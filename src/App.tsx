@@ -15,41 +15,56 @@ import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 import WhatsAppButton from "./components/chat/WhatsAppButton";
+import Subscription from "./pages/Subscription";
+import { AuthProvider } from "./contexts/AuthContext";
+import { SubscriptionProvider } from "./contexts/SubscriptionContext";
+import RouteGuard from "./components/auth/RouteGuard";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          
-          {/* Rotas protegidas dentro do layout de dashboard */}
-          <Route path="/" element={<DashboardLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/cozinha" element={<Kitchen />} />
-            <Route path="/produtos" element={<Products />} />
-            <Route path="/entregadores" element={<Entregadores />} />
-            <Route path="/financeiro" element={<Financeiro />} />
-            <Route path="/relatorios" element={<Relatorios />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
+        <AuthProvider>
+          <SubscriptionProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              
+              {/* Public routes */}
+              <Route element={<RouteGuard requireAuth={false} />}>
+                <Route path="/login" element={<Login />} />
+              </Route>
+              
+              {/* Protected routes */}
+              <Route element={<RouteGuard requireAuth={true} />}>
+                <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/cozinha" element={<Kitchen />} />
+                  <Route path="/produtos" element={<Products />} />
+                  <Route path="/entregadores" element={<Entregadores />} />
+                  <Route path="/financeiro" element={<Financeiro />} />
+                  <Route path="/relatorios" element={<Relatorios />} />
+                  <Route path="/configuracoes" element={<Configuracoes />} />
+                  <Route path="/assinatura" element={<Subscription />} />
+                  
+                  {/* Placeholder for other routes in development */}
+                  <Route path="/pedidos" element={<div className="p-4">Página de Pedidos - Em desenvolvimento</div>} />
+                </Route>
+              </Route>
+              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
             
-            {/* Placeholder para outras rotas em desenvolvimento */}
-            <Route path="/pedidos" element={<div className="p-4">Página de Pedidos - Em desenvolvimento</div>} />
-          </Route>
-          
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-        
-        {/* WhatsApp Button for global access */}
-        <WhatsAppButton 
-          phoneNumber="5511999999999" 
-          message="Olá! Estou com uma dúvida sobre o BoraCumê." 
-        />
+            {/* WhatsApp Button for global access */}
+            <WhatsAppButton 
+              phoneNumber="5511999999999" 
+              message="Olá! Estou com uma dúvida sobre o BoraCumê." 
+            />
+          </SubscriptionProvider>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

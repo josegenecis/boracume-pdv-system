@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -37,8 +37,11 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
-type PaymentMethod = 'PIX' | 'DINHEIRO' | 'CARTÃO';
+type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
 
 interface Transaction {
   id: string;
@@ -50,75 +53,12 @@ interface Transaction {
   paymentMethod: PaymentMethod;
 }
 
-const initialTransactions: Transaction[] = [
-  {
-    id: 'T1001',
-    date: new Date(2024, 4, 22, 14, 30),
-    description: 'Pedido #8765',
-    amount: 89.90,
-    type: 'entrada',
-    category: 'Vendas',
-    paymentMethod: 'PIX'
-  },
-  {
-    id: 'T1002',
-    date: new Date(2024, 4, 22, 15, 45),
-    description: 'Pedido #8764',
-    amount: 65.50,
-    type: 'entrada',
-    category: 'Vendas',
-    paymentMethod: 'CARTÃO'
-  },
-  {
-    id: 'T1003',
-    date: new Date(2024, 4, 22, 16, 20),
-    description: 'Pedido #8763',
-    amount: 115.80,
-    type: 'entrada',
-    category: 'Vendas',
-    paymentMethod: 'DINHEIRO'
-  },
-  {
-    id: 'T1004',
-    date: new Date(2024, 4, 22, 18, 10),
-    description: 'Compra Ingredientes',
-    amount: 350.75,
-    type: 'saida',
-    category: 'Compras',
-    paymentMethod: 'PIX'
-  },
-  {
-    id: 'T1005',
-    date: new Date(2024, 4, 21, 13, 15),
-    description: 'Pagamento Fornecedor',
-    amount: 1200.00,
-    type: 'saida',
-    category: 'Fornecedores',
-    paymentMethod: 'CARTÃO'
-  },
-  {
-    id: 'T1006',
-    date: new Date(2024, 4, 20, 19, 30),
-    description: 'Pedido #8762',
-    amount: 32.90,
-    type: 'entrada',
-    category: 'Vendas',
-    paymentMethod: 'DINHEIRO'
-  },
-  {
-    id: 'T1007',
-    date: new Date(2024, 4, 20, 20, 45),
-    description: 'Pagamento Entregador',
-    amount: 120.00,
-    type: 'saida',
-    category: 'Despesas Operacionais',
-    paymentMethod: 'PIX'
-  }
-];
-
 const Financeiro = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>(initialTransactions);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState({
     paymentMethod: '' as '' | PaymentMethod,
     type: '' as '' | 'entrada' | 'saida',
@@ -126,6 +66,53 @@ const Financeiro = () => {
     endDate: null as Date | null,
     searchTerm: ''
   });
+  
+  // Fetch transactions from Supabase
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        
+        // Fetch orders as income transactions
+        const { data: orders, error: ordersError } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', user.id);
+        
+        if (ordersError) throw ordersError;
+        
+        // Transform orders to transactions format
+        const orderTransactions = (orders || []).map(order => ({
+          id: order.id,
+          date: new Date(order.created_at),
+          description: `Pedido #${order.id.substring(0, 8)}`,
+          amount: order.total,
+          type: 'entrada' as 'entrada',
+          category: 'Vendas',
+          paymentMethod: order.payment_method as PaymentMethod
+        }));
+        
+        // In a real app, you'd also fetch expense transactions
+        // For now, we'll use just the income from orders
+        const allTransactions = [...orderTransactions];
+        
+        setTransactions(allTransactions);
+        setFilteredTransactions(allTransactions);
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao carregar transações',
+          description: error.message,
+          variant: 'destructive'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchTransactions();
+  }, [user, toast]);
   
   // Calculate financial summaries
   const totalIncome = filteredTransactions
@@ -140,15 +127,15 @@ const Financeiro = () => {
   
   // Payment method breakdown
   const pixTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'PIX' && t.type === 'entrada')
+    .filter(t => t.paymentMethod === 'pix' && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
   const cardTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'CARTÃO' && t.type === 'entrada')
+    .filter(t => t.paymentMethod === 'cartao' && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
     
   const cashTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'DINHEIRO' && t.type === 'entrada')
+    .filter(t => t.paymentMethod === 'dinheiro' && t.type === 'entrada')
     .reduce((sum, transaction) => sum + transaction.amount, 0);
   
   // Apply filters
@@ -217,6 +204,15 @@ const Financeiro = () => {
     }).format(amount);
   };
   
+  const getPaymentMethodLabel = (method: PaymentMethod) => {
+    switch (method) {
+      case 'pix': return 'PIX';
+      case 'dinheiro': return 'DINHEIRO';
+      case 'cartao': return 'CARTÃO';
+      default: return method;
+    }
+  };
+  
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Gestão Financeira</h1>
@@ -279,7 +275,7 @@ const Financeiro = () => {
           <CardContent>
             <div className="text-xl font-bold">{formatCurrency(pixTotal)}</div>
             <div className="text-sm text-muted-foreground">
-              {Math.round((pixTotal / totalIncome) * 100)}% das receitas
+              {totalIncome ? Math.round((pixTotal / totalIncome) * 100) : 0}% das receitas
             </div>
           </CardContent>
         </Card>
@@ -294,7 +290,7 @@ const Financeiro = () => {
           <CardContent>
             <div className="text-xl font-bold">{formatCurrency(cardTotal)}</div>
             <div className="text-sm text-muted-foreground">
-              {Math.round((cardTotal / totalIncome) * 100)}% das receitas
+              {totalIncome ? Math.round((cardTotal / totalIncome) * 100) : 0}% das receitas
             </div>
           </CardContent>
         </Card>
@@ -309,7 +305,7 @@ const Financeiro = () => {
           <CardContent>
             <div className="text-xl font-bold">{formatCurrency(cashTotal)}</div>
             <div className="text-sm text-muted-foreground">
-              {Math.round((cashTotal / totalIncome) * 100)}% das receitas
+              {totalIncome ? Math.round((cashTotal / totalIncome) * 100) : 0}% das receitas
             </div>
           </CardContent>
         </Card>
@@ -349,9 +345,9 @@ const Financeiro = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">Todos</SelectItem>
-                      <SelectItem value="PIX">PIX</SelectItem>
-                      <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
-                      <SelectItem value="CARTÃO">Cartão</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -396,7 +392,13 @@ const Financeiro = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.length > 0 ? (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Carregando transações...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredTransactions.length > 0 ? (
                     filteredTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
                         <TableCell>
@@ -406,7 +408,7 @@ const Financeiro = () => {
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell>{transaction.category}</TableCell>
                         <TableCell>
-                          <Badge variant="outline">{transaction.paymentMethod}</Badge>
+                          <Badge variant="outline">{getPaymentMethodLabel(transaction.paymentMethod)}</Badge>
                         </TableCell>
                         <TableCell className="font-medium">
                           {formatCurrency(transaction.amount)}

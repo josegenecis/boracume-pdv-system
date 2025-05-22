@@ -1,96 +1,196 @@
 
-import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface PromotionalBannerProps {
+interface Banner {
+  id: string;
+  imageUrl: string;
   title: string;
   description?: string;
-  imageUrl?: string;
   link?: string;
-  position?: 'top' | 'middle' | 'bottom';
-  onClose?: () => void;
 }
 
-const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
-  title,
-  description,
-  imageUrl,
-  link,
-  position = 'top',
-  onClose,
+interface PromotionalBannerProps {
+  autoPlay?: boolean;
+  interval?: number;
+}
+
+const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ 
+  autoPlay = true, 
+  interval = 5000 
 }) => {
-  const positionStyles = {
-    top: 'mb-4',
-    middle: 'my-4',
-    bottom: 'mt-4',
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+  
+  // Fetch banners from Supabase
+  useEffect(() => {
+    const fetchBanners = async () => {
+      if (!user) {
+        // Use default banners for non-authenticated users or before auth is loaded
+        setBanners([
+          {
+            id: '1',
+            imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
+            title: 'Promoção Especial',
+            description: 'Peça agora e ganhe 10% de desconto!',
+          },
+          {
+            id: '2',
+            imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0',
+            title: 'Prato do Dia',
+            description: 'Experimente nossa nova especialidade da casa',
+          }
+        ]);
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('marketing_settings')
+          .select('banner_images')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (error) throw error;
+        
+        if (data && data.banner_images && Array.isArray(data.banner_images) && data.banner_images.length > 0) {
+          setBanners(data.banner_images as Banner[]);
+        } else {
+          // Default banners if none are configured
+          setBanners([
+            {
+              id: '1',
+              imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
+              title: 'Promoção Especial',
+              description: 'Peça agora e ganhe 10% de desconto!',
+            },
+            {
+              id: '2',
+              imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0',
+              title: 'Prato do Dia',
+              description: 'Experimente nossa nova especialidade da casa',
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching banners:', error);
+        // Fallback to default banners on error
+        setBanners([
+          {
+            id: '1',
+            imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
+            title: 'Promoção Especial',
+            description: 'Peça agora e ganhe 10% de desconto!',
+          }
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchBanners();
+  }, [user]);
+  
+  // Auto-play functionality
+  useEffect(() => {
+    if (!autoPlay || banners.length <= 1) return;
+    
+    const timer = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
+    }, interval);
+    
+    return () => clearInterval(timer);
+  }, [autoPlay, interval, banners.length]);
+  
+  if (isLoading) {
+    return (
+      <div className="w-full h-64 bg-gray-200 animate-pulse rounded-lg flex items-center justify-center">
+        <span className="text-gray-400">Carregando...</span>
+      </div>
+    );
+  }
+  
+  if (banners.length === 0) {
+    return null;
+  }
+  
+  const handlePrevious = () => {
+    setCurrentIndex((prevIndex) => (prevIndex - 1 + banners.length) % banners.length);
   };
   
+  const handleNext = () => {
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
+  };
+  
+  const currentBanner = banners[currentIndex];
+
   return (
-    <Card className={`overflow-hidden ${positionStyles[position]} relative`}>
-      {onClose && (
-        <button
-          onClick={onClose}
-          className="absolute right-2 top-2 z-10 rounded-full bg-background/80 p-1 text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
+    <div className="relative w-full h-64 overflow-hidden rounded-lg">
+      {/* Banner Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
+        style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
+      >
+        <div className="absolute inset-0 bg-black bg-opacity-40" />
+      </div>
       
-      <div className="relative">
-        {imageUrl && (
-          <div className="relative h-32 sm:h-48 overflow-hidden">
-            <img
-              src={imageUrl}
-              alt={title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent flex flex-col justify-center px-6 text-white">
-              <h3 className="text-xl sm:text-2xl font-bold">{title}</h3>
-              {description && (
-                <p className="text-sm sm:text-base mt-2 max-w-md">{description}</p>
-              )}
-              {link && (
-                <Button 
-                  variant="outline" 
-                  className="mt-3 w-fit text-white border-white hover:bg-white/20 hover:text-white"
-                  asChild
-                >
-                  <a href={link}>
-                    Ver promoção
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
-          </div>
+      {/* Banner Content */}
+      <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+        <h2 className="text-2xl font-bold mb-2">{currentBanner.title}</h2>
+        {currentBanner.description && (
+          <p className="mb-4">{currentBanner.description}</p>
         )}
-        
-        {!imageUrl && (
-          <CardContent className="bg-gradient-to-r from-orange-500 to-orange-400 text-white p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
-              <div>
-                <h3 className="text-lg sm:text-xl font-bold">{title}</h3>
-                {description && <p className="text-sm sm:text-base mt-1 max-w-md">{description}</p>}
-              </div>
-              {link && (
-                <Button 
-                  variant="outline" 
-                  className="mt-3 sm:mt-0 w-fit text-white border-white hover:bg-white/20 hover:text-white"
-                  asChild
-                >
-                  <a href={link}>
-                    Ver promoção
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
-          </CardContent>
+        {currentBanner.link && (
+          <Button variant="secondary" className="self-start">
+            Saiba mais
+          </Button>
         )}
       </div>
-    </Card>
+      
+      {/* Navigation Controls */}
+      {banners.length > 1 && (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full"
+            onClick={handlePrevious}
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full"
+            onClick={handleNext}
+          >
+            <ChevronRight className="h-6 w-6" />
+          </Button>
+        </>
+      )}
+      
+      {/* Dots Indicator */}
+      {banners.length > 1 && (
+        <div className="absolute bottom-3 left-0 right-0 flex justify-center space-x-2">
+          {banners.map((_, index) => (
+            <button
+              key={index}
+              className={`w-2 h-2 rounded-full ${
+                currentIndex === index ? 'bg-white' : 'bg-white/50'
+              }`}
+              onClick={() => setCurrentIndex(index)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 

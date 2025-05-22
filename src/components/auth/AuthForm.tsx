@@ -6,36 +6,119 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Logo from '@/components/Logo';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const AuthForm: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(false);
+  const { signIn, signUp, isLoading } = useAuth();
+  const { toast } = useToast();
   
-  const handleSubmit = (e: React.FormEvent) => {
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  
+  // Register form state
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [restaurantName, setRestaurantName] = useState('');
+  const [name, setName] = useState('');
+  
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    // Simulação de login
-    setTimeout(() => {
-      setIsLoading(false);
-      window.location.href = '/dashboard';
-    }, 1000);
+    if (!loginEmail || !loginPassword) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor preencha todos os campos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    await signIn(loginEmail, loginPassword);
   };
   
-  const handleGoogleLogin = () => {
-    setIsLoading(true);
-    // Simulação de login com Google
-    setTimeout(() => {
-      setIsLoading(false);
-      window.location.href = '/dashboard';
-    }, 1000);
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!registerEmail || !registerPassword || !confirmPassword || !restaurantName || !name) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor preencha todos os campos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (registerPassword !== confirmPassword) {
+      toast({
+        title: "Senhas diferentes",
+        description: "As senhas não coincidem.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    await signUp(registerEmail, registerPassword, restaurantName);
+  };
+  
+  const handleGoogleLogin = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+      
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao entrar com Google",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!loginEmail) {
+      toast({
+        title: "Email necessário",
+        description: "Por favor digite seu email para recuperar sua senha.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Email enviado",
+        description: "Verifique sua caixa de entrada para redefinir sua senha.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao recuperar senha",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader className="space-y-1 flex flex-col items-center">
         <Logo size="lg" />
-        <CardTitle className="text-2xl mt-4">Bem-vindo de volta</CardTitle>
+        <CardTitle className="text-2xl mt-4">Bem-vindo ao BoraCumê</CardTitle>
         <CardDescription>
-          Acesse sua conta para gerenciar seu restaurante
+          Gerencie seu restaurante de forma simples e eficiente
         </CardDescription>
       </CardHeader>
       <Tabs defaultValue="login" className="w-full">
@@ -44,20 +127,37 @@ const AuthForm: React.FC = () => {
           <TabsTrigger value="register">Registrar</TabsTrigger>
         </TabsList>
         <TabsContent value="login">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleLoginSubmit}>
             <CardContent className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="seu@email.com" required />
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="seu@email.com" 
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Senha</Label>
-                  <a href="#" className="text-sm text-boracume-orange hover:underline">
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-boracume-orange hover:underline"
+                  >
                     Esqueceu a senha?
-                  </a>
+                  </button>
                 </div>
-                <Input id="password" type="password" required />
+                <Input 
+                  id="password" 
+                  type="password" 
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required 
+                />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col">
@@ -85,27 +185,60 @@ const AuthForm: React.FC = () => {
           </form>
         </TabsContent>
         <TabsContent value="register">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleRegisterSubmit}>
             <CardContent className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label htmlFor="restaurant-name">Nome do Restaurante</Label>
-                <Input id="restaurant-name" type="text" placeholder="Restaurante do João" required />
+                <Input 
+                  id="restaurant-name" 
+                  type="text" 
+                  placeholder="Restaurante do João" 
+                  value={restaurantName}
+                  onChange={(e) => setRestaurantName(e.target.value)}
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Seu Nome</Label>
-                <Input id="name" type="text" placeholder="João da Silva" required />
+                <Input 
+                  id="name" 
+                  type="text" 
+                  placeholder="João da Silva"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)} 
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="register-email">Email</Label>
-                <Input id="register-email" type="email" placeholder="seu@email.com" required />
+                <Input 
+                  id="register-email" 
+                  type="email" 
+                  placeholder="seu@email.com" 
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="register-password">Senha</Label>
-                <Input id="register-password" type="password" required />
+                <Input 
+                  id="register-password" 
+                  type="password" 
+                  value={registerPassword}
+                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  required 
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar Senha</Label>
-                <Input id="confirm-password" type="password" required />
+                <Input 
+                  id="confirm-password" 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required 
+                />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col">
