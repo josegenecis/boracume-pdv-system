@@ -54,7 +54,16 @@ const MarketingSettings: React.FC = () => {
         if (data) {
           form.setValue('googleTagId', data.google_tag_id || '');
           form.setValue('facebookPixelId', data.facebook_pixel_id || '');
-          form.setValue('bannerImages', data.banner_images || []);
+          
+          // Properly handle the banner_images from JSON
+          // Ensure it's an array of strings before setting the value
+          const bannerImages = Array.isArray(data.banner_images) 
+            ? data.banner_images.map((item: any) => 
+                typeof item === 'string' ? item : ''
+              ).filter(Boolean)
+            : [];
+            
+          form.setValue('bannerImages', bannerImages);
         }
       } catch (error: any) {
         console.error('Error fetching marketing settings:', error);
@@ -78,7 +87,7 @@ const MarketingSettings: React.FC = () => {
         .update({
           google_tag_id: values.googleTagId,
           facebook_pixel_id: values.facebookPixelId,
-          banner_images: values.bannerImages,
+          banner_images: values.bannerImages || [],
           updated_at: new Date().toISOString()
         })
         .eq('user_id', user.id);

@@ -61,35 +61,42 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         if (error) throw error;
         
         if (data && data.banner_images && Array.isArray(data.banner_images) && data.banner_images.length > 0) {
-          setBanners(data.banner_images as Banner[]);
+          // Safely convert the JSON data to Banner objects
+          const parsedBanners: Banner[] = [];
+          
+          for (const item of data.banner_images) {
+            // Check if the item conforms to the Banner interface
+            if (
+              typeof item === 'object' && 
+              item !== null && 
+              'id' in item && 
+              'imageUrl' in item && 
+              'title' in item
+            ) {
+              parsedBanners.push({
+                id: String(item.id),
+                imageUrl: String(item.imageUrl),
+                title: String(item.title),
+                description: 'description' in item ? String(item.description) : undefined,
+                link: 'link' in item ? String(item.link) : undefined
+              });
+            }
+          }
+          
+          if (parsedBanners.length > 0) {
+            setBanners(parsedBanners);
+          } else {
+            // Fallback to default banners if parsing failed
+            setBanners(getDefaultBanners());
+          }
         } else {
           // Default banners if none are configured
-          setBanners([
-            {
-              id: '1',
-              imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
-              title: 'Promoção Especial',
-              description: 'Peça agora e ganhe 10% de desconto!',
-            },
-            {
-              id: '2',
-              imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0',
-              title: 'Prato do Dia',
-              description: 'Experimente nossa nova especialidade da casa',
-            }
-          ]);
+          setBanners(getDefaultBanners());
         }
       } catch (error) {
         console.error('Error fetching banners:', error);
         // Fallback to default banners on error
-        setBanners([
-          {
-            id: '1',
-            imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
-            title: 'Promoção Especial',
-            description: 'Peça agora e ganhe 10% de desconto!',
-          }
-        ]);
+        setBanners(getDefaultBanners());
       } finally {
         setIsLoading(false);
       }
@@ -97,6 +104,24 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     
     fetchBanners();
   }, [user]);
+  
+  // Function to get default banners
+  const getDefaultBanners = (): Banner[] => {
+    return [
+      {
+        id: '1',
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
+        title: 'Promoção Especial',
+        description: 'Peça agora e ganhe 10% de desconto!',
+      },
+      {
+        id: '2',
+        imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0',
+        title: 'Prato do Dia',
+        description: 'Experimente nossa nova especialidade da casa',
+      }
+    ];
+  };
   
   // Auto-play functionality
   useEffect(() => {
