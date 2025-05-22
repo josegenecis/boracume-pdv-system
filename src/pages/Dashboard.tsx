@@ -15,6 +15,16 @@ const revenueData = [
   { name: 'Dom', revenue: 8100 },
 ];
 
+// Define the type for our order objects
+type Order = {
+  id: string;
+  customer: string;
+  items: number;
+  total: number;
+  status: string;
+  time: string;
+};
+
 const recentOrders = [
   { 
     id: '#8765', 
@@ -56,7 +66,7 @@ const recentOrders = [
     status: 'cancelled', 
     time: '19:55' 
   },
-] as const;
+];
 
 const Dashboard = () => {
   return (

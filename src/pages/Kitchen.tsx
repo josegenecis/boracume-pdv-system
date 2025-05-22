@@ -2,8 +2,26 @@
 import React, { useState } from 'react';
 import KitchenOrderCard from '@/components/kitchen/KitchenOrderCard';
 
+// Define types for our order data
+interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  options?: string[];
+  notes?: string;
+}
+
+interface KitchenOrder {
+  id: string;
+  orderNumber: string;
+  customer: string;
+  items: OrderItem[];
+  priority: 'normal' | 'high';
+  timestamp: Date;
+}
+
 // Sample data
-const initialOrders = [
+const initialOrders: KitchenOrder[] = [
   {
     id: '1',
     orderNumber: '8765',
@@ -65,12 +83,12 @@ const initialOrders = [
     priority: 'normal',
     timestamp: new Date(Date.now() - 8 * 60 * 1000) // 8 minutes ago
   }
-] as const;
+];
 
 const Kitchen = () => {
-  const [pendingOrders, setPendingOrders] = useState(initialOrders);
-  const [preparingOrders, setPreparingOrders] = useState<typeof initialOrders>([]);
-  const [readyOrders, setReadyOrders] = useState<typeof initialOrders>([]);
+  const [pendingOrders, setPendingOrders] = useState<KitchenOrder[]>([...initialOrders]);
+  const [preparingOrders, setPreparingOrders] = useState<KitchenOrder[]>([]);
+  const [readyOrders, setReadyOrders] = useState<KitchenOrder[]>([]);
   
   const handleStatusChange = (id: string, status: 'preparing' | 'ready') => {
     if (status === 'preparing') {
