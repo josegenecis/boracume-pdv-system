@@ -21,11 +21,11 @@ type Order = {
   customer: string;
   items: number;
   total: number;
-  status: string;
+  status: 'delivered' | 'ready' | 'preparing' | 'pending' | 'cancelled';
   time: string;
 };
 
-const recentOrders = [
+const recentOrders: Order[] = [
   { 
     id: '#8765', 
     customer: 'João Silva', 
