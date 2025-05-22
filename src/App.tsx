@@ -9,7 +9,12 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Kitchen from "./pages/Kitchen";
 import Products from "./pages/Products";
+import Entregadores from "./pages/Entregadores";
+import Financeiro from "./pages/Financeiro";
+import Relatorios from "./pages/Relatorios";
+import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
+import WhatsAppButton from "./components/chat/WhatsAppButton";
 
 const queryClient = new QueryClient();
 
@@ -28,17 +33,23 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/cozinha" element={<Kitchen />} />
             <Route path="/produtos" element={<Products />} />
+            <Route path="/entregadores" element={<Entregadores />} />
+            <Route path="/financeiro" element={<Financeiro />} />
+            <Route path="/relatorios" element={<Relatorios />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
             
-            {/* Placeholders para as demais rotas que serão implementadas */}
+            {/* Placeholder para outras rotas em desenvolvimento */}
             <Route path="/pedidos" element={<div className="p-4">Página de Pedidos - Em desenvolvimento</div>} />
-            <Route path="/entregadores" element={<div className="p-4">Página de Entregadores - Em desenvolvimento</div>} />
-            <Route path="/financeiro" element={<div className="p-4">Página de Financeiro - Em desenvolvimento</div>} />
-            <Route path="/relatorios" element={<div className="p-4">Página de Relatórios - Em desenvolvimento</div>} />
-            <Route path="/configuracoes" element={<div className="p-4">Página de Configurações - Em desenvolvimento</div>} />
           </Route>
           
           <Route path="*" element={<NotFound />} />
         </Routes>
+        
+        {/* WhatsApp Button for global access */}
+        <WhatsAppButton 
+          phoneNumber="5511999999999" 
+          message="Olá! Estou com uma dúvida sobre o BoraCumê." 
+        />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
