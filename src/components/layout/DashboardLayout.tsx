@@ -101,8 +101,12 @@ const TopBar: React.FC = () => {
   };
   
   const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
   };
   
   return (

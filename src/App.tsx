@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Kitchen from "./pages/Kitchen";
 import Products from "./pages/Products";
+import Orders from "./pages/Orders";
 import Entregadores from "./pages/Entregadores";
 import Financeiro from "./pages/Financeiro";
 import Relatorios from "./pages/Relatorios";
@@ -49,9 +50,7 @@ const App = () => (
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
                   <Route path="/assinatura" element={<Subscription />} />
-                  
-                  {/* Placeholder for other routes in development */}
-                  <Route path="/pedidos" element={<div className="p-4">Página de Pedidos - Em desenvolvimento</div>} />
+                  <Route path="/pedidos" element={<Orders />} />
                 </Route>
               </Route>
               

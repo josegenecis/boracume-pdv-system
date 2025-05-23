@@ -10,7 +10,8 @@ import {
   FileText,
   Settings,
   CreditCard,
-  Home
+  Home,
+  Package
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -65,7 +66,7 @@ const SidebarLinks: React.FC = () => {
     },
     {
       title: 'Produtos',
-      icon: <ShoppingCart className="h-5 w-5" />,
+      icon: <Package className="h-5 w-5" />,
       href: '/produtos',
     },
   ];
@@ -110,27 +111,32 @@ const SidebarLinks: React.FC = () => {
 
   return (
     <nav className="space-y-1">
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          to={link.href}
-          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-            location.pathname === link.href
-              ? 'bg-boracume-orange text-white'
-              : 'text-gray-700 hover:bg-gray-100'
-          } group`}
-        >
-          <span className={`mr-3 ${location.pathname === link.href ? 'text-white' : 'text-gray-500'}`}>
-            {link.icon}
-          </span>
-          <span className="flex-1">{link.title}</span>
-          {link.badge && (
-            <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-boracume-orange text-white">
-              {link.badge}
+      {links.map((link) => {
+        // Check if the current path matches this link
+        const isActive = location.pathname === link.href;
+        
+        return (
+          <Link
+            key={link.href}
+            to={link.href}
+            className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+              isActive
+                ? 'bg-boracume-orange text-white'
+                : 'text-gray-700 hover:bg-gray-100'
+            } group`}
+          >
+            <span className={`mr-3 ${isActive ? 'text-white' : 'text-gray-500'}`}>
+              {link.icon}
             </span>
-          )}
-        </Link>
-      ))}
+            <span className="flex-1">{link.title}</span>
+            {link.badge && (
+              <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-boracume-orange text-white">
+                {link.badge}
+              </span>
+            )}
+          </Link>
+        );
+      })}
     </nav>
   );
 };
