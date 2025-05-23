@@ -54,6 +54,11 @@ const SidebarLinks: React.FC = () => {
       href: '/dashboard',
     },
     {
+      title: 'Pedidos',
+      icon: <ShoppingCart className="h-5 w-5" />,
+      href: '/pedidos',
+    },
+    {
       title: 'Cozinha',
       icon: <ChefHat className="h-5 w-5" />,
       href: '/cozinha',

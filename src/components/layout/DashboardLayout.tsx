@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Bell, Settings, ShoppingCart, Package, CreditCard, 
   FileText, Users, LogOut, Menu, Home, Clock
@@ -13,6 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Logo from '@/components/Logo';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/contexts/AuthContext';
+import SidebarLinks from './SidebarLinks';
 
 interface NavItemProps {
   icon: React.ReactNode;
@@ -46,32 +48,14 @@ const NavItem: React.FC<NavItemProps> = ({
 };
 
 const Sidebar: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const location = useLocation();
-  
   return (
     <div className={`flex flex-col h-full bg-white border-r ${className}`}>
       <div className="p-4">
         <Logo />
       </div>
       
-      <div className="px-2 pt-4">
-        <div className="text-xs font-medium text-gray-500 px-3 mb-2">PRINCIPAL</div>
-        <div className="space-y-1">
-          <NavItem icon={<Home />} label="Dashboard" href="/dashboard" />
-          <NavItem icon={<ShoppingCart />} label="Pedidos" href="/pedidos" />
-          <NavItem icon={<Package />} label="Produtos" href="/produtos" />
-          <NavItem icon={<Clock />} label="KDS (Cozinha)" href="/cozinha" />
-          <NavItem icon={<Users />} label="Entregadores" href="/entregadores" />
-        </div>
-      </div>
-      
-      <div className="px-2 pt-6">
-        <div className="text-xs font-medium text-gray-500 px-3 mb-2">GESTÃO</div>
-        <div className="space-y-1">
-          <NavItem icon={<CreditCard />} label="Financeiro" href="/financeiro" />
-          <NavItem icon={<FileText />} label="Relatórios" href="/relatorios" />
-          <NavItem icon={<Settings />} label="Configurações" href="/configuracoes" />
-        </div>
+      <div className="px-2 pt-4 flex-1 overflow-y-auto">
+        <SidebarLinks />
       </div>
       
       <div className="mt-auto p-4">
@@ -97,6 +81,30 @@ const Sidebar: React.FC<{ className?: string }> = ({ className = '' }) => {
 };
 
 const TopBar: React.FC = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get page title based on current path
+  const getPageTitle = () => {
+    const path = location.pathname;
+    if (path === '/dashboard') return 'Painel de Controle';
+    if (path === '/cozinha') return 'KDS (Cozinha)';
+    if (path === '/produtos') return 'Produtos';
+    if (path === '/pedidos') return 'Pedidos';
+    if (path === '/entregadores') return 'Entregadores';
+    if (path === '/financeiro') return 'Financeiro';
+    if (path === '/relatorios') return 'Relatórios';
+    if (path === '/configuracoes') return 'Configurações';
+    if (path === '/assinatura') return 'Assinatura';
+    return 'BoraCumê';
+  };
+  
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
+  
   return (
     <header className="border-b bg-white h-16 px-4 flex items-center justify-between">
       <div className="flex items-center md:hidden">
@@ -114,13 +122,17 @@ const TopBar: React.FC = () => {
       </div>
       
       <div className="md:flex items-center gap-4 hidden">
-        <h1 className="text-xl font-semibold">Painel de Controle</h1>
+        <h1 className="text-xl font-semibold">{getPageTitle()}</h1>
       </div>
       
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" className="relative">
           <Bell size={20} />
           <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+        </Button>
+        
+        <Button variant="ghost" size="icon" onClick={handleLogout}>
+          <LogOut size={20} />
         </Button>
         
         <Avatar className="h-8 w-8">
@@ -134,6 +146,21 @@ const TopBar: React.FC = () => {
 
 const DashboardLayout: React.FC = () => {
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Effect to handle page loading
+  useEffect(() => {
+    // Set loading to true when route changes
+    setIsLoading(true);
+    
+    // Set loading to false after a small delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
   
   return (
     <div className="flex h-screen bg-gray-50">
@@ -147,7 +174,13 @@ const DashboardLayout: React.FC = () => {
         <TopBar />
         
         <main className="flex-1 overflow-y-auto p-4">
-          <Outlet />
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-boracume-orange"></div>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>
