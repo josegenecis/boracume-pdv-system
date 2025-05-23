@@ -151,9 +151,9 @@ const TopBar: React.FC = () => {
 const DashboardLayout: React.FC = () => {
   const isMobile = useIsMobile();
   const location = useLocation();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   
-  // Effect to handle page loading
+  // Effect to handle page loading - fixing potential infinite loading issue
   useEffect(() => {
     // Set loading to true when route changes
     setIsLoading(true);
