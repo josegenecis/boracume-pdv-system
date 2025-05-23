@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -344,7 +343,7 @@ const Financeiro = () => {
                       <SelectValue placeholder="Forma de Pagamento" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="pix">PIX</SelectItem>
                       <SelectItem value="dinheiro">Dinheiro</SelectItem>
                       <SelectItem value="cartao">Cartão</SelectItem>
@@ -361,7 +360,7 @@ const Financeiro = () => {
                       <SelectValue placeholder="Tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="entrada">Receitas</SelectItem>
                       <SelectItem value="saida">Despesas</SelectItem>
                     </SelectContent>
