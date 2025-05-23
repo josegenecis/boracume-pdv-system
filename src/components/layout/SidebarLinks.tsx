@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ChefHat,
   ShoppingCart,
@@ -22,6 +23,7 @@ interface SidebarLink {
 
 const SidebarLinks: React.FC = () => {
   const { subscription } = useAuth();
+  const location = useLocation();
   
   // Check if a feature is available based on subscription
   const hasFeature = (feature: string): boolean => {
@@ -104,19 +106,25 @@ const SidebarLinks: React.FC = () => {
   return (
     <nav className="space-y-1">
       {links.map((link) => (
-        <a
+        <Link
           key={link.href}
-          href={link.href}
-          className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 group"
+          to={link.href}
+          className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+            location.pathname === link.href
+              ? 'bg-boracume-orange text-white'
+              : 'text-gray-700 hover:bg-gray-100'
+          } group`}
         >
-          <span className="mr-3 text-gray-500">{link.icon}</span>
+          <span className={`mr-3 ${location.pathname === link.href ? 'text-white' : 'text-gray-500'}`}>
+            {link.icon}
+          </span>
           <span className="flex-1">{link.title}</span>
           {link.badge && (
             <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-boracume-orange text-white">
               {link.badge}
             </span>
           )}
-        </a>
+        </Link>
       ))}
     </nav>
   );

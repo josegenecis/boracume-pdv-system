@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   Bell, Settings, ShoppingCart, Package, CreditCard, 
   FileText, Users, LogOut, Menu, Home, Clock
@@ -24,25 +24,30 @@ interface NavItemProps {
 const NavItem: React.FC<NavItemProps> = ({ 
   icon, label, active = false, href 
 }) => {
+  const location = useLocation();
+  const isActive = location.pathname === href;
+  
   return (
-    <a 
-      href={href}
+    <Link 
+      to={href}
       className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
-        active 
+        isActive 
           ? 'bg-boracume-orange text-white' 
           : 'hover:bg-boracume-orange/10 text-gray-700'
       }`}
     >
       {React.cloneElement(icon as React.ReactElement, { 
         size: 20,
-        className: active ? 'text-white' : 'text-boracume-orange'
+        className: isActive ? 'text-white' : 'text-boracume-orange'
       })}
       <span>{label}</span>
-    </a>
+    </Link>
   );
 };
 
 const Sidebar: React.FC<{ className?: string }> = ({ className = '' }) => {
+  const location = useLocation();
+  
   return (
     <div className={`flex flex-col h-full bg-white border-r ${className}`}>
       <div className="p-4">
@@ -52,7 +57,7 @@ const Sidebar: React.FC<{ className?: string }> = ({ className = '' }) => {
       <div className="px-2 pt-4">
         <div className="text-xs font-medium text-gray-500 px-3 mb-2">PRINCIPAL</div>
         <div className="space-y-1">
-          <NavItem icon={<Home />} label="Dashboard" active href="/dashboard" />
+          <NavItem icon={<Home />} label="Dashboard" href="/dashboard" />
           <NavItem icon={<ShoppingCart />} label="Pedidos" href="/pedidos" />
           <NavItem icon={<Package />} label="Produtos" href="/produtos" />
           <NavItem icon={<Clock />} label="KDS (Cozinha)" href="/cozinha" />
