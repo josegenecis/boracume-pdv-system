@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      appearance_settings: {
+        Row: {
+          compact_mode: boolean | null
+          created_at: string
+          font_size: string | null
+          high_contrast: boolean | null
+          id: string
+          primary_color: string | null
+          reduced_motion: boolean | null
+          show_animations: boolean | null
+          theme: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          compact_mode?: boolean | null
+          created_at?: string
+          font_size?: string | null
+          high_contrast?: boolean | null
+          id?: string
+          primary_color?: string | null
+          reduced_motion?: boolean | null
+          show_animations?: boolean | null
+          theme?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          compact_mode?: boolean | null
+          created_at?: string
+          font_size?: string | null
+          high_contrast?: boolean | null
+          id?: string
+          primary_color?: string | null
+          reduced_motion?: boolean | null
+          show_animations?: boolean | null
+          theme?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       delivery_personnel: {
         Row: {
           created_at: string
@@ -45,6 +87,36 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_settings: {
+        Row: {
+          created_at: string
+          delivery_areas: Json | null
+          google_maps_api_key: string | null
+          id: string
+          maps_integration_enabled: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_areas?: Json | null
+          google_maps_api_key?: string | null
+          id?: string
+          maps_integration_enabled?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_areas?: Json | null
+          google_maps_api_key?: string | null
+          id?: string
+          maps_integration_enabled?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketing_settings: {
         Row: {
           banner_images: Json | null
@@ -72,6 +144,57 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          created_at: string
+          daily_reports: boolean | null
+          email_notifications: boolean | null
+          id: string
+          low_stock: boolean | null
+          new_orders: boolean | null
+          order_sound: string | null
+          order_updates: boolean | null
+          push_notifications: boolean | null
+          sms_notifications: boolean | null
+          sound_enabled: boolean | null
+          updated_at: string
+          user_id: string
+          volume: string | null
+        }
+        Insert: {
+          created_at?: string
+          daily_reports?: boolean | null
+          email_notifications?: boolean | null
+          id?: string
+          low_stock?: boolean | null
+          new_orders?: boolean | null
+          order_sound?: string | null
+          order_updates?: boolean | null
+          push_notifications?: boolean | null
+          sms_notifications?: boolean | null
+          sound_enabled?: boolean | null
+          updated_at?: string
+          user_id: string
+          volume?: string | null
+        }
+        Update: {
+          created_at?: string
+          daily_reports?: boolean | null
+          email_notifications?: boolean | null
+          id?: string
+          low_stock?: boolean | null
+          new_orders?: boolean | null
+          order_sound?: string | null
+          order_updates?: boolean | null
+          push_notifications?: boolean | null
+          sms_notifications?: boolean | null
+          sound_enabled?: boolean | null
+          updated_at?: string
+          user_id?: string
+          volume?: string | null
         }
         Relationships: []
       }
@@ -166,26 +289,89 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          delivery_fee: number | null
+          description: string | null
+          email: string | null
           id: string
+          logo_url: string | null
+          minimum_order: number | null
+          opening_hours: string | null
           phone: string | null
           restaurant_name: string | null
           updated_at: string
+          website: string | null
         }
         Insert: {
           address?: string | null
           created_at?: string
+          delivery_fee?: number | null
+          description?: string | null
+          email?: string | null
           id: string
+          logo_url?: string | null
+          minimum_order?: number | null
+          opening_hours?: string | null
           phone?: string | null
           restaurant_name?: string | null
           updated_at?: string
+          website?: string | null
         }
         Update: {
           address?: string | null
           created_at?: string
+          delivery_fee?: number | null
+          description?: string | null
+          email?: string | null
           id?: string
+          logo_url?: string | null
+          minimum_order?: number | null
+          opening_hours?: string | null
           phone?: string | null
           restaurant_name?: string | null
           updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      scale_settings: {
+        Row: {
+          auto_tare: boolean | null
+          connected: boolean | null
+          connection_type: string | null
+          created_at: string
+          device_name: string | null
+          enabled: boolean | null
+          id: string
+          precision: string | null
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_tare?: boolean | null
+          connected?: boolean | null
+          connection_type?: string | null
+          created_at?: string
+          device_name?: string | null
+          enabled?: boolean | null
+          id?: string
+          precision?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_tare?: boolean | null
+          connected?: boolean | null
+          connection_type?: string | null
+          created_at?: string
+          device_name?: string | null
+          enabled?: boolean | null
+          id?: string
+          precision?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -259,6 +445,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_settings: {
+        Row: {
+          created_at: string
+          default_message: string
+          enabled: boolean | null
+          id: string
+          phone_number: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_message: string
+          enabled?: boolean | null
+          id?: string
+          phone_number: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_message?: string
+          enabled?: boolean | null
+          id?: string
+          phone_number?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

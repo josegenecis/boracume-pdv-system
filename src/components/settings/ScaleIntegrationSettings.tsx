@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Scale, Bluetooth, Usb, Wifi, Save, TestTube } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ScaleIntegrationSettings = () => {
   const [scaleSettings, setScaleSettings] = useState({
@@ -20,13 +22,50 @@ const ScaleIntegrationSettings = () => {
     connected: false
   });
 
-  const [availableDevices, setAvailableDevices] = useState([
+  const [availableDevices] = useState([
     { id: 'scale_001', name: 'Balança Toledo 3400', type: 'bluetooth', status: 'available' },
-    { id: 'scale_002', name: 'Balança Filizola BP-15', type: 'usb', status: 'connected' },
+    { id: 'scale_002', name: 'Balança Filizola BP-15', type: 'usb', status: 'available' },
     { id: 'scale_003', name: 'Balança Urano POP-Z', type: 'wifi', status: 'available' }
   ]);
 
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('scale_settings')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar configurações:', error);
+        return;
+      }
+
+      if (data) {
+        setScaleSettings({
+          enabled: data.enabled,
+          connectionType: data.connection_type,
+          deviceName: data.device_name || '',
+          unit: data.unit,
+          precision: data.precision,
+          autoTare: data.auto_tare,
+          connected: data.connected
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+    }
+  };
 
   const handleToggle = (field: string) => {
     setScaleSettings(prev => ({
@@ -44,23 +83,15 @@ const ScaleIntegrationSettings = () => {
 
   const connectToDevice = async (deviceId: string) => {
     try {
-      // Simular conexão com balança
       toast({
         title: "Conectando...",
         description: "Tentando conectar com a balança.",
       });
 
-      // Simular delay de conexão
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const device = availableDevices.find(d => d.id === deviceId);
       if (device) {
-        setAvailableDevices(prev =>
-          prev.map(d =>
-            d.id === deviceId ? { ...d, status: 'connected' } : { ...d, status: 'available' }
-          )
-        );
-
         setScaleSettings(prev => ({
           ...prev,
           deviceName: device.name,
@@ -91,7 +122,6 @@ const ScaleIntegrationSettings = () => {
       return;
     }
 
-    // Simular leitura da balança
     const weight = (Math.random() * 5).toFixed(3);
     toast({
       title: "Teste da balança",
@@ -99,14 +129,58 @@ const ScaleIntegrationSettings = () => {
     });
   };
 
-  const handleSave = () => {
-    // Aqui salvaria no banco de dados
-    console.log('Configurações da balança:', scaleSettings);
+  const handleSave = async () => {
+    if (!user) return;
     
-    toast({
-      title: "Configurações salvas!",
-      description: "As configurações de integração com balança foram atualizadas.",
-    });
+    setLoading(true);
+    try {
+      const { data: existingData } = await supabase
+        .from('scale_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      const settingsData = {
+        user_id: user.id,
+        enabled: scaleSettings.enabled,
+        connection_type: scaleSettings.connectionType,
+        device_name: scaleSettings.deviceName,
+        unit: scaleSettings.unit,
+        precision: scaleSettings.precision,
+        auto_tare: scaleSettings.autoTare,
+        connected: scaleSettings.connected,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingData) {
+        const { error } = await supabase
+          .from('scale_settings')
+          .update(settingsData)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('scale_settings')
+          .insert(settingsData);
+
+        if (error) throw error;
+      }
+      
+      toast({
+        title: "Configurações salvas!",
+        description: "As configurações de integração com balança foram atualizadas.",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: "Não foi possível salvar as configurações. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getConnectionIcon = (type: string) => {
@@ -269,12 +343,11 @@ const ScaleIntegrationSettings = () => {
                   <div className="flex items-center gap-2">
                     {getStatusBadge(device.status)}
                     <Button
-                      variant={device.status === 'connected' ? 'destructive' : 'outline'}
+                      variant="outline"
                       size="sm"
                       onClick={() => connectToDevice(device.id)}
-                      disabled={device.status === 'connected' && scaleSettings.connected}
                     >
-                      {device.status === 'connected' ? 'Desconectar' : 'Conectar'}
+                      Conectar
                     </Button>
                   </div>
                 </div>
@@ -304,9 +377,9 @@ const ScaleIntegrationSettings = () => {
       )}
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto">
+        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
           <Save size={16} className="mr-2" />
-          Salvar Configurações
+          {loading ? 'Salvando...' : 'Salvar Configurações'}
         </Button>
       </div>
     </div>

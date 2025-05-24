@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
 import ProfileSettings from '@/components/settings/ProfileSettings';
@@ -8,20 +7,18 @@ import NotificationSettings from '@/components/settings/NotificationSettings';
 import AppearanceSettings from '@/components/settings/AppearanceSettings';
 import WhatsAppSettings from '@/components/settings/WhatsAppSettings';
 import ScaleIntegrationSettings from '@/components/settings/ScaleIntegrationSettings';
+import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Configuracoes: React.FC = () => {
   const { subscription } = useAuth();
   
-  // Check if marketing feature is available
   const hasMarketingFeature = () => {
-    // During trial, all features are available
     if (subscription?.status === 'trial') {
       return true;
     }
     
-    // If elite plan, all features are available
     if (subscription?.status === 'active' && subscription?.plan?.name === 'Elite') {
       return true;
     }
@@ -39,6 +36,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="appearance">Aparência</TabsTrigger>
+          <TabsTrigger value="delivery">Delivery</TabsTrigger>
           <TabsTrigger value="qrcode">QR Code</TabsTrigger>
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
@@ -62,6 +60,10 @@ const Configuracoes: React.FC = () => {
         
         <TabsContent value="appearance">
           <AppearanceSettings />
+        </TabsContent>
+        
+        <TabsContent value="delivery">
+          <DeliverySettings />
         </TabsContent>
         
         <TabsContent value="qrcode">

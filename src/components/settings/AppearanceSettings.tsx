@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Palette, Monitor, Sun, Moon, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const AppearanceSettings = () => {
   const [appearance, setAppearance] = useState({
@@ -19,7 +21,111 @@ const AppearanceSettings = () => {
     reducedMotion: false
   });
 
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    applyThemeChanges();
+  }, [appearance]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('appearance_settings')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar configurações:', error);
+        return;
+      }
+
+      if (data) {
+        setAppearance({
+          theme: data.theme,
+          primaryColor: data.primary_color,
+          fontSize: data.font_size,
+          compactMode: data.compact_mode,
+          showAnimations: data.show_animations,
+          highContrast: data.high_contrast,
+          reducedMotion: data.reduced_motion
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+    }
+  };
+
+  const applyThemeChanges = () => {
+    const root = document.documentElement;
+    
+    // Aplicar tema
+    if (appearance.theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+
+    // Aplicar cor principal
+    const colorMap = {
+      orange: { primary: '25 25 112', accent: '255 127 80' },
+      blue: { primary: '37 99 235', accent: '147 197 253' },
+      green: { primary: '34 197 94', accent: '134 239 172' },
+      purple: { primary: '147 51 234', accent: '196 181 253' },
+      red: { primary: '239 68 68', accent: '248 113 113' }
+    };
+
+    const colors = colorMap[appearance.primaryColor as keyof typeof colorMap];
+    if (colors) {
+      root.style.setProperty('--primary', colors.primary);
+      root.style.setProperty('--accent', colors.accent);
+    }
+
+    // Aplicar tamanho da fonte
+    const fontSizes = {
+      small: '14px',
+      medium: '16px',
+      large: '18px',
+      'extra-large': '20px'
+    };
+    root.style.fontSize = fontSizes[appearance.fontSize as keyof typeof fontSizes];
+
+    // Aplicar modo compacto
+    if (appearance.compactMode) {
+      root.classList.add('compact-mode');
+    } else {
+      root.classList.remove('compact-mode');
+    }
+
+    // Aplicar alto contraste
+    if (appearance.highContrast) {
+      root.classList.add('high-contrast');
+    } else {
+      root.classList.remove('high-contrast');
+    }
+
+    // Aplicar movimento reduzido
+    if (appearance.reducedMotion) {
+      root.classList.add('reduced-motion');
+    } else {
+      root.classList.remove('reduced-motion');
+    }
+
+    // Aplicar animações
+    if (!appearance.showAnimations) {
+      root.classList.add('no-animations');
+    } else {
+      root.classList.remove('no-animations');
+    }
+  };
 
   const handleToggle = (field: string) => {
     setAppearance(prev => ({
@@ -35,14 +141,58 @@ const AppearanceSettings = () => {
     }));
   };
 
-  const handleSave = () => {
-    // Aqui salvaria no banco de dados e aplicaria as mudanças
-    console.log('Configurações de aparência:', appearance);
+  const handleSave = async () => {
+    if (!user) return;
     
-    toast({
-      title: "Aparência atualizada!",
-      description: "As configurações de aparência foram salvas com sucesso.",
-    });
+    setLoading(true);
+    try {
+      const { data: existingData } = await supabase
+        .from('appearance_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      const settingsData = {
+        user_id: user.id,
+        theme: appearance.theme,
+        primary_color: appearance.primaryColor,
+        font_size: appearance.fontSize,
+        compact_mode: appearance.compactMode,
+        show_animations: appearance.showAnimations,
+        high_contrast: appearance.highContrast,
+        reduced_motion: appearance.reducedMotion,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingData) {
+        const { error } = await supabase
+          .from('appearance_settings')
+          .update(settingsData)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('appearance_settings')
+          .insert(settingsData);
+
+        if (error) throw error;
+      }
+      
+      toast({
+        title: "Aparência atualizada!",
+        description: "As configurações de aparência foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: "Não foi possível salvar as configurações. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const colorOptions = [
@@ -217,9 +367,9 @@ const AppearanceSettings = () => {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto">
+        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
           <Save size={16} className="mr-2" />
-          Salvar Alterações
+          {loading ? 'Salvando...' : 'Salvar Alterações'}
         </Button>
       </div>
     </div>

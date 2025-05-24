@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Volume2, Bell, Mail, MessageSquare, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const NotificationSettings = () => {
   const [notifications, setNotifications] = useState({
@@ -22,7 +24,47 @@ const NotificationSettings = () => {
     volume: '80'
   });
 
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      loadSettings();
+    }
+  }, [user]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('notification_settings')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar configurações:', error);
+        return;
+      }
+
+      if (data) {
+        setNotifications({
+          newOrders: data.new_orders,
+          orderUpdates: data.order_updates,
+          lowStock: data.low_stock,
+          dailyReports: data.daily_reports,
+          emailNotifications: data.email_notifications,
+          smsNotifications: data.sms_notifications,
+          pushNotifications: data.push_notifications,
+          soundEnabled: data.sound_enabled,
+          orderSound: data.order_sound,
+          volume: data.volume
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+    }
+  };
 
   const handleToggle = (field: string) => {
     setNotifications(prev => ({
@@ -39,25 +81,103 @@ const NotificationSettings = () => {
   };
 
   const playTestSound = () => {
-    // Simular som de notificação
-    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSqR2vjNfS0FJHfI2+WRQQ0XXr3p6a1VFAxEn+Dzu2oiBSqM2frQg');
-    audio.volume = parseInt(notifications.volume) / 100;
-    audio.play().catch(() => {
+    if (!notifications.soundEnabled) {
       toast({
-        title: "Teste de som",
-        description: "Som de notificação reproduzido (se disponível no navegador).",
+        title: "Som desabilitado",
+        description: "Habilite o som nas configurações para testar.",
+        variant: "destructive",
       });
+      return;
+    }
+
+    // Criar áudio baseado no tipo de som selecionado
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Configurar frequência baseada no som selecionado
+    let frequency = 800; // bell
+    switch (notifications.orderSound) {
+      case 'chime': frequency = 1000; break;
+      case 'ding': frequency = 1200; break;
+      case 'notification': frequency = 600; break;
+    }
+    
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    oscillator.type = 'sine';
+    
+    // Configurar volume
+    const volume = parseInt(notifications.volume) / 100;
+    gainNode.gain.setValueAtTime(volume * 0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+
+    toast({
+      title: "Som reproduzido",
+      description: `Som "${notifications.orderSound}" com volume ${notifications.volume}%.`,
     });
   };
 
-  const handleSave = () => {
-    // Aqui salvaria no banco de dados
-    console.log('Configurações de notificação:', notifications);
+  const handleSave = async () => {
+    if (!user) return;
     
-    toast({
-      title: "Configurações salvas!",
-      description: "As configurações de notificação foram atualizadas com sucesso.",
-    });
+    setLoading(true);
+    try {
+      const { data: existingData } = await supabase
+        .from('notification_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      const settingsData = {
+        user_id: user.id,
+        new_orders: notifications.newOrders,
+        order_updates: notifications.orderUpdates,
+        low_stock: notifications.lowStock,
+        daily_reports: notifications.dailyReports,
+        email_notifications: notifications.emailNotifications,
+        sms_notifications: notifications.smsNotifications,
+        push_notifications: notifications.pushNotifications,
+        sound_enabled: notifications.soundEnabled,
+        order_sound: notifications.orderSound,
+        volume: notifications.volume,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingData) {
+        const { error } = await supabase
+          .from('notification_settings')
+          .update(settingsData)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('notification_settings')
+          .insert(settingsData);
+
+        if (error) throw error;
+      }
+      
+      toast({
+        title: "Configurações salvas!",
+        description: "As configurações de notificação foram atualizadas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: "Não foi possível salvar as configurações. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -254,9 +374,9 @@ const NotificationSettings = () => {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto">
+        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
           <Save size={16} className="mr-2" />
-          Salvar Configurações
+          {loading ? 'Salvando...' : 'Salvar Configurações'}
         </Button>
       </div>
     </div>
