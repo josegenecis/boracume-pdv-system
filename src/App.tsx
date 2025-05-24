@@ -14,6 +14,7 @@ import Entregadores from "./pages/Entregadores";
 import Financeiro from "./pages/Financeiro";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
+import PDV from "./pages/PDV";
 import NotFound from "./pages/NotFound";
 import WhatsAppButton from "./components/chat/WhatsAppButton";
 import Subscription from "./pages/Subscription";
@@ -45,12 +46,13 @@ const App = () => (
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/cozinha" element={<Kitchen />} />
                   <Route path="/produtos" element={<Products />} />
+                  <Route path="/pedidos" element={<Orders />} />
+                  <Route path="/pdv" element={<PDV />} />
                   <Route path="/entregadores" element={<Entregadores />} />
                   <Route path="/financeiro" element={<Financeiro />} />
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
                   <Route path="/assinatura" element={<Subscription />} />
-                  <Route path="/pedidos" element={<Orders />} />
                 </Route>
               </Route>
               

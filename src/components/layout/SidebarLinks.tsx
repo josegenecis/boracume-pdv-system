@@ -11,7 +11,8 @@ import {
   Settings,
   CreditCard,
   Home,
-  Package
+  Package,
+  Calculator
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -58,6 +59,11 @@ const SidebarLinks: React.FC = () => {
       title: 'Pedidos',
       icon: <ShoppingCart className="h-5 w-5" />,
       href: '/pedidos',
+    },
+    {
+      title: 'PDV',
+      icon: <Calculator className="h-5 w-5" />,
+      href: '/pdv',
     },
     {
       title: 'Cozinha',

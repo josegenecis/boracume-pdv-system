@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Bell, Settings, ShoppingCart, Package, CreditCard, 
-  FileText, Users, LogOut, Menu, Home, Clock
+  FileText, Users, LogOut, Menu, Home, Clock, Calculator
 } from 'lucide-react';
 import { 
   Sheet, SheetContent, SheetTrigger 
@@ -92,6 +92,7 @@ const TopBar: React.FC = () => {
     if (path === '/cozinha') return 'KDS (Cozinha)';
     if (path === '/produtos') return 'Produtos';
     if (path === '/pedidos') return 'Pedidos';
+    if (path === '/pdv') return 'PDV (Ponto de Venda)';
     if (path === '/entregadores') return 'Entregadores';
     if (path === '/financeiro') return 'Financeiro';
     if (path === '/relatorios') return 'Relatórios';
