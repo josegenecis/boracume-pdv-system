@@ -49,10 +49,23 @@ const DeliverySettings = () => {
       }
 
       if (data) {
+        // Safely parse the delivery_areas from JSON
+        let deliveryAreas: DeliveryArea[] = [];
+        if (data.delivery_areas) {
+          try {
+            deliveryAreas = Array.isArray(data.delivery_areas) 
+              ? data.delivery_areas as DeliveryArea[]
+              : JSON.parse(data.delivery_areas as string);
+          } catch (e) {
+            console.error('Error parsing delivery areas:', e);
+            deliveryAreas = [];
+          }
+        }
+
         setSettings({
-          mapsIntegrationEnabled: data.maps_integration_enabled,
+          mapsIntegrationEnabled: data.maps_integration_enabled || false,
           googleMapsApiKey: data.google_maps_api_key || '',
-          deliveryAreas: data.delivery_areas || []
+          deliveryAreas: deliveryAreas
         });
       }
     } catch (error) {
@@ -126,11 +139,12 @@ const DeliverySettings = () => {
         .eq('user_id', user.id)
         .single();
 
+      // Convert DeliveryArea[] to Json format for Supabase
       const settingsData = {
         user_id: user.id,
         maps_integration_enabled: settings.mapsIntegrationEnabled,
         google_maps_api_key: settings.googleMapsApiKey,
-        delivery_areas: settings.deliveryAreas,
+        delivery_areas: JSON.stringify(settings.deliveryAreas),
         updated_at: new Date().toISOString()
       };
 
