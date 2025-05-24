@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,9 +52,12 @@ const DeliverySettings = () => {
         let deliveryAreas: DeliveryArea[] = [];
         if (data.delivery_areas) {
           try {
-            deliveryAreas = Array.isArray(data.delivery_areas) 
-              ? data.delivery_areas as DeliveryArea[]
-              : JSON.parse(data.delivery_areas as string);
+            // Properly handle the Json type conversion
+            if (Array.isArray(data.delivery_areas)) {
+              deliveryAreas = data.delivery_areas as unknown as DeliveryArea[];
+            } else if (typeof data.delivery_areas === 'string') {
+              deliveryAreas = JSON.parse(data.delivery_areas);
+            }
           } catch (e) {
             console.error('Error parsing delivery areas:', e);
             deliveryAreas = [];
