@@ -152,17 +152,17 @@ const TopBar: React.FC = () => {
 const DashboardLayout: React.FC = () => {
   const isMobile = useIsMobile();
   const location = useLocation();
-  const [isLoading, setIsLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(false);
   
-  // Effect to handle page loading - fixing potential infinite loading issue
+  // Simplified page loading - only for route transitions, not auth
   useEffect(() => {
-    // Set loading to true when route changes
-    setIsLoading(true);
+    console.log('📍 Route changed to:', location.pathname);
+    setPageLoading(true);
     
     // Set loading to false after a small delay
     const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 300);
+      setPageLoading(false);
+    }, 200); // Reduced from 300ms
     
     return () => clearTimeout(timer);
   }, [location.pathname]);
@@ -179,9 +179,9 @@ const DashboardLayout: React.FC = () => {
         <TopBar />
         
         <main className="flex-1 overflow-y-auto p-4">
-          {isLoading ? (
+          {pageLoading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-boracume-orange"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-boracume-orange"></div>
             </div>
           ) : (
             <Outlet />

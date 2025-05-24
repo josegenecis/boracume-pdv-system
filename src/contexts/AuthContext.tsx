@@ -48,26 +48,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Fetch profile from Supabase
+  // Timeout for async operations
+  const createTimeoutPromise = (ms: number) => 
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Operation timeout')), ms)
+    );
+
+  // Fetch profile from Supabase with timeout and error handling
   const fetchProfile = async (userId: string) => {
+    console.log('🔍 Fetching profile for user:', userId);
     try {
-      const { data, error } = await supabase
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      if (data) setProfile(data as Profile);
+      const result = await Promise.race([
+        profilePromise,
+        createTimeoutPromise(10000) // 10 second timeout
+      ]);
+
+      const { data, error } = result as any;
+      
+      if (error) {
+        console.warn('⚠️ Profile fetch error (this might be expected for new users):', error.message);
+        // Don't throw for missing profile - it's normal for new users
+        if (error.code !== 'PGRST116') {
+          throw error;
+        }
+        return;
+      }
+      
+      if (data) {
+        console.log('✅ Profile loaded successfully');
+        setProfile(data as Profile);
+      }
     } catch (error: any) {
-      console.error('Error fetching profile:', error.message);
+      console.error('❌ Error fetching profile:', error.message);
+      // Don't block auth flow for profile errors
     }
   };
 
-  // Fetch subscription from Supabase
+  // Fetch subscription from Supabase with timeout and error handling
   const fetchSubscription = async (userId: string) => {
+    console.log('🔍 Fetching subscription for user:', userId);
     try {
-      const { data, error } = await supabase
+      const subscriptionPromise = supabase
         .from('subscriptions')
         .select(`
           *,
@@ -80,10 +107,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('user_id', userId)
         .single();
 
-      if (error) throw error;
-      if (data) setSubscription(data as Subscription);
+      const result = await Promise.race([
+        subscriptionPromise,
+        createTimeoutPromise(10000) // 10 second timeout
+      ]);
+
+      const { data, error } = result as any;
+      
+      if (error) {
+        console.warn('⚠️ Subscription fetch error (this might be expected):', error.message);
+        // Don't throw for missing subscription
+        if (error.code !== 'PGRST116') {
+          throw error;
+        }
+        return;
+      }
+      
+      if (data) {
+        console.log('✅ Subscription loaded successfully');
+        setSubscription(data as Subscription);
+      }
     } catch (error: any) {
-      console.error('Error fetching subscription:', error.message);
+      console.error('❌ Error fetching subscription:', error.message);
+      // Don't block auth flow for subscription errors
     }
   };
 
@@ -94,51 +140,109 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Initialize auth state
+  // Initialize auth state with comprehensive error handling
   useEffect(() => {
+    console.log('🚀 Initializing AuthContext');
+    
     const initializeAuth = async () => {
-      setIsLoading(true);
-      
-      // First check for existing session
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      setSession(currentSession);
-      setUser(currentSession?.user || null);
-      
-      if (currentSession?.user) {
-        await Promise.all([
-          fetchProfile(currentSession.user.id),
-          fetchSubscription(currentSession.user.id)
+      try {
+        setIsLoading(true);
+        
+        // Set up auth state change listener FIRST
+        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
+            console.log('🔄 Auth event:', event, 'Session exists:', !!newSession);
+            
+            setSession(newSession);
+            setUser(newSession?.user || null);
+            
+            if (event === 'SIGNED_IN' && newSession?.user) {
+              console.log('👤 User signed in, loading profile data...');
+              // Use setTimeout to avoid blocking the auth state change
+              setTimeout(async () => {
+                try {
+                  await Promise.all([
+                    fetchProfile(newSession.user.id),
+                    fetchSubscription(newSession.user.id)
+                  ]);
+                } catch (error) {
+                  console.error('❌ Error loading user data:', error);
+                } finally {
+                  setIsLoading(false);
+                }
+              }, 100);
+            } else if (event === 'SIGNED_OUT') {
+              console.log('👋 User signed out');
+              setProfile(null);
+              setSubscription(null);
+              setIsLoading(false);
+            } else {
+              setIsLoading(false);
+            }
+          }
+        );
+        
+        // THEN check for existing session
+        console.log('🔍 Checking for existing session...');
+        const sessionPromise = supabase.auth.getSession();
+        const sessionResult = await Promise.race([
+          sessionPromise,
+          createTimeoutPromise(8000) // 8 second timeout
         ]);
+        
+        const { data: { session: currentSession }, error } = sessionResult as any;
+        
+        if (error) {
+          console.error('❌ Session check error:', error);
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('📋 Initial session check:', !!currentSession);
+        setSession(currentSession);
+        setUser(currentSession?.user || null);
+        
+        if (currentSession?.user) {
+          console.log('👤 Existing session found, loading user data...');
+          try {
+            await Promise.all([
+              fetchProfile(currentSession.user.id),
+              fetchSubscription(currentSession.user.id)
+            ]);
+          } catch (error) {
+            console.error('❌ Error loading initial user data:', error);
+          }
+        }
+        
+        // Cleanup function
+        return () => {
+          console.log('🧹 Cleaning up auth subscription');
+          authSubscription.unsubscribe();
+        };
+        
+      } catch (error) {
+        console.error('❌ Fatal auth initialization error:', error);
+        toast({
+          title: "Erro de conexão",
+          description: "Problema ao conectar com o servidor. Recarregue a página.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
     
-    initializeAuth();
+    const cleanup = initializeAuth();
     
-    // Set up auth state change listener
-    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        console.log('Auth event:', event);
-        setSession(newSession);
-        setUser(newSession?.user || null);
-        
-        if (event === 'SIGNED_IN' && newSession?.user) {
-          await Promise.all([
-            fetchProfile(newSession.user.id),
-            fetchSubscription(newSession.user.id)
-          ]);
-        }
-        
-        if (event === 'SIGNED_OUT') {
-          setProfile(null);
-          setSubscription(null);
-        }
-      }
-    );
+    // Safety timeout - if loading takes too long, force stop
+    const safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ Auth initialization taking too long, forcing stop');
+      setIsLoading(false);
+    }, 15000); // 15 second safety timeout
     
     return () => {
-      authSubscription.unsubscribe();
+      clearTimeout(safetyTimeout);
+      cleanup?.then(fn => fn?.());
     };
   }, []);
 
@@ -146,10 +250,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setIsLoading(true);
+      console.log('🔐 Attempting sign in for:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
       if (error) throw error;
       
+      console.log('✅ Sign in successful');
       toast({
         title: "Login realizado com sucesso",
         description: "Bem-vindo de volta!",
@@ -157,6 +264,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('❌ Sign in error:', error);
       toast({
         title: "Erro ao fazer login",
         description: error.message,
@@ -171,6 +279,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, restaurantName: string) => {
     try {
       setIsLoading(true);
+      console.log('📝 Attempting sign up for:', email);
       
       // Register user
       const { data, error } = await supabase.auth.signUp({ 
@@ -182,12 +291,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Update profile with restaurant name
       if (data?.user) {
-        await supabase
-          .from('profiles')
-          .update({ restaurant_name: restaurantName })
-          .eq('id', data.user.id);
+        try {
+          await supabase
+            .from('profiles')
+            .update({ restaurant_name: restaurantName })
+            .eq('id', data.user.id);
+          console.log('✅ Profile updated with restaurant name');
+        } catch (profileError) {
+          console.warn('⚠️ Could not update profile immediately:', profileError);
+        }
       }
       
+      console.log('✅ Sign up successful');
       toast({
         title: "Conta criada com sucesso",
         description: "Bem-vindo ao BoraCumê!",
@@ -195,6 +310,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       navigate('/dashboard');
     } catch (error: any) {
+      console.error('❌ Sign up error:', error);
       toast({
         title: "Erro ao criar conta",
         description: error.message,
@@ -209,6 +325,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setIsLoading(true);
+      console.log('👋 Attempting sign out');
+      
       const { error } = await supabase.auth.signOut();
       
       if (error) throw error;
@@ -220,6 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Você saiu da sua conta com sucesso.",
       });
     } catch (error: any) {
+      console.error('❌ Sign out error:', error);
       toast({
         title: "Erro ao fazer logout",
         description: error.message,
