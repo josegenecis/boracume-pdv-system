@@ -56,7 +56,7 @@ export const useKitchenOrders = () => {
       // Convert the data to match our KitchenOrder interface
       const formattedOrders: KitchenOrder[] = (data || []).map(order => ({
         ...order,
-        items: Array.isArray(order.items) ? order.items as OrderItem[] : [],
+        items: Array.isArray(order.items) ? (order.items as unknown as OrderItem[]) : [],
         priority: order.priority as 'normal' | 'high',
         status: order.status as 'pending' | 'preparing' | 'ready' | 'completed'
       }));
