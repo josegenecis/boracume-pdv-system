@@ -41,7 +41,7 @@ export const useKitchenOrders = () => {
       console.log('🔄 Fetching kitchen orders...');
       
       const { data, error } = await supabase
-        .from('kitchen_orders')
+        .from('kitchen_orders' as any)
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -52,7 +52,7 @@ export const useKitchenOrders = () => {
       }
 
       console.log('✅ Kitchen orders fetched:', data?.length || 0);
-      setOrders(data || []);
+      setOrders((data as KitchenOrder[]) || []);
       setError(null);
     } catch (err) {
       console.error('❌ Unexpected error fetching kitchen orders:', err);
@@ -67,7 +67,7 @@ export const useKitchenOrders = () => {
       console.log(`🔄 Updating order ${orderId} status to ${newStatus}`);
       
       const { error } = await supabase
-        .from('kitchen_orders')
+        .from('kitchen_orders' as any)
         .update({ status: newStatus })
         .eq('id', orderId);
 
@@ -113,7 +113,7 @@ export const useKitchenOrders = () => {
       };
 
       const { error } = await supabase
-        .from('kitchen_orders')
+        .from('kitchen_orders' as any)
         .insert([sampleOrder]);
 
       if (error) {

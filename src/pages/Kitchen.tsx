@@ -5,15 +5,43 @@ import { Plus, RefreshCw } from 'lucide-react';
 import KitchenOrderCard from '@/components/kitchen/KitchenOrderCard';
 import { useKitchenOrders } from '@/hooks/useKitchenOrders';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/components/ui/use-toast';
 
 const Kitchen = () => {
   const { orders, loading, error, updateOrderStatus, createSampleOrder, refetch } = useKitchenOrders();
+  const { toast } = useToast();
 
   const handleStatusChange = async (id: string, status: 'preparing' | 'ready') => {
     try {
       await updateOrderStatus(id, status);
+      toast({
+        title: "Status atualizado",
+        description: `Pedido marcado como ${status === 'preparing' ? 'em preparo' : 'pronto'}`,
+      });
     } catch (error) {
       console.error('Erro ao atualizar status do pedido:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar status do pedido",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCreateSampleOrder = async () => {
+    try {
+      await createSampleOrder();
+      toast({
+        title: "Pedido criado",
+        description: "Pedido de teste criado com sucesso",
+      });
+    } catch (error) {
+      console.error('Erro ao criar pedido teste:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao criar pedido de teste",
+        variant: "destructive"
+      });
     }
   };
 
@@ -66,7 +94,7 @@ const Kitchen = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Painel da Cozinha (KDS)</h1>
         <div className="flex gap-2">
-          <Button onClick={createSampleOrder} variant="outline" size="sm">
+          <Button onClick={handleCreateSampleOrder} variant="outline" size="sm">
             <Plus className="h-4 w-4 mr-2" />
             Pedido Teste
           </Button>

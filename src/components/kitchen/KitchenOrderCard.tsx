@@ -16,10 +16,14 @@ interface OrderItem {
 
 interface KitchenOrder {
   id: string;
-  orderNumber: string;
-  customer: string;
+  order_number: string;
+  customer_name: string;
+  customer_phone?: string;
   items: OrderItem[];
   priority: 'normal' | 'high';
+  status: 'pending' | 'preparing' | 'ready' | 'completed';
+  created_at: string;
+  updated_at: string;
   timestamp: Date;
 }
 
@@ -29,10 +33,10 @@ interface KitchenOrderCardProps {
 }
 
 const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChange }) => {
-  const [status, setStatus] = useState<'pending' | 'preparing' | 'ready'>('pending');
+  const [currentStatus, setCurrentStatus] = useState<'pending' | 'preparing' | 'ready'>(order.status as 'pending' | 'preparing' | 'ready');
   
   const handleStatusChange = (newStatus: 'preparing' | 'ready') => {
-    setStatus(newStatus);
+    setCurrentStatus(newStatus);
     onStatusChange(order.id, newStatus);
   };
   
@@ -54,12 +58,12 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <div className="flex justify-between items-center">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              Pedido #{order.orderNumber}
+              Pedido #{order.order_number}
               {order.priority === 'high' && (
                 <Badge className="bg-red-500">URGENTE</Badge>
               )}
             </CardTitle>
-            <div className="text-sm text-muted-foreground">Cliente: {order.customer}</div>
+            <div className="text-sm text-muted-foreground">Cliente: {order.customer_name}</div>
           </div>
           <div className="flex items-center text-sm text-muted-foreground">
             <Clock size={14} className="mr-1" />
@@ -92,7 +96,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         </ul>
       </CardContent>
       <CardFooter className="pt-0 flex justify-between">
-        {status === 'pending' && (
+        {currentStatus === 'pending' && (
           <Button 
             className="w-full" 
             onClick={() => handleStatusChange('preparing')}
@@ -100,15 +104,15 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
             Iniciar Preparo
           </Button>
         )}
-        {status === 'preparing' && (
+        {currentStatus === 'preparing' && (
           <Button 
-            className="w-full bg-boracume-green hover:bg-boracume-green/90" 
+            className="w-full bg-green-600 hover:bg-green-700" 
             onClick={() => handleStatusChange('ready')}
           >
             Marcar como Pronto
           </Button>
         )}
-        {status === 'ready' && (
+        {currentStatus === 'ready' && (
           <Button 
             className="w-full" 
             variant="outline" 
