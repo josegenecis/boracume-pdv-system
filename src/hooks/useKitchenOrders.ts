@@ -52,7 +52,16 @@ export const useKitchenOrders = () => {
       }
 
       console.log('✅ Kitchen orders fetched:', data?.length || 0);
-      setOrders(data || []);
+      
+      // Convert the data to match our KitchenOrder interface
+      const formattedOrders: KitchenOrder[] = (data || []).map(order => ({
+        ...order,
+        items: Array.isArray(order.items) ? order.items as OrderItem[] : [],
+        priority: order.priority as 'normal' | 'high',
+        status: order.status as 'pending' | 'preparing' | 'ready' | 'completed'
+      }));
+      
+      setOrders(formattedOrders);
       setError(null);
     } catch (err) {
       console.error('❌ Unexpected error fetching kitchen orders:', err);
