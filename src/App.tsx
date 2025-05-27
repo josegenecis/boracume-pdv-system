@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,6 +20,7 @@ import Subscription from "./pages/Subscription";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import RouteGuard from "./components/auth/RouteGuard";
+import Menu from "./pages/Menu";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +38,7 @@ const App = () => (
               {/* Public routes */}
               <Route element={<RouteGuard requireAuth={false} />}>
                 <Route path="/login" element={<Login />} />
+                <Route path="/menu/:restaurantId?" element={<Menu />} />
               </Route>
               
               {/* Protected routes */}

@@ -68,7 +68,7 @@ const QRCodeGenerator = () => {
             Gerador de QR Code
           </CardTitle>
           <CardDescription>
-            Crie um QR Code para que seus clientes acessem o cardápio digital
+            Crie um QR Code para que seus clientes acessem o cardápio digital e façam pedidos
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -85,13 +85,24 @@ const QRCodeGenerator = () => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Link final: {menuLink}
+              Link do cardápio: {menuLink}
             </p>
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>💡 Dica:</strong> Seus clientes poderão visualizar o cardápio, adicionar itens ao carrinho e fazer pedidos diretamente através deste link!
+              </p>
+            </div>
           </div>
           
           {qrCodeUrl && (
             <div className="flex flex-col items-center space-y-4 p-4 border rounded-lg">
               <img src={qrCodeUrl} alt="QR Code do Cardápio" className="border rounded" />
+              <div className="text-center space-y-2">
+                <p className="text-sm font-medium">QR Code do Cardápio Digital</p>
+                <p className="text-xs text-muted-foreground">
+                  Escaneie para acessar o cardápio e fazer pedidos
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={downloadQRCode}>
                   Baixar QR Code
@@ -99,6 +110,12 @@ const QRCodeGenerator = () => {
                 <Button variant="outline" onClick={() => copyToClipboard(menuLink)}>
                   <Copy size={16} className="mr-2" />
                   Copiar Link
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => window.open(menuLink, '_blank')}
+                >
+                  Visualizar Cardápio
                 </Button>
               </div>
             </div>
@@ -113,7 +130,7 @@ const QRCodeGenerator = () => {
             Links de Compartilhamento
           </CardTitle>
           <CardDescription>
-            Compartilhe seu cardápio em diferentes plataformas
+            Compartilhe seu cardápio digital em diferentes plataformas
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -121,11 +138,11 @@ const QRCodeGenerator = () => {
             <div className="p-4 border rounded-lg">
               <h3 className="font-medium mb-2">WhatsApp</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Compartilhe diretamente no WhatsApp
+                Compartilhe o cardápio digital diretamente no WhatsApp
               </p>
               <Button 
                 className="w-full bg-green-600 hover:bg-green-700"
-                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Confira nosso cardápio: ${menuLink}`)}`)}
+                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`🍕 Confira nosso cardápio digital e faça seu pedido: ${menuLink}`)}`)}
               >
                 <Share size={16} className="mr-2" />
                 Compartilhar
@@ -146,6 +163,18 @@ const QRCodeGenerator = () => {
                 Copiar Link
               </Button>
             </div>
+          </div>
+          
+          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <h3 className="font-medium mb-2 text-orange-800">📋 Como usar o cardápio digital:</h3>
+            <ul className="text-sm text-orange-700 space-y-1">
+              <li>• Clientes escaneiam o QR Code ou acessam o link</li>
+              <li>• Visualizam produtos com fotos e descrições</li>
+              <li>• Adicionam itens ao carrinho</li>
+              <li>• Preenchem dados pessoais e endereço</li>
+              <li>• Escolhem forma de pagamento</li>
+              <li>• Finalizam o pedido que chega em tempo real</li>
+            </ul>
           </div>
         </CardContent>
       </Card>
