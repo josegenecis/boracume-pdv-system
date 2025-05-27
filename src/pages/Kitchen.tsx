@@ -1,114 +1,81 @@
 
-import React, { useState } from 'react';
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Plus, RefreshCw } from 'lucide-react';
 import KitchenOrderCard from '@/components/kitchen/KitchenOrderCard';
-
-// Define types for our order data
-interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  options?: string[];
-  notes?: string;
-}
-
-interface KitchenOrder {
-  id: string;
-  orderNumber: string;
-  customer: string;
-  items: OrderItem[];
-  priority: 'normal' | 'high';
-  timestamp: Date;
-}
-
-// Sample data
-const initialOrders: KitchenOrder[] = [
-  {
-    id: '1',
-    orderNumber: '8765',
-    customer: 'João Silva',
-    items: [
-      {
-        id: '101',
-        name: 'X-Burger Especial',
-        quantity: 2,
-        options: ['Sem cebola', 'Bacon extra'],
-        notes: 'Ponto bem passado'
-      },
-      {
-        id: '102',
-        name: 'Batata Frita Grande',
-        quantity: 1
-      }
-    ],
-    priority: 'normal',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes ago
-  },
-  {
-    id: '2',
-    orderNumber: '8764',
-    customer: 'Maria Souza',
-    items: [
-      {
-        id: '201',
-        name: 'Pizza Margherita',
-        quantity: 1,
-        notes: 'Borda recheada com catupiry'
-      },
-      {
-        id: '202',
-        name: 'Refrigerante Cola 2L',
-        quantity: 1
-      }
-    ],
-    priority: 'high',
-    timestamp: new Date(Date.now() - 2 * 60 * 1000) // 2 minutes ago
-  },
-  {
-    id: '3',
-    orderNumber: '8763',
-    customer: 'Carlos Oliveira',
-    items: [
-      {
-        id: '301',
-        name: 'Combo X-Salada',
-        quantity: 2,
-        options: ['Sem picles', 'Maionese à parte']
-      },
-      {
-        id: '302',
-        name: 'Milk Shake Chocolate',
-        quantity: 2
-      }
-    ],
-    priority: 'normal',
-    timestamp: new Date(Date.now() - 8 * 60 * 1000) // 8 minutes ago
-  }
-];
+import { useKitchenOrders } from '@/hooks/useKitchenOrders';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Kitchen = () => {
-  const [pendingOrders, setPendingOrders] = useState<KitchenOrder[]>([...initialOrders]);
-  const [preparingOrders, setPreparingOrders] = useState<KitchenOrder[]>([]);
-  const [readyOrders, setReadyOrders] = useState<KitchenOrder[]>([]);
-  
-  const handleStatusChange = (id: string, status: 'preparing' | 'ready') => {
-    if (status === 'preparing') {
-      const order = pendingOrders.find(o => o.id === id);
-      if (order) {
-        setPendingOrders(pendingOrders.filter(o => o.id !== id));
-        setPreparingOrders([...preparingOrders, order]);
-      }
-    } else if (status === 'ready') {
-      const order = preparingOrders.find(o => o.id === id);
-      if (order) {
-        setPreparingOrders(preparingOrders.filter(o => o.id !== id));
-        setReadyOrders([...readyOrders, order]);
-      }
+  const { orders, loading, error, updateOrderStatus, createSampleOrder, refetch } = useKitchenOrders();
+
+  const handleStatusChange = async (id: string, status: 'preparing' | 'ready') => {
+    try {
+      await updateOrderStatus(id, status);
+    } catch (error) {
+      console.error('Erro ao atualizar status do pedido:', error);
     }
   };
-  
+
+  const pendingOrders = orders.filter(order => order.status === 'pending');
+  const preparingOrders = orders.filter(order => order.status === 'preparing');
+  const readyOrders = orders.filter(order => order.status === 'ready');
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">Painel da Cozinha (KDS)</h1>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((col) => (
+            <div key={col} className="space-y-4">
+              <Skeleton className="h-8 w-40" />
+              {[1, 2].map((item) => (
+                <Skeleton key={item} className="h-48 w-full" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Painel da Cozinha (KDS)</h1>
+        <div className="text-center py-8">
+          <p className="text-red-500 mb-4">Erro ao carregar pedidos: {error}</p>
+          <Button onClick={refetch} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Painel da Cozinha (KDS)</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold tracking-tight">Painel da Cozinha (KDS)</h1>
+        <div className="flex gap-2">
+          <Button onClick={createSampleOrder} variant="outline" size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Pedido Teste
+          </Button>
+          <Button onClick={refetch} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+        </div>
+      </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-4">
@@ -119,7 +86,10 @@ const Kitchen = () => {
           {pendingOrders.map(order => (
             <KitchenOrderCard 
               key={order.id}
-              order={order}
+              order={{
+                ...order,
+                timestamp: new Date(order.created_at)
+              }}
               onStatusChange={handleStatusChange}
             />
           ))}
@@ -138,7 +108,10 @@ const Kitchen = () => {
           {preparingOrders.map(order => (
             <KitchenOrderCard 
               key={order.id}
-              order={order}
+              order={{
+                ...order,
+                timestamp: new Date(order.created_at)
+              }}
               onStatusChange={handleStatusChange}
             />
           ))}
@@ -157,7 +130,10 @@ const Kitchen = () => {
           {readyOrders.map(order => (
             <KitchenOrderCard 
               key={order.id}
-              order={order}
+              order={{
+                ...order,
+                timestamp: new Date(order.created_at)
+              }}
               onStatusChange={handleStatusChange}
             />
           ))}
