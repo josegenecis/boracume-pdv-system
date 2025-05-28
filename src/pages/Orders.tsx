@@ -1,277 +1,340 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Bell, Package } from 'lucide-react';
-import OrderCard from '@/components/orders/OrderCard';
-import { OrderStatusType } from '@/components/orders/OrderStatusBadge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Search, Phone, MapPin, Clock, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-  options?: string[];
-  notes?: string;
-}
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import OrderStatusBadge, { OrderStatusType } from '@/components/orders/OrderStatusBadge';
 
 interface Order {
   id: string;
-  order_number: string;
   customer_name: string;
-  customer_phone?: string;
-  customer_address?: string;
-  items: OrderItem[];
+  customer_phone: string;
+  customer_address: string;
+  items: any[];
   total: number;
-  status: OrderStatusType;
   payment_method: string;
+  status: OrderStatusType;
   created_at: string;
-  estimated_time?: number;
+  updated_at: string;
 }
 
-// Sample orders data with different statuses
-const sampleOrders: Order[] = [
-  {
-    id: '1',
-    order_number: '8765',
-    customer_name: 'João Silva',
-    customer_phone: '(11) 99999-8765',
-    customer_address: 'Rua das Flores, 123 - Centro',
-    items: [
-      { id: '1', name: 'X-Burger Especial', quantity: 1, price: 29.90, options: ['Sem cebola'], notes: 'Bem passado' },
-      { id: '2', name: 'Batata Frita', quantity: 1, price: 18.90 },
-      { id: '3', name: 'Refrigerante Cola', quantity: 1, price: 12.90 }
-    ],
-    total: 61.70,
-    status: 'new',
-    payment_method: 'PIX',
-    created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
-  },
-  {
-    id: '2',
-    order_number: '8764',
-    customer_name: 'Maria Souza',
-    customer_phone: '(11) 98888-7654',
-    customer_address: 'Av. Principal, 456 - Jardim',
-    items: [
-      { id: '1', name: 'Pizza Margherita', quantity: 1, price: 45.90 },
-      { id: '2', name: 'Refrigerante Cola', quantity: 2, price: 12.90 }
-    ],
-    total: 71.70,
-    status: 'preparing',
-    payment_method: 'Cartão de Crédito',
-    created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(), // 15 minutes ago
-  },
-  {
-    id: '3',
-    order_number: '8763',
-    customer_name: 'Carlos Oliveira',
-    customer_phone: '(11) 97777-6543',
-    customer_address: 'Rua da Liberdade, 789 - Vila Nova',
-    items: [
-      { id: '1', name: 'X-Burger Especial', quantity: 2, price: 29.90 },
-      { id: '2', name: 'Batata Frita', quantity: 2, price: 18.90 }
-    ],
-    total: 97.60,
-    status: 'ready',
-    payment_method: 'Dinheiro',
-    created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(), // 25 minutes ago
-  },
-  {
-    id: '4',
-    order_number: '8762',
-    customer_name: 'Ana Santos',
-    customer_phone: '(11) 96666-5432',
-    customer_address: 'Rua do Comércio, 321 - Centro',
-    items: [
-      { id: '1', name: 'Pizza Margherita', quantity: 1, price: 45.90 }
-    ],
-    total: 45.90,
-    status: 'in_delivery',
-    payment_method: 'PIX',
-    created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(), // 35 minutes ago
-  },
-  {
-    id: '5',
-    order_number: '8761',
-    customer_name: 'Roberto Lima',
-    customer_phone: '(11) 95555-4321',
-    customer_address: 'Av. das Nações, 654 - Bela Vista',
-    items: [
-      { id: '1', name: 'X-Burger Especial', quantity: 1, price: 29.90 },
-      { id: '2', name: 'Refrigerante Cola', quantity: 1, price: 12.90 }
-    ],
-    total: 42.80,
-    status: 'delivered',
-    payment_method: 'Cartão de Débito',
-    created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
-  }
-];
-
 const Orders = () => {
-  const [orders, setOrders] = useState<Order[]>(sampleOrders);
-  const [newOrdersCount, setNewOrdersCount] = useState(0);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
-    const newCount = orders.filter(order => order.status === 'new').length;
-    setNewOrdersCount(newCount);
-  }, [orders]);
+    if (user) {
+      fetchOrders();
+      
+      // Set up real-time subscription for new orders
+      const channel = supabase
+        .channel('orders-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Order change detected:', payload);
+            if (payload.eventType === 'INSERT') {
+              toast({
+                title: "Novo Pedido!",
+                description: `Pedido de ${payload.new.customer_name} foi recebido.`,
+              });
+            }
+            fetchOrders();
+          }
+        )
+        .subscribe();
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatusType) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { ...order, status: newStatus }
-        : order
-    ));
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user]);
 
-    const statusMessages: Record<OrderStatusType, string> = {
-      new: 'Pedido marcado como novo',
-      confirmed: 'Pedido confirmado com sucesso',
-      preparing: 'Preparo iniciado',
-      ready: 'Pedido pronto para entrega',
-      in_delivery: 'Pedido enviado para entrega',
-      delivered: 'Pedido entregue com sucesso',
-      cancelled: 'Pedido cancelado'
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setOrders(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar pedidos:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os pedidos.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatusType) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Status atualizado!",
+        description: "O status do pedido foi atualizado com sucesso.",
+      });
+
+      fetchOrders();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status do pedido.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = 
+      order.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customer_phone.includes(searchQuery) ||
+      order.id.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = selectedStatus === 'all' || order.status === selectedStatus;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const getStatusCounts = () => {
+    return {
+      all: orders.length,
+      new: orders.filter(o => o.status === 'new').length,
+      confirmed: orders.filter(o => o.status === 'confirmed').length,
+      preparing: orders.filter(o => o.status === 'preparing').length,
+      ready: orders.filter(o => o.status === 'ready').length,
+      in_delivery: orders.filter(o => o.status === 'in_delivery').length,
+      delivered: orders.filter(o => o.status === 'delivered').length,
+      cancelled: orders.filter(o => o.status === 'cancelled').length,
     };
-
-    toast({
-      title: "Status atualizado",
-      description: statusMessages[newStatus],
-    });
   };
 
-  const handleViewDetails = (orderId: string) => {
-    // Implementation for viewing order details
-    toast({
-      title: "Detalhes do pedido",
-      description: `Visualizando detalhes do pedido ${orderId}`,
-    });
-  };
+  const statusCounts = getStatusCounts();
 
-  const refreshOrders = () => {
-    // Simulate refreshing orders
-    toast({
-      title: "Pedidos atualizados",
-      description: "Lista de pedidos foi atualizada",
-    });
-  };
+  const statusOptions: { value: OrderStatusType; label: string }[] = [
+    { value: 'confirmed', label: 'Confirmar' },
+    { value: 'preparing', label: 'Preparando' },
+    { value: 'ready', label: 'Pronto' },
+    { value: 'in_delivery', label: 'Em Entrega' },
+    { value: 'delivered', label: 'Entregue' },
+    { value: 'cancelled', label: 'Cancelar' },
+  ];
 
-  const getOrdersByStatus = (status: OrderStatusType) => {
-    return orders.filter(order => order.status === status);
-  };
-
-  const getStatusCount = (status: OrderStatusType) => {
-    return getOrdersByStatus(status).length;
-  };
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando pedidos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Painel de Pedidos</h1>
-          <p className="text-muted-foreground">Gerencie todos os pedidos em tempo real</p>
-        </div>
-        <div className="flex gap-2">
-          {newOrdersCount > 0 && (
-            <Badge className="bg-red-500 text-white animate-pulse">
-              <Bell className="w-3 h-3 mr-1" />
-              {newOrdersCount} novos
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Total: {orders.length}</span>
+          {statusCounts.new > 0 && (
+            <Badge variant="destructive" className="animate-pulse">
+              {statusCounts.new} novos
             </Badge>
           )}
-          <Button onClick={refreshOrders} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Atualizar
-          </Button>
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid grid-cols-7 w-full">
-          <TabsTrigger value="all">
-            Todos ({orders.length})
+      {/* Search */}
+      <div className="flex gap-2 relative">
+        <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+        <Input 
+          placeholder="Buscar por cliente, telefone ou ID do pedido..." 
+          className="pl-10"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      {/* Status Tabs */}
+      <Tabs value={selectedStatus} onValueChange={setSelectedStatus}>
+        <TabsList className="grid grid-cols-4 lg:grid-cols-8 gap-1">
+          <TabsTrigger value="all" className="text-xs">
+            Todos ({statusCounts.all})
           </TabsTrigger>
-          <TabsTrigger value="new" className="relative">
-            Novos ({getStatusCount('new')})
-            {getStatusCount('new') > 0 && (
-              <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-            )}
+          <TabsTrigger value="new" className="text-xs">
+            Novos ({statusCounts.new})
           </TabsTrigger>
-          <TabsTrigger value="confirmed">
-            Confirmados ({getStatusCount('confirmed')})
+          <TabsTrigger value="confirmed" className="text-xs">
+            Confirmados ({statusCounts.confirmed})
           </TabsTrigger>
-          <TabsTrigger value="preparing">
-            Preparando ({getStatusCount('preparing')})
+          <TabsTrigger value="preparing" className="text-xs">
+            Preparando ({statusCounts.preparing})
           </TabsTrigger>
-          <TabsTrigger value="ready">
-            Prontos ({getStatusCount('ready')})
+          <TabsTrigger value="ready" className="text-xs">
+            Prontos ({statusCounts.ready})
           </TabsTrigger>
-          <TabsTrigger value="in_delivery">
-            Em Entrega ({getStatusCount('in_delivery')})
+          <TabsTrigger value="in_delivery" className="text-xs">
+            Em Entrega ({statusCounts.in_delivery})
           </TabsTrigger>
-          <TabsTrigger value="delivered">
-            Entregues ({getStatusCount('delivered')})
+          <TabsTrigger value="delivered" className="text-xs">
+            Entregues ({statusCounts.delivered})
+          </TabsTrigger>
+          <TabsTrigger value="cancelled" className="text-xs">
+            Cancelados ({statusCounts.cancelled})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all" className="mt-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {orders.map(order => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onStatusChange={handleStatusChange}
-                onViewDetails={handleViewDetails}
-              />
-            ))}
-          </div>
-          {orders.length === 0 && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Package className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Nenhum pedido encontrado</h3>
-                <p className="text-muted-foreground text-center">
-                  Quando você receber pedidos, eles aparecerão aqui.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+        <div className="mt-6">
+          {filteredOrders.length === 0 ? (
+            <div className="text-center py-12">
+              <h3 className="text-lg font-medium">Nenhum pedido encontrado</h3>
+              <p className="text-gray-600">
+                {orders.length === 0 
+                  ? "Aguardando o primeiro pedido..."
+                  : "Tente ajustar os filtros de busca."
+                }
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredOrders.map((order) => (
+                <Card key={order.id} className="overflow-hidden">
+                  <CardHeader className="pb-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">#{order.id.slice(-8)}</CardTitle>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDateTime(order.created_at)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            {formatCurrency(order.total)}
+                          </span>
+                        </div>
+                      </div>
+                      <OrderStatusBadge status={order.status} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Customer Info */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="font-semibold mb-2">Cliente</h4>
+                        <p className="text-sm">{order.customer_name}</p>
+                        <p className="text-sm flex items-center gap-1 text-gray-600">
+                          <Phone className="w-3 h-3" />
+                          {order.customer_phone}
+                        </p>
+                        <p className="text-sm flex items-center gap-1 text-gray-600">
+                          <MapPin className="w-3 h-3" />
+                          {order.customer_address}
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-2">Pagamento</h4>
+                        <Badge variant="outline">
+                          {order.payment_method === 'credit' && 'Cartão de Crédito'}
+                          {order.payment_method === 'pix' && 'PIX'}
+                          {order.payment_method === 'cash' && 'Dinheiro'}
+                        </Badge>
+                      </div>
+                    </div>
 
-        {['new', 'confirmed', 'preparing', 'ready', 'in_delivery', 'delivered'].map(status => (
-          <TabsContent key={status} value={status} className="mt-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              {getOrdersByStatus(status as OrderStatusType).map(order => (
-                <OrderCard
-                  key={order.id}
-                  order={order}
-                  onStatusChange={handleStatusChange}
-                  onViewDetails={handleViewDetails}
-                />
+                    {/* Order Items */}
+                    <div>
+                      <h4 className="font-semibold mb-2">Itens do Pedido</h4>
+                      <div className="space-y-2">
+                        {order.items.map((item: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <span>{item.quantity}x {item.name}</span>
+                            <span>{formatCurrency(item.price * item.quantity)}</span>
+                          </div>
+                        ))}
+                        <div className="border-t pt-2 flex justify-between items-center font-semibold">
+                          <span>Total:</span>
+                          <span>{formatCurrency(order.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Actions */}
+                    {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                      <div>
+                        <h4 className="font-semibold mb-2">Ações</h4>
+                        <div className="flex gap-2 flex-wrap">
+                          {statusOptions
+                            .filter(option => option.value !== order.status)
+                            .map((option) => (
+                              <Button
+                                key={option.value}
+                                variant="outline"
+                                size="sm"
+                                onClick={() => updateOrderStatus(order.id, option.value)}
+                              >
+                                {option.label}
+                              </Button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               ))}
             </div>
-            {getOrdersByStatus(status as OrderStatusType).length === 0 && (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Package className="w-12 h-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">
-                    Nenhum pedido {status === 'new' ? 'novo' : 
-                                  status === 'confirmed' ? 'confirmado' :
-                                  status === 'preparing' ? 'em preparo' :
-                                  status === 'ready' ? 'pronto' :
-                                  status === 'in_delivery' ? 'em entrega' : 'entregue'}
-                  </h3>
-                  <p className="text-muted-foreground text-center">
-                    Os pedidos com este status aparecerão aqui.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        ))}
+          )}
+        </div>
       </Tabs>
     </div>
   );

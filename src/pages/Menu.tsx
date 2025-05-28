@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone } from 'lucide-react';
+import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import PromotionalBanner from '@/components/marketing/PromotionalBanner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
@@ -17,16 +18,28 @@ interface Product {
   category: string;
   image_url?: string;
   available: boolean;
+  user_id: string;
 }
 
 interface CartItem extends Product {
   quantity: number;
 }
 
+interface RestaurantInfo {
+  restaurant_name: string;
+  description?: string;
+  phone?: string;
+  address?: string;
+  logo_url?: string;
+}
+
 const Menu = () => {
+  const { restaurantId } = useParams();
   const [products, setProducts] = useState<Product[]>([]);
+  const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     phone: '',
@@ -35,62 +48,111 @@ const Menu = () => {
   });
   const [paymentMethod, setPaymentMethod] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Sample products data
   useEffect(() => {
-    const sampleProducts: Product[] = [
-      {
-        id: '1',
-        name: 'X-Burger Especial',
-        description: 'Hambúrguer artesanal, queijo cheddar, bacon, alface, tomate e molho especial',
-        price: 29.90,
-        category: 'hamburgers',
-        image_url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-        available: true,
-      },
-      {
-        id: '2',
-        name: 'Pizza Margherita',
-        description: 'Molho de tomate, mussarela, tomate e manjericão',
-        price: 45.90,
-        category: 'pizzas',
-        image_url: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b',
-        available: true,
-      },
-      {
-        id: '3',
-        name: 'Refrigerante Cola 2L',
-        description: 'Refrigerante sabor cola gelado',
-        price: 12.90,
-        category: 'drinks',
-        image_url: 'https://images.unsplash.com/photo-1581636625402-29b2a704ef13',
-        available: true,
-      },
-      {
-        id: '4',
-        name: 'Batata Frita Especial',
-        description: 'Batatas crocantes com tempero especial da casa',
-        price: 18.90,
-        category: 'sides',
-        image_url: 'https://images.unsplash.com/photo-1576107232684-1279f390859f',
-        available: true,
+    if (restaurantId) {
+      fetchRestaurantData(restaurantId);
+    } else {
+      // Se não há ID específico, busca o primeiro restaurante
+      fetchFirstRestaurant();
+    }
+  }, [restaurantId]);
+
+  const fetchFirstRestaurant = async () => {
+    try {
+      setLoading(true);
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, restaurant_name, description, phone, address, logo_url')
+        .limit(1);
+
+      if (profileError) throw profileError;
+      
+      if (profiles && profiles.length > 0) {
+        const profile = profiles[0];
+        setRestaurantInfo({
+          restaurant_name: profile.restaurant_name || 'Restaurante',
+          description: profile.description,
+          phone: profile.phone,
+          address: profile.address,
+          logo_url: profile.logo_url
+        });
+        fetchProducts(profile.id);
       }
-    ];
-    setProducts(sampleProducts);
-  }, []);
+    } catch (error) {
+      console.error('Erro ao carregar dados do restaurante:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as informações do restaurante.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRestaurantData = async (userId: string) => {
+    try {
+      setLoading(true);
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('restaurant_name, description, phone, address, logo_url')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) throw profileError;
+      
+      setRestaurantInfo(profile);
+      fetchProducts(userId);
+    } catch (error) {
+      console.error('Erro ao carregar dados do restaurante:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as informações do restaurante.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProducts = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('available', true)
+        .order('category', { ascending: true });
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os produtos.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const categories = [
     { id: 'all', name: 'Todos' },
-    { id: 'hamburgers', name: 'Hambúrgueres' },
-    { id: 'pizzas', name: 'Pizzas' },
-    { id: 'drinks', name: 'Bebidas' },
-    { id: 'sides', name: 'Acompanhamentos' }
+    ...Array.from(new Set(products.map(p => p.category))).map(category => ({
+      id: category,
+      name: category.charAt(0).toUpperCase() + category.slice(1)
+    }))
   ];
 
-  const filteredProducts = selectedCategory === 'all' 
-    ? products 
-    : products.filter(p => p.category === selectedCategory);
+  const filteredProducts = products.filter(product => {
+    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         product.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -116,9 +178,7 @@ const Menu = () => {
       return prev.map(item => {
         if (item.id === productId) {
           const newQuantity = item.quantity + change;
-          return newQuantity <= 0 
-            ? null 
-            : { ...item, quantity: newQuantity };
+          return newQuantity <= 0 ? null : { ...item, quantity: newQuantity };
         }
         return item;
       }).filter(Boolean) as CartItem[];
@@ -129,7 +189,7 @@ const Menu = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
-  const handleOrderSubmit = () => {
+  const handleOrderSubmit = async () => {
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.address || !paymentMethod) {
       toast({
         title: "Informações incompletas",
@@ -148,19 +208,44 @@ const Menu = () => {
       return;
     }
 
-    // Here you would normally send the order to your backend
-    console.log('Order submitted:', { customerInfo, cart, paymentMethod, total: getTotalPrice() });
-    
-    toast({
-      title: "Pedido enviado!",
-      description: "Seu pedido foi recebido e está sendo preparado.",
-    });
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .insert({
+          customer_name: customerInfo.name,
+          customer_phone: customerInfo.phone,
+          customer_address: customerInfo.address,
+          items: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity
+          })),
+          total: getTotalPrice(),
+          payment_method: paymentMethod,
+          status: 'new',
+          user_id: cart[0]?.user_id
+        });
 
-    // Reset form
-    setCart([]);
-    setCustomerInfo({ name: '', phone: '', address: '', neighborhood: '' });
-    setPaymentMethod('');
-    setShowCheckout(false);
+      if (error) throw error;
+
+      toast({
+        title: "Pedido enviado!",
+        description: "Seu pedido foi recebido e está sendo preparado.",
+      });
+
+      setCart([]);
+      setCustomerInfo({ name: '', phone: '', address: '', neighborhood: '' });
+      setPaymentMethod('');
+      setShowCheckout(false);
+    } catch (error) {
+      console.error('Erro ao enviar pedido:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível enviar o pedido. Tente novamente.",
+        variant: "destructive"
+      });
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -170,20 +255,60 @@ const Menu = () => {
     }).format(value);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando cardápio...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-boracume-orange mb-2">BoraCumê</h1>
-          <p className="text-gray-600">Deliciosas opções para você!</p>
+          <div className="flex items-center gap-4">
+            {restaurantInfo?.logo_url && (
+              <img 
+                src={restaurantInfo.logo_url} 
+                alt="Logo" 
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold text-primary">
+                {restaurantInfo?.restaurant_name || 'Restaurante'}
+              </h1>
+              {restaurantInfo?.description && (
+                <p className="text-gray-600">{restaurantInfo.description}</p>
+              )}
+              {restaurantInfo?.address && (
+                <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                  <MapPin className="w-3 h-3" />
+                  {restaurantInfo.address}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Promotional Banner */}
-        <div className="mb-8">
-          <PromotionalBanner />
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Buscar produtos..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
         </div>
 
         {/* Categories */}
@@ -218,21 +343,20 @@ const Menu = () => {
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg">{product.name}</CardTitle>
-                  <Badge variant={product.available ? "default" : "destructive"}>
-                    {product.available ? "Disponível" : "Indisponível"}
-                  </Badge>
+                  <Badge variant="default">Disponível</Badge>
                 </div>
-                <p className="text-gray-600 text-sm">{product.description}</p>
+                {product.description && (
+                  <p className="text-gray-600 text-sm">{product.description}</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="flex justify-between items-center">
-                  <span className="text-xl font-bold text-boracume-orange">
+                  <span className="text-xl font-bold text-primary">
                     {formatCurrency(product.price)}
                   </span>
                   <Button 
                     onClick={() => addToCart(product)}
-                    disabled={!product.available}
-                    className="bg-boracume-orange hover:bg-orange-600"
+                    className="bg-primary hover:bg-primary/90"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Adicionar
@@ -242,6 +366,12 @@ const Menu = () => {
             </Card>
           ))}
         </div>
+
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Nenhum produto encontrado.</p>
+          </div>
+        )}
 
         {/* Cart Summary */}
         {cart.length > 0 && (
@@ -284,12 +414,12 @@ const Menu = () => {
                 
                 <div className="flex justify-between items-center font-bold text-lg">
                   <span>Total:</span>
-                  <span className="text-boracume-orange">{formatCurrency(getTotalPrice())}</span>
+                  <span className="text-primary">{formatCurrency(getTotalPrice())}</span>
                 </div>
                 
                 <Button 
                   onClick={() => setShowCheckout(true)}
-                  className="w-full bg-boracume-orange hover:bg-orange-600"
+                  className="w-full bg-primary hover:bg-primary/90"
                 >
                   Finalizar Pedido
                 </Button>
@@ -380,7 +510,7 @@ const Menu = () => {
                   ))}
                   <div className="flex justify-between font-bold pt-2 border-t">
                     <span>Total:</span>
-                    <span className="text-boracume-orange">{formatCurrency(getTotalPrice())}</span>
+                    <span className="text-primary">{formatCurrency(getTotalPrice())}</span>
                   </div>
                 </div>
 
@@ -395,7 +525,7 @@ const Menu = () => {
                   </Button>
                   <Button 
                     onClick={handleOrderSubmit}
-                    className="flex-1 bg-boracume-orange hover:bg-orange-600"
+                    className="flex-1 bg-primary hover:bg-primary/90"
                   >
                     Confirmar Pedido
                   </Button>

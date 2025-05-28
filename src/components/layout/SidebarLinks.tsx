@@ -12,7 +12,8 @@ import {
   BarChart3,
   Settings,
   CreditCard as SubscriptionIcon,
-  Menu
+  Menu,
+  Globe
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -21,6 +22,7 @@ const SidebarLinks = () => {
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha' },
     { to: '/produtos', icon: Package, label: 'Produtos' },
     { to: '/cardapio', icon: Menu, label: 'Cardápio Digital' },
+    { to: '/menu', icon: Globe, label: 'Ver Cardápio Público', external: true },
     { to: '/pedidos', icon: ShoppingCart, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV' },
     { to: '/entregadores', icon: Truck, label: 'Entregadores' },
@@ -36,9 +38,10 @@ const SidebarLinks = () => {
         <NavLink
           key={item.to}
           to={item.to}
+          target={item.external ? '_blank' : undefined}
           className={({ isActive }) =>
             `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
-              isActive
+              isActive && !item.external
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             }`
