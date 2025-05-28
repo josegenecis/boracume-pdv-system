@@ -1,148 +1,53 @@
 
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import {
-  ChefHat,
-  ShoppingCart,
-  BarChart4,
+import { NavLink } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  ChefHat, 
+  Package, 
+  ShoppingCart, 
+  CreditCard,
   Truck,
   DollarSign,
-  FileText,
+  BarChart3,
   Settings,
-  CreditCard,
-  Home,
-  Package,
-  Calculator
+  CreditCard as SubscriptionIcon,
+  Menu
 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
 
-interface SidebarLink {
-  title: string;
-  icon: JSX.Element;
-  href: string;
-  badge?: string;
-}
-
-const SidebarLinks: React.FC = () => {
-  const { subscription } = useAuth();
-  const location = useLocation();
-  
-  // Check if a feature is available based on subscription
-  const hasFeature = (feature: string): boolean => {
-    // During trial, all features are available
-    if (subscription?.status === 'trial') {
-      return true;
-    }
-    
-    // If active subscription with Elite plan, all features are available
-    if (subscription?.status === 'active' && subscription?.plan?.name === 'Elite') {
-      return true;
-    }
-    
-    // For Basic plan, only specific features are available
-    if (subscription?.status === 'active' && subscription?.plan?.name === 'Basic') {
-      const basicFeatures = ['cardápio digital', 'PDV', 'recebimento de pedidos'];
-      return basicFeatures.includes(feature);
-    }
-    
-    // Default to false if no subscription or expired
-    return false;
-  };
-
-  const links: SidebarLink[] = [
-    {
-      title: 'Dashboard',
-      icon: <Home className="h-5 w-5" />,
-      href: '/dashboard',
-    },
-    {
-      title: 'Pedidos',
-      icon: <ShoppingCart className="h-5 w-5" />,
-      href: '/pedidos',
-    },
-    {
-      title: 'PDV',
-      icon: <Calculator className="h-5 w-5" />,
-      href: '/pdv',
-    },
-    {
-      title: 'Cozinha',
-      icon: <ChefHat className="h-5 w-5" />,
-      href: '/cozinha',
-    },
-    {
-      title: 'Produtos',
-      icon: <Package className="h-5 w-5" />,
-      href: '/produtos',
-    },
+const SidebarLinks = () => {
+  const navItems = [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/cozinha', icon: ChefHat, label: 'Cozinha' },
+    { to: '/produtos', icon: Package, label: 'Produtos' },
+    { to: '/cardapio', icon: Menu, label: 'Cardápio Digital' },
+    { to: '/pedidos', icon: ShoppingCart, label: 'Pedidos' },
+    { to: '/pdv', icon: CreditCard, label: 'PDV' },
+    { to: '/entregadores', icon: Truck, label: 'Entregadores' },
+    { to: '/financeiro', icon: DollarSign, label: 'Financeiro' },
+    { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
+    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
+    { to: '/assinatura', icon: SubscriptionIcon, label: 'Planos & Upgrade' },
   ];
-  
-  // Add premium features based on subscription
-  if (hasFeature('gestão de entregadores')) {
-    links.push({
-      title: 'Entregadores',
-      icon: <Truck className="h-5 w-5" />,
-      href: '/entregadores',
-    });
-  }
-  
-  if (hasFeature('financeiro')) {
-    links.push({
-      title: 'Financeiro',
-      icon: <DollarSign className="h-5 w-5" />,
-      href: '/financeiro',
-    });
-  }
-  
-  if (hasFeature('relatórios')) {
-    links.push({
-      title: 'Relatórios',
-      icon: <BarChart4 className="h-5 w-5" />,
-      href: '/relatorios',
-    });
-  }
-  
-  links.push({
-    title: 'Configurações',
-    icon: <Settings className="h-5 w-5" />,
-    href: '/configuracoes',
-  });
-  
-  links.push({
-    title: 'Assinatura',
-    icon: <CreditCard className="h-5 w-5" />,
-    href: '/assinatura',
-    badge: subscription?.status === 'trial' ? 'Teste' : undefined
-  });
 
   return (
-    <nav className="space-y-1">
-      {links.map((link) => {
-        // Check if the current path matches this link
-        const isActive = location.pathname === link.href;
-        
-        return (
-          <Link
-            key={link.href}
-            to={link.href}
-            className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+    <nav className="space-y-2">
+      {navItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          className={({ isActive }) =>
+            `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
               isActive
-                ? 'bg-boracume-orange text-white'
-                : 'text-gray-700 hover:bg-gray-100'
-            } group`}
-          >
-            <span className={`mr-3 ${isActive ? 'text-white' : 'text-gray-500'}`}>
-              {link.icon}
-            </span>
-            <span className="flex-1">{link.title}</span>
-            {link.badge && (
-              <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-boracume-orange text-white">
-                {link.badge}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`
+          }
+        >
+          <item.icon size={20} />
+          <span>{item.label}</span>
+        </NavLink>
+      ))}
     </nav>
   );
 };

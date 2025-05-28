@@ -74,19 +74,32 @@ const AppearanceSettings = () => {
       root.classList.remove('dark');
     }
 
-    // Aplicar cor principal
+    // Aplicar cor principal - Fixed color mapping
     const colorMap = {
-      orange: { primary: '25 25 112', accent: '255 127 80' },
-      blue: { primary: '37 99 235', accent: '147 197 253' },
-      green: { primary: '34 197 94', accent: '134 239 172' },
-      purple: { primary: '147 51 234', accent: '196 181 253' },
-      red: { primary: '239 68 68', accent: '248 113 113' }
+      orange: { primary: '16 100% 56%', accent: '25 95% 53%' },
+      blue: { primary: '221 83% 53%', accent: '217 91% 60%' },
+      green: { primary: '142 76% 36%', accent: '138 76% 49%' },
+      purple: { primary: '258 90% 66%', accent: '266 85% 58%' },
+      red: { primary: '0 72% 51%', accent: '0 84% 60%' }
     };
 
     const colors = colorMap[appearance.primaryColor as keyof typeof colorMap];
     if (colors) {
       root.style.setProperty('--primary', colors.primary);
       root.style.setProperty('--accent', colors.accent);
+      
+      // Also update the boracume colors to match
+      if (appearance.primaryColor === 'orange') {
+        root.style.setProperty('--boracume-orange', '#FF5722');
+      } else if (appearance.primaryColor === 'blue') {
+        root.style.setProperty('--boracume-orange', '#2563eb');
+      } else if (appearance.primaryColor === 'green') {
+        root.style.setProperty('--boracume-orange', '#16a34a');
+      } else if (appearance.primaryColor === 'purple') {
+        root.style.setProperty('--boracume-orange', '#9333ea');
+      } else if (appearance.primaryColor === 'red') {
+        root.style.setProperty('--boracume-orange', '#dc2626');
+      }
     }
 
     // Aplicar tamanho da fonte

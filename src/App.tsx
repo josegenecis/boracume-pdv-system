@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +18,7 @@ import PDV from "./pages/PDV";
 import NotFound from "./pages/NotFound";
 import WhatsAppButton from "./components/chat/WhatsAppButton";
 import Subscription from "./pages/Subscription";
+import MenuDigital from "./pages/MenuDigital";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import RouteGuard from "./components/auth/RouteGuard";
@@ -47,6 +49,7 @@ const App = () => (
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/cozinha" element={<Kitchen />} />
                   <Route path="/produtos" element={<Products />} />
+                  <Route path="/cardapio" element={<MenuDigital />} />
                   <Route path="/pedidos" element={<Orders />} />
                   <Route path="/pdv" element={<PDV />} />
                   <Route path="/entregadores" element={<Entregadores />} />
