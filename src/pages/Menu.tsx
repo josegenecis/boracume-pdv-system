@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone, Search } from 'lucide-react';
+import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -49,13 +49,13 @@ const Menu = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (restaurantId) {
       fetchRestaurantData(restaurantId);
     } else {
-      // Se não há ID específico, busca o primeiro restaurante
       fetchFirstRestaurant();
     }
   }, [restaurantId]);
@@ -80,8 +80,14 @@ const Menu = () => {
           logo_url: profile.logo_url
         });
         fetchProducts(profile.id);
+      } else {
+        toast({
+          title: "Aviso",
+          description: "Nenhum restaurante encontrado.",
+          variant: "destructive"
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar dados do restaurante:', error);
       toast({
         title: "Erro",
@@ -106,7 +112,7 @@ const Menu = () => {
       
       setRestaurantInfo(profile);
       fetchProducts(userId);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar dados do restaurante:', error);
       toast({
         title: "Erro",
@@ -129,7 +135,7 @@ const Menu = () => {
 
       if (error) throw error;
       setProducts(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar produtos:', error);
       toast({
         title: "Erro",
@@ -185,12 +191,16 @@ const Menu = () => {
     });
   };
 
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.id !== productId));
+  };
+
   const getTotalPrice = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
   const handleOrderSubmit = async () => {
-    if (!customerInfo.name || !customerInfo.phone || !customerInfo.address || !paymentMethod) {
+    if (!customerInfo.name.trim() || !customerInfo.phone.trim() || !customerInfo.address.trim() || !paymentMethod) {
       toast({
         title: "Informações incompletas",
         description: "Por favor, preencha todas as informações obrigatórias.",
@@ -209,23 +219,29 @@ const Menu = () => {
     }
 
     try {
+      setSubmittingOrder(true);
+      
+      const orderData = {
+        customer_name: customerInfo.name.trim(),
+        customer_phone: customerInfo.phone.trim(),
+        customer_address: customerInfo.address.trim(),
+        items: cart.map(item => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity
+        })),
+        total: getTotalPrice(),
+        payment_method: paymentMethod,
+        status: 'new',
+        user_id: cart[0]?.user_id
+      };
+
+      console.log('Enviando pedido:', orderData);
+
       const { error } = await supabase
         .from('orders')
-        .insert({
-          customer_name: customerInfo.name,
-          customer_phone: customerInfo.phone,
-          customer_address: customerInfo.address,
-          items: cart.map(item => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity
-          })),
-          total: getTotalPrice(),
-          payment_method: paymentMethod,
-          status: 'new',
-          user_id: cart[0]?.user_id
-        });
+        .insert([orderData]);
 
       if (error) throw error;
 
@@ -234,17 +250,20 @@ const Menu = () => {
         description: "Seu pedido foi recebido e está sendo preparado.",
       });
 
+      // Limpar dados
       setCart([]);
       setCustomerInfo({ name: '', phone: '', address: '', neighborhood: '' });
       setPaymentMethod('');
       setShowCheckout(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar pedido:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível enviar o pedido. Tente novamente.",
+        description: error.message || "Não foi possível enviar o pedido. Tente novamente.",
         variant: "destructive"
       });
+    } finally {
+      setSubmittingOrder(false);
     }
   };
 
@@ -375,7 +394,7 @@ const Menu = () => {
 
         {/* Cart Summary */}
         {cart.length > 0 && (
-          <Card className="fixed bottom-4 left-4 right-4 md:relative md:bottom-auto md:left-auto md:right-auto shadow-lg">
+          <Card className="fixed bottom-4 left-4 right-4 md:relative md:bottom-auto md:left-auto md:right-auto shadow-lg z-50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5" />
@@ -386,7 +405,7 @@ const Menu = () => {
               <div className="space-y-3">
                 {cart.map(item => (
                   <div key={item.id} className="flex justify-between items-center">
-                    <div>
+                    <div className="flex-1">
                       <span className="font-medium">{item.name}</span>
                       <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
                     </div>
@@ -398,13 +417,20 @@ const Menu = () => {
                       >
                         <Minus className="w-3 h-3" />
                       </Button>
-                      <span className="font-medium">{item.quantity}</span>
+                      <span className="font-medium w-8 text-center">{item.quantity}</span>
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => updateQuantity(item.id, 1)}
                       >
                         <Plus className="w-3 h-3" />
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <X className="w-3 h-3" />
                       </Button>
                     </div>
                   </div>
@@ -433,7 +459,16 @@ const Menu = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
               <CardHeader>
-                <CardTitle>Finalizar Pedido</CardTitle>
+                <CardTitle className="flex justify-between items-center">
+                  Finalizar Pedido
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowCheckout(false)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Customer Info */}
@@ -472,19 +507,19 @@ const Menu = () => {
                 {/* Payment Method */}
                 <div className="space-y-3">
                   <h3 className="font-semibold">Forma de Pagamento</h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <Button
                       variant={paymentMethod === 'credit' ? "default" : "outline"}
                       onClick={() => setPaymentMethod('credit')}
-                      className="h-12"
+                      className="h-12 justify-start"
                     >
                       <CreditCard className="w-4 h-4 mr-2" />
-                      Cartão
+                      Cartão de Crédito
                     </Button>
                     <Button
                       variant={paymentMethod === 'pix' ? "default" : "outline"}
                       onClick={() => setPaymentMethod('pix')}
-                      className="h-12"
+                      className="h-12 justify-start"
                     >
                       <Smartphone className="w-4 h-4 mr-2" />
                       PIX
@@ -492,7 +527,7 @@ const Menu = () => {
                     <Button
                       variant={paymentMethod === 'cash' ? "default" : "outline"}
                       onClick={() => setPaymentMethod('cash')}
-                      className="h-12 col-span-2"
+                      className="h-12 justify-start"
                     >
                       💰 Dinheiro
                     </Button>
@@ -520,14 +555,16 @@ const Menu = () => {
                     variant="outline" 
                     onClick={() => setShowCheckout(false)}
                     className="flex-1"
+                    disabled={submittingOrder}
                   >
                     Voltar
                   </Button>
                   <Button 
                     onClick={handleOrderSubmit}
                     className="flex-1 bg-primary hover:bg-primary/90"
+                    disabled={submittingOrder}
                   >
-                    Confirmar Pedido
+                    {submittingOrder ? 'Enviando...' : 'Confirmar Pedido'}
                   </Button>
                 </div>
               </CardContent>

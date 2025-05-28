@@ -12,29 +12,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Minus, ImageIcon, Upload } from 'lucide-react';
+import { ImageIcon, Upload, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-
-interface ProductOption {
-  id: string;
-  name: string;
-  price: number;
-}
 
 interface ProductFormProps {
   editMode?: boolean;
   onSubmit?: (data: any) => void;
   productData?: any;
+  onClose?: () => void;
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({ 
   editMode = false,
   onSubmit,
-  productData
+  productData,
+  onClose
 }) => {
   const [formData, setFormData] = useState({
     name: productData?.name || '',
@@ -42,7 +37,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
     category: productData?.category || '',
     price: productData?.price || '',
     available: productData?.available ?? true,
-    featured: false,
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>(productData?.image_url || '');
@@ -54,6 +48,26 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Verificar se é uma imagem válida
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione apenas arquivos de imagem.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Verificar tamanho do arquivo (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Erro",
+          description: "A imagem deve ter no máximo 5MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       setImageFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -66,27 +80,45 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
       setUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
       
-      const { error: uploadError } = await supabase.storage
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Gerar nome único para o arquivo
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      
+      console.log('Fazendo upload da imagem:', fileName);
+      
+      // Upload do arquivo
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
       if (uploadError) {
+        console.error('Erro no upload:', uploadError);
         throw uploadError;
       }
 
-      const { data } = supabase.storage
+      console.log('Upload realizado com sucesso:', uploadData);
+
+      // Obter URL pública
+      const { data: urlData } = supabase.storage
         .from('product-images')
         .getPublicUrl(fileName);
 
-      return data.publicUrl;
-    } catch (error) {
+      console.log('URL pública obtida:', urlData.publicUrl);
+      
+      return urlData.publicUrl;
+    } catch (error: any) {
       console.error('Erro ao fazer upload da imagem:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível fazer upload da imagem.",
+        title: "Erro no upload",
+        description: error.message || "Não foi possível fazer upload da imagem.",
         variant: "destructive"
       });
       return null;
@@ -107,27 +139,41 @@ const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
+    if (!formData.name || !formData.category || !formData.price) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       
       let imageUrl = productData?.image_url || '';
       
+      // Upload da nova imagem se selecionada
       if (imageFile) {
         const uploadedUrl = await uploadImage(imageFile);
         if (uploadedUrl) {
           imageUrl = uploadedUrl;
+        } else {
+          return; // Parar se o upload falhou
         }
       }
 
       const productPayload = {
-        name: formData.name,
-        description: formData.description,
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
         category: formData.category,
         price: parseFloat(formData.price),
         available: formData.available,
-        image_url: imageUrl,
+        image_url: imageUrl || null,
         user_id: user.id
       };
+
+      console.log('Salvando produto:', productPayload);
 
       let result;
       if (editMode && productData?.id) {
@@ -147,6 +193,8 @@ const ProductForm: React.FC<ProductFormProps> = ({
         throw result.error;
       }
 
+      console.log('Produto salvo com sucesso:', result.data);
+
       toast({
         title: "Sucesso!",
         description: `Produto ${editMode ? 'atualizado' : 'criado'} com sucesso.`,
@@ -155,16 +203,38 @@ const ProductForm: React.FC<ProductFormProps> = ({
       if (onSubmit) {
         onSubmit(result.data?.[0]);
       }
-    } catch (error) {
+
+      if (onClose) {
+        onClose();
+      }
+
+      // Reset form if creating new product
+      if (!editMode) {
+        setFormData({
+          name: '',
+          description: '',
+          category: '',
+          price: '',
+          available: true,
+        });
+        setImageFile(null);
+        setImagePreview('');
+      }
+    } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível salvar o produto.",
+        description: error.message || "Não foi possível salvar o produto.",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview('');
   };
   
   return (
@@ -177,7 +247,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
-                <Label htmlFor="name">Nome do Produto</Label>
+                <Label htmlFor="name">Nome do Produto *</Label>
                 <Input 
                   id="name" 
                   placeholder="Ex: X-Burger Especial" 
@@ -199,7 +269,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
               
               <div>
-                <Label htmlFor="category">Categoria</Label>
+                <Label htmlFor="category">Categoria *</Label>
                 <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma categoria" />
@@ -216,7 +286,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
               </div>
               
               <div>
-                <Label htmlFor="price">Preço (R$)</Label>
+                <Label htmlFor="price">Preço (R$) *</Label>
                 <Input 
                   id="price" 
                   type="number" 
@@ -242,7 +312,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
             <div className="space-y-4">
               <div>
                 <Label>Imagem do Produto</Label>
-                <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center h-[200px] bg-muted/50">
+                <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center h-[200px] bg-muted/50 relative">
                   {imagePreview ? (
                     <div className="relative w-full h-full">
                       <img 
@@ -252,21 +322,18 @@ const ProductForm: React.FC<ProductFormProps> = ({
                       />
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="destructive"
                         size="sm"
-                        className="absolute bottom-2 right-2"
-                        onClick={() => {
-                          setImagePreview('');
-                          setImageFile(null);
-                        }}
+                        className="absolute top-2 right-2"
+                        onClick={removeImage}
                       >
-                        Remover
+                        <X className="w-4 h-4" />
                       </Button>
                     </div>
                   ) : (
                     <>
                       <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
-                      <div className="text-sm text-center text-muted-foreground">
+                      <div className="text-sm text-center text-muted-foreground mb-4">
                         Arraste uma imagem ou clique para fazer upload
                       </div>
                       <Input
@@ -275,11 +342,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
                         onChange={handleImageChange}
                         className="hidden"
                         id="image-upload"
+                        disabled={uploading}
                       />
                       <Label htmlFor="image-upload" asChild>
-                        <Button variant="outline" size="sm" className="mt-4" type="button">
+                        <Button variant="outline" size="sm" type="button" disabled={uploading}>
                           <Upload className="w-4 h-4 mr-2" />
-                          Selecionar Imagem
+                          {uploading ? 'Enviando...' : 'Selecionar Imagem'}
                         </Button>
                       </Label>
                     </>
@@ -290,9 +358,13 @@ const ProductForm: React.FC<ProductFormProps> = ({
           </div>
         </CardContent>
         <CardFooter className="flex justify-end space-x-2">
-          <Button variant="outline" type="button">Cancelar</Button>
+          {onClose && (
+            <Button variant="outline" type="button" onClick={onClose}>
+              Cancelar
+            </Button>
+          )}
           <Button type="submit" disabled={loading || uploading}>
-            {loading || uploading ? 'Salvando...' : (editMode ? 'Atualizar' : 'Criar')} Produto
+            {loading ? 'Salvando...' : (editMode ? 'Atualizar' : 'Criar')} Produto
           </Button>
         </CardFooter>
       </Card>
