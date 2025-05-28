@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import OrderStatusBadge, { OrderStatusType } from '@/components/orders/OrderStatusBadge';
+import type { Json } from '@/integrations/supabase/types';
 
 interface Order {
   id: string;
@@ -22,6 +22,22 @@ interface Order {
   status: OrderStatusType;
   created_at: string;
   updated_at: string;
+}
+
+// Type for raw order data from Supabase
+interface RawOrder {
+  id: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_address: string | null;
+  items: Json;
+  total: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  change_amount: number | null;
 }
 
 const Orders = () => {
@@ -79,7 +95,21 @@ const Orders = () => {
         throw error;
       }
 
-      setOrders(data || []);
+      // Transform raw orders to match our Order interface
+      const transformedOrders: Order[] = (data as RawOrder[] || []).map(order => ({
+        id: order.id,
+        customer_name: order.customer_name || '',
+        customer_phone: order.customer_phone || '',
+        customer_address: order.customer_address || '',
+        items: Array.isArray(order.items) ? order.items : [],
+        total: order.total,
+        payment_method: order.payment_method,
+        status: order.status as OrderStatusType,
+        created_at: order.created_at,
+        updated_at: order.updated_at,
+      }));
+
+      setOrders(transformedOrders);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({
