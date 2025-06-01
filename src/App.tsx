@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import RouteGuard from "./components/auth/RouteGuard";
+import DashboardLayout from "./components/layout/DashboardLayout";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -43,19 +44,19 @@ function App() {
                 <Route path="/menu/:restaurantId" element={<MenuDigital />} />
                 <Route path="/cardapio" element={<Menu />} />
                 
-                {/* Protected Routes */}
-                <Route path="/dashboard" element={<RouteGuard><Dashboard /></RouteGuard>} />
-                <Route path="/pedidos" element={<RouteGuard><Orders /></RouteGuard>} />
-                <Route path="/produtos" element={<RouteGuard><Products /></RouteGuard>} />
-                <Route path="/pdv" element={<RouteGuard><PDV /></RouteGuard>} />
-                <Route path="/cozinha" element={<RouteGuard><Kitchen /></RouteGuard>} />
-                <Route path="/mesas" element={<RouteGuard><Mesas /></RouteGuard>} />
-                <Route path="/bairros-entrega" element={<RouteGuard><BairrosEntrega /></RouteGuard>} />
-                <Route path="/entregadores" element={<RouteGuard><Entregadores /></RouteGuard>} />
-                <Route path="/financeiro" element={<RouteGuard><Financeiro /></RouteGuard>} />
-                <Route path="/relatorios" element={<RouteGuard><Relatorios /></RouteGuard>} />
-                <Route path="/configuracoes" element={<RouteGuard><Configuracoes /></RouteGuard>} />
-                <Route path="/assinatura" element={<RouteGuard><Subscription /></RouteGuard>} />
+                {/* Protected Routes with DashboardLayout */}
+                <Route path="/dashboard" element={<RouteGuard><DashboardLayout><Dashboard /></DashboardLayout></RouteGuard>} />
+                <Route path="/pedidos" element={<RouteGuard><DashboardLayout><Orders /></DashboardLayout></RouteGuard>} />
+                <Route path="/produtos" element={<RouteGuard><DashboardLayout><Products /></DashboardLayout></RouteGuard>} />
+                <Route path="/pdv" element={<RouteGuard><DashboardLayout><PDV /></DashboardLayout></RouteGuard>} />
+                <Route path="/cozinha" element={<RouteGuard><DashboardLayout><Kitchen /></DashboardLayout></RouteGuard>} />
+                <Route path="/mesas" element={<RouteGuard><DashboardLayout><Mesas /></DashboardLayout></RouteGuard>} />
+                <Route path="/bairros-entrega" element={<RouteGuard><DashboardLayout><BairrosEntrega /></DashboardLayout></RouteGuard>} />
+                <Route path="/entregadores" element={<RouteGuard><DashboardLayout><Entregadores /></DashboardLayout></RouteGuard>} />
+                <Route path="/financeiro" element={<RouteGuard><DashboardLayout><Financeiro /></DashboardLayout></RouteGuard>} />
+                <Route path="/relatorios" element={<RouteGuard><DashboardLayout><Relatorios /></DashboardLayout></RouteGuard>} />
+                <Route path="/configuracoes" element={<RouteGuard><DashboardLayout><Configuracoes /></DashboardLayout></RouteGuard>} />
+                <Route path="/assinatura" element={<RouteGuard><DashboardLayout><Subscription /></DashboardLayout></RouteGuard>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>

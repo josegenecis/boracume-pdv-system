@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone, Search, X } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { MapPin, ShoppingCart, Plus, Minus, CreditCard, Smartphone, Search, X, User, Phone, MapPinIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -44,9 +45,11 @@ const Menu = () => {
     name: '',
     phone: '',
     address: '',
-    neighborhood: ''
+    neighborhood: '',
+    observations: ''
   });
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [changeAmount, setChangeAmount] = useState('');
   const [showCheckout, setShowCheckout] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submittingOrder, setSubmittingOrder] = useState(false);
@@ -80,12 +83,6 @@ const Menu = () => {
           logo_url: profile.logo_url
         });
         fetchProducts(profile.id);
-      } else {
-        toast({
-          title: "Aviso",
-          description: "Nenhum restaurante encontrado.",
-          variant: "destructive"
-        });
       }
     } catch (error: any) {
       console.error('Erro ao carregar dados do restaurante:', error);
@@ -114,11 +111,6 @@ const Menu = () => {
       fetchProducts(userId);
     } catch (error: any) {
       console.error('Erro ao carregar dados do restaurante:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as informações do restaurante.",
-        variant: "destructive"
-      });
     } finally {
       setLoading(false);
     }
@@ -137,11 +129,6 @@ const Menu = () => {
       setProducts(data || []);
     } catch (error: any) {
       console.error('Erro ao carregar produtos:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os produtos.",
-        variant: "destructive"
-      });
     }
   };
 
@@ -233,11 +220,10 @@ const Menu = () => {
         })),
         total: getTotalPrice(),
         payment_method: paymentMethod,
+        change_amount: paymentMethod === 'cash' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         user_id: cart[0]?.user_id
       };
-
-      console.log('Enviando pedido:', orderData);
 
       const { error } = await supabase
         .from('orders')
@@ -252,8 +238,9 @@ const Menu = () => {
 
       // Limpar dados
       setCart([]);
-      setCustomerInfo({ name: '', phone: '', address: '', neighborhood: '' });
+      setCustomerInfo({ name: '', phone: '', address: '', neighborhood: '', observations: '' });
       setPaymentMethod('');
+      setChangeAmount('');
       setShowCheckout(false);
     } catch (error: any) {
       console.error('Erro ao enviar pedido:', error);
@@ -289,7 +276,7 @@ const Menu = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex items-center gap-4">
             {restaurantInfo?.logo_url && (
               <img 
@@ -316,7 +303,7 @@ const Menu = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Search */}
         <div className="mb-6">
           <div className="relative">
@@ -347,11 +334,11 @@ const Menu = () => {
         </div>
 
         {/* Products Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
           {filteredProducts.map(product => (
-            <Card key={product.id} className="overflow-hidden">
+            <Card key={product.id} className="overflow-hidden h-full flex flex-col">
               {product.image_url && (
-                <div className="aspect-video w-full overflow-hidden">
+                <div className="aspect-square w-full overflow-hidden">
                   <img 
                     src={product.image_url} 
                     alt={product.name}
@@ -359,25 +346,25 @@ const Menu = () => {
                   />
                 </div>
               )}
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">{product.name}</CardTitle>
-                  <Badge variant="default">Disponível</Badge>
+              <CardHeader className="pb-2 flex-1">
+                <div className="space-y-2">
+                  <CardTitle className="text-base leading-tight">{product.name}</CardTitle>
+                  {product.description && (
+                    <p className="text-gray-600 text-xs line-clamp-2">{product.description}</p>
+                  )}
                 </div>
-                {product.description && (
-                  <p className="text-gray-600 text-sm">{product.description}</p>
-                )}
               </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center">
-                  <span className="text-xl font-bold text-primary">
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  <div className="text-lg font-bold text-primary">
                     {formatCurrency(product.price)}
-                  </span>
+                  </div>
                   <Button 
                     onClick={() => addToCart(product)}
-                    className="bg-primary hover:bg-primary/90"
+                    className="w-full"
+                    size="sm"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-3 h-3 mr-1" />
                     Adicionar
                   </Button>
                 </div>
@@ -473,7 +460,10 @@ const Menu = () => {
               <CardContent className="space-y-4">
                 {/* Customer Info */}
                 <div className="space-y-3">
-                  <h3 className="font-semibold">Informações do Cliente</h3>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Informações do Cliente
+                  </h3>
                   <Input
                     placeholder="Nome completo *"
                     value={customerInfo.name}
@@ -489,7 +479,7 @@ const Menu = () => {
                 {/* Address */}
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
+                    <MapPinIcon className="w-4 h-4" />
                     Endereço de Entrega
                   </h3>
                   <Input
@@ -501,6 +491,12 @@ const Menu = () => {
                     placeholder="Bairro"
                     value={customerInfo.neighborhood}
                     onChange={(e) => setCustomerInfo(prev => ({ ...prev, neighborhood: e.target.value }))}
+                  />
+                  <Textarea
+                    placeholder="Observações (opcional)"
+                    value={customerInfo.observations}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, observations: e.target.value }))}
+                    rows={2}
                   />
                 </div>
 
@@ -515,6 +511,14 @@ const Menu = () => {
                     >
                       <CreditCard className="w-4 h-4 mr-2" />
                       Cartão de Crédito
+                    </Button>
+                    <Button
+                      variant={paymentMethod === 'debit' ? "default" : "outline"}
+                      onClick={() => setPaymentMethod('debit')}
+                      className="h-12 justify-start"
+                    >
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Cartão de Débito
                     </Button>
                     <Button
                       variant={paymentMethod === 'pix' ? "default" : "outline"}
@@ -532,6 +536,18 @@ const Menu = () => {
                       💰 Dinheiro
                     </Button>
                   </div>
+                  
+                  {paymentMethod === 'cash' && (
+                    <div className="mt-3">
+                      <Input
+                        placeholder="Troco para quanto? (opcional)"
+                        value={changeAmount}
+                        onChange={(e) => setChangeAmount(e.target.value)}
+                        type="number"
+                        step="0.01"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Order Summary */}
