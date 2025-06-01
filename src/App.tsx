@@ -46,125 +46,26 @@ function App() {
                 
                 {/* Protected Routes with DashboardLayout */}
                 <Route 
-                  path="/dashboard" 
+                  path="/*" 
                   element={
                     <RouteGuard>
-                      <DashboardLayout>
-                        <Dashboard />
-                      </DashboardLayout>
+                      <DashboardLayout />
                     </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/pedidos" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Orders />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/produtos" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Products />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/pdv" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <PDV />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/cozinha" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Kitchen />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/mesas" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Mesas />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/bairros-entrega" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <BairrosEntrega />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/entregadores" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Entregadores />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/financeiro" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Financeiro />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/relatorios" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Relatorios />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/configuracoes" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Configuracoes />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
-                <Route 
-                  path="/assinatura" 
-                  element={
-                    <RouteGuard>
-                      <DashboardLayout>
-                        <Subscription />
-                      </DashboardLayout>
-                    </RouteGuard>
-                  } 
-                />
+                  }
+                >
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="pedidos" element={<Orders />} />
+                  <Route path="produtos" element={<Products />} />
+                  <Route path="pdv" element={<PDV />} />
+                  <Route path="cozinha" element={<Kitchen />} />
+                  <Route path="mesas" element={<Mesas />} />
+                  <Route path="bairros-entrega" element={<BairrosEntrega />} />
+                  <Route path="entregadores" element={<Entregadores />} />
+                  <Route path="financeiro" element={<Financeiro />} />
+                  <Route path="relatorios" element={<Relatorios />} />
+                  <Route path="configuracoes" element={<Configuracoes />} />
+                  <Route path="assinatura" element={<Subscription />} />
+                </Route>
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
