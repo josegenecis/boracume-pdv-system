@@ -6,6 +6,7 @@ import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
 import { CreditCard, ShoppingCart, Users, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface DashboardStats {
   todaySales: number;
@@ -21,10 +22,17 @@ interface RevenueData {
   revenue: number;
 }
 
+interface OrderItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 interface Order {
   id: string;
   customer_name: string;
-  items: any[];
+  items: OrderItem[];
   total: number;
   status: string;
   created_at: string;
@@ -85,7 +93,7 @@ const Dashboard = () => {
     // Produtos vendidos hoje
     const productsSold = todayOrders?.reduce((sum, order) => {
       const items = Array.isArray(order.items) ? order.items : [];
-      return sum + items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+      return sum + items.reduce((itemSum: number, item: any) => itemSum + (item.quantity || 0), 0);
     }, 0) || 0;
 
     // Pedidos pendentes
@@ -115,7 +123,7 @@ const Dashboard = () => {
     });
 
     const newCustomers = Array.from(customerFirstOrders.values())
-      .filter(date => new Date(date) >= today).length;
+      .filter(date => new Date(date as string) >= today).length;
 
     const totalCustomers = customerFirstOrders.size;
 
@@ -161,7 +169,7 @@ const Dashboard = () => {
   };
 
   const fetchRecentOrders = async () => {
-    const { data: orders, error } = await supabase
+    const { data: ordersData, error } = await supabase
       .from('orders')
       .select('*')
       .eq('user_id', user?.id)
@@ -170,7 +178,17 @@ const Dashboard = () => {
 
     if (error) throw error;
 
-    setRecentOrders(orders || []);
+    // Transform the data to match our Order interface
+    const orders: Order[] = (ordersData || []).map(order => ({
+      id: order.id,
+      customer_name: order.customer_name || '',
+      items: Array.isArray(order.items) ? order.items as OrderItem[] : [],
+      total: Number(order.total),
+      status: order.status,
+      created_at: order.created_at
+    }));
+
+    setRecentOrders(orders);
   };
 
   const formatCurrency = (value: number) => {
@@ -196,59 +214,63 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando dados...</p>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-gray-600">Carregando dados...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard 
-          title="Vendas de Hoje" 
-          value={formatCurrency(stats.todaySales)} 
-          description={`${stats.todayOrders} pedidos realizados`}
-          icon={<CreditCard />}
-          trend={getStatsTrend(stats.todaySales, 'sales')}
-        />
-        <StatsCard 
-          title="Pedidos Pendentes" 
-          value={stats.pendingOrders.toString()} 
-          description="Aguardando preparo/entrega"
-          icon={<ShoppingCart />}
-          trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
-        />
-        <StatsCard 
-          title="Novos Clientes" 
-          value={stats.newCustomers.toString()} 
-          description={`Total: ${stats.totalCustomers} clientes`}
-          icon={<Users />}
-          trend={getStatsTrend(stats.newCustomers, 'customers')}
-        />
-        <StatsCard 
-          title="Produtos Vendidos" 
-          value={stats.productsSold.toString()} 
-          description="Hoje"
-          icon={<Package />}
-        />
+    <DashboardLayout>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard 
+            title="Vendas de Hoje" 
+            value={formatCurrency(stats.todaySales)} 
+            description={`${stats.todayOrders} pedidos realizados`}
+            icon={<CreditCard />}
+            trend={getStatsTrend(stats.todaySales, 'sales')}
+          />
+          <StatsCard 
+            title="Pedidos Pendentes" 
+            value={stats.pendingOrders.toString()} 
+            description="Aguardando preparo/entrega"
+            icon={<ShoppingCart />}
+            trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
+          />
+          <StatsCard 
+            title="Novos Clientes" 
+            value={stats.newCustomers.toString()} 
+            description={`Total: ${stats.totalCustomers} clientes`}
+            icon={<Users />}
+            trend={getStatsTrend(stats.newCustomers, 'customers')}
+          />
+          <StatsCard 
+            title="Produtos Vendidos" 
+            value={stats.productsSold.toString()} 
+            description="Hoje"
+            icon={<Package />}
+          />
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <RevenueChart data={revenueData} />
+        </div>
+        
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
+          <RecentOrdersTable orders={recentOrders} />
+        </div>
       </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <RevenueChart data={revenueData} />
-      </div>
-      
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
-        <RecentOrdersTable orders={recentOrders} />
-      </div>
-    </div>
+    </DashboardLayout>
   );
 };
 
