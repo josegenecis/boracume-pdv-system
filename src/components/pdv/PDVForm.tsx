@@ -9,11 +9,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Interface for product with weight option
 interface Product {
   id: string;
   name: string;
@@ -21,11 +21,25 @@ interface Product {
   weight_based: boolean;
 }
 
-// Create schema for form validation
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+}
+
+interface Table {
+  id: string;
+  table_number: number;
+  status: string;
+}
+
 const orderSchema = z.object({
+  orderType: z.enum(['delivery', 'table']),
   customerName: z.string().min(3, { message: 'Nome deve ter pelo menos 3 caracteres' }),
   customerPhone: z.string().min(8, { message: 'Telefone inválido' }),
-  customerAddress: z.string().min(5, { message: 'Endereço deve ter pelo menos 5 caracteres' }),
+  customerAddress: z.string().optional(),
+  deliveryZoneId: z.string().optional(),
+  tableId: z.string().optional(),
   paymentMethod: z.enum(['pix', 'dinheiro', 'cartao']),
   changeAmount: z.number().optional(),
   productId: z.string().min(1, { message: 'Selecione um produto' }),
@@ -34,16 +48,20 @@ const orderSchema = z.object({
 
 const PDVForm = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<DeliveryZone | null>(null);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [deliveryFee, setDeliveryFee] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
   
-  // Initialize form
   const form = useForm<z.infer<typeof orderSchema>>({
     resolver: zodResolver(orderSchema),
     defaultValues: {
+      orderType: 'delivery',
       customerName: '',
       customerPhone: '',
       customerAddress: '',
@@ -53,65 +71,92 @@ const PDVForm = () => {
     },
   });
   
-  // Fetch products from Supabase
   useEffect(() => {
-    const fetchProducts = async () => {
-      if (!user) return;
-      
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from('products')
-          .select('id, name, price, weight_based')
-          .eq('user_id', user.id)
-          .eq('available', true);
-        
-        if (error) throw error;
-        
-        setProducts(data || []);
-      } catch (error: any) {
-        toast({
-          title: 'Erro ao carregar produtos',
-          description: error.message,
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      await Promise.all([
+        fetchProducts(),
+        fetchDeliveryZones(),
+        fetchTables()
+      ]);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao carregar dados',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, price, weight_based')
+      .eq('user_id', user?.id)
+      .eq('available', true);
     
-    fetchProducts();
-  }, [user, toast]);
+    if (error) throw error;
+    setProducts(data || []);
+  };
+
+  const fetchDeliveryZones = async () => {
+    const { data, error } = await supabase
+      .from('delivery_zones')
+      .select('*')
+      .eq('user_id', user?.id);
+    
+    if (error) throw error;
+    setDeliveryZones(data || []);
+  };
+
+  const fetchTables = async () => {
+    const { data, error } = await supabase
+      .from('tables')
+      .select('*')
+      .eq('user_id', user?.id)
+      .eq('status', 'available');
+    
+    if (error) throw error;
+    setTables(data || []);
+  };
   
-  // Watch for changes in form values
-  const paymentMethod = form.watch('paymentMethod');
+  const orderType = form.watch('orderType');
   const productId = form.watch('productId');
   const quantity = form.watch('quantity');
+  const deliveryZoneId = form.watch('deliveryZoneId');
+  const paymentMethod = form.watch('paymentMethod');
   
-  // Update selected product when product ID changes
   useEffect(() => {
     const product = products.find(p => p.id === productId);
     setSelectedProduct(product || null);
   }, [productId, products]);
-  
-  // Calculate total amount when product or quantity changes
+
   useEffect(() => {
-    if (selectedProduct) {
-      setTotalAmount(selectedProduct.price * (quantity || 0));
-    } else {
-      setTotalAmount(0);
-    }
-  }, [selectedProduct, quantity]);
+    const zone = deliveryZones.find(z => z.id === deliveryZoneId);
+    setSelectedDeliveryZone(zone || null);
+    setDeliveryFee(zone?.delivery_fee || 0);
+  }, [deliveryZoneId, deliveryZones]);
   
-  // Handle scale connection for weight-based products
+  useEffect(() => {
+    const productTotal = selectedProduct ? selectedProduct.price * (quantity || 0) : 0;
+    const deliveryTotal = orderType === 'delivery' ? deliveryFee : 0;
+    setTotalAmount(productTotal + deliveryTotal);
+  }, [selectedProduct, quantity, deliveryFee, orderType]);
+  
   const handleConnectScale = async () => {
-    // In a real app, this would connect to a hardware scale via Web Serial API
     toast({
       title: 'Conectando balança...',
       description: 'Simulando conexão com balança de pesagem',
     });
     
-    // Simulate getting weight from scale
     setTimeout(() => {
       const simulatedWeight = (Math.random() * 2 + 0.1).toFixed(3);
       form.setValue('quantity', parseFloat(simulatedWeight));
@@ -122,47 +167,66 @@ const PDVForm = () => {
     }, 1500);
   };
   
-  // Handle form submission
+  const generateOrderNumber = () => {
+    return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  };
+
   const onSubmit = async (data: z.infer<typeof orderSchema>) => {
     if (!user) return;
     
     try {
       setIsLoading(true);
       
-      // Create order items
       const orderItem = {
         product_id: data.productId,
         product_name: selectedProduct?.name || '',
         price: selectedProduct?.price || 0,
         quantity: data.quantity,
-        subtotal: totalAmount
+        subtotal: (selectedProduct?.price || 0) * data.quantity
       };
-      
-      // Create order in Supabase
-      const { error } = await supabase.from('orders').insert({
+
+      const orderData = {
         user_id: user.id,
         customer_name: data.customerName,
         customer_phone: data.customerPhone,
-        customer_address: data.customerAddress,
+        customer_address: data.orderType === 'delivery' ? data.customerAddress : null,
         payment_method: data.paymentMethod,
         change_amount: data.paymentMethod === 'dinheiro' ? data.changeAmount : null,
         items: [orderItem],
         total: totalAmount,
-        status: 'pending'
-      });
+        delivery_fee: orderType === 'delivery' ? deliveryFee : 0,
+        delivery_zone_id: data.orderType === 'delivery' ? data.deliveryZoneId : null,
+        table_id: data.orderType === 'table' ? data.tableId : null,
+        status: 'new',
+        order_number: generateOrderNumber()
+      };
       
-      if (error) throw error;
+      const { error: orderError } = await supabase
+        .from('orders')
+        .insert(orderData);
+      
+      if (orderError) throw orderError;
+
+      // Se for mesa, atualizar status da mesa
+      if (data.orderType === 'table' && data.tableId) {
+        await supabase
+          .from('tables')
+          .update({ status: 'occupied' })
+          .eq('id', data.tableId);
+      }
       
       toast({
         title: 'Pedido criado com sucesso',
-        description: 'O pedido foi enviado para cozinha',
+        description: `Pedido #${orderData.order_number} foi registrado`,
       });
       
-      // Reset form
       form.reset();
       setSelectedProduct(null);
+      setSelectedDeliveryZone(null);
       setTotalAmount(0);
+      setDeliveryFee(0);
     } catch (error: any) {
+      console.error('Erro ao criar pedido:', error);
       toast({
         title: 'Erro ao criar pedido',
         description: error.message,
@@ -180,8 +244,25 @@ const PDVForm = () => {
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
-            {/* Customer Information */}
+          <CardContent className="space-y-6">
+            {/* Tipo de Pedido */}
+            <FormField
+              control={form.control}
+              name="orderType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo de Pedido</FormLabel>
+                  <Tabs value={field.value} onValueChange={field.onChange}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="delivery">Entrega</TabsTrigger>
+                      <TabsTrigger value="table">Mesa</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </FormItem>
+              )}
+            />
+
+            {/* Informações do Cliente */}
             <div className="space-y-4">
               <h3 className="font-medium">Informações do Cliente</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -212,22 +293,79 @@ const PDVForm = () => {
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="customerAddress"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Endereço de Entrega</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Rua, número, bairro, cidade" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
+              {/* Campos específicos por tipo */}
+              {orderType === 'delivery' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="customerAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Endereço de Entrega</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Rua, número, bairro" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="deliveryZoneId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bairro</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o bairro" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {deliveryZones.map((zone) => (
+                              <SelectItem key={zone.id} value={zone.id}>
+                                {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {orderType === 'table' && (
+                <FormField
+                  control={form.control}
+                  name="tableId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Mesa</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione uma mesa" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {tables.map((table) => (
+                            <SelectItem key={table.id} value={table.id}>
+                              Mesa {table.table_number}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
             
-            {/* Order Information */}
+            {/* Detalhes do Pedido */}
             <div className="space-y-4 pt-4 border-t">
               <h3 className="font-medium">Detalhes do Pedido</h3>
               <div className="space-y-4">
@@ -239,7 +377,7 @@ const PDVForm = () => {
                       <FormLabel>Produto</FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
-                        defaultValue={field.value}
+                        value={field.value}
                         disabled={isLoading}
                       >
                         <FormControl>
@@ -287,7 +425,7 @@ const PDVForm = () => {
                               onClick={handleConnectScale}
                               disabled={isLoading}
                             >
-                              Conectar Balança
+                              Balança
                             </Button>
                           )}
                         </div>
@@ -296,11 +434,22 @@ const PDVForm = () => {
                     )}
                   />
                   
-                  <div className="flex items-end">
-                    <div className="w-full">
-                      <div className="font-medium text-sm mb-2">Total</div>
-                      <div className="text-2xl font-bold">
-                        R$ {totalAmount.toFixed(2)}
+                  <div className="space-y-2">
+                    <div className="font-medium text-sm">Resumo</div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>R$ {(totalAmount - deliveryFee).toFixed(2)}</span>
+                      </div>
+                      {orderType === 'delivery' && deliveryFee > 0 && (
+                        <div className="flex justify-between">
+                          <span>Taxa de entrega:</span>
+                          <span>R$ {deliveryFee.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-lg">
+                        <span>Total:</span>
+                        <span>R$ {totalAmount.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -308,7 +457,7 @@ const PDVForm = () => {
               </div>
             </div>
             
-            {/* Payment Method */}
+            {/* Forma de Pagamento */}
             <div className="space-y-4 pt-4 border-t">
               <h3 className="font-medium">Forma de Pagamento</h3>
               <FormField
@@ -319,7 +468,7 @@ const PDVForm = () => {
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                         className="flex space-x-4"
                       >
                         <FormItem className="flex items-center space-x-2 space-y-0">
@@ -347,7 +496,6 @@ const PDVForm = () => {
                 )}
               />
               
-              {/* Change amount field for cash payments */}
               {paymentMethod === 'dinheiro' && (
                 <FormField
                   control={form.control}

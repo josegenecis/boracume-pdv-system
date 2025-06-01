@@ -48,7 +48,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Verificar se é uma imagem válida
       if (!file.type.startsWith('image/')) {
         toast({
           title: "Erro",
@@ -58,7 +57,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
         return;
       }
 
-      // Verificar tamanho do arquivo (5MB max)
       if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "Erro",
@@ -85,13 +83,11 @@ const ProductForm: React.FC<ProductFormProps> = ({
         throw new Error('Usuário não autenticado');
       }
 
-      // Gerar nome único para o arquivo
       const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       
       console.log('Fazendo upload da imagem:', fileName);
       
-      // Upload do arquivo
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('product-images')
         .upload(fileName, file, {
@@ -106,7 +102,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
       console.log('Upload realizado com sucesso:', uploadData);
 
-      // Obter URL pública
       const { data: urlData } = supabase.storage
         .from('product-images')
         .getPublicUrl(fileName);
@@ -153,13 +148,12 @@ const ProductForm: React.FC<ProductFormProps> = ({
       
       let imageUrl = productData?.image_url || '';
       
-      // Upload da nova imagem se selecionada
       if (imageFile) {
         const uploadedUrl = await uploadImage(imageFile);
         if (uploadedUrl) {
           imageUrl = uploadedUrl;
         } else {
-          return; // Parar se o upload falhou
+          return;
         }
       }
 
@@ -208,7 +202,6 @@ const ProductForm: React.FC<ProductFormProps> = ({
         onClose();
       }
 
-      // Reset form if creating new product
       if (!editMode) {
         setFormData({
           name: '',

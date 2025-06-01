@@ -1,74 +1,211 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
 import { CreditCard, ShoppingCart, Users, Package } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
-const revenueData = [
-  { name: 'Seg', revenue: 4200 },
-  { name: 'Ter', revenue: 3800 },
-  { name: 'Qua', revenue: 5200 },
-  { name: 'Qui', revenue: 4900 },
-  { name: 'Sex', revenue: 7500 },
-  { name: 'Sab', revenue: 9200 },
-  { name: 'Dom', revenue: 8100 },
-];
+interface DashboardStats {
+  todaySales: number;
+  todayOrders: number;
+  pendingOrders: number;
+  productsSold: number;
+  newCustomers: number;
+  totalCustomers: number;
+}
 
-// Define the type for our order objects
-type Order = {
+interface RevenueData {
+  name: string;
+  revenue: number;
+}
+
+interface Order {
   id: string;
-  customer: string;
-  items: number;
+  customer_name: string;
+  items: any[];
   total: number;
-  status: 'delivered' | 'ready' | 'preparing' | 'pending' | 'cancelled';
-  time: string;
-};
-
-const recentOrders: Order[] = [
-  { 
-    id: '#8765', 
-    customer: 'João Silva', 
-    items: 3, 
-    total: 89.90, 
-    status: 'delivered', 
-    time: '20:45' 
-  },
-  { 
-    id: '#8764', 
-    customer: 'Maria Souza', 
-    items: 2, 
-    total: 65.50, 
-    status: 'ready', 
-    time: '20:32' 
-  },
-  { 
-    id: '#8763', 
-    customer: 'Carlos Oliveira', 
-    items: 4, 
-    total: 115.80, 
-    status: 'preparing', 
-    time: '20:25' 
-  },
-  { 
-    id: '#8762', 
-    customer: 'Ana Santos', 
-    items: 1, 
-    total: 32.90, 
-    status: 'pending', 
-    time: '20:10' 
-  },
-  { 
-    id: '#8761', 
-    customer: 'Roberto Lima', 
-    items: 5, 
-    total: 149.90, 
-    status: 'cancelled', 
-    time: '19:55' 
-  },
-];
+  status: string;
+  created_at: string;
+}
 
 const Dashboard = () => {
+  const [stats, setStats] = useState<DashboardStats>({
+    todaySales: 0,
+    todayOrders: 0,
+    pendingOrders: 0,
+    productsSold: 0,
+    newCustomers: 0,
+    totalCustomers: 0,
+  });
+  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([
+        fetchStats(),
+        fetchRevenueData(),
+        fetchRecentOrders()
+      ]);
+    } catch (error) {
+      console.error('Erro ao carregar dados do dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString();
+
+    // Vendas de hoje
+    const { data: todayOrders, error: todayError } = await supabase
+      .from('orders')
+      .select('total, items')
+      .eq('user_id', user?.id)
+      .gte('created_at', todayISO);
+
+    if (todayError) throw todayError;
+
+    const todaySales = todayOrders?.reduce((sum, order) => sum + Number(order.total), 0) || 0;
+    const todayOrdersCount = todayOrders?.length || 0;
+
+    // Produtos vendidos hoje
+    const productsSold = todayOrders?.reduce((sum, order) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      return sum + items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+    }, 0) || 0;
+
+    // Pedidos pendentes
+    const { data: pendingOrders, error: pendingError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('user_id', user?.id)
+      .in('status', ['new', 'confirmed', 'preparing']);
+
+    if (pendingError) throw pendingError;
+
+    // Novos clientes hoje
+    const { data: allOrders, error: allOrdersError } = await supabase
+      .from('orders')
+      .select('customer_name, created_at')
+      .eq('user_id', user?.id);
+
+    if (allOrdersError) throw allOrdersError;
+
+    const customerFirstOrders = new Map();
+    allOrders?.forEach(order => {
+      const customerName = order.customer_name;
+      if (!customerFirstOrders.has(customerName) || 
+          new Date(order.created_at) < new Date(customerFirstOrders.get(customerName))) {
+        customerFirstOrders.set(customerName, order.created_at);
+      }
+    });
+
+    const newCustomers = Array.from(customerFirstOrders.values())
+      .filter(date => new Date(date) >= today).length;
+
+    const totalCustomers = customerFirstOrders.size;
+
+    setStats({
+      todaySales,
+      todayOrders: todayOrdersCount,
+      pendingOrders: pendingOrders?.length || 0,
+      productsSold,
+      newCustomers,
+      totalCustomers,
+    });
+  };
+
+  const fetchRevenueData = async () => {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const last7Days = [];
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      
+      const { data: dayOrders, error } = await supabase
+        .from('orders')
+        .select('total')
+        .eq('user_id', user?.id)
+        .gte('created_at', date.toISOString())
+        .lt('created_at', nextDay.toISOString());
+
+      if (error) throw error;
+
+      const revenue = dayOrders?.reduce((sum, order) => sum + Number(order.total), 0) || 0;
+      
+      last7Days.push({
+        name: days[date.getDay()],
+        revenue
+      });
+    }
+
+    setRevenueData(last7Days);
+  };
+
+  const fetchRecentOrders = async () => {
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', user?.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+
+    setRecentOrders(orders || []);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const getStatsTrend = (current: number, type: string) => {
+    // Simular tendência baseada em dados atuais
+    const trends = {
+      sales: current > 1000 ? 12 : current > 500 ? 8 : 5,
+      orders: current > 10 ? 15 : current > 5 ? 10 : 3,
+      customers: current > 3 ? 25 : current > 1 ? 15 : 5,
+    };
+    
+    return {
+      value: trends[type as keyof typeof trends] || 0,
+      positive: true
+    };
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando dados...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -76,29 +213,29 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard 
           title="Vendas de Hoje" 
-          value="R$ 2.589,90" 
-          description="12 pedidos realizados"
+          value={formatCurrency(stats.todaySales)} 
+          description={`${stats.todayOrders} pedidos realizados`}
           icon={<CreditCard />}
-          trend={{ value: 12, positive: true }}
+          trend={getStatsTrend(stats.todaySales, 'sales')}
         />
         <StatsCard 
           title="Pedidos Pendentes" 
-          value="8" 
-          description="4 em preparo, 4 a iniciar"
+          value={stats.pendingOrders.toString()} 
+          description="Aguardando preparo/entrega"
           icon={<ShoppingCart />}
-          trend={{ value: 2, positive: false }}
+          trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
         />
         <StatsCard 
           title="Novos Clientes" 
-          value="5" 
-          description="Total: 358 clientes"
+          value={stats.newCustomers.toString()} 
+          description={`Total: ${stats.totalCustomers} clientes`}
           icon={<Users />}
-          trend={{ value: 10, positive: true }}
+          trend={getStatsTrend(stats.newCustomers, 'customers')}
         />
         <StatsCard 
           title="Produtos Vendidos" 
-          value="47" 
-          description="12 diferentes itens"
+          value={stats.productsSold.toString()} 
+          description="Hoje"
           icon={<Package />}
         />
       </div>

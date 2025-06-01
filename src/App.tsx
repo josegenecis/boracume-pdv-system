@@ -3,76 +3,68 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import DashboardLayout from "./components/layout/DashboardLayout";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { SubscriptionProvider } from "./contexts/SubscriptionContext";
+import RouteGuard from "./components/auth/RouteGuard";
+import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Kitchen from "./pages/Kitchen";
-import Products from "./pages/Products";
 import Orders from "./pages/Orders";
+import Products from "./pages/Products";
+import PDV from "./pages/PDV";
+import Kitchen from "./pages/Kitchen";
+import MenuDigital from "./pages/MenuDigital";
+import Menu from "./pages/Menu";
 import Entregadores from "./pages/Entregadores";
 import Financeiro from "./pages/Financeiro";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
-import PDV from "./pages/PDV";
-import NotFound from "./pages/NotFound";
-import WhatsAppButton from "./components/chat/WhatsAppButton";
 import Subscription from "./pages/Subscription";
-import MenuDigital from "./pages/MenuDigital";
-import { AuthProvider } from "./contexts/AuthContext";
-import { SubscriptionProvider } from "./contexts/SubscriptionContext";
-import RouteGuard from "./components/auth/RouteGuard";
-import Menu from "./pages/Menu";
+import Mesas from "./pages/Mesas";
+import BairrosEntrega from "./pages/BairrosEntrega";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <BrowserRouter>
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
         <AuthProvider>
           <SubscriptionProvider>
             <Toaster />
             <Sonner />
-            <Routes>
-              <Route path="/" element={<Navigate to="/login" replace />} />
-              
-              {/* Public routes */}
-              <Route element={<RouteGuard requireAuth={false} />}>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
-                <Route path="/menu/:restaurantId?" element={<Menu />} />
-              </Route>
-              
-              {/* Protected routes */}
-              <Route element={<RouteGuard requireAuth={true} />}>
-                <Route element={<DashboardLayout />}>
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/cozinha" element={<Kitchen />} />
-                  <Route path="/produtos" element={<Products />} />
-                  <Route path="/cardapio" element={<MenuDigital />} />
-                  <Route path="/pedidos" element={<Orders />} />
-                  <Route path="/pdv" element={<PDV />} />
-                  <Route path="/entregadores" element={<Entregadores />} />
-                  <Route path="/financeiro" element={<Financeiro />} />
-                  <Route path="/relatorios" element={<Relatorios />} />
-                  <Route path="/configuracoes" element={<Configuracoes />} />
-                  <Route path="/assinatura" element={<Subscription />} />
-                </Route>
-              </Route>
-              
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            
-            {/* WhatsApp Button for global access */}
-            <WhatsAppButton 
-              phoneNumber="5511999999999" 
-              message="Olá! Estou com uma dúvida sobre o BoraCumê." 
-            />
+                <Route path="/menu" element={<MenuDigital />} />
+                <Route path="/menu/:restaurantId" element={<MenuDigital />} />
+                <Route path="/cardapio" element={<Menu />} />
+                
+                {/* Protected Routes */}
+                <Route path="/dashboard" element={<RouteGuard><Dashboard /></RouteGuard>} />
+                <Route path="/pedidos" element={<RouteGuard><Orders /></RouteGuard>} />
+                <Route path="/produtos" element={<RouteGuard><Products /></RouteGuard>} />
+                <Route path="/pdv" element={<RouteGuard><PDV /></RouteGuard>} />
+                <Route path="/cozinha" element={<RouteGuard><Kitchen /></RouteGuard>} />
+                <Route path="/mesas" element={<RouteGuard><Mesas /></RouteGuard>} />
+                <Route path="/bairros-entrega" element={<RouteGuard><BairrosEntrega /></RouteGuard>} />
+                <Route path="/entregadores" element={<RouteGuard><Entregadores /></RouteGuard>} />
+                <Route path="/financeiro" element={<RouteGuard><Financeiro /></RouteGuard>} />
+                <Route path="/relatorios" element={<RouteGuard><Relatorios /></RouteGuard>} />
+                <Route path="/configuracoes" element={<RouteGuard><Configuracoes /></RouteGuard>} />
+                <Route path="/assinatura" element={<RouteGuard><Subscription /></RouteGuard>} />
+                
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
           </SubscriptionProvider>
         </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
