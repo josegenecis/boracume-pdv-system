@@ -92,7 +92,7 @@ const Dashboard = () => {
 
     // Produtos vendidos hoje
     const productsSold = todayOrders?.reduce((sum, order) => {
-      const items = Array.isArray(order.items) ? order.items : [];
+      const items = Array.isArray(order.items) ? order.items as any[] : [];
       return sum + items.reduce((itemSum: number, item: any) => itemSum + (item.quantity || 0), 0);
     }, 0) || 0;
 
@@ -182,7 +182,7 @@ const Dashboard = () => {
     const orders: Order[] = (ordersData || []).map(order => ({
       id: order.id,
       customer_name: order.customer_name || '',
-      items: Array.isArray(order.items) ? order.items as OrderItem[] : [],
+      items: Array.isArray(order.items) ? (order.items as unknown as OrderItem[]) : [],
       total: Number(order.total),
       status: order.status,
       created_at: order.created_at
@@ -214,63 +214,59 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando dados...</p>
-          </div>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando dados...</p>
         </div>
-      </DashboardLayout>
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard 
-            title="Vendas de Hoje" 
-            value={formatCurrency(stats.todaySales)} 
-            description={`${stats.todayOrders} pedidos realizados`}
-            icon={<CreditCard />}
-            trend={getStatsTrend(stats.todaySales, 'sales')}
-          />
-          <StatsCard 
-            title="Pedidos Pendentes" 
-            value={stats.pendingOrders.toString()} 
-            description="Aguardando preparo/entrega"
-            icon={<ShoppingCart />}
-            trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
-          />
-          <StatsCard 
-            title="Novos Clientes" 
-            value={stats.newCustomers.toString()} 
-            description={`Total: ${stats.totalCustomers} clientes`}
-            icon={<Users />}
-            trend={getStatsTrend(stats.newCustomers, 'customers')}
-          />
-          <StatsCard 
-            title="Produtos Vendidos" 
-            value={stats.productsSold.toString()} 
-            description="Hoje"
-            icon={<Package />}
-          />
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <RevenueChart data={revenueData} />
-        </div>
-        
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
-          <RecentOrdersTable orders={recentOrders} />
-        </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard 
+          title="Vendas de Hoje" 
+          value={formatCurrency(stats.todaySales)} 
+          description={`${stats.todayOrders} pedidos realizados`}
+          icon={<CreditCard />}
+          trend={getStatsTrend(stats.todaySales, 'sales')}
+        />
+        <StatsCard 
+          title="Pedidos Pendentes" 
+          value={stats.pendingOrders.toString()} 
+          description="Aguardando preparo/entrega"
+          icon={<ShoppingCart />}
+          trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
+        />
+        <StatsCard 
+          title="Novos Clientes" 
+          value={stats.newCustomers.toString()} 
+          description={`Total: ${stats.totalCustomers} clientes`}
+          icon={<Users />}
+          trend={getStatsTrend(stats.newCustomers, 'customers')}
+        />
+        <StatsCard 
+          title="Produtos Vendidos" 
+          value={stats.productsSold.toString()} 
+          description="Hoje"
+          icon={<Package />}
+        />
       </div>
-    </DashboardLayout>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <RevenueChart data={revenueData} />
+      </div>
+      
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
+        <RecentOrdersTable orders={recentOrders} />
+      </div>
+    </div>
   );
 };
 
