@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,6 @@ import { UtensilsCrossed, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface TableData {
   id: string;
@@ -153,123 +153,121 @@ const Mesas = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center space-x-2">
-          <UtensilsCrossed className="h-6 w-6 text-orange-500" />
-          <h1 className="text-2xl font-bold">Gerenciar Mesas</h1>
-        </div>
-
-        {/* Formulário para adicionar/editar mesa */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {editingTable ? 'Editar Mesa' : 'Adicionar Nova Mesa'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="table_number">Número da Mesa</Label>
-                <Input
-                  id="table_number"
-                  type="number"
-                  min="1"
-                  value={newTable.table_number || ''}
-                  onChange={(e) => setNewTable({ ...newTable, table_number: parseInt(e.target.value) || 0 })}
-                  placeholder="Ex: 1, 2, 3..."
-                />
-              </div>
-              <div>
-                <Label htmlFor="capacity">Capacidade (pessoas)</Label>
-                <Input
-                  id="capacity"
-                  type="number"
-                  min="1"
-                  value={newTable.capacity}
-                  onChange={(e) => setNewTable({ ...newTable, capacity: parseInt(e.target.value) || 4 })}
-                  placeholder="4"
-                />
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <Button 
-                onClick={handleSaveTable} 
-                disabled={isLoading || newTable.table_number <= 0}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {editingTable ? 'Atualizar' : 'Adicionar'} Mesa
-              </Button>
-              {editingTable && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setEditingTable(null);
-                    setNewTable({ table_number: 0, capacity: 4 });
-                  }}
-                >
-                  Cancelar
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Lista de mesas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Mesas Cadastradas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {tables.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <UtensilsCrossed className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma mesa cadastrada ainda.</p>
-                <p className="text-sm">Adicione mesas para organizar o atendimento.</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Capacidade</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tables.map((table) => (
-                    <TableRow key={table.id}>
-                      <TableCell className="font-medium">Mesa {table.table_number}</TableCell>
-                      <TableCell>{table.capacity} pessoas</TableCell>
-                      <TableCell>{getStatusBadge(table.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditTable(table)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteTable(table.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      <div className="flex items-center space-x-2">
+        <UtensilsCrossed className="h-6 w-6 text-orange-500" />
+        <h1 className="text-2xl font-bold">Gerenciar Mesas</h1>
       </div>
-    </DashboardLayout>
+
+      {/* Formulário para adicionar/editar mesa */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {editingTable ? 'Editar Mesa' : 'Adicionar Nova Mesa'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="table_number">Número da Mesa</Label>
+              <Input
+                id="table_number"
+                type="number"
+                min="1"
+                value={newTable.table_number || ''}
+                onChange={(e) => setNewTable({ ...newTable, table_number: parseInt(e.target.value) || 0 })}
+                placeholder="Ex: 1, 2, 3..."
+              />
+            </div>
+            <div>
+              <Label htmlFor="capacity">Capacidade (pessoas)</Label>
+              <Input
+                id="capacity"
+                type="number"
+                min="1"
+                value={newTable.capacity}
+                onChange={(e) => setNewTable({ ...newTable, capacity: parseInt(e.target.value) || 4 })}
+                placeholder="4"
+              />
+            </div>
+          </div>
+          <div className="flex space-x-2">
+            <Button 
+              onClick={handleSaveTable} 
+              disabled={isLoading || newTable.table_number <= 0}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {editingTable ? 'Atualizar' : 'Adicionar'} Mesa
+            </Button>
+            {editingTable && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setEditingTable(null);
+                  setNewTable({ table_number: 0, capacity: 4 });
+                }}
+              >
+                Cancelar
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de mesas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Mesas Cadastradas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tables.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <UtensilsCrossed className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Nenhuma mesa cadastrada ainda.</p>
+              <p className="text-sm">Adicione mesas para organizar o atendimento.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número</TableHead>
+                  <TableHead>Capacidade</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tables.map((table) => (
+                  <TableRow key={table.id}>
+                    <TableCell className="font-medium">Mesa {table.table_number}</TableCell>
+                    <TableCell>{table.capacity} pessoas</TableCell>
+                    <TableCell>{getStatusBadge(table.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditTable(table)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteTable(table.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
