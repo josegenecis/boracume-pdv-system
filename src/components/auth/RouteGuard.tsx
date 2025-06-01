@@ -1,15 +1,15 @@
-
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface RouteGuardProps {
+  children: React.ReactNode;
   requireAuth?: boolean;
 }
 
-const RouteGuard: React.FC<RouteGuardProps> = ({ requireAuth = true }) => {
+const RouteGuard: React.FC<RouteGuardProps> = ({ children, requireAuth = true }) => {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -41,7 +41,7 @@ const RouteGuard: React.FC<RouteGuardProps> = ({ requireAuth = true }) => {
   }
 
   // Otherwise, render the children
-  return <Outlet />;
+  return <>{children}</>;
 };
 
 export default RouteGuard;

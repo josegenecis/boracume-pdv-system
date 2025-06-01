@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -108,24 +107,34 @@ const PDVForm = () => {
   };
 
   const fetchDeliveryZones = async () => {
-    const { data, error } = await supabase
-      .from('delivery_zones')
-      .select('*')
-      .eq('user_id', user?.id);
-    
-    if (error) throw error;
-    setDeliveryZones(data || []);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', user?.id);
+      
+      if (error) throw error;
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.warn('Delivery zones table not ready yet:', error);
+      setDeliveryZones([]);
+    }
   };
 
   const fetchTables = async () => {
-    const { data, error } = await supabase
-      .from('tables')
-      .select('*')
-      .eq('user_id', user?.id)
-      .eq('status', 'available');
-    
-    if (error) throw error;
-    setTables(data || []);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('tables')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'available');
+      
+      if (error) throw error;
+      setTables(data || []);
+    } catch (error) {
+      console.warn('Tables table not ready yet:', error);
+      setTables([]);
+    }
   };
   
   const orderType = form.watch('orderType');
@@ -209,10 +218,14 @@ const PDVForm = () => {
 
       // Se for mesa, atualizar status da mesa
       if (data.orderType === 'table' && data.tableId) {
-        await supabase
-          .from('tables')
-          .update({ status: 'occupied' })
-          .eq('id', data.tableId);
+        try {
+          await (supabase as any)
+            .from('tables')
+            .update({ status: 'occupied' })
+            .eq('id', data.tableId);
+        } catch (error) {
+          console.warn('Could not update table status:', error);
+        }
       }
       
       toast({
@@ -310,34 +323,36 @@ const PDVForm = () => {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="deliveryZoneId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bairro</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o bairro" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {deliveryZones.map((zone) => (
-                              <SelectItem key={zone.id} value={zone.id}>
-                                {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {deliveryZones.length > 0 && (
+                    <FormField
+                      control={form.control}
+                      name="deliveryZoneId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bairro</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o bairro" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {deliveryZones.map((zone) => (
+                                <SelectItem key={zone.id} value={zone.id}>
+                                  {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </>
               )}
 
-              {orderType === 'table' && (
+              {orderType === 'table' && tables.length > 0 && (
                 <FormField
                   control={form.control}
                   name="tableId"
