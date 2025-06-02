@@ -10,11 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Pencil, Trash2, FolderPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Category {
   id: string;
   name: string;
   description?: string;
+  display_order: number;
+  active: boolean;
 }
 
 const CategoryManager = () => {
@@ -22,7 +25,12 @@ const CategoryManager = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState({ name: '', description: '' });
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    description: '', 
+    display_order: 0,
+    active: true 
+  });
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -35,14 +43,14 @@ const CategoryManager = () => {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      // Por enquanto, vamos usar categorias fixas enquanto a tabela não está disponível nos tipos
-      const mockCategories: Category[] = [
-        { id: '1', name: 'Hambúrgueres', description: 'Deliciosos hambúrgueres artesanais' },
-        { id: '2', name: 'Pizzas', description: 'Pizzas tradicionais e especiais' },
-        { id: '3', name: 'Bebidas', description: 'Refrigerantes, sucos e águas' },
-        { id: '4', name: 'Sobremesas', description: 'Doces e sobremesas variadas' }
-      ];
-      setCategories(mockCategories);
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('display_order', { ascending: true });
+
+      if (error) throw error;
+      setCategories(data || []);
     } catch (error: any) {
       console.error('Erro ao carregar categorias:', error);
       toast({
@@ -62,26 +70,34 @@ const CategoryManager = () => {
       setIsLoading(true);
       
       if (editingCategory) {
-        // Atualizar categoria existente
-        setCategories(prev => prev.map(cat => 
-          cat.id === editingCategory.id 
-            ? { ...cat, name: formData.name, description: formData.description || '' }
-            : cat
-        ));
+        const { error } = await supabase
+          .from('product_categories')
+          .update({
+            name: formData.name,
+            description: formData.description || null,
+            display_order: formData.display_order,
+            active: formData.active
+          })
+          .eq('id', editingCategory.id);
+        
+        if (error) throw error;
         
         toast({
           title: 'Categoria atualizada',
           description: 'A categoria foi atualizada com sucesso.',
         });
       } else {
-        // Criar nova categoria
-        const newCategory: Category = {
-          id: Date.now().toString(),
-          name: formData.name,
-          description: formData.description || ''
-        };
+        const { error } = await supabase
+          .from('product_categories')
+          .insert({
+            user_id: user.id,
+            name: formData.name,
+            description: formData.description || null,
+            display_order: formData.display_order,
+            active: formData.active
+          });
         
-        setCategories(prev => [...prev, newCategory]);
+        if (error) throw error;
         
         toast({
           title: 'Categoria criada',
@@ -89,9 +105,10 @@ const CategoryManager = () => {
         });
       }
       
-      setFormData({ name: '', description: '' });
+      setFormData({ name: '', description: '', display_order: 0, active: true });
       setEditingCategory(null);
       setIsDialogOpen(false);
+      fetchCategories();
     } catch (error: any) {
       toast({
         title: 'Erro ao salvar categoria',
@@ -105,7 +122,12 @@ const CategoryManager = () => {
 
   const handleEdit = (category: Category) => {
     setEditingCategory(category);
-    setFormData({ name: category.name, description: category.description || '' });
+    setFormData({
+      name: category.name,
+      description: category.description || '',
+      display_order: category.display_order,
+      active: category.active
+    });
     setIsDialogOpen(true);
   };
 
@@ -115,12 +137,19 @@ const CategoryManager = () => {
     try {
       setIsLoading(true);
       
-      setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+      const { error } = await supabase
+        .from('product_categories')
+        .delete()
+        .eq('id', categoryId);
+      
+      if (error) throw error;
       
       toast({
         title: 'Categoria excluída',
         description: 'A categoria foi excluída com sucesso.',
       });
+      
+      fetchCategories();
     } catch (error: any) {
       toast({
         title: 'Erro ao excluir categoria',
@@ -133,7 +162,7 @@ const CategoryManager = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', description: '', display_order: 0, active: true });
     setEditingCategory(null);
   };
 
@@ -178,6 +207,16 @@ const CategoryManager = () => {
                     rows={3}
                   />
                 </div>
+                <div>
+                  <Label htmlFor="display_order">Ordem de Exibição</Label>
+                  <Input
+                    id="display_order"
+                    type="number"
+                    value={formData.display_order}
+                    onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+                    placeholder="0"
+                  />
+                </div>
                 <div className="flex gap-2 justify-end">
                   <Button 
                     variant="outline" 
@@ -210,6 +249,8 @@ const CategoryManager = () => {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Descrição</TableHead>
+                <TableHead>Ordem</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -218,6 +259,12 @@ const CategoryManager = () => {
                 <TableRow key={category.id}>
                   <TableCell className="font-medium">{category.name}</TableCell>
                   <TableCell>{category.description || '-'}</TableCell>
+                  <TableCell>{category.display_order}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs ${category.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                      {category.active ? 'Ativa' : 'Inativa'}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end space-x-2">
                       <Button

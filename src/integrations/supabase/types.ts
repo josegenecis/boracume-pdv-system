@@ -117,6 +117,42 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_zones: {
+        Row: {
+          active: boolean | null
+          created_at: string
+          delivery_fee: number
+          delivery_time: string | null
+          id: string
+          minimum_order: number | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string
+          delivery_fee?: number
+          delivery_time?: string | null
+          id?: string
+          minimum_order?: number | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string
+          delivery_fee?: number
+          delivery_time?: string | null
+          id?: string
+          minimum_order?: number | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       kitchen_orders: {
         Row: {
           created_at: string
@@ -244,10 +280,16 @@ export type Database = {
           customer_address: string | null
           customer_name: string | null
           customer_phone: string | null
+          delivery_fee: number | null
+          delivery_zone_id: string | null
+          estimated_time: string | null
           id: string
           items: Json
+          order_number: string | null
+          order_type: string | null
           payment_method: string
           status: string
+          table_id: string | null
           total: number
           updated_at: string
           user_id: string
@@ -258,10 +300,16 @@ export type Database = {
           customer_address?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivery_fee?: number | null
+          delivery_zone_id?: string | null
+          estimated_time?: string | null
           id?: string
           items: Json
+          order_number?: string | null
+          order_type?: string | null
           payment_method: string
           status: string
+          table_id?: string | null
           total: number
           updated_at?: string
           user_id: string
@@ -272,11 +320,65 @@ export type Database = {
           customer_address?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivery_fee?: number | null
+          delivery_zone_id?: string | null
+          estimated_time?: string | null
           id?: string
           items?: Json
+          order_number?: string | null
+          order_type?: string | null
           payment_method?: string
           status?: string
+          table_id?: string | null
           total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_delivery_zone_id_fkey"
+            columns: ["delivery_zone_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_zones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_categories: {
+        Row: {
+          active: boolean | null
+          created_at: string
+          description: string | null
+          display_order: number | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          name?: string
           updated_at?: string
           user_id?: string
         }
@@ -286,6 +388,7 @@ export type Database = {
         Row: {
           available: boolean | null
           category: string
+          category_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -299,6 +402,7 @@ export type Database = {
         Insert: {
           available?: boolean | null
           category: string
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -312,6 +416,7 @@ export type Database = {
         Update: {
           available?: boolean | null
           category?: string
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -322,7 +427,15 @@ export type Database = {
           user_id?: string
           weight_based?: boolean | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -369,6 +482,51 @@ export type Database = {
           restaurant_name?: string | null
           updated_at?: string
           website?: string | null
+        }
+        Relationships: []
+      }
+      promotional_banners: {
+        Row: {
+          active: boolean | null
+          created_at: string
+          description: string | null
+          display_order: number | null
+          end_date: string | null
+          id: string
+          image_url: string | null
+          link_url: string | null
+          start_date: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          display_order?: number | null
+          end_date?: string | null
+          id?: string
+          image_url?: string | null
+          link_url?: string | null
+          start_date?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          display_order?: number | null
+          end_date?: string | null
+          id?: string
+          image_url?: string | null
+          link_url?: string | null
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -484,6 +642,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tables: {
+        Row: {
+          capacity: number | null
+          created_at: string
+          id: string
+          location: string | null
+          status: string | null
+          table_number: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          capacity?: number | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          status?: string | null
+          table_number: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          capacity?: number | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          status?: string | null
+          table_number?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       whatsapp_settings: {
         Row: {

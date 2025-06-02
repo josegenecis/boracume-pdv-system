@@ -11,19 +11,27 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
 import CategoryManager from '@/components/products/CategoryManager';
+import BannerManager from '@/components/banners/BannerManager';
 
 interface Product {
   id: string;
   name: string;
   description?: string;
   price: number;
-  category: string;
+  category_id?: string;
   image_url?: string;
   available: boolean;
+  weight_based?: boolean;
+}
+
+interface Category {
+  id: string;
+  name: string;
 }
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -35,13 +43,17 @@ const Products = () => {
 
   useEffect(() => {
     if (user) {
-      fetchProducts();
+      fetchData();
     }
   }, [user]);
 
   useEffect(() => {
     filterProducts();
   }, [products, searchQuery, selectedCategory]);
+
+  const fetchData = async () => {
+    await Promise.all([fetchProducts(), fetchCategories()]);
+  };
 
   const fetchProducts = async () => {
     try {
@@ -66,6 +78,22 @@ const Products = () => {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('id, name')
+        .eq('user_id', user?.id)
+        .eq('active', true)
+        .order('display_order');
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error: any) {
+      console.error('Erro ao carregar categorias:', error);
+    }
+  };
+
   const filterProducts = () => {
     let filtered = products;
 
@@ -77,7 +105,7 @@ const Products = () => {
     }
 
     if (selectedCategory !== 'all') {
-      filtered = filtered.filter(product => product.category === selectedCategory);
+      filtered = filtered.filter(product => product.category_id === selectedCategory);
     }
 
     setFilteredProducts(filtered);
@@ -130,7 +158,13 @@ const Products = () => {
     }).format(value);
   };
 
-  const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId) return 'Sem categoria';
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || 'Categoria não encontrada';
+  };
+
+  const categoryFilters = ['all', ...categories.map(c => c.id)];
 
   return (
     <div className="space-y-6">
@@ -149,6 +183,7 @@ const Products = () => {
         <TabsList>
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
+          <TabsTrigger value="banners">Banners</TabsTrigger>
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
@@ -180,14 +215,21 @@ const Products = () => {
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant={selectedCategory === 'all' ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedCategory('all')}
+                      >
+                        Todos
+                      </Button>
                       {categories.map(category => (
                         <Button
-                          key={category}
-                          variant={selectedCategory === category ? "default" : "outline"}
+                          key={category.id}
+                          variant={selectedCategory === category.id ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setSelectedCategory(category)}
+                          onClick={() => setSelectedCategory(category.id)}
                         >
-                          {category === 'all' ? 'Todos' : category}
+                          {category.name}
                         </Button>
                       ))}
                     </div>
@@ -240,8 +282,9 @@ const Products = () => {
                         <div className="flex justify-between items-center mb-4">
                           <span className="text-2xl font-bold text-primary">
                             {formatCurrency(product.price)}
+                            {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                           </span>
-                          <Badge variant="outline">{product.category}</Badge>
+                          <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -272,6 +315,10 @@ const Products = () => {
         
         <TabsContent value="categories">
           <CategoryManager />
+        </TabsContent>
+        
+        <TabsContent value="banners">
+          <BannerManager />
         </TabsContent>
       </Tabs>
     </div>

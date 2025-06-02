@@ -1,100 +1,214 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Package, ShoppingCart, Phone, MapPin, Clock } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useParams } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Phone, MapPin, Clock, Search, ShoppingCart, Plus, Minus } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   price: number;
-  category: string;
   image_url?: string;
   available: boolean;
+  weight_based?: boolean;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface Banner {
+  id: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+  link_url?: string;
+  start_date?: string;
+  end_date?: string;
+  active: boolean;
 }
 
 interface Restaurant {
   id: string;
-  restaurant_name: string;
-  description: string;
-  phone: string;
-  address: string;
-  opening_hours: string;
+  restaurant_name?: string;
+  description?: string;
+  phone?: string;
+  address?: string;
   logo_url?: string;
-  delivery_fee: number;
-  minimum_order: number;
+  opening_hours?: string;
+}
+
+interface CartItem extends Product {
+  quantity: number;
 }
 
 const MenuDigital = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [cart, setCart] = useState<{[key: string]: number}>({});
   const { restaurantId } = useParams();
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [customerInfo, setCustomerInfo] = useState({
+    name: '',
+    phone: '',
+    address: ''
+  });
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchMenuData();
   }, [restaurantId]);
 
+  useEffect(() => {
+    filterProducts();
+  }, [products, selectedCategory, searchQuery]);
+
   const fetchMenuData = async () => {
     try {
       setLoading(true);
       
-      // Se tem restaurantId específico, buscar por ele, senão pegar o primeiro usuário
       let userId = restaurantId;
       
-      if (!userId) {
-        // Buscar o primeiro restaurante disponível
+      // Se não há restaurantId específico, pegar o primeiro restaurante disponível
+      if (!restaurantId) {
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id')
-          .not('restaurant_name', 'is', null)
           .limit(1);
         
         if (profiles && profiles.length > 0) {
           userId = profiles[0].id;
+        } else {
+          throw new Error('Nenhum restaurante encontrado');
         }
       }
 
-      if (!userId) {
-        throw new Error('Nenhum restaurante encontrado');
-      }
-
-      // Buscar informações do restaurante
+      // Buscar dados do restaurante
       const { data: restaurantData, error: restaurantError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (restaurantError && restaurantError.code !== 'PGRST116') {
-        throw restaurantError;
-      }
+      if (restaurantError) throw restaurantError;
+      setRestaurant(restaurantData);
 
-      // Buscar produtos disponíveis
+      // Buscar categorias
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('product_categories')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('display_order');
+
+      if (categoriesError) throw categoriesError;
+      setCategories(categoriesData || []);
+
+      // Buscar produtos
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
         .eq('user_id', userId)
         .eq('available', true)
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
+        .order('name');
 
       if (productsError) throw productsError;
-
-      setRestaurant(restaurantData);
       setProducts(productsData || []);
-    } catch (error) {
-      console.error('Erro ao carregar cardápio:', error);
+
+      // Buscar banners ativos
+      const { data: bannersData, error: bannersError } = await supabase
+        .from('promotional_banners')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .or(`start_date.is.null,start_date.lte.${new Date().toISOString()}`)
+        .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
+        .order('display_order');
+
+      if (bannersError) {
+        console.warn('Erro ao carregar banners:', bannersError);
+      } else {
+        setBanners(bannersData || []);
+      }
+
+    } catch (error: any) {
+      console.error('Erro ao carregar dados do menu:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar o menu do restaurante.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const filterProducts = () => {
+    let filtered = products;
+
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(product => product.category_id === selectedCategory);
+    }
+
+    if (searchQuery) {
+      filtered = filtered.filter(product =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    setFilteredProducts(filtered);
+  };
+
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        return prev.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+
+    toast({
+      title: "Produto adicionado",
+      description: `${product.name} foi adicionado ao carrinho.`,
+    });
+  };
+
+  const updateQuantity = (productId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      setCart(prev => prev.filter(item => item.id !== productId));
+      return;
+    }
+    setCart(prev =>
+      prev.map(item =>
+        item.id === productId ? { ...item, quantity: newQuantity } : item
+      )
+    );
+  };
+
+  const getTotalValue = () => {
+    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
   const formatCurrency = (value: number) => {
@@ -104,84 +218,65 @@ const MenuDigital = () => {
     }).format(value);
   };
 
-  const categories = [
-    { id: 'all', name: 'Todos' },
-    { id: 'hamburgers', name: 'Hambúrgueres' },
-    { id: 'pizzas', name: 'Pizzas' },
-    { id: 'drinks', name: 'Bebidas' },
-    { id: 'desserts', name: 'Sobremesas' },
-    { id: 'appetizers', name: 'Petiscos' },
-    { id: 'mains', name: 'Pratos Principais' }
-  ];
-
-  const filteredProducts = products.filter(product => 
-    selectedCategory === 'all' || product.category === selectedCategory
-  );
-
-  const addToCart = (productId: string) => {
-    setCart(prev => ({
-      ...prev,
-      [productId]: (prev[productId] || 0) + 1
-    }));
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart(prev => {
-      const newCart = { ...prev };
-      if (newCart[productId] > 1) {
-        newCart[productId]--;
-      } else {
-        delete newCart[productId];
-      }
-      return newCart;
-    });
-  };
-
-  const getCartTotal = () => {
-    return Object.entries(cart).reduce((total, [productId, quantity]) => {
-      const product = products.find(p => p.id === productId);
-      return total + (product?.price || 0) * quantity;
-    }, 0);
-  };
-
-  const getCartItemCount = () => {
-    return Object.values(cart).reduce((total, quantity) => total + quantity, 0);
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId) return 'Sem categoria';
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || 'Sem categoria';
   };
 
   const handleWhatsAppOrder = () => {
-    const orderItems = Object.entries(cart).map(([productId, quantity]) => {
-      const product = products.find(p => p.id === productId);
-      return `${quantity}x ${product?.name} - ${formatCurrency((product?.price || 0) * quantity)}`;
-    }).join('\n');
+    if (cart.length === 0) {
+      toast({
+        title: "Carrinho vazio",
+        description: "Adicione produtos ao carrinho antes de fazer o pedido.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const total = getCartTotal() + (restaurant?.delivery_fee || 0);
-    const message = `🍽️ *Pedido do Cardápio Digital*\n\n📋 *Itens:*\n${orderItems}\n\n💰 *Subtotal:* ${formatCurrency(getCartTotal())}\n🚚 *Taxa de entrega:* ${formatCurrency(restaurant?.delivery_fee || 0)}\n💯 *Total:* ${formatCurrency(total)}\n\n📍 *Restaurante:* ${restaurant?.restaurant_name}`;
-    
+    if (!customerInfo.name || !customerInfo.phone) {
+      toast({
+        title: "Informações obrigatórias",
+        description: "Por favor, preencha seu nome e telefone.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const orderDetails = cart.map(item => 
+      `• ${item.name} (${item.quantity}x) - ${formatCurrency(item.price * item.quantity)}`
+    ).join('\n');
+
+    const message = `🍽️ *Novo Pedido - ${restaurant?.restaurant_name}*\n\n` +
+      `👤 *Cliente:* ${customerInfo.name}\n` +
+      `📱 *Telefone:* ${customerInfo.phone}\n` +
+      `📍 *Endereço:* ${customerInfo.address || 'Não informado'}\n\n` +
+      `🛒 *Itens do Pedido:*\n${orderDetails}\n\n` +
+      `💰 *Total:* ${formatCurrency(getTotalValue())}`;
+
     const whatsappUrl = `https://wa.me/${restaurant?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando cardápio...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (!restaurant) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Package size={48} className="mx-auto text-muted-foreground mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Restaurante não encontrado</h2>
-          <p className="text-muted-foreground">
-            O restaurante solicitado não está disponível.
-          </p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="p-8 text-center">
+          <CardContent>
+            <h2 className="text-2xl font-bold mb-4">Restaurante não encontrado</h2>
+            <p className="text-muted-foreground">
+              O restaurante que você está procurando não foi encontrado.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -190,176 +285,249 @@ const MenuDigital = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header do Restaurante */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-start space-x-4">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex items-center gap-4">
             {restaurant.logo_url && (
               <img 
                 src={restaurant.logo_url} 
                 alt={restaurant.restaurant_name}
-                className="w-20 h-20 rounded-lg object-cover"
+                className="w-16 h-16 rounded-full object-cover"
               />
             )}
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900">
-                {restaurant.restaurant_name}
-              </h1>
-              <p className="text-gray-600 mt-1">{restaurant.description}</p>
-              
-              <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+              <h1 className="text-2xl font-bold">{restaurant.restaurant_name || 'Restaurante'}</h1>
+              {restaurant.description && (
+                <p className="text-gray-600">{restaurant.description}</p>
+              )}
+              <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
                 {restaurant.phone && (
                   <div className="flex items-center gap-1">
-                    <Phone size={14} />
+                    <Phone size={16} />
                     {restaurant.phone}
                   </div>
                 )}
                 {restaurant.address && (
                   <div className="flex items-center gap-1">
-                    <MapPin size={14} />
+                    <MapPin size={16} />
                     {restaurant.address}
                   </div>
                 )}
                 {restaurant.opening_hours && (
                   <div className="flex items-center gap-1">
-                    <Clock size={14} />
+                    <Clock size={16} />
                     {restaurant.opening_hours}
                   </div>
                 )}
               </div>
-
-              <div className="flex gap-4 mt-3 text-sm">
-                <Badge variant="outline">
-                  Taxa de entrega: {formatCurrency(restaurant.delivery_fee)}
-                </Badge>
-                <Badge variant="outline">
-                  Pedido mínimo: {formatCurrency(restaurant.minimum_order)}
-                </Badge>
-              </div>
             </div>
+            {cart.length > 0 && (
+              <Button 
+                onClick={() => setIsCartOpen(true)}
+                className="relative"
+              >
+                <ShoppingCart size={20} />
+                <Badge className="absolute -top-2 -right-2 bg-red-500">
+                  {cart.reduce((total, item) => total + item.quantity, 0)}
+                </Badge>
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {products.length === 0 ? (
-          <div className="text-center py-12">
-            <Package size={48} className="mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">Cardápio em breve</h3>
-            <p className="text-muted-foreground">
-              Estamos preparando nosso cardápio. Volte em breve!
-            </p>
+      {/* Banners Promocionais */}
+      {banners.length > 0 && (
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {banners.map((banner) => (
+              <Card key={banner.id} className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow">
+                {banner.image_url && (
+                  <img 
+                    src={banner.image_url} 
+                    alt={banner.title}
+                    className="w-full h-32 object-cover"
+                  />
+                )}
+                <CardContent className="p-4">
+                  <h3 className="font-bold text-lg">{banner.title}</h3>
+                  {banner.description && (
+                    <p className="text-gray-600 text-sm mt-1">{banner.description}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        ) : (
-          <>
-            {/* Categorias */}
-            <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="mb-6">
-              <TabsList className="grid grid-cols-4 lg:grid-cols-7 gap-1 h-auto p-1">
-                {categories.map(category => (
-                  <TabsTrigger 
-                    key={category.id} 
-                    value={category.id} 
-                    className="text-xs py-2 px-3"
-                  >
-                    {category.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+        </div>
+      )}
 
-            {/* Lista de Produtos */}
-            <div className="grid gap-4">
-              {filteredProducts.map((product) => (
-                <Card key={product.id} className="overflow-hidden">
-                  <div className="flex">
-                    {product.image_url && (
-                      <div className="w-24 h-24 md:w-32 md:h-32 flex-shrink-0">
-                        <img 
-                          src={product.image_url} 
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1 p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg">{product.name}</h3>
-                          {product.description && (
-                            <p className="text-gray-600 text-sm mt-1 line-clamp-2">
-                              {product.description}
-                            </p>
-                          )}
-                          <p className="font-bold text-primary text-lg mt-2">
-                            {formatCurrency(product.price)}
-                          </p>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 ml-4">
-                          {cart[product.id] ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeFromCart(product.id)}
-                              >
-                                -
-                              </Button>
-                              <span className="w-8 text-center">{cart[product.id]}</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addToCart(product.id)}
-                              >
-                                +
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => addToCart(product.id)}
-                            >
-                              Adicionar
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+      <div className="container mx-auto px-4 py-6">
+        {/* Filtros */}
+        <div className="mb-6 space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Buscar produtos..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={selectedCategory === 'all' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedCategory('all')}
+            >
+              Todos
+            </Button>
+            {categories.map(category => (
+              <Button
+                key={category.id}
+                variant={selectedCategory === category.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                {category.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Lista de Produtos */}
+        {filteredProducts.length === 0 ? (
+          <Card className="text-center py-12">
+            <CardContent>
+              <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
+              <p className="text-muted-foreground">
+                {searchQuery || selectedCategory !== 'all'
+                  ? 'Tente ajustar os filtros ou buscar por outros termos.'
+                  : 'Este restaurante ainda não tem produtos cadastrados.'}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProducts.map((product) => (
+              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                {product.image_url && (
+                  <div className="aspect-video w-full overflow-hidden">
+                    <img 
+                      src={product.image_url} 
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                </Card>
-              ))}
-            </div>
-          </>
+                )}
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg">{product.name}</CardTitle>
+                    <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
+                  </div>
+                  {product.description && (
+                    <p className="text-gray-600 text-sm">{product.description}</p>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    <span className="text-2xl font-bold text-primary">
+                      {formatCurrency(product.price)}
+                      {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
+                    </span>
+                    <Button onClick={() => addToCart(product)}>
+                      <Plus size={16} className="mr-1" />
+                      Adicionar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Carrinho Flutuante */}
-      {getCartItemCount() > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 max-w-4xl mx-auto">
-          <Card className="bg-primary text-primary-foreground shadow-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart size={20} />
-                    <span className="font-semibold">
-                      {getCartItemCount()} {getCartItemCount() === 1 ? 'item' : 'itens'}
-                    </span>
-                  </div>
-                  <div className="text-sm opacity-90">
-                    Total: {formatCurrency(getCartTotal() + (restaurant?.delivery_fee || 0))}
-                  </div>
+      {/* Modal do Carrinho */}
+      <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seu Pedido</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {cart.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                Seu carrinho está vazio
+              </p>
+            ) : (
+              <>
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 border rounded">
+                      <div className="flex-1">
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatCurrency(item.price)} cada
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                          <Minus size={12} />
+                        </Button>
+                        <span className="w-8 text-center">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <Plus size={12} />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <Button 
-                  variant="secondary" 
-                  onClick={handleWhatsAppOrder}
-                  className="bg-white text-primary hover:bg-gray-100"
-                >
-                  Finalizar no WhatsApp
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                
+                <div className="border-t pt-4">
+                  <div className="flex justify-between text-lg font-bold mb-4">
+                    <span>Total:</span>
+                    <span>{formatCurrency(getTotalValue())}</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <Input
+                      placeholder="Seu nome *"
+                      value={customerInfo.name}
+                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="Seu telefone *"
+                      value={customerInfo.phone}
+                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                    />
+                    <Textarea
+                      placeholder="Endereço para entrega"
+                      value={customerInfo.address}
+                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
+                      rows={2}
+                    />
+                  </div>
+                  
+                  <Button 
+                    onClick={handleWhatsAppOrder}
+                    className="w-full mt-4 bg-green-600 hover:bg-green-700"
+                    disabled={cart.length === 0}
+                  >
+                    Fazer Pedido via WhatsApp
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

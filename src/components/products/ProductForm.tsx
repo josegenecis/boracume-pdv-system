@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,18 +25,25 @@ interface ProductFormProps {
   onClose?: () => void;
 }
 
+interface Category {
+  id: string;
+  name: string;
+}
+
 const ProductForm: React.FC<ProductFormProps> = ({ 
   editMode = false,
   onSubmit,
   productData,
   onClose
 }) => {
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState({
     name: productData?.name || '',
     description: productData?.description || '',
-    category: productData?.category || '',
+    category_id: productData?.category_id || '',
     price: productData?.price || '',
     available: productData?.available ?? true,
+    weight_based: productData?.weight_based || false,
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>(productData?.image_url || '');
@@ -44,6 +51,28 @@ const ProductForm: React.FC<ProductFormProps> = ({
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      fetchCategories();
+    }
+  }, [user]);
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('id, name')
+        .eq('user_id', user?.id)
+        .eq('active', true)
+        .order('display_order');
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error: any) {
+      console.error('Erro ao carregar categorias:', error);
+    }
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,7 +163,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
       return;
     }
 
-    if (!formData.name || !formData.category || !formData.price) {
+    if (!formData.name || !formData.category_id || !formData.price) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos obrigatórios.",
@@ -160,9 +189,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
       const productPayload = {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
-        category: formData.category,
+        category_id: formData.category_id,
         price: parseFloat(formData.price),
         available: formData.available,
+        weight_based: formData.weight_based,
         image_url: imageUrl || null,
         user_id: user.id
       };
@@ -206,9 +236,10 @@ const ProductForm: React.FC<ProductFormProps> = ({
         setFormData({
           name: '',
           description: '',
-          category: '',
+          category_id: '',
           price: '',
           available: true,
+          weight_based: false,
         });
         setImageFile(null);
         setImagePreview('');
@@ -263,17 +294,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
               
               <div>
                 <Label htmlFor="category">Categoria *</Label>
-                <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
+                <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma categoria" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hamburgers">Hambúrgueres</SelectItem>
-                    <SelectItem value="pizzas">Pizzas</SelectItem>
-                    <SelectItem value="drinks">Bebidas</SelectItem>
-                    <SelectItem value="desserts">Sobremesas</SelectItem>
-                    <SelectItem value="appetizers">Petiscos</SelectItem>
-                    <SelectItem value="mains">Pratos Principais</SelectItem>
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -290,6 +320,15 @@ const ProductForm: React.FC<ProductFormProps> = ({
                   onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
                   required
                 />
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="weight_based" 
+                  checked={formData.weight_based}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, weight_based: checked }))}
+                />
+                <Label htmlFor="weight_based">Produto vendido por peso</Label>
               </div>
               
               <div className="flex items-center space-x-2">

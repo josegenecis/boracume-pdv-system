@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Minus, Trash2, Calculator, Search } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,12 +19,26 @@ interface Product {
   price: number;
   image_url?: string;
   available: boolean;
-  category: string;
+  category_id?: string;
   description?: string;
+  weight_based?: boolean;
 }
 
 interface CartItem extends Product {
   quantity: number;
+}
+
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
+}
+
+interface Table {
+  id: string;
+  table_number: number;
+  status: string;
 }
 
 const PDV = () => {
@@ -31,6 +47,11 @@ const PDV = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in'>('delivery');
+  const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,27 +62,23 @@ const PDV = () => {
 
   useEffect(() => {
     if (user) {
-      fetchProducts();
+      fetchData();
     }
   }, [user]);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('available', true)
-        .order('name');
-
-      if (error) throw error;
-      setProducts(data || []);
+      await Promise.all([
+        fetchProducts(),
+        fetchDeliveryZones(),
+        fetchTables()
+      ]);
     } catch (error: any) {
-      console.error('Erro ao carregar produtos:', error);
+      console.error('Erro ao carregar dados:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível carregar os produtos.",
+        description: "Não foi possível carregar os dados.",
         variant: "destructive"
       });
     } finally {
@@ -69,9 +86,54 @@ const PDV = () => {
     }
   };
 
+  const fetchProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('user_id', user?.id)
+      .eq('available', true)
+      .order('name');
+
+    if (error) throw error;
+    setProducts(data || []);
+  };
+
+  const fetchDeliveryZones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.warn('Delivery zones not available:', error);
+      setDeliveryZones([]);
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tables')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'available')
+        .order('table_number');
+
+      if (error) throw error;
+      setTables(data || []);
+    } catch (error) {
+      console.warn('Tables not available:', error);
+      setTables([]);
+    }
+  };
+
   const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchQuery.toLowerCase())
+    product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const addToCart = (product: Product) => {
@@ -113,11 +175,25 @@ const PDV = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  const getDeliveryFee = () => {
+    if (orderType !== 'delivery' || !selectedDeliveryZone) return 0;
+    const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
+    return zone?.delivery_fee || 0;
+  };
+
+  const getFinalTotal = () => {
+    return getTotalValue() + getDeliveryFee();
+  };
+
   const getChangeValue = () => {
     if (paymentMethod === 'dinheiro' && changeAmount) {
-      return parseFloat(changeAmount) - getTotalValue();
+      return parseFloat(changeAmount) - getFinalTotal();
     }
     return 0;
+  };
+
+  const generateOrderNumber = () => {
+    return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   };
 
   const handleFinalizeSale = async () => {
@@ -139,7 +215,25 @@ const PDV = () => {
       return;
     }
 
-    if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < getTotalValue()) {
+    if (orderType === 'delivery' && !customerAddress.trim()) {
+      toast({
+        title: "Endereço obrigatório",
+        description: "Por favor, informe o endereço para entrega.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (orderType === 'dine_in' && !selectedTable) {
+      toast({
+        title: "Mesa obrigatória",
+        description: "Por favor, selecione uma mesa.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < getFinalTotal()) {
       toast({
         title: "Valor insuficiente",
         description: "O valor recebido é menor que o total do pedido.",
@@ -148,23 +242,42 @@ const PDV = () => {
       return;
     }
 
+    // Verificar valor mínimo para entrega
+    if (orderType === 'delivery' && selectedDeliveryZone) {
+      const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
+      if (zone && getTotalValue() < zone.minimum_order) {
+        toast({
+          title: "Valor mínimo não atingido",
+          description: `O valor mínimo para entrega neste bairro é ${formatCurrency(zone.minimum_order)}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       setProcessing(true);
 
+      const orderNumber = generateOrderNumber();
       const orderData = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
-        customer_address: customerAddress.trim() || null,
+        customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
+        order_type: orderType,
+        delivery_zone_id: orderType === 'delivery' ? selectedDeliveryZone || null : null,
+        table_id: orderType === 'dine_in' ? selectedTable || null : null,
         items: cart.map(item => ({
           id: item.id,
           name: item.name,
           price: item.price,
           quantity: item.quantity
         })),
-        total: getTotalValue(),
+        total: getFinalTotal(),
+        delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
+        order_number: orderNumber,
         user_id: user?.id
       };
 
@@ -177,11 +290,23 @@ const PDV = () => {
 
       if (error) throw error;
 
+      // Atualizar status da mesa se for pedido no local
+      if (orderType === 'dine_in' && selectedTable) {
+        try {
+          await supabase
+            .from('tables')
+            .update({ status: 'occupied' })
+            .eq('id', selectedTable);
+        } catch (error) {
+          console.warn('Não foi possível atualizar status da mesa:', error);
+        }
+      }
+
       console.log('Pedido criado com sucesso:', data);
 
       toast({
         title: "Venda finalizada!",
-        description: `Pedido de ${formatCurrency(getTotalValue())} finalizado com sucesso.`,
+        description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
       });
 
       // Limpar dados
@@ -189,8 +314,11 @@ const PDV = () => {
       setCustomerName('');
       setCustomerPhone('');
       setCustomerAddress('');
+      setSelectedDeliveryZone('');
+      setSelectedTable('');
       setChangeAmount('');
       setPaymentMethod('pix');
+      setOrderType('delivery');
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
       toast({
@@ -266,6 +394,7 @@ const PDV = () => {
                       <h3 className="font-medium text-sm mb-1 line-clamp-2">{product.name}</h3>
                       <p className="text-lg font-bold text-primary mb-2">
                         {formatCurrency(product.price)}
+                        {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                       </p>
                       <Button 
                         onClick={() => addToCart(product)}
@@ -286,6 +415,31 @@ const PDV = () => {
 
       {/* Carrinho e Checkout */}
       <div className="space-y-4">
+        {/* Tipo de Pedido */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Tipo de Pedido</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="delivery" className="flex items-center gap-1">
+                  <Truck size={16} />
+                  Entrega
+                </TabsTrigger>
+                <TabsTrigger value="pickup" className="flex items-center gap-1">
+                  <Store size={16} />
+                  Retirada
+                </TabsTrigger>
+                <TabsTrigger value="dine_in" className="flex items-center gap-1">
+                  <UtensilsCrossed size={16} />
+                  No Local
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -340,9 +494,21 @@ const PDV = () => {
                 <Separator />
                 
                 <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span>{formatCurrency(getTotalValue())}</span>
+                  </div>
+                  
+                  {orderType === 'delivery' && getDeliveryFee() > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>Taxa de entrega:</span>
+                      <span>{formatCurrency(getDeliveryFee())}</span>
+                    </div>
+                  )}
+                  
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total:</span>
-                    <span>{formatCurrency(getTotalValue())}</span>
+                    <span>{formatCurrency(getFinalTotal())}</span>
                   </div>
                   
                   {paymentMethod === 'dinheiro' && changeAmount && (
@@ -376,12 +542,48 @@ const PDV = () => {
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
             />
-            <Textarea
-              placeholder="Endereço (opcional)"
-              value={customerAddress}
-              onChange={(e) => setCustomerAddress(e.target.value)}
-              rows={2}
-            />
+            
+            {orderType === 'delivery' && (
+              <>
+                <Textarea
+                  placeholder="Endereço para entrega *"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
+                  required
+                />
+                {deliveryZones.length > 0 && (
+                  <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o bairro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliveryZones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          {zone.name} - {formatCurrency(zone.delivery_fee)} 
+                          {zone.minimum_order > 0 && ` (Mín: ${formatCurrency(zone.minimum_order)})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            )}
+            
+            {orderType === 'dine_in' && tables.length > 0 && (
+              <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a mesa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((table) => (
+                    <SelectItem key={table.id} value={table.id}>
+                      Mesa {table.table_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </CardContent>
         </Card>
 
@@ -422,7 +624,7 @@ const PDV = () => {
                 onChange={(e) => setChangeAmount(e.target.value)}
                 type="number"
                 step="0.01"
-                min={getTotalValue()}
+                min={getFinalTotal()}
               />
             )}
           </CardContent>
