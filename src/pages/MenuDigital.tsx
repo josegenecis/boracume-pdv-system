@@ -19,6 +19,7 @@ interface Product {
   image_url?: string;
   available: boolean;
   weight_based?: boolean;
+  category_id?: string;
 }
 
 interface Category {

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -186,9 +185,14 @@ const ProductForm: React.FC<ProductFormProps> = ({
         }
       }
 
+      // Encontrar o nome da categoria para o campo category (obrigatório)
+      const selectedCategory = categories.find(cat => cat.id === formData.category_id);
+      const categoryName = selectedCategory?.name || 'Sem categoria';
+
       const productPayload = {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
+        category: categoryName, // Campo obrigatório
         category_id: formData.category_id,
         price: parseFloat(formData.price),
         available: formData.available,
