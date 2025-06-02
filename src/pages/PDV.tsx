@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -297,6 +296,12 @@ const PDV = () => {
         subtotal: item.price * item.quantity
       }));
 
+      // Corrigir o payment_method para valores válidos no banco
+      let validPaymentMethod = paymentMethod;
+      if (paymentMethod === 'credit') {
+        validPaymentMethod = 'cartao';
+      }
+
       const orderData = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
@@ -307,7 +312,7 @@ const PDV = () => {
         items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
-        payment_method: paymentMethod,
+        payment_method: validPaymentMethod, // Usando valor corrigido
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         order_number: orderNumber,
@@ -604,8 +609,17 @@ const PDV = () => {
                       ) : (
                         deliveryZones.map((zone) => (
                           <SelectItem key={zone.id} value={zone.id}>
-                            {zone.name} - {formatCurrency(zone.delivery_fee)} 
-                            {zone.minimum_order > 0 && ` (Mín: ${formatCurrency(zone.minimum_order)})`}
+                            <div className="flex justify-between items-center w-full">
+                              <span>{zone.name}</span>
+                              <span className="ml-2 text-sm text-green-600 font-medium">
+                                {formatCurrency(zone.delivery_fee)}
+                              </span>
+                            </div>
+                            {zone.minimum_order > 0 && (
+                              <div className="text-xs text-gray-500">
+                                Mínimo: {formatCurrency(zone.minimum_order)}
+                              </div>
+                            )}
                           </SelectItem>
                         ))
                       )}
@@ -659,11 +673,11 @@ const PDV = () => {
                 PIX
               </Button>
               <Button
-                variant={paymentMethod === 'credit' ? 'default' : 'outline'}
-                onClick={() => setPaymentMethod('credit')}
+                variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
+                onClick={() => setPaymentMethod('cartao')}
                 className="justify-start"
               >
-                Cartão de Crédito
+                Cartão
               </Button>
               <Button
                 variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
