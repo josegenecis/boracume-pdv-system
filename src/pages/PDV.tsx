@@ -87,19 +87,26 @@ const PDV = () => {
   };
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('user_id', user?.id)
-      .eq('available', true)
-      .order('name');
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('available', true)
+        .order('name');
 
-    if (error) throw error;
-    setProducts(data || []);
+      if (error) throw error;
+      setProducts(data || []);
+      console.log('Produtos carregados:', data);
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error);
+      setProducts([]);
+    }
   };
 
   const fetchDeliveryZones = async () => {
     try {
+      console.log('Carregando bairros de entrega para user:', user?.id);
       const { data, error } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -107,10 +114,15 @@ const PDV = () => {
         .eq('active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao carregar bairros:', error);
+        throw error;
+      }
+      
+      console.log('Bairros carregados:', data);
       setDeliveryZones(data || []);
     } catch (error) {
-      console.warn('Delivery zones not available:', error);
+      console.error('Erro ao carregar bairros de entrega:', error);
       setDeliveryZones([]);
     }
   };
@@ -124,10 +136,15 @@ const PDV = () => {
         .eq('status', 'available')
         .order('table_number');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao carregar mesas:', error);
+        throw error;
+      }
+      
+      console.log('Mesas carregadas:', data);
       setTables(data || []);
     } catch (error) {
-      console.warn('Tables not available:', error);
+      console.error('Erro ao carregar mesas:', error);
       setTables([]);
     }
   };
@@ -215,13 +232,24 @@ const PDV = () => {
       return;
     }
 
-    if (orderType === 'delivery' && !customerAddress.trim()) {
-      toast({
-        title: "Endereço obrigatório",
-        description: "Por favor, informe o endereço para entrega.",
-        variant: "destructive",
-      });
-      return;
+    if (orderType === 'delivery') {
+      if (!customerAddress.trim()) {
+        toast({
+          title: "Endereço obrigatório",
+          description: "Por favor, informe o endereço para entrega.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!selectedDeliveryZone) {
+        toast({
+          title: "Bairro obrigatório",
+          description: "Por favor, selecione o bairro para entrega.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (orderType === 'dine_in' && !selectedTable) {
@@ -259,6 +287,16 @@ const PDV = () => {
       setProcessing(true);
 
       const orderNumber = generateOrderNumber();
+      
+      // Preparar itens do pedido
+      const orderItems = cart.map(item => ({
+        product_id: item.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity
+      }));
+
       const orderData = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
@@ -266,19 +304,15 @@ const PDV = () => {
         order_type: orderType,
         delivery_zone_id: orderType === 'delivery' ? selectedDeliveryZone || null : null,
         table_id: orderType === 'dine_in' ? selectedTable || null : null,
-        items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity
-        })),
+        items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         order_number: orderNumber,
-        user_id: user?.id
+        user_id: user?.id,
+        estimated_time: '30-45 min'
       };
 
       console.log('Criando pedido:', orderData);
@@ -288,7 +322,10 @@ const PDV = () => {
         .insert([orderData])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao criar pedido:', error);
+        throw error;
+      }
 
       // Atualizar status da mesa se for pedido no local
       if (orderType === 'dine_in' && selectedTable) {
@@ -552,35 +589,55 @@ const PDV = () => {
                   rows={2}
                   required
                 />
-                {deliveryZones.length > 0 && (
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Bairro de Entrega *</label>
                   <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o bairro" />
                     </SelectTrigger>
                     <SelectContent>
-                      {deliveryZones.map((zone) => (
-                        <SelectItem key={zone.id} value={zone.id}>
-                          {zone.name} - {formatCurrency(zone.delivery_fee)} 
-                          {zone.minimum_order > 0 && ` (Mín: ${formatCurrency(zone.minimum_order)})`}
-                        </SelectItem>
-                      ))}
+                      {deliveryZones.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500">
+                          Nenhum bairro cadastrado
+                        </div>
+                      ) : (
+                        deliveryZones.map((zone) => (
+                          <SelectItem key={zone.id} value={zone.id}>
+                            {zone.name} - {formatCurrency(zone.delivery_fee)} 
+                            {zone.minimum_order > 0 && ` (Mín: ${formatCurrency(zone.minimum_order)})`}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
-                )}
+                  
+                  {deliveryZones.length === 0 && (
+                    <p className="text-xs text-red-500">
+                      Configure os bairros de entrega na seção "Bairros de Entrega"
+                    </p>
+                  )}
+                </div>
               </>
             )}
             
-            {orderType === 'dine_in' && tables.length > 0 && (
+            {orderType === 'dine_in' && (
               <Select value={selectedTable} onValueChange={setSelectedTable}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a mesa" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tables.map((table) => (
-                    <SelectItem key={table.id} value={table.id}>
-                      Mesa {table.table_number}
-                    </SelectItem>
-                  ))}
+                  {tables.length === 0 ? (
+                    <div className="p-2 text-sm text-gray-500">
+                      Nenhuma mesa disponível
+                    </div>
+                  ) : (
+                    tables.map((table) => (
+                      <SelectItem key={table.id} value={table.id}>
+                        Mesa {table.table_number}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             )}

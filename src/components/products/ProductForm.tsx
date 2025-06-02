@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -115,12 +116,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
       const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       
       console.log('Fazendo upload da imagem:', fileName);
+      console.log('Tamanho do arquivo:', file.size);
+      console.log('Tipo do arquivo:', file.type);
       
+      // Primeiro, fazer o upload da imagem
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('product-images')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: file.type
         });
 
       if (uploadError) {
@@ -130,6 +135,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
 
       console.log('Upload realizado com sucesso:', uploadData);
 
+      // Obter a URL pública da imagem
       const { data: urlData } = supabase.storage
         .from('product-images')
         .getPublicUrl(fileName);
@@ -176,12 +182,16 @@ const ProductForm: React.FC<ProductFormProps> = ({
       
       let imageUrl = productData?.image_url || '';
       
+      // Upload da imagem se uma nova foi selecionada
       if (imageFile) {
+        console.log('Fazendo upload de nova imagem...');
         const uploadedUrl = await uploadImage(imageFile);
         if (uploadedUrl) {
           imageUrl = uploadedUrl;
+          console.log('URL da imagem atualizada:', imageUrl);
         } else {
-          return;
+          console.error('Falha no upload da imagem');
+          return; // Para a execução se o upload falhar
         }
       }
 
@@ -218,6 +228,7 @@ const ProductForm: React.FC<ProductFormProps> = ({
       }
 
       if (result.error) {
+        console.error('Erro ao salvar produto:', result.error);
         throw result.error;
       }
 
