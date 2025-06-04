@@ -107,57 +107,26 @@ const PDV = () => {
     try {
       console.log('Carregando bairros de entrega para user:', user?.id);
       
-      // Buscar primeiro na tabela delivery_settings
-      const { data: settingsData, error: settingsError } = await supabase
-        .from('delivery_settings')
-        .select('delivery_areas')
+      // Buscar diretamente da tabela delivery_zones
+      const { data: zonesData, error: zonesError } = await supabase
+        .from('delivery_zones')
+        .select('*')
         .eq('user_id', user?.id)
-        .single();
+        .eq('active', true)
+        .order('name');
 
-      if (settingsError && settingsError.code !== 'PGRST116') {
-        console.error('Erro ao carregar configurações de entrega:', settingsError);
+      if (zonesError) {
+        console.error('Erro ao carregar delivery_zones:', zonesError);
+        setDeliveryZones([]);
+        return;
       }
 
-      let deliveryAreas: DeliveryZone[] = [];
-
-      if (settingsData?.delivery_areas) {
-        try {
-          // Parse do JSON das áreas de entrega
-          const areas = Array.isArray(settingsData.delivery_areas) 
-            ? settingsData.delivery_areas 
-            : JSON.parse(settingsData.delivery_areas as string);
-          
-          deliveryAreas = areas.map((area: any) => ({
-            id: area.id,
-            name: area.name,
-            delivery_fee: area.fee || 0,
-            minimum_order: area.minimum_order || 0
-          }));
-        } catch (error) {
-          console.error('Erro ao fazer parse das áreas de entrega:', error);
-        }
-      }
-
-      // Se não houver áreas nas configurações, tentar buscar na tabela delivery_zones
-      if (deliveryAreas.length === 0) {
-        const { data: zonesData, error: zonesError } = await supabase
-          .from('delivery_zones')
-          .select('*')
-          .eq('user_id', user?.id)
-          .eq('active', true)
-          .order('name');
-
-        if (zonesError) {
-          console.error('Erro ao carregar tabela delivery_zones:', zonesError);
-        } else if (zonesData) {
-          deliveryAreas = zonesData.map(zone => ({
-            id: zone.id,
-            name: zone.name,
-            delivery_fee: zone.delivery_fee,
-            minimum_order: zone.minimum_order || 0
-          }));
-        }
-      }
+      const deliveryAreas: DeliveryZone[] = (zonesData || []).map(zone => ({
+        id: zone.id,
+        name: zone.name,
+        delivery_fee: zone.delivery_fee,
+        minimum_order: zone.minimum_order || 0
+      }));
       
       console.log('Bairros carregados:', deliveryAreas);
       setDeliveryZones(deliveryAreas);
