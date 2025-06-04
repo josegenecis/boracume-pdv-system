@@ -106,20 +106,61 @@ const PDV = () => {
   const fetchDeliveryZones = async () => {
     try {
       console.log('Carregando bairros de entrega para user:', user?.id);
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
+      
+      // Buscar primeiro na tabela delivery_settings
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('delivery_settings')
+        .select('delivery_areas')
         .eq('user_id', user?.id)
-        .eq('active', true)
-        .order('name');
+        .single();
 
-      if (error) {
-        console.error('Erro ao carregar bairros:', error);
-        throw error;
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        console.error('Erro ao carregar configurações de entrega:', settingsError);
+      }
+
+      let deliveryAreas: DeliveryZone[] = [];
+
+      if (settingsData?.delivery_areas) {
+        try {
+          // Parse do JSON das áreas de entrega
+          const areas = Array.isArray(settingsData.delivery_areas) 
+            ? settingsData.delivery_areas 
+            : JSON.parse(settingsData.delivery_areas as string);
+          
+          deliveryAreas = areas.map((area: any) => ({
+            id: area.id,
+            name: area.name,
+            delivery_fee: area.fee || 0,
+            minimum_order: area.minimum_order || 0
+          }));
+        } catch (error) {
+          console.error('Erro ao fazer parse das áreas de entrega:', error);
+        }
+      }
+
+      // Se não houver áreas nas configurações, tentar buscar na tabela delivery_zones
+      if (deliveryAreas.length === 0) {
+        const { data: zonesData, error: zonesError } = await supabase
+          .from('delivery_zones')
+          .select('*')
+          .eq('user_id', user?.id)
+          .eq('active', true)
+          .order('name');
+
+        if (zonesError) {
+          console.error('Erro ao carregar tabela delivery_zones:', zonesError);
+        } else if (zonesData) {
+          deliveryAreas = zonesData.map(zone => ({
+            id: zone.id,
+            name: zone.name,
+            delivery_fee: zone.delivery_fee,
+            minimum_order: zone.minimum_order || 0
+          }));
+        }
       }
       
-      console.log('Bairros carregados:', data);
-      setDeliveryZones(data || []);
+      console.log('Bairros carregados:', deliveryAreas);
+      setDeliveryZones(deliveryAreas);
     } catch (error) {
       console.error('Erro ao carregar bairros de entrega:', error);
       setDeliveryZones([]);
@@ -312,7 +353,7 @@ const PDV = () => {
         items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
-        payment_method: validPaymentMethod, // Usando valor corrigido
+        payment_method: validPaymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         order_number: orderNumber,
@@ -609,17 +650,19 @@ const PDV = () => {
                       ) : (
                         deliveryZones.map((zone) => (
                           <SelectItem key={zone.id} value={zone.id}>
-                            <div className="flex justify-between items-center w-full">
-                              <span>{zone.name}</span>
-                              <span className="ml-2 text-sm text-green-600 font-medium">
-                                {formatCurrency(zone.delivery_fee)}
-                              </span>
-                            </div>
-                            {zone.minimum_order > 0 && (
-                              <div className="text-xs text-gray-500">
-                                Mínimo: {formatCurrency(zone.minimum_order)}
+                            <div className="flex flex-col w-full">
+                              <div className="flex justify-between items-center w-full">
+                                <span>{zone.name}</span>
+                                <span className="ml-2 text-sm text-green-600 font-medium">
+                                  {formatCurrency(zone.delivery_fee)}
+                                </span>
                               </div>
-                            )}
+                              {zone.minimum_order > 0 && (
+                                <div className="text-xs text-gray-500 text-left">
+                                  Mínimo: {formatCurrency(zone.minimum_order)}
+                                </div>
+                              )}
+                            </div>
                           </SelectItem>
                         ))
                       )}
@@ -628,7 +671,7 @@ const PDV = () => {
                   
                   {deliveryZones.length === 0 && (
                     <p className="text-xs text-red-500">
-                      Configure os bairros de entrega na seção "Bairros de Entrega"
+                      Configure os bairros de entrega na seção "Configurações" → "Delivery"
                     </p>
                   )}
                 </div>
