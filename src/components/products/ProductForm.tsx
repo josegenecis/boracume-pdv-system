@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -273,9 +272,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
                 </label>
               </div>
               
-              <p className="text-xs text-gray-500 text-center">
-                Formatos aceitos: JPG, PNG, WebP, GIF (máx. 5MB)
-              </p>
+              <div className="text-center space-y-1">
+                <p className="text-xs text-gray-500">
+                  Formatos aceitos: JPG, PNG, WebP, GIF (máx. 5MB)
+                </p>
+                <p className="text-xs text-blue-600 font-medium">
+                  Tamanho recomendado: 400x400px (formato quadrado)
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

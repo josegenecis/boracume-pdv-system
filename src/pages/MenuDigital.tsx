@@ -8,9 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Minus, ShoppingCart, Phone, MapPin, Clock, Star, Truck, Store } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, Phone, MapPin, Clock, Truck, Store } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import PromotionalBanner from '@/components/marketing/PromotionalBanner';
 
 interface Product {
   id: string;
@@ -44,6 +45,7 @@ interface DeliveryZone {
   name: string;
   delivery_fee: number;
   minimum_order: number;
+  delivery_time?: string;
 }
 
 const MenuDigital = () => {
@@ -140,6 +142,7 @@ const MenuDigital = () => {
 
       if (error) throw error;
       setDeliveryZones(data || []);
+      console.log('Bairros carregados:', data);
     } catch (error) {
       console.error('Erro ao carregar bairros de entrega:', error);
     }
@@ -200,6 +203,10 @@ const MenuDigital = () => {
   };
 
   const handleFinishOrder = async () => {
+    console.log('Iniciando finalização do pedido...');
+    console.log('Bairros disponíveis:', deliveryZones);
+    console.log('Bairro selecionado:', selectedDeliveryZone);
+    
     if (cart.length === 0) {
       toast({
         title: 'Carrinho vazio',
@@ -219,10 +226,19 @@ const MenuDigital = () => {
     }
 
     if (orderType === 'delivery') {
-      if (!customerAddress.trim() || !selectedDeliveryZone) {
+      if (!customerAddress.trim()) {
         toast({
-          title: 'Dados de entrega obrigatórios',
-          description: 'Por favor, preencha o endereço e selecione o bairro.',
+          title: 'Endereço obrigatório',
+          description: 'Por favor, preencha o endereço para entrega.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!selectedDeliveryZone) {
+        toast({
+          title: 'Bairro obrigatório',
+          description: 'Por favor, selecione o bairro para entrega.',
           variant: 'destructive',
         });
         return;
@@ -266,16 +282,19 @@ const MenuDigital = () => {
         status: 'new',
         order_number: orderNumber,
         user_id: userId,
-        estimated_time: '30-45 min'
+        estimated_time: deliveryZones.find(z => z.id === selectedDeliveryZone)?.delivery_time || '30-45 min'
       };
 
-      console.log('Criando pedido do menu digital:', orderData);
+      console.log('Dados do pedido:', orderData);
 
       const { error } = await supabase
         .from('orders')
         .insert([orderData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro SQL:', error);
+        throw error;
+      }
 
       toast({
         title: 'Pedido enviado!',
@@ -379,6 +398,11 @@ const MenuDigital = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Banner Promocional */}
+        <div className="mb-6">
+          <PromotionalBanner restaurantId={userId} />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu */}
           <div className="lg:col-span-2 space-y-6">
@@ -439,71 +463,74 @@ const MenuDigital = () => {
               </Card>
             )}
 
-            {/* Produtos */}
-            <div className="space-y-4">
+            {/* Produtos - Grid menor */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredProducts.length === 0 ? (
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center text-gray-500">
-                      <p>Nenhum produto disponível no momento.</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="col-span-2">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-center text-gray-500">
+                        <p>Nenhum produto disponível no momento.</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               ) : (
                 filteredProducts.map((product) => (
                   <Card key={product.id} className="overflow-hidden">
-                    <CardContent className="p-4">
-                      <div className="flex gap-4">
+                    <CardContent className="p-3">
+                      <div className="space-y-3">
                         {product.image_url && (
                           <img
                             src={product.image_url}
                             alt={product.name}
-                            className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                            className="w-full h-32 rounded-lg object-cover"
                           />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-semibold text-lg">{product.name}</h3>
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-primary">
-                                {formatCurrency(product.price)}
-                                {product.weight_based && <span className="text-sm text-gray-500 ml-1">/kg</span>}
-                              </p>
-                            </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <h3 className="font-semibold text-sm">{product.name}</h3>
+                            <Badge variant="secondary" className="text-xs">{product.category}</Badge>
                           </div>
                           {product.description && (
-                            <p className="text-gray-600 text-sm mb-3">{product.description}</p>
+                            <p className="text-gray-600 text-xs line-clamp-2">{product.description}</p>
                           )}
-                          <div className="flex items-center justify-between">
-                            <Badge variant="secondary">{product.category}</Badge>
-                            <div className="flex items-center gap-2">
+                          <div className="flex justify-between items-center">
+                            <p className="text-lg font-bold text-primary">
+                              {formatCurrency(product.price)}
+                              {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
+                            </p>
+                            <div className="flex items-center gap-1">
                               {cart.find(item => item.id === product.id) ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
                                   <Button
                                     variant="outline"
                                     size="sm"
+                                    className="h-7 w-7 p-0"
                                     onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity - 1)}
                                   >
-                                    <Minus size={16} />
+                                    <Minus size={12} />
                                   </Button>
-                                  <span className="w-8 text-center">
+                                  <span className="w-6 text-center text-sm">
                                     {cart.find(item => item.id === product.id)?.quantity}
                                   </span>
                                   <Button
                                     variant="outline"
                                     size="sm"
+                                    className="h-7 w-7 p-0"
                                     onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity + 1)}
                                   >
-                                    <Plus size={16} />
+                                    <Plus size={12} />
                                   </Button>
                                 </div>
                               ) : (
                                 <Button
                                   onClick={() => addToCart(product)}
                                   size="sm"
+                                  className="h-7 px-2 text-xs"
                                 >
-                                  <Plus size={16} className="mr-1" />
-                                  Adicionar
+                                  <Plus size={12} className="mr-1" />
+                                  Add
                                 </Button>
                               )}
                             </div>
@@ -627,7 +654,7 @@ const MenuDigital = () => {
                                 <SelectContent>
                                   {deliveryZones.map((zone) => (
                                     <SelectItem key={zone.id} value={zone.id}>
-                                      <div className="flex flex-col">
+                                      <div className="flex flex-col text-left">
                                         <span>{zone.name}</span>
                                         <span className="text-xs text-gray-500">
                                           Taxa: {formatCurrency(zone.delivery_fee)} | 
