@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -142,9 +141,9 @@ const MenuDigital = () => {
 
       if (error) throw error;
       setDeliveryZones(data || []);
-      console.log('Bairros carregados:', data);
+      console.log('Delivery zones carregados:', data);
     } catch (error) {
-      console.error('Erro ao carregar bairros de entrega:', error);
+      console.error('Erro ao carregar delivery zones:', error);
     }
   };
 
@@ -204,8 +203,8 @@ const MenuDigital = () => {
 
   const handleFinishOrder = async () => {
     console.log('Iniciando finalização do pedido...');
-    console.log('Bairros disponíveis:', deliveryZones);
-    console.log('Bairro selecionado:', selectedDeliveryZone);
+    console.log('Delivery zones disponíveis:', deliveryZones);
+    console.log('Delivery zone selecionado:', selectedDeliveryZone);
     
     if (cart.length === 0) {
       toast({
@@ -244,7 +243,6 @@ const MenuDigital = () => {
         return;
       }
 
-      // Verificar valor mínimo
       const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
       if (zone && getTotalValue() < zone.minimum_order) {
         toast({
@@ -258,7 +256,6 @@ const MenuDigital = () => {
 
     try {
       setProcessing(true);
-
       const orderNumber = generateOrderNumber();
       
       const orderItems = cart.map(item => ({
@@ -301,7 +298,6 @@ const MenuDigital = () => {
         description: `Seu pedido #${orderNumber} foi recebido. Total: ${formatCurrency(getFinalTotal())}.`,
       });
 
-      // Limpar formulário
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
@@ -398,13 +394,11 @@ const MenuDigital = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Banner Promocional */}
         <div className="mb-6">
           <PromotionalBanner restaurantId={userId} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Menu */}
           <div className="lg:col-span-2 space-y-6">
             {/* Tipo de Pedido */}
             <Card>
@@ -463,10 +457,10 @@ const MenuDigital = () => {
               </Card>
             )}
 
-            {/* Produtos - Grid menor */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Produtos - Tamanho igual ao PDV */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {filteredProducts.length === 0 ? (
-                <div className="col-span-2">
+                <div className="col-span-full">
                   <Card>
                     <CardContent className="pt-6">
                       <div className="text-center text-gray-500">
@@ -478,25 +472,25 @@ const MenuDigital = () => {
               ) : (
                 filteredProducts.map((product) => (
                   <Card key={product.id} className="overflow-hidden">
-                    <CardContent className="p-3">
-                      <div className="space-y-3">
+                    <CardContent className="p-2">
+                      <div className="space-y-2">
                         {product.image_url && (
                           <img
                             src={product.image_url}
                             alt={product.name}
-                            className="w-full h-32 rounded-lg object-cover"
+                            className="w-full h-20 rounded object-cover"
                           />
                         )}
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           <div className="flex justify-between items-start">
-                            <h3 className="font-semibold text-sm">{product.name}</h3>
+                            <h3 className="font-semibold text-xs leading-tight">{product.name}</h3>
                             <Badge variant="secondary" className="text-xs">{product.category}</Badge>
                           </div>
                           {product.description && (
                             <p className="text-gray-600 text-xs line-clamp-2">{product.description}</p>
                           )}
                           <div className="flex justify-between items-center">
-                            <p className="text-lg font-bold text-primary">
+                            <p className="text-sm font-bold text-primary">
                               {formatCurrency(product.price)}
                               {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </p>
@@ -506,30 +500,30 @@ const MenuDigital = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
+                                    className="h-6 w-6 p-0"
                                     onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity - 1)}
                                   >
-                                    <Minus size={12} />
+                                    <Minus size={10} />
                                   </Button>
-                                  <span className="w-6 text-center text-sm">
+                                  <span className="w-4 text-center text-xs">
                                     {cart.find(item => item.id === product.id)?.quantity}
                                   </span>
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
+                                    className="h-6 w-6 p-0"
                                     onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity + 1)}
                                   >
-                                    <Plus size={12} />
+                                    <Plus size={10} />
                                   </Button>
                                 </div>
                               ) : (
                                 <Button
                                   onClick={() => addToCart(product)}
                                   size="sm"
-                                  className="h-7 px-2 text-xs"
+                                  className="h-6 px-2 text-xs"
                                 >
-                                  <Plus size={12} className="mr-1" />
+                                  <Plus size={10} className="mr-1" />
                                   Add
                                 </Button>
                               )}

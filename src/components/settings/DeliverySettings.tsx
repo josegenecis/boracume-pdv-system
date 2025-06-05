@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,20 +11,28 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-interface DeliveryArea {
+interface DeliveryZone {
   id: string;
   name: string;
-  fee: number;
+  delivery_fee: number;
+  minimum_order: number;
+  delivery_time: string;
+  active: boolean;
 }
 
 const DeliverySettings = () => {
   const [settings, setSettings] = useState({
     mapsIntegrationEnabled: false,
     googleMapsApiKey: '',
-    deliveryAreas: [] as DeliveryArea[]
   });
 
-  const [newArea, setNewArea] = useState({ name: '', fee: '' });
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [newZone, setNewZone] = useState({ 
+    name: '', 
+    delivery_fee: '', 
+    minimum_order: '',
+    delivery_time: '30-45 min'
+  });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -31,6 +40,7 @@ const DeliverySettings = () => {
   useEffect(() => {
     if (user) {
       loadSettings();
+      loadDeliveryZones();
     }
   }, [user]);
 
@@ -48,30 +58,32 @@ const DeliverySettings = () => {
       }
 
       if (data) {
-        // Safely parse the delivery_areas from JSON
-        let deliveryAreas: DeliveryArea[] = [];
-        if (data.delivery_areas) {
-          try {
-            // Properly handle the Json type conversion
-            if (Array.isArray(data.delivery_areas)) {
-              deliveryAreas = data.delivery_areas as unknown as DeliveryArea[];
-            } else if (typeof data.delivery_areas === 'string') {
-              deliveryAreas = JSON.parse(data.delivery_areas);
-            }
-          } catch (e) {
-            console.error('Error parsing delivery areas:', e);
-            deliveryAreas = [];
-          }
-        }
-
         setSettings({
           mapsIntegrationEnabled: data.maps_integration_enabled || false,
           googleMapsApiKey: data.google_maps_api_key || '',
-          deliveryAreas: deliveryAreas
         });
       }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
+    }
+  };
+
+  const loadDeliveryZones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('name');
+
+      if (error) {
+        console.error('Erro ao carregar bairros:', error);
+        return;
+      }
+
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar bairros:', error);
     }
   };
 
@@ -89,45 +101,105 @@ const DeliverySettings = () => {
     }));
   };
 
-  const addDeliveryArea = () => {
-    if (!newArea.name.trim() || !newArea.fee) {
+  const addDeliveryZone = async () => {
+    if (!newZone.name.trim() || !newZone.delivery_fee || !newZone.minimum_order) {
       toast({
         title: "Dados incompletos",
-        description: "Preencha o nome do bairro e a taxa de entrega.",
+        description: "Preencha todos os campos obrigatórios.",
         variant: "destructive"
       });
       return;
     }
 
-    const area: DeliveryArea = {
-      id: Date.now().toString(),
-      name: newArea.name.trim(),
-      fee: parseFloat(newArea.fee)
-    };
+    try {
+      const zoneData = {
+        user_id: user?.id,
+        name: newZone.name.trim(),
+        delivery_fee: parseFloat(newZone.delivery_fee),
+        minimum_order: parseFloat(newZone.minimum_order),
+        delivery_time: newZone.delivery_time,
+        active: true
+      };
 
-    setSettings(prev => ({
-      ...prev,
-      deliveryAreas: [...prev.deliveryAreas, area]
-    }));
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .insert([zoneData])
+        .select()
+        .single();
 
-    setNewArea({ name: '', fee: '' });
+      if (error) throw error;
 
-    toast({
-      title: "Área adicionada",
-      description: `${area.name} foi adicionado à lista de entrega.`,
-    });
+      setDeliveryZones(prev => [...prev, data]);
+      setNewZone({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
+
+      toast({
+        title: "Bairro adicionado",
+        description: `${zoneData.name} foi adicionado à lista de entrega.`,
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar bairro:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar o bairro. Tente novamente.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const removeDeliveryArea = (id: string) => {
-    setSettings(prev => ({
-      ...prev,
-      deliveryAreas: prev.deliveryAreas.filter(area => area.id !== id)
-    }));
+  const removeDeliveryZone = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('delivery_zones')
+        .delete()
+        .eq('id', id);
 
-    toast({
-      title: "Área removida",
-      description: "A área de entrega foi removida da lista.",
-    });
+      if (error) throw error;
+
+      setDeliveryZones(prev => prev.filter(zone => zone.id !== id));
+
+      toast({
+        title: "Bairro removido",
+        description: "O bairro foi removido da lista de entrega.",
+      });
+    } catch (error) {
+      console.error('Erro ao remover bairro:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover o bairro. Tente novamente.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const toggleZoneStatus = async (zoneId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('delivery_zones')
+        .update({ active: !currentStatus })
+        .eq('id', zoneId);
+
+      if (error) throw error;
+
+      setDeliveryZones(prev => 
+        prev.map(zone => 
+          zone.id === zoneId 
+            ? { ...zone, active: !currentStatus }
+            : zone
+        )
+      );
+
+      toast({
+        title: "Status atualizado",
+        description: `O bairro foi ${!currentStatus ? 'ativado' : 'desativado'}.`,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status do bairro.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -141,12 +213,10 @@ const DeliverySettings = () => {
         .eq('user_id', user.id)
         .single();
 
-      // Convert DeliveryArea[] to Json format for Supabase
       const settingsData = {
         user_id: user.id,
         maps_integration_enabled: settings.mapsIntegrationEnabled,
         google_maps_api_key: settings.googleMapsApiKey,
-        delivery_areas: JSON.stringify(settings.deliveryAreas),
         updated_at: new Date().toISOString()
       };
 
@@ -179,6 +249,13 @@ const DeliverySettings = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
   };
 
   return (
@@ -230,39 +307,61 @@ const DeliverySettings = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPin size={24} />
-            Áreas de Entrega
+            Bairros de Entrega
           </CardTitle>
           <CardDescription>
             Configure os bairros que você atende e as respectivas taxas de entrega
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="area-name">Nome do Bairro</Label>
+              <Label htmlFor="zone-name">Nome do Bairro</Label>
               <Input
-                id="area-name"
+                id="zone-name"
                 placeholder="Ex: Centro"
-                value={newArea.name}
-                onChange={(e) => setNewArea(prev => ({ ...prev, name: e.target.value }))}
+                value={newZone.name}
+                onChange={(e) => setNewZone(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="delivery-fee">Taxa de Entrega (R$)</Label>
+              <Label htmlFor="delivery-fee">Taxa (R$)</Label>
               <Input
                 id="delivery-fee"
                 type="number"
                 step="0.01"
-                placeholder="Ex: 5.00"
-                value={newArea.fee}
-                onChange={(e) => setNewArea(prev => ({ ...prev, fee: e.target.value }))}
+                placeholder="5.00"
+                value={newZone.delivery_fee}
+                onChange={(e) => setNewZone(prev => ({ ...prev, delivery_fee: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="minimum-order">Mínimo (R$)</Label>
+              <Input
+                id="minimum-order"
+                type="number"
+                step="0.01"
+                placeholder="25.00"
+                value={newZone.minimum_order}
+                onChange={(e) => setNewZone(prev => ({ ...prev, minimum_order: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="delivery-time">Tempo</Label>
+              <Input
+                id="delivery-time"
+                placeholder="30-45 min"
+                value={newZone.delivery_time}
+                onChange={(e) => setNewZone(prev => ({ ...prev, delivery_time: e.target.value }))}
               />
             </div>
             
             <div className="space-y-2">
               <Label>&nbsp;</Label>
-              <Button onClick={addDeliveryArea} className="w-full">
+              <Button onClick={addDeliveryZone} className="w-full">
                 <Plus size={16} className="mr-2" />
                 Adicionar
               </Button>
@@ -270,27 +369,35 @@ const DeliverySettings = () => {
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-medium">Áreas Cadastradas</h4>
-            {settings.deliveryAreas.length === 0 ? (
+            <h4 className="font-medium">Bairros Cadastrados</h4>
+            {deliveryZones.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nenhuma área de entrega cadastrada ainda.
+                Nenhum bairro de entrega cadastrado ainda.
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {settings.deliveryAreas.map((area) => (
-                  <div key={area.id} className="flex items-center justify-between p-3 border rounded-lg">
+                {deliveryZones.map((zone) => (
+                  <div key={zone.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
-                      <p className="font-medium">{area.name}</p>
+                      <p className="font-medium">{zone.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        Taxa: R$ {area.fee.toFixed(2)}
+                        Taxa: {formatCurrency(zone.delivery_fee)} | 
+                        Mín: {formatCurrency(zone.minimum_order)} | 
+                        Tempo: {zone.delivery_time}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">Ativo</Badge>
+                      <Badge 
+                        variant={zone.active ? "default" : "secondary"}
+                        className="cursor-pointer"
+                        onClick={() => toggleZoneStatus(zone.id, zone.active)}
+                      >
+                        {zone.active ? 'Ativo' : 'Inativo'}
+                      </Badge>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => removeDeliveryArea(area.id)}
+                        onClick={() => removeDeliveryZone(zone.id)}
                       >
                         <Trash2 size={14} />
                       </Button>

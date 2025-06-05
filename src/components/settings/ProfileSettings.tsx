@@ -79,20 +79,38 @@ const ProfileSettings = () => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Erro',
+        description: 'Por favor, selecione apenas arquivos de imagem.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Erro',
+        description: 'A imagem deve ter no máximo 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}_logo.${fileExt}`;
+      const fileName = `${user.id}_logo_${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('restaurant-images')
+        .from('profile-images')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('restaurant-images')
+        .from('profile-images')
         .getPublicUrl(filePath);
 
       setProfileImage(publicUrl);
@@ -170,11 +188,13 @@ const ProfileSettings = () => {
               <AvatarImage src={profileImage} />
               <AvatarFallback>RS</AvatarFallback>
             </Avatar>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="logo-upload" className="cursor-pointer">
-                <Button variant="outline" className="cursor-pointer" disabled={uploading}>
-                  <Upload size={16} className="mr-2" />
-                  {uploading ? 'Enviando...' : 'Alterar Logo'}
+                <Button variant="outline" className="cursor-pointer" disabled={uploading} asChild>
+                  <span>
+                    <Upload size={16} className="mr-2" />
+                    {uploading ? 'Enviando...' : 'Alterar Logo'}
+                  </span>
                 </Button>
               </Label>
               <input
@@ -184,9 +204,14 @@ const ProfileSettings = () => {
                 className="hidden"
                 onChange={handleImageUpload}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Imagens em PNG, JPG até 2MB
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Formatos aceitos: JPG, PNG, WebP, GIF (máx. 5MB)
+                </p>
+                <p className="text-xs text-blue-600 font-medium">
+                  Tamanho recomendado: 200x200px (formato quadrado)
+                </p>
+              </div>
             </div>
           </div>
 

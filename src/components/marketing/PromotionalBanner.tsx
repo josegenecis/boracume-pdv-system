@@ -16,7 +16,7 @@ interface Banner {
 interface PromotionalBannerProps {
   autoPlay?: boolean;
   interval?: number;
-  restaurantId?: string; // Para uso no cardápio digital
+  restaurantId?: string;
 }
 
 const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ 
@@ -29,14 +29,11 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
   
-  // Usar restaurantId se fornecido, caso contrário usar user.id
   const userId = restaurantId || user?.id;
   
-  // Fetch banners from Supabase
   useEffect(() => {
     const fetchBanners = async () => {
       if (!userId) {
-        // Use default banners for non-authenticated users
         setBanners(getDefaultBanners());
         setIsLoading(false);
         return;
@@ -45,7 +42,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
       try {
         setIsLoading(true);
         
-        // Buscar banners promocionais da tabela promotional_banners
         const { data: promoBanners, error: promoError } = await supabase
           .from('promotional_banners')
           .select('*')
@@ -67,7 +63,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           }));
           setBanners(convertedBanners);
         } else {
-          // Fallback para marketing_settings se não houver banners promocionais
           const { data: marketingData, error: marketingError } = await supabase
             .from('marketing_settings')
             .select('banner_images')
@@ -114,7 +109,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     fetchBanners();
   }, [userId]);
   
-  // Function to get default banners
   const getDefaultBanners = (): Banner[] => {
     return [
       {
@@ -132,7 +126,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     ];
   };
   
-  // Auto-play functionality
   useEffect(() => {
     if (!autoPlay || banners.length <= 1) return;
     
@@ -167,7 +160,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
 
   return (
     <div className="relative w-full h-48 overflow-hidden rounded-lg shadow-lg">
-      {/* Banner Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
         style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
@@ -175,7 +167,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         <div className="absolute inset-0 bg-black bg-opacity-40" />
       </div>
       
-      {/* Banner Content */}
       <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
         <h2 className="text-xl font-bold mb-1">{currentBanner.title}</h2>
         {currentBanner.description && (
@@ -188,7 +179,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         )}
       </div>
       
-      {/* Navigation Controls */}
       {banners.length > 1 && (
         <>
           <Button
@@ -210,7 +200,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         </>
       )}
       
-      {/* Dots Indicator */}
       {banners.length > 1 && (
         <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-1">
           {banners.map((_, index) => (
@@ -225,7 +214,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         </div>
       )}
       
-      {/* Indicação de tamanho recomendado */}
       <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
         800x300px recomendado
       </div>
