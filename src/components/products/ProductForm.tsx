@@ -1,421 +1,424 @@
 
 import React, { useState, useEffect } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
 import { Button } from '@/components/ui/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { ImageIcon, Upload, X } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Upload, X, Image as ImageIcon } from 'lucide-react';
+
+const productSchema = z.object({
+  name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres' }),
+  price: z.number().min(0.01, { message: 'Preço deve ser maior que 0' }),
+  category: z.string().min(1, { message: 'Selecione uma categoria' }),
+  description: z.string().optional(),
+  weight_based: z.boolean().default(false),
+  available: z.boolean().default(true),
+});
 
 interface ProductFormProps {
-  editMode?: boolean;
-  onSubmit?: (data: any) => void;
-  productData?: any;
-  onClose?: () => void;
+  product?: any;
+  onSuccess?: () => void;
+  onCancel?: () => void;
 }
 
-interface Category {
-  id: string;
-  name: string;
-}
-
-const ProductForm: React.FC<ProductFormProps> = ({ 
-  editMode = false,
-  onSubmit,
-  productData,
-  onClose
-}) => {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [formData, setFormData] = useState({
-    name: productData?.name || '',
-    description: productData?.description || '',
-    category_id: productData?.category_id || '',
-    price: productData?.price || '',
-    available: productData?.available ?? true,
-    weight_based: productData?.weight_based || false,
-  });
+const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel }) => {
+  const [categories, setCategories] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>(productData?.image_url || '');
-  const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(product?.image_url || null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const form = useForm<z.infer<typeof productSchema>>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: product?.name || '',
+      price: product?.price || 0,
+      category: product?.category || '',
+      description: product?.description || '',
+      weight_based: product?.weight_based || false,
+      available: product?.available ?? true,
+    },
+  });
+
   useEffect(() => {
-    if (user) {
-      fetchCategories();
-    }
-  }, [user]);
+    fetchCategories();
+  }, []);
 
   const fetchCategories = async () => {
     try {
       const { data, error } = await supabase
         .from('product_categories')
-        .select('id, name')
+        .select('*')
         .eq('user_id', user?.id)
         .eq('active', true)
-        .order('display_order');
+        .order('name');
 
       if (error) throw error;
       setCategories(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao carregar categorias:', error);
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Erro",
-          description: "Por favor, selecione apenas arquivos de imagem.",
-          variant: "destructive"
-        });
-        return;
-      }
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "Erro",
-          description: "A imagem deve ter no máximo 5MB.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Erro',
+        description: 'Por favor, selecione apenas arquivos de imagem.',
+        variant: 'destructive',
+      });
+      return;
     }
+
+    // Validar tamanho (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Erro',
+        description: 'A imagem deve ter no máximo 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setImageFile(file);
+    
+    // Criar preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
-      setUploading(true);
+      setUploadingImage(true);
       
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${user?.id}/${fileName}`;
 
-      const fileExt = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      
-      console.log('Fazendo upload da imagem:', fileName);
-      console.log('Tamanho do arquivo:', file.size);
-      console.log('Tipo do arquivo:', file.type);
-      
-      // Primeiro, fazer o upload da imagem
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: file.type
-        });
+        .upload(filePath, file);
 
       if (uploadError) {
         console.error('Erro no upload:', uploadError);
         throw uploadError;
       }
 
-      console.log('Upload realizado com sucesso:', uploadData);
-
-      // Obter a URL pública da imagem
-      const { data: urlData } = supabase.storage
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
         .from('product-images')
-        .getPublicUrl(fileName);
+        .getPublicUrl(filePath);
 
-      console.log('URL pública obtida:', urlData.publicUrl);
-      
-      return urlData.publicUrl;
-    } catch (error: any) {
+      return publicUrl;
+    } catch (error) {
       console.error('Erro ao fazer upload da imagem:', error);
       toast({
-        title: "Erro no upload",
-        description: error.message || "Não foi possível fazer upload da imagem.",
-        variant: "destructive"
+        title: 'Erro no upload',
+        description: 'Não foi possível fazer upload da imagem. Tente novamente.',
+        variant: 'destructive',
       });
       return null;
     } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) {
-      toast({
-        title: "Erro",
-        description: "Você precisa estar logado para salvar produtos.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!formData.name || !formData.category_id || !formData.price) {
-      toast({
-        title: "Erro",
-        description: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      let imageUrl = productData?.image_url || '';
-      
-      // Upload da imagem se uma nova foi selecionada
-      if (imageFile) {
-        console.log('Fazendo upload de nova imagem...');
-        const uploadedUrl = await uploadImage(imageFile);
-        if (uploadedUrl) {
-          imageUrl = uploadedUrl;
-          console.log('URL da imagem atualizada:', imageUrl);
-        } else {
-          console.error('Falha no upload da imagem');
-          return; // Para a execução se o upload falhar
-        }
-      }
-
-      // Encontrar o nome da categoria para o campo category (obrigatório)
-      const selectedCategory = categories.find(cat => cat.id === formData.category_id);
-      const categoryName = selectedCategory?.name || 'Sem categoria';
-
-      const productPayload = {
-        name: formData.name.trim(),
-        description: formData.description?.trim() || null,
-        category: categoryName, // Campo obrigatório
-        category_id: formData.category_id,
-        price: parseFloat(formData.price),
-        available: formData.available,
-        weight_based: formData.weight_based,
-        image_url: imageUrl || null,
-        user_id: user.id
-      };
-
-      console.log('Salvando produto:', productPayload);
-
-      let result;
-      if (editMode && productData?.id) {
-        result = await supabase
-          .from('products')
-          .update(productPayload)
-          .eq('id', productData.id)
-          .select();
-      } else {
-        result = await supabase
-          .from('products')
-          .insert([productPayload])
-          .select();
-      }
-
-      if (result.error) {
-        console.error('Erro ao salvar produto:', result.error);
-        throw result.error;
-      }
-
-      console.log('Produto salvo com sucesso:', result.data);
-
-      toast({
-        title: "Sucesso!",
-        description: `Produto ${editMode ? 'atualizado' : 'criado'} com sucesso.`,
-      });
-
-      if (onSubmit) {
-        onSubmit(result.data?.[0]);
-      }
-
-      if (onClose) {
-        onClose();
-      }
-
-      if (!editMode) {
-        setFormData({
-          name: '',
-          description: '',
-          category_id: '',
-          price: '',
-          available: true,
-          weight_based: false,
-        });
-        setImageFile(null);
-        setImagePreview('');
-      }
-    } catch (error: any) {
-      console.error('Erro ao salvar produto:', error);
-      toast({
-        title: "Erro",
-        description: error.message || "Não foi possível salvar o produto.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+      setUploadingImage(false);
     }
   };
 
   const removeImage = () => {
     setImageFile(null);
-    setImagePreview('');
+    setImagePreview(null);
   };
-  
+
+  const onSubmit = async (data: z.infer<typeof productSchema>) => {
+    if (!user) return;
+
+    try {
+      setIsLoading(true);
+
+      let imageUrl = product?.image_url || null;
+
+      // Upload da nova imagem se selecionada
+      if (imageFile) {
+        const uploadedUrl = await uploadImage(imageFile);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        }
+      }
+
+      const productData = {
+        ...data,
+        image_url: imageUrl,
+        user_id: user.id,
+        category_id: categories.find(c => c.name === data.category)?.id || null,
+      };
+
+      let error;
+      if (product) {
+        // Atualizar produto existente
+        const { error: updateError } = await supabase
+          .from('products')
+          .update(productData)
+          .eq('id', product.id);
+        error = updateError;
+      } else {
+        // Criar novo produto
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert([productData]);
+        error = insertError;
+      }
+
+      if (error) throw error;
+
+      toast({
+        title: product ? 'Produto atualizado!' : 'Produto criado!',
+        description: `${data.name} foi ${product ? 'atualizado' : 'criado'} com sucesso.`,
+      });
+
+      form.reset();
+      setImageFile(null);
+      setImagePreview(null);
+      onSuccess?.();
+    } catch (error: any) {
+      console.error('Erro ao salvar produto:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível salvar o produto.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{editMode ? 'Editar Produto' : 'Novo Produto'}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nome do Produto *</Label>
-                <Input 
-                  id="name" 
-                  placeholder="Ex: X-Burger Especial" 
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="description">Descrição</Label>
-                <Textarea 
-                  id="description" 
-                  placeholder="Descreva os principais ingredientes e características do produto"
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="category">Categoria *</Label>
-                <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <Label htmlFor="price">Preço (R$) *</Label>
-                <Input 
-                  id="price" 
-                  type="number" 
-                  min="0" 
-                  step="0.01" 
-                  placeholder="0,00"
-                  value={formData.price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                  required
-                />
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Switch 
-                  id="weight_based" 
-                  checked={formData.weight_based}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, weight_based: checked }))}
-                />
-                <Label htmlFor="weight_based">Produto vendido por peso</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Switch 
-                  id="available" 
-                  checked={formData.available}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
-                />
-                <Label htmlFor="available">Disponível para venda</Label>
-              </div>
-            </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{product ? 'Editar Produto' : 'Novo Produto'}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             
+            {/* Upload de Imagem */}
             <div className="space-y-4">
-              <div>
-                <Label>Imagem do Produto</Label>
-                <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center h-[200px] bg-muted/50 relative">
-                  {imagePreview ? (
-                    <div className="relative w-full h-full">
-                      <img 
-                        src={imagePreview} 
-                        alt="Preview" 
-                        className="w-full h-full object-cover rounded"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="absolute top-2 right-2"
-                        onClick={removeImage}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
-                      <div className="text-sm text-center text-muted-foreground mb-4">
-                        Arraste uma imagem ou clique para fazer upload
-                      </div>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                        id="image-upload"
-                        disabled={uploading}
-                      />
-                      <Label htmlFor="image-upload" asChild>
-                        <Button variant="outline" size="sm" type="button" disabled={uploading}>
-                          <Upload className="w-4 h-4 mr-2" />
-                          {uploading ? 'Enviando...' : 'Selecionar Imagem'}
-                        </Button>
-                      </Label>
-                    </>
-                  )}
+              <label className="text-sm font-medium">Imagem do Produto</label>
+              
+              {imagePreview ? (
+                <div className="relative w-32 h-32 mx-auto">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full h-full object-cover rounded-lg border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="absolute -top-2 -right-2 rounded-full w-6 h-6 p-0"
+                    onClick={removeImage}
+                  >
+                    <X size={12} />
+                  </Button>
                 </div>
+              ) : (
+                <div className="w-32 h-32 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                  <ImageIcon size={32} className="text-gray-400" />
+                </div>
+              )}
+
+              <div className="flex justify-center">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex items-center gap-2"
+                    disabled={uploadingImage}
+                    asChild
+                  >
+                    <span>
+                      <Upload size={16} />
+                      {uploadingImage ? 'Carregando...' : 'Selecionar Imagem'}
+                    </span>
+                  </Button>
+                </label>
               </div>
+              
+              <p className="text-xs text-gray-500 text-center">
+                Formatos aceitos: JPG, PNG, WebP, GIF (máx. 5MB)
+              </p>
             </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-end space-x-2">
-          {onClose && (
-            <Button variant="outline" type="button" onClick={onClose}>
-              Cancelar
-            </Button>
-          )}
-          <Button type="submit" disabled={loading || uploading}>
-            {loading ? 'Salvando...' : (editMode ? 'Atualizar' : 'Criar')} Produto
-          </Button>
-        </CardFooter>
-      </Card>
-    </form>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do Produto</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Pizza Margherita" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Preço</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Categoria</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma categoria" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrição</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Descrição do produto..."
+                      {...field}
+                      rows={3}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="weight_based"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Produto por peso</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Produto vendido por quilograma
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="available"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Disponível</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Produto disponível para venda
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <Button
+                type="submit"
+                disabled={isLoading || uploadingImage}
+                className="flex-1"
+              >
+                {isLoading ? 'Salvando...' : product ? 'Atualizar' : 'Criar Produto'}
+              </Button>
+              {onCancel && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onCancel}
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
 };
 

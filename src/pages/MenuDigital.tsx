@@ -1,42 +1,30 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSearchParams } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Phone, MapPin, Clock, Search, ShoppingCart, Plus, Minus } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Plus, Minus, ShoppingCart, Phone, MapPin, Clock, Star, Truck, Store } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
   name: string;
-  description?: string;
   price: number;
+  description?: string;
   image_url?: string;
+  category: string;
   available: boolean;
   weight_based?: boolean;
-  category_id?: string;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-interface Banner {
-  id: string;
-  title: string;
-  description?: string;
-  image_url?: string;
-  link_url?: string;
-  start_date?: string;
-  end_date?: string;
-  active: boolean;
+interface CartItem extends Product {
+  quantity: number;
 }
 
 interface Restaurant {
@@ -45,114 +33,60 @@ interface Restaurant {
   description?: string;
   phone?: string;
   address?: string;
-  logo_url?: string;
   opening_hours?: string;
+  logo_url?: string;
+  minimum_order?: number;
+  delivery_fee?: number;
 }
 
-interface CartItem extends Product {
-  quantity: number;
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
 }
 
 const MenuDigital = () => {
-  const { restaurantId } = useParams();
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('user') || searchParams.get('u');
+  
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [customerInfo, setCustomerInfo] = useState({
-    name: '',
-    phone: '',
-    address: ''
-  });
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [orderType, setOrderType] = useState<'delivery' | 'pickup'>('delivery');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState('pix');
   const [loading, setLoading] = useState(true);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchMenuData();
-  }, [restaurantId]);
+    if (userId) {
+      loadMenuData();
+    } else {
+      setLoading(false);
+    }
+  }, [userId]);
 
-  useEffect(() => {
-    filterProducts();
-  }, [products, selectedCategory, searchQuery]);
-
-  const fetchMenuData = async () => {
+  const loadMenuData = async () => {
     try {
       setLoading(true);
-      
-      let userId = restaurantId;
-      
-      // Se não há restaurantId específico, pegar o primeiro restaurante disponível
-      if (!restaurantId) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id')
-          .limit(1);
-        
-        if (profiles && profiles.length > 0) {
-          userId = profiles[0].id;
-        } else {
-          throw new Error('Nenhum restaurante encontrado');
-        }
-      }
-
-      // Buscar dados do restaurante
-      const { data: restaurantData, error: restaurantError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (restaurantError) throw restaurantError;
-      setRestaurant(restaurantData);
-
-      // Buscar categorias
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('product_categories')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('display_order');
-
-      if (categoriesError) throw categoriesError;
-      setCategories(categoriesData || []);
-
-      // Buscar produtos
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('available', true)
-        .order('name');
-
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
-
-      // Buscar banners ativos
-      const { data: bannersData, error: bannersError } = await supabase
-        .from('promotional_banners')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .or(`start_date.is.null,start_date.lte.${new Date().toISOString()}`)
-        .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
-        .order('display_order');
-
-      if (bannersError) {
-        console.warn('Erro ao carregar banners:', bannersError);
-      } else {
-        setBanners(bannersData || []);
-      }
-
-    } catch (error: any) {
+      await Promise.all([
+        loadRestaurantInfo(),
+        loadProducts(),
+        loadDeliveryZones()
+      ]);
+    } catch (error) {
       console.error('Erro ao carregar dados do menu:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível carregar o menu do restaurante.',
+        description: 'Não foi possível carregar o menu.',
         variant: 'destructive',
       });
     } finally {
@@ -160,22 +94,61 @@ const MenuDigital = () => {
     }
   };
 
-  const filterProducts = () => {
-    let filtered = products;
+  const loadRestaurantInfo = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(product => product.category_id === selectedCategory);
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      setRestaurant(data);
+    } catch (error) {
+      console.error('Erro ao carregar informações do restaurante:', error);
     }
-
-    if (searchQuery) {
-      filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredProducts(filtered);
   };
+
+  const loadProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('available', true)
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error);
+    }
+  };
+
+  const loadDeliveryZones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar bairros de entrega:', error);
+    }
+  };
+
+  const categories = [...new Set(products.map(p => p.category))].filter(Boolean);
+  const filteredProducts = selectedCategory 
+    ? products.filter(p => p.category === selectedCategory)
+    : products;
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -191,7 +164,7 @@ const MenuDigital = () => {
     });
 
     toast({
-      title: "Produto adicionado",
+      title: 'Produto adicionado',
       description: `${product.name} foi adicionado ao carrinho.`,
     });
   };
@@ -212,6 +185,122 @@ const MenuDigital = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  const getDeliveryFee = () => {
+    if (orderType !== 'delivery' || !selectedDeliveryZone) return 0;
+    const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
+    return zone?.delivery_fee || 0;
+  };
+
+  const getFinalTotal = () => {
+    return getTotalValue() + getDeliveryFee();
+  };
+
+  const generateOrderNumber = () => {
+    return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  };
+
+  const handleFinishOrder = async () => {
+    if (cart.length === 0) {
+      toast({
+        title: 'Carrinho vazio',
+        description: 'Adicione produtos antes de finalizar o pedido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!customerName.trim() || !customerPhone.trim()) {
+      toast({
+        title: 'Dados obrigatórios',
+        description: 'Por favor, preencha seu nome e telefone.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (orderType === 'delivery') {
+      if (!customerAddress.trim() || !selectedDeliveryZone) {
+        toast({
+          title: 'Dados de entrega obrigatórios',
+          description: 'Por favor, preencha o endereço e selecione o bairro.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Verificar valor mínimo
+      const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
+      if (zone && getTotalValue() < zone.minimum_order) {
+        toast({
+          title: 'Valor mínimo não atingido',
+          description: `O valor mínimo para entrega neste bairro é ${formatCurrency(zone.minimum_order)}.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    try {
+      setProcessing(true);
+
+      const orderNumber = generateOrderNumber();
+      
+      const orderItems = cart.map(item => ({
+        product_id: item.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity
+      }));
+
+      const orderData = {
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
+        order_type: orderType,
+        delivery_zone_id: orderType === 'delivery' ? selectedDeliveryZone : null,
+        items: orderItems,
+        total: getFinalTotal(),
+        delivery_fee: getDeliveryFee(),
+        payment_method: paymentMethod,
+        status: 'new',
+        order_number: orderNumber,
+        user_id: userId,
+        estimated_time: '30-45 min'
+      };
+
+      console.log('Criando pedido do menu digital:', orderData);
+
+      const { error } = await supabase
+        .from('orders')
+        .insert([orderData]);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Pedido enviado!',
+        description: `Seu pedido #${orderNumber} foi recebido. Total: ${formatCurrency(getFinalTotal())}.`,
+      });
+
+      // Limpar formulário
+      setCart([]);
+      setCustomerName('');
+      setCustomerPhone('');
+      setCustomerAddress('');
+      setSelectedDeliveryZone('');
+      setShowCheckout(false);
+    } catch (error: any) {
+      console.error('Erro ao criar pedido:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível enviar o pedido. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -219,63 +308,25 @@ const MenuDigital = () => {
     }).format(value);
   };
 
-  const getCategoryName = (categoryId?: string) => {
-    if (!categoryId) return 'Sem categoria';
-    const category = categories.find(c => c.id === categoryId);
-    return category?.name || 'Sem categoria';
-  };
-
-  const handleWhatsAppOrder = () => {
-    if (cart.length === 0) {
-      toast({
-        title: "Carrinho vazio",
-        description: "Adicione produtos ao carrinho antes de fazer o pedido.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!customerInfo.name || !customerInfo.phone) {
-      toast({
-        title: "Informações obrigatórias",
-        description: "Por favor, preencha seu nome e telefone.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const orderDetails = cart.map(item => 
-      `• ${item.name} (${item.quantity}x) - ${formatCurrency(item.price * item.quantity)}`
-    ).join('\n');
-
-    const message = `🍽️ *Novo Pedido - ${restaurant?.restaurant_name}*\n\n` +
-      `👤 *Cliente:* ${customerInfo.name}\n` +
-      `📱 *Telefone:* ${customerInfo.phone}\n` +
-      `📍 *Endereço:* ${customerInfo.address || 'Não informado'}\n\n` +
-      `🛒 *Itens do Pedido:*\n${orderDetails}\n\n` +
-      `💰 *Total:* ${formatCurrency(getTotalValue())}`;
-
-    const whatsappUrl = `https://wa.me/${restaurant?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  if (!restaurant) {
+  if (!userId || !restaurant) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="p-8 text-center">
-          <CardContent>
-            <h2 className="text-2xl font-bold mb-4">Restaurante não encontrado</h2>
-            <p className="text-muted-foreground">
-              O restaurante que você está procurando não foi encontrado.
-            </p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-2">Menu não encontrado</h2>
+              <p className="text-gray-600">
+                Este link parece estar incorreto ou o restaurante não existe.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -285,22 +336,24 @@ const MenuDigital = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header do Restaurante */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
+      <div className="bg-white shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-start gap-4">
             {restaurant.logo_url && (
-              <img 
-                src={restaurant.logo_url} 
+              <img
+                src={restaurant.logo_url}
                 alt={restaurant.restaurant_name}
-                className="w-16 h-16 rounded-full object-cover"
+                className="w-16 h-16 rounded-lg object-cover"
               />
             )}
             <div className="flex-1">
-              <h1 className="text-2xl font-bold">{restaurant.restaurant_name || 'Restaurante'}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {restaurant.restaurant_name || 'Restaurante'}
+              </h1>
               {restaurant.description && (
-                <p className="text-gray-600">{restaurant.description}</p>
+                <p className="text-gray-600 mt-1">{restaurant.description}</p>
               )}
-              <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
+              <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
                 {restaurant.phone && (
                   <div className="flex items-center gap-1">
                     <Phone size={16} />
@@ -321,214 +374,326 @@ const MenuDigital = () => {
                 )}
               </div>
             </div>
-            {cart.length > 0 && (
-              <Button 
-                onClick={() => setIsCartOpen(true)}
-                className="relative"
-              >
-                <ShoppingCart size={20} />
-                <Badge className="absolute -top-2 -right-2 bg-red-500">
-                  {cart.reduce((total, item) => total + item.quantity, 0)}
-                </Badge>
-              </Button>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Banners Promocionais */}
-      {banners.length > 0 && (
-        <div className="container mx-auto px-4 py-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {banners.map((banner) => (
-              <Card key={banner.id} className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow">
-                {banner.image_url && (
-                  <img 
-                    src={banner.image_url} 
-                    alt={banner.title}
-                    className="w-full h-32 object-cover"
-                  />
-                )}
-                <CardContent className="p-4">
-                  <h3 className="font-bold text-lg">{banner.title}</h3>
-                  {banner.description && (
-                    <p className="text-gray-600 text-sm mt-1">{banner.description}</p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="container mx-auto px-4 py-6">
-        {/* Filtros */}
-        <div className="mb-6 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Buscar produtos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={selectedCategory === 'all' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedCategory('all')}
-            >
-              Todos
-            </Button>
-            {categories.map(category => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lista de Produtos */}
-        {filteredProducts.length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
-              <p className="text-muted-foreground">
-                {searchQuery || selectedCategory !== 'all'
-                  ? 'Tente ajustar os filtros ou buscar por outros termos.'
-                  : 'Este restaurante ainda não tem produtos cadastrados.'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
-              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                {product.image_url && (
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img 
-                      src={product.image_url} 
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                    <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
-                  </div>
-                  {product.description && (
-                    <p className="text-gray-600 text-sm">{product.description}</p>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center">
-                    <span className="text-2xl font-bold text-primary">
-                      {formatCurrency(product.price)}
-                      {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
-                    </span>
-                    <Button onClick={() => addToCart(product)}>
-                      <Plus size={16} className="mr-1" />
-                      Adicionar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Modal do Carrinho */}
-      <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Seu Pedido</DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {cart.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Seu carrinho está vazio
-              </p>
-            ) : (
-              <>
-                <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {cart.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded">
-                      <div className="flex-1">
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(item.price)} cada
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          <Minus size={12} />
-                        </Button>
-                        <span className="w-8 text-center">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          <Plus size={12} />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="border-t pt-4">
-                  <div className="flex justify-between text-lg font-bold mb-4">
-                    <span>Total:</span>
-                    <span>{formatCurrency(getTotalValue())}</span>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Input
-                      placeholder="Seu nome *"
-                      value={customerInfo.name}
-                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
-                    />
-                    <Input
-                      placeholder="Seu telefone *"
-                      value={customerInfo.phone}
-                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
-                    />
-                    <Textarea
-                      placeholder="Endereço para entrega"
-                      value={customerInfo.address}
-                      onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
-                      rows={2}
-                    />
-                  </div>
-                  
-                  <Button 
-                    onClick={handleWhatsAppOrder}
-                    className="w-full mt-4 bg-green-600 hover:bg-green-700"
-                    disabled={cart.length === 0}
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Menu */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Tipo de Pedido */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Tipo de Pedido</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button
+                    variant={orderType === 'delivery' ? 'default' : 'outline'}
+                    onClick={() => setOrderType('delivery')}
+                    className="flex items-center gap-2"
                   >
-                    Fazer Pedido via WhatsApp
+                    <Truck size={16} />
+                    Entrega
+                  </Button>
+                  <Button
+                    variant={orderType === 'pickup' ? 'default' : 'outline'}
+                    onClick={() => setOrderType('pickup')}
+                    className="flex items-center gap-2"
+                  >
+                    <Store size={16} />
+                    Retirada
                   </Button>
                 </div>
-              </>
+              </CardContent>
+            </Card>
+
+            {/* Filtros por Categoria */}
+            {categories.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Categorias</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={selectedCategory === '' ? 'default' : 'outline'}
+                      onClick={() => setSelectedCategory('')}
+                      size="sm"
+                    >
+                      Todas
+                    </Button>
+                    {categories.map((category) => (
+                      <Button
+                        key={category}
+                        variant={selectedCategory === category ? 'default' : 'outline'}
+                        onClick={() => setSelectedCategory(category)}
+                        size="sm"
+                      >
+                        {category}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             )}
+
+            {/* Produtos */}
+            <div className="space-y-4">
+              {filteredProducts.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center text-gray-500">
+                      <p>Nenhum produto disponível no momento.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                filteredProducts.map((product) => (
+                  <Card key={product.id} className="overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex gap-4">
+                        {product.image_url && (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-semibold text-lg">{product.name}</h3>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-primary">
+                                {formatCurrency(product.price)}
+                                {product.weight_based && <span className="text-sm text-gray-500 ml-1">/kg</span>}
+                              </p>
+                            </div>
+                          </div>
+                          {product.description && (
+                            <p className="text-gray-600 text-sm mb-3">{product.description}</p>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <Badge variant="secondary">{product.category}</Badge>
+                            <div className="flex items-center gap-2">
+                              {cart.find(item => item.id === product.id) ? (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity - 1)}
+                                  >
+                                    <Minus size={16} />
+                                  </Button>
+                                  <span className="w-8 text-center">
+                                    {cart.find(item => item.id === product.id)?.quantity}
+                                  </span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => updateQuantity(product.id, cart.find(item => item.id === product.id)!.quantity + 1)}
+                                  >
+                                    <Plus size={16} />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  onClick={() => addToCart(product)}
+                                  size="sm"
+                                >
+                                  <Plus size={16} className="mr-1" />
+                                  Adicionar
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          {/* Carrinho */}
+          <div className="lg:col-span-1">
+            <Card className="sticky top-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart size={20} />
+                  Carrinho ({cart.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {cart.length === 0 ? (
+                  <p className="text-center text-gray-500 py-4">
+                    Carrinho vazio
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {cart.map((item) => (
+                        <div key={item.id} className="flex justify-between items-start p-2 border rounded">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{item.name}</p>
+                            <p className="text-sm text-gray-500">
+                              {formatCurrency(item.price)} x {item.quantity}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 ml-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Minus size={12} />
+                            </Button>
+                            <span className="w-6 text-center text-sm">{item.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Plus size={12} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Subtotal:</span>
+                        <span>{formatCurrency(getTotalValue())}</span>
+                      </div>
+                      
+                      {orderType === 'delivery' && getDeliveryFee() > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span>Taxa de entrega:</span>
+                          <span>{formatCurrency(getDeliveryFee())}</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between font-bold">
+                        <span>Total:</span>
+                        <span>{formatCurrency(getFinalTotal())}</span>
+                      </div>
+                    </div>
+
+                    {!showCheckout ? (
+                      <Button
+                        onClick={() => setShowCheckout(true)}
+                        className="w-full"
+                        disabled={cart.length === 0}
+                      >
+                        Finalizar Pedido
+                      </Button>
+                    ) : (
+                      <div className="space-y-4 border-t pt-4">
+                        <h4 className="font-medium">Dados do Pedido</h4>
+                        
+                        <Input
+                          placeholder="Seu nome *"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                        />
+                        
+                        <Input
+                          placeholder="Seu telefone *"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                        />
+                        
+                        {orderType === 'delivery' && (
+                          <>
+                            <Textarea
+                              placeholder="Endereço completo para entrega *"
+                              value={customerAddress}
+                              onChange={(e) => setCustomerAddress(e.target.value)}
+                              rows={2}
+                            />
+                            
+                            {deliveryZones.length > 0 && (
+                              <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione seu bairro *" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {deliveryZones.map((zone) => (
+                                    <SelectItem key={zone.id} value={zone.id}>
+                                      <div className="flex flex-col">
+                                        <span>{zone.name}</span>
+                                        <span className="text-xs text-gray-500">
+                                          Taxa: {formatCurrency(zone.delivery_fee)} | 
+                                          Mín: {formatCurrency(zone.minimum_order)}
+                                        </span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </>
+                        )}
+                        
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Forma de Pagamento</label>
+                          <div className="grid grid-cols-1 gap-2">
+                            <Button
+                              variant={paymentMethod === 'pix' ? 'default' : 'outline'}
+                              onClick={() => setPaymentMethod('pix')}
+                              size="sm"
+                            >
+                              PIX
+                            </Button>
+                            <Button
+                              variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
+                              onClick={() => setPaymentMethod('cartao')}
+                              size="sm"
+                            >
+                              Cartão
+                            </Button>
+                            <Button
+                              variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
+                              onClick={() => setPaymentMethod('dinheiro')}
+                              size="sm"
+                            >
+                              Dinheiro
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowCheckout(false)}
+                            className="flex-1"
+                          >
+                            Voltar
+                          </Button>
+                          <Button
+                            onClick={handleFinishOrder}
+                            disabled={processing}
+                            className="flex-1"
+                          >
+                            {processing ? 'Enviando...' : 'Confirmar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

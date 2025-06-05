@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,7 +108,6 @@ const PDV = () => {
     try {
       console.log('Carregando bairros de entrega para user:', user?.id);
       
-      // Buscar diretamente da tabela delivery_zones
       const { data: zonesData, error: zonesError } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -306,12 +306,6 @@ const PDV = () => {
         subtotal: item.price * item.quantity
       }));
 
-      // Corrigir o payment_method para valores válidos no banco
-      let validPaymentMethod = paymentMethod;
-      if (paymentMethod === 'credit') {
-        validPaymentMethod = 'cartao';
-      }
-
       const orderData = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
@@ -322,7 +316,7 @@ const PDV = () => {
         items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
-        payment_method: validPaymentMethod,
+        payment_method: paymentMethod, // Agora aceita pix, cartao, dinheiro
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         order_number: orderNumber,
