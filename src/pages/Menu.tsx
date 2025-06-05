@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { QrCode, ExternalLink, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 
 const Menu = () => {
   const [copied, setCopied] = useState(false);
@@ -61,10 +60,13 @@ const Menu = () => {
             </p>
             
             <div className="flex justify-center">
-              <QRCodeGenerator 
-                value={menuUrl}
-                size={200}
-              />
+              <div className="w-48 h-48 bg-gray-100 border rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <QrCode size={48} className="mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm text-gray-500">QR Code será gerado aqui</p>
+                  <p className="text-xs text-gray-400 mt-1">800x300px recomendado</p>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -10,6 +10,7 @@ import { Plus, Trash2, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Json } from '@/integrations/supabase/types';
 
 interface ProductVariation {
   id: string;
@@ -17,7 +18,11 @@ interface ProductVariation {
   price: number;
   required: boolean;
   max_selections: number;
-  options: any[];
+  options: Json;
+  product_id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ProductVariationsFormProps {
@@ -75,7 +80,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
         price: parseFloat(newVariation.price) || 0,
         required: newVariation.required,
         max_selections: newVariation.max_selections,
-        options: []
+        options: [] as Json
       };
 
       const { data, error } = await supabase
