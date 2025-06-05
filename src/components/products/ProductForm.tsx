@@ -163,7 +163,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
       }
 
       const productData = {
-        ...data,
+        name: data.name,
+        price: data.price,
+        category: data.category,
+        description: data.description || '',
+        weight_based: data.weight_based,
+        available: data.available,
         image_url: imageUrl,
         user_id: user.id,
         category_id: categories.find(c => c.name === data.category)?.id || null,
@@ -181,7 +186,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
         // Criar novo produto
         const { error: insertError } = await supabase
           .from('products')
-          .insert([productData]);
+          .insert(productData);
         error = insertError;
       }
 

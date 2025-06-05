@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Package, Search, Eye, Edit, Trash2 } from 'lucide-react';
+import { Package, Search, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -164,8 +164,6 @@ const Products = () => {
     return category?.name || 'Categoria não encontrada';
   };
 
-  const categoryFilters = ['all', ...categories.map(c => c.id)];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -189,10 +187,9 @@ const Products = () => {
         <TabsContent value="products" className="space-y-6">
           {showForm ? (
             <ProductForm
-              editMode={!!editingProduct}
-              productData={editingProduct}
-              onSubmit={handleFormSubmit}
-              onClose={() => {
+              product={editingProduct}
+              onSuccess={handleFormSubmit}
+              onCancel={() => {
                 setShowForm(false);
                 setEditingProduct(null);
               }}
