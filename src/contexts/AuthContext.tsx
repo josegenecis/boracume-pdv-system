@@ -1,6 +1,5 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -30,8 +29,8 @@ interface AuthContextType {
   profile: Profile | null;
   subscription: Subscription | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, restaurantName: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string, restaurantName: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<void>;
   refreshSubscription: () => Promise<void>;
@@ -45,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   // Timeout for async operations
@@ -254,7 +252,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Sign in error:', error);
+        toast({
+          title: "Erro ao fazer login",
+          description: error.message,
+          variant: "destructive",
+        });
+        return { success: false, error: error.message };
+      }
       
       console.log('✅ Sign in successful');
       toast({
@@ -262,7 +268,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Bem-vindo de volta!",
       });
       
-      navigate('/dashboard');
+      return { success: true };
     } catch (error: any) {
       console.error('❌ Sign in error:', error);
       toast({
@@ -270,6 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: error.message,
         variant: "destructive",
       });
+      return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
     }
@@ -287,7 +294,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Sign up error:', error);
+        toast({
+          title: "Erro ao criar conta",
+          description: error.message,
+          variant: "destructive",
+        });
+        return { success: false, error: error.message };
+      }
       
       // Update profile with restaurant name
       if (data?.user) {
@@ -308,7 +323,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Bem-vindo ao BoraCumê!",
       });
       
-      navigate('/dashboard');
+      return { success: true };
     } catch (error: any) {
       console.error('❌ Sign up error:', error);
       toast({
@@ -316,6 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: error.message,
         variant: "destructive",
       });
+      return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
     }
@@ -330,8 +346,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.auth.signOut();
       
       if (error) throw error;
-      
-      navigate('/login');
       
       toast({
         title: "Logout realizado",

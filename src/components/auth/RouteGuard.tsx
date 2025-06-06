@@ -1,5 +1,6 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+
+import React, { useEffect } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,14 @@ interface RouteGuardProps {
 
 const RouteGuard: React.FC<RouteGuardProps> = ({ children, requireAuth = true }) => {
   const { user, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Redirect authenticated users to dashboard after login
+    if (!requireAuth && user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, requireAuth, navigate]);
 
   if (isLoading) {
     return (

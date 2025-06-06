@@ -3,47 +3,46 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageCircle, Users, Settings, Bot, Send, Phone } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { MessageSquare, Send, Phone, Bot, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+interface Message {
+  id: string;
+  content: string;
+  sender: 'bot' | 'customer';
+  sent_at: string;
+}
 
 interface Conversation {
   id: string;
   customer_phone: string;
-  customer_name?: string;
+  customer_name: string;
   status: string;
   created_at: string;
-  updated_at: string;
-}
-
-interface Message {
-  id: string;
-  conversation_id: string;
-  content: string;
-  sender: 'bot' | 'customer';
-  message_type: string;
-  sent_at: string;
-  delivered: boolean;
+  messages: Message[];
 }
 
 const WhatsAppChatbot = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
-  const { user } = useAuth();
 
+  // Buscar conversas
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchConversations();
     }
-  }, [user]);
+  }, [user?.id]);
 
+  // Buscar mensagens da conversa selecionada
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation);
@@ -52,7 +51,6 @@ const WhatsAppChatbot = () => {
 
   const fetchConversations = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('whatsapp_conversations')
         .select('*')
@@ -61,9 +59,13 @@ const WhatsAppChatbot = () => {
 
       if (error) throw error;
       setConversations(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar conversas:', error);
-      setConversations([]);
+    } catch (error: any) {
+      console.error('Erro ao buscar conversas:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as conversas.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -78,10 +80,21 @@ const WhatsAppChatbot = () => {
         .order('sent_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      setMessages([]);
+      
+      // Transformar os dados para o tipo correto
+      const typedMessages: Message[] = (data || []).map(msg => ({
+        ...msg,
+        sender: msg.sender as 'bot' | 'customer'
+      }));
+      
+      setMessages(typedMessages);
+    } catch (error: any) {
+      console.error('Erro ao buscar mensagens:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as mensagens.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -91,24 +104,23 @@ const WhatsAppChatbot = () => {
     try {
       const { error } = await supabase
         .from('whatsapp_messages')
-        .insert([{
+        .insert({
           conversation_id: selectedConversation,
-          content: newMessage.trim(),
+          content: newMessage,
           sender: 'bot',
-          message_type: 'text',
-          delivered: true
-        }]);
+          message_type: 'text'
+        });
 
       if (error) throw error;
 
       setNewMessage('');
-      await fetchMessages(selectedConversation);
-
+      fetchMessages(selectedConversation);
+      
       toast({
         title: "Mensagem enviada",
-        description: "Mensagem enviada com sucesso.",
+        description: "Sua mensagem foi enviada com sucesso."
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);
       toast({
         title: "Erro",
@@ -118,31 +130,38 @@ const WhatsAppChatbot = () => {
     }
   };
 
-  const startNewConversation = async () => {
-    const phone = prompt('Digite o número do WhatsApp (apenas números):');
-    if (!phone) return;
-
+  const createTestConversation = async () => {
     try {
       const { data, error } = await supabase
         .from('whatsapp_conversations')
-        .insert([{
+        .insert({
           user_id: user?.id,
-          customer_phone: phone,
+          customer_phone: '+5511999999999',
+          customer_name: 'Cliente Teste',
           status: 'active'
-        }])
+        })
         .select()
         .single();
 
       if (error) throw error;
 
-      await fetchConversations();
-      setSelectedConversation(data.id);
+      // Criar mensagem inicial
+      await supabase
+        .from('whatsapp_messages')
+        .insert({
+          conversation_id: data.id,
+          content: 'Olá! Gostaria de fazer um pedido.',
+          sender: 'customer',
+          message_type: 'text'
+        });
 
+      fetchConversations();
+      
       toast({
-        title: "Conversa iniciada",
-        description: "Nova conversa criada com sucesso.",
+        title: "Conversa criada",
+        description: "Uma conversa de teste foi criada."
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar conversa:', error);
       toast({
         title: "Erro",
@@ -152,24 +171,15 @@ const WhatsAppChatbot = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('pt-BR');
-  };
-
-  const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-    }
-    return phone;
-  };
-
   const selectedConv = conversations.find(c => c.id === selectedConversation);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <MessageSquare className="mx-auto h-8 w-8 animate-pulse text-gray-400" />
+          <p className="mt-2 text-sm text-gray-500">Carregando conversas...</p>
+        </div>
       </div>
     );
   }
@@ -177,10 +187,10 @@ const WhatsAppChatbot = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">ChatBot WhatsApp</h1>
-        <Button onClick={startNewConversation} className="flex items-center gap-2">
-          <MessageCircle size={16} />
-          Nova Conversa
+        <h1 className="text-2xl font-bold">WhatsApp Chatbot</h1>
+        <Button onClick={createTestConversation} className="flex items-center gap-2">
+          <MessageSquare size={16} />
+          Criar Conversa Teste
         </Button>
       </div>
 
@@ -189,42 +199,39 @@ const WhatsAppChatbot = () => {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Users size={20} />
+              <Phone size={20} />
               Conversas ({conversations.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[500px] overflow-y-auto">
+            <div className="space-y-2 max-h-[500px] overflow-y-auto">
               {conversations.length === 0 ? (
-                <div className="text-center py-8 px-4">
-                  <p className="text-gray-500">Nenhuma conversa ainda.</p>
+                <div className="p-4 text-center text-gray-500">
+                  <MessageSquare className="mx-auto h-8 w-8 mb-2" />
+                  <p>Nenhuma conversa ainda</p>
+                  <p className="text-xs">Clique em "Criar Conversa Teste"</p>
                 </div>
               ) : (
                 conversations.map((conversation) => (
                   <div
                     key={conversation.id}
-                    className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${
+                    className={`p-3 border-b cursor-pointer hover:bg-gray-50 ${
                       selectedConversation === conversation.id ? 'bg-blue-50 border-blue-200' : ''
                     }`}
                     onClick={() => setSelectedConversation(conversation.id)}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium">
-                          {conversation.customer_name || 'Cliente'}
-                        </p>
-                        <p className="text-sm text-gray-600 flex items-center gap-1">
-                          <Phone size={12} />
-                          {formatPhone(conversation.customer_phone)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {formatDate(conversation.updated_at)}
-                        </p>
+                      <div>
+                        <p className="font-medium">{conversation.customer_name}</p>
+                        <p className="text-sm text-gray-500">{conversation.customer_phone}</p>
                       </div>
                       <Badge variant={conversation.status === 'active' ? 'default' : 'secondary'}>
-                        {conversation.status === 'active' ? 'Ativa' : 'Inativa'}
+                        {conversation.status}
                       </Badge>
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(conversation.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 ))
               )}
@@ -236,34 +243,19 @@ const WhatsAppChatbot = () => {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <MessageCircle size={20} />
-              {selectedConv ? (
-                <div>
-                  <span>{selectedConv.customer_name || 'Cliente'}</span>
-                  <span className="text-sm text-gray-500 ml-2">
-                    {formatPhone(selectedConv.customer_phone)}
-                  </span>
-                </div>
-              ) : (
-                'Selecione uma conversa'
-              )}
+              <MessageSquare size={20} />
+              {selectedConv ? `Chat com ${selectedConv.customer_name}` : 'Selecione uma conversa'}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {!selectedConversation ? (
-              <div className="text-center py-12">
-                <MessageCircle size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-500">
-                  Selecione uma conversa para começar a conversar
-                </p>
-              </div>
-            ) : (
-              <>
+          <CardContent className="p-4">
+            {selectedConversation ? (
+              <div className="flex flex-col h-[460px]">
                 {/* Mensagens */}
-                <div className="h-[300px] overflow-y-auto border rounded-lg p-4 space-y-3">
+                <div className="flex-1 space-y-3 overflow-y-auto mb-4 p-2 border rounded-lg bg-gray-50">
                   {messages.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">Nenhuma mensagem ainda.</p>
+                    <div className="text-center text-gray-500 py-8">
+                      <MessageSquare className="mx-auto h-8 w-8 mb-2" />
+                      <p>Nenhuma mensagem ainda</p>
                     </div>
                   ) : (
                     messages.map((message) => (
@@ -272,17 +264,27 @@ const WhatsAppChatbot = () => {
                         className={`flex ${message.sender === 'bot' ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-xs px-4 py-2 rounded-lg ${
+                          className={`max-w-xs px-3 py-2 rounded-lg ${
                             message.sender === 'bot'
                               ? 'bg-blue-500 text-white'
-                              : 'bg-gray-200 text-gray-900'
+                              : 'bg-white border shadow-sm'
                           }`}
                         >
+                          <div className="flex items-center gap-1 mb-1">
+                            {message.sender === 'bot' ? (
+                              <Bot size={12} />
+                            ) : (
+                              <User size={12} />
+                            )}
+                            <span className="text-xs opacity-75">
+                              {message.sender === 'bot' ? 'Bot' : 'Cliente'}
+                            </span>
+                          </div>
                           <p className="text-sm">{message.content}</p>
                           <p className={`text-xs mt-1 ${
-                            message.sender === 'bot' ? 'text-blue-100' : 'text-gray-500'
+                            message.sender === 'bot' ? 'text-blue-100' : 'text-gray-400'
                           }`}>
-                            {formatDate(message.sent_at)}
+                            {new Date(message.sent_at).toLocaleTimeString()}
                           </p>
                         </div>
                       </div>
@@ -290,59 +292,70 @@ const WhatsAppChatbot = () => {
                   )}
                 </div>
 
-                {/* Input de Mensagem */}
+                {/* Input de mensagem */}
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Digite sua mensagem..."
+                  <Textarea
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="Digite sua mensagem..."
+                    className="flex-1 min-h-[60px]"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                      }
+                    }}
                   />
-                  <Button onClick={sendMessage} disabled={!newMessage.trim()}>
+                  <Button onClick={sendMessage} className="self-end">
                     <Send size={16} />
                   </Button>
                 </div>
-              </>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[460px] text-gray-500">
+                <div className="text-center">
+                  <MessageSquare className="mx-auto h-12 w-12 mb-4" />
+                  <p>Selecione uma conversa para começar</p>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Informações do Bot */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot size={20} />
-            Funcionalidades do ChatBot
-          </CardTitle>
+          <CardTitle>Como funciona o Chatbot</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Respostas Automáticas</h4>
-              <p className="text-blue-800 text-sm">
-                Configure respostas automáticas para perguntas frequentes e horários de funcionamento.
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Phone className="h-6 w-6 text-green-600" />
+              </div>
+              <h3 className="font-medium mb-2">Receba Mensagens</h3>
+              <p className="text-sm text-gray-600">
+                Clientes enviam mensagens pelo WhatsApp do seu restaurante
               </p>
             </div>
-
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h4 className="font-medium text-green-900 mb-2">Integração com Cardápio</h4>
-              <p className="text-green-800 text-sm">
-                Clientes podem fazer pedidos diretamente pelo WhatsApp com integração ao seu cardápio.
+            
+            <div className="text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Bot className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="font-medium mb-2">Resposta Automática</h3>
+              <p className="text-sm text-gray-600">
+                O bot responde automaticamente com o cardápio e opções
               </p>
             </div>
-
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <h4 className="font-medium text-orange-900 mb-2">Histórico de Conversas</h4>
-              <p className="text-orange-800 text-sm">
-                Mantenha um histórico completo de todas as conversas com seus clientes.
-              </p>
-            </div>
-
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <h4 className="font-medium text-purple-900 mb-2">Notificações em Tempo Real</h4>
-              <p className="text-purple-800 text-sm">
-                Receba notificações instantâneas quando novos clientes entrarem em contato.
+            
+            <div className="text-center">
+              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <MessageSquare className="h-6 w-6 text-orange-600" />
+              </div>
+              <h3 className="font-medium mb-2">Gerencie Conversas</h3>
+              <p className="text-sm text-gray-600">
+                Acompanhe e responda as conversas diretamente daqui
               </p>
             </div>
           </div>
