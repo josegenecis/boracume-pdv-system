@@ -23,7 +23,6 @@ interface Conversation {
   customer_name: string;
   status: string;
   created_at: string;
-  messages: Message[];
 }
 
 const WhatsAppChatbot = () => {
@@ -58,7 +57,17 @@ const WhatsAppChatbot = () => {
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setConversations(data || []);
+      
+      // Transformar os dados para o tipo correto
+      const typedConversations: Conversation[] = (data || []).map(conv => ({
+        id: conv.id,
+        customer_phone: conv.customer_phone,
+        customer_name: conv.customer_name || 'Cliente',
+        status: conv.status,
+        created_at: conv.created_at
+      }));
+      
+      setConversations(typedConversations);
     } catch (error: any) {
       console.error('Erro ao buscar conversas:', error);
       toast({
@@ -83,8 +92,10 @@ const WhatsAppChatbot = () => {
       
       // Transformar os dados para o tipo correto
       const typedMessages: Message[] = (data || []).map(msg => ({
-        ...msg,
-        sender: msg.sender as 'bot' | 'customer'
+        id: msg.id,
+        content: msg.content,
+        sender: msg.sender as 'bot' | 'customer',
+        sent_at: msg.sent_at
       }));
       
       setMessages(typedMessages);
