@@ -45,118 +45,32 @@ const App = () => (
                 </RouteGuard>
               } />
               <Route path="/menu-digital" element={<MenuDigital />} />
+              
+              {/* Routes that use DashboardLayout */}
               <Route path="/" element={
                 <RouteGuard>
-                  <DashboardLayout>
-                    <Index />
-                  </DashboardLayout>
+                  <DashboardLayout />
                 </RouteGuard>
-              } />
-              <Route path="/dashboard" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Dashboard />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/products" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Products />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/orders" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Orders />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/kitchen" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Kitchen />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/pdv" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <PDV />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/menu" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Menu />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/loyalty" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Loyalty />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/whatsapp-bot" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <WhatsAppBot />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/configuracoes" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Configuracoes />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/bairros-entrega" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <BairrosEntrega />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/entregadores" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Entregadores />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/mesas" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Mesas />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/relatorios" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Relatorios />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/financeiro" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Financeiro />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
-              <Route path="/subscription" element={
-                <RouteGuard>
-                  <DashboardLayout>
-                    <Subscription />
-                  </DashboardLayout>
-                </RouteGuard>
-              } />
+              }>
+                <Route index element={<Index />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="products" element={<Products />} />
+                <Route path="orders" element={<Orders />} />
+                <Route path="kitchen" element={<Kitchen />} />
+                <Route path="cozinha" element={<Kitchen />} />
+                <Route path="pdv" element={<PDV />} />
+                <Route path="menu" element={<Menu />} />
+                <Route path="loyalty" element={<Loyalty />} />
+                <Route path="whatsapp-bot" element={<WhatsAppBot />} />
+                <Route path="configuracoes" element={<Configuracoes />} />
+                <Route path="bairros-entrega" element={<BairrosEntrega />} />
+                <Route path="entregadores" element={<Entregadores />} />
+                <Route path="mesas" element={<Mesas />} />
+                <Route path="relatorios" element={<Relatorios />} />
+                <Route path="financeiro" element={<Financeiro />} />
+                <Route path="subscription" element={<Subscription />} />
+              </Route>
+              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </SubscriptionProvider>
