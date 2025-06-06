@@ -313,7 +313,7 @@ const PDV = () => {
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
-        status: 'new',
+        status: 'pending', // Mudei de 'new' para 'pending'
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min'

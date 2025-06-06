@@ -206,7 +206,7 @@ const PDVForm = () => {
         delivery_fee: orderType === 'delivery' ? deliveryFee : 0,
         delivery_zone_id: data.orderType === 'delivery' ? data.deliveryZoneId : null,
         table_id: data.orderType === 'table' ? data.tableId : null,
-        status: 'new',
+        status: 'pending', // Mudei de 'new' para 'pending'
         order_number: generateOrderNumber()
       };
       

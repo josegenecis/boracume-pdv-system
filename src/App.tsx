@@ -55,11 +55,13 @@ const App = () => (
                 <Route index element={<Index />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="products" element={<Products />} />
+                <Route path="produtos" element={<Products />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="kitchen" element={<Kitchen />} />
                 <Route path="cozinha" element={<Kitchen />} />
                 <Route path="pdv" element={<PDV />} />
                 <Route path="menu" element={<Menu />} />
+                <Route path="cardapio" element={<Menu />} />
                 <Route path="loyalty" element={<Loyalty />} />
                 <Route path="whatsapp-bot" element={<WhatsAppBot />} />
                 <Route path="configuracoes" element={<Configuracoes />} />
@@ -69,6 +71,7 @@ const App = () => (
                 <Route path="relatorios" element={<Relatorios />} />
                 <Route path="financeiro" element={<Financeiro />} />
                 <Route path="subscription" element={<Subscription />} />
+                <Route path="assinatura" element={<Subscription />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
