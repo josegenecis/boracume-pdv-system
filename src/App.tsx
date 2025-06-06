@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import RouteGuard from "@/components/auth/RouteGuard";
@@ -39,7 +39,11 @@ const App = () => (
             <Toaster />
             <Sonner />
             <Routes>
-              <Route path="/login" element={<Login />} />
+              <Route path="/login" element={
+                <RouteGuard requireAuth={false}>
+                  <Login />
+                </RouteGuard>
+              } />
               <Route path="/menu-digital" element={<MenuDigital />} />
               <Route path="/" element={
                 <RouteGuard>
