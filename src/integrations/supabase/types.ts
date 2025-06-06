@@ -192,6 +192,114 @@ export type Database = {
         }
         Relationships: []
       }
+      loyalty_customers: {
+        Row: {
+          created_at: string
+          customer_name: string
+          customer_phone: string
+          id: string
+          points: number | null
+          total_spent: number | null
+          updated_at: string
+          user_id: string
+          visits_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          customer_name: string
+          customer_phone: string
+          id?: string
+          points?: number | null
+          total_spent?: number | null
+          updated_at?: string
+          user_id: string
+          visits_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string
+          customer_phone?: string
+          id?: string
+          points?: number | null
+          total_spent?: number | null
+          updated_at?: string
+          user_id?: string
+          visits_count?: number | null
+        }
+        Relationships: []
+      }
+      loyalty_redemptions: {
+        Row: {
+          customer_id: string
+          id: string
+          points_used: number
+          redeemed_at: string
+          reward_id: string
+          used: boolean | null
+        }
+        Insert: {
+          customer_id: string
+          id?: string
+          points_used: number
+          redeemed_at?: string
+          reward_id: string
+          used?: boolean | null
+        }
+        Update: {
+          customer_id?: string
+          id?: string
+          points_used?: number
+          redeemed_at?: string
+          reward_id?: string
+          used?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_redemptions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_redemptions_reward_id_fkey"
+            columns: ["reward_id"]
+            isOneToOne: false
+            referencedRelation: "loyalty_rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_rewards: {
+        Row: {
+          active: boolean | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          points_required: number
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          points_required: number
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          points_required?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       marketing_settings: {
         Row: {
           banner_images: Json | null
@@ -722,6 +830,74 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      whatsapp_conversations: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          customer_phone: string
+          id: string
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string
+          id?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      whatsapp_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          delivered: boolean | null
+          id: string
+          message_type: string
+          sender: string
+          sent_at: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          delivered?: boolean | null
+          id?: string
+          message_type?: string
+          sender: string
+          sent_at?: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          delivered?: boolean | null
+          id?: string
+          message_type?: string
+          sender?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_settings: {
         Row: {

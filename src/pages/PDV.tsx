@@ -97,7 +97,6 @@ const PDV = () => {
 
       if (error) throw error;
       setProducts(data || []);
-      console.log('Produtos carregados:', data);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       setProducts([]);
@@ -106,8 +105,6 @@ const PDV = () => {
 
   const fetchDeliveryZones = async () => {
     try {
-      console.log('Carregando bairros de entrega para user:', user?.id);
-      
       const { data: zonesData, error: zonesError } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -128,7 +125,6 @@ const PDV = () => {
         minimum_order: zone.minimum_order || 0
       }));
       
-      console.log('Bairros carregados:', deliveryAreas);
       setDeliveryZones(deliveryAreas);
     } catch (error) {
       console.error('Erro ao carregar bairros de entrega:', error);
@@ -150,7 +146,6 @@ const PDV = () => {
         throw error;
       }
       
-      console.log('Mesas carregadas:', data);
       setTables(data || []);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
@@ -316,7 +311,7 @@ const PDV = () => {
         items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
-        payment_method: paymentMethod, // Agora aceita pix, cartao, dinheiro
+        payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'new',
         order_number: orderNumber,

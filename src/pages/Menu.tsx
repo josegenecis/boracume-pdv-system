@@ -36,6 +36,11 @@ const Menu = () => {
     window.open(menuUrl, '_blank');
   };
 
+  const generateQRCode = () => {
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}`;
+    return qrCodeUrl;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -60,13 +65,11 @@ const Menu = () => {
             </p>
             
             <div className="flex justify-center">
-              <div className="w-48 h-48 bg-gray-100 border rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <QrCode size={48} className="mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm text-gray-500">QR Code será gerado aqui</p>
-                  <p className="text-xs text-gray-400 mt-1">800x300px recomendado</p>
-                </div>
-              </div>
+              <img 
+                src={generateQRCode()} 
+                alt="QR Code do Cardápio"
+                className="w-48 h-48 border rounded-lg"
+              />
             </div>
 
             <div className="space-y-2">
@@ -119,7 +122,7 @@ const Menu = () => {
                   3
                 </div>
                 <p className="text-sm">
-                  <strong>Receba os pedidos</strong> diretamente no sistema e gerencie as entregas.
+                  <strong>Receba os pedidos</strong> diretamente pelo WhatsApp e gerencie as entregas.
                 </p>
               </div>
             </div>
@@ -130,7 +133,7 @@ const Menu = () => {
                 <li>• Mantenha seus produtos e preços sempre atualizados</li>
                 <li>• Configure os bairros de entrega em Configurações</li>
                 <li>• Use imagens atrativas para seus produtos</li>
-                <li>• Configure banners promocionais para destacar ofertas</li>
+                <li>• Configure seu perfil com informações do restaurante</li>
               </ul>
             </div>
           </CardContent>
