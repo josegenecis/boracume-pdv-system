@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
@@ -9,6 +8,7 @@ import WhatsAppSettings from '@/components/settings/WhatsAppSettings';
 import ScaleIntegrationSettings from '@/components/settings/ScaleIntegrationSettings';
 import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
+import DeviceManager from '@/components/devices/DeviceManager';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Configuracoes: React.FC = () => {
@@ -33,6 +33,7 @@ const Configuracoes: React.FC = () => {
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="general">Geral</TabsTrigger>
+          <TabsTrigger value="devices">Dispositivos</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="appearance">Aparência</TabsTrigger>
@@ -48,6 +49,10 @@ const Configuracoes: React.FC = () => {
             <WhatsAppSettings />
             <ScaleIntegrationSettings />
           </div>
+        </TabsContent>
+        
+        <TabsContent value="devices">
+          <DeviceManager />
         </TabsContent>
         
         <TabsContent value="profile">

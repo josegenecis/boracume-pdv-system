@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -114,11 +113,10 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         )}
         {currentStatus === 'ready' && (
           <Button 
-            className="w-full" 
-            variant="outline" 
-            disabled
+            className="w-full bg-blue-600 hover:bg-blue-700" 
+            variant="default"
           >
-            Pronto para Entrega
+            Saiu para Entrega
           </Button>
         )}
       </CardFooter>

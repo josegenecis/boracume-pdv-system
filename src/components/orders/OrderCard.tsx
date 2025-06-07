@@ -108,109 +108,117 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
   const canAdvance = getNextStatus(order.status) !== null;
 
   return (
-    <Card className={`w-full ${order.status === 'new' ? 'border-red-500 border-2 shadow-lg' : ''}`}>
-      <CardHeader className="pb-3">
+    <Card className={`w-full max-w-sm ${order.status === 'new' ? 'border-red-500 border-2 shadow-lg' : ''}`}>
+      <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              Pedido #{order.order_number}
+            <CardTitle className="text-base flex items-center gap-2">
+              #{order.order_number}
               <OrderStatusBadge status={order.status} />
               {order.status === 'new' && (
-                <Badge className="bg-red-100 text-red-800 animate-bounce">NOVO!</Badge>
+                <Badge className="bg-red-100 text-red-800 animate-bounce text-xs">NOVO!</Badge>
               )}
             </CardTitle>
-            <div className="text-sm text-muted-foreground flex items-center gap-4 mt-1">
-              <span>{order.customer_name}</span>
+            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
+              <span className="truncate max-w-24">{order.customer_name}</span>
               <div className="flex items-center gap-1">
-                <Clock size={12} />
-                {formatTime(order.created_at)} ({getTimeElapsed(order.created_at)})
+                <Clock size={10} />
+                <span>{formatTime(order.created_at)}</span>
               </div>
             </div>
           </div>
           <div className="text-right">
-            <div className="font-bold text-lg text-boracume-orange">
+            <div className="font-bold text-base text-primary">
               {formatCurrency(order.total)}
             </div>
-            <div className="text-sm text-muted-foreground">
-              {order.payment_method}
+            <div className="text-xs text-muted-foreground">
+              {getTimeElapsed(order.created_at)}
             </div>
           </div>
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-3">
-        {/* Customer Info */}
-        <div className="flex gap-4 text-sm">
+      <CardContent className="py-2">
+        <div className="space-y-1">
           {order.customer_phone && (
-            <div className="flex items-center gap-1">
-              <Phone size={14} />
-              {order.customer_phone}
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Phone size={10} />
+              <span className="truncate">{order.customer_phone}</span>
             </div>
           )}
           {order.customer_address && (
-            <div className="flex items-center gap-1">
-              <MapPin size={14} />
-              {order.customer_address}
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin size={10} />
+              <span className="truncate">{order.customer_address}</span>
             </div>
           )}
         </div>
-
-        <Separator />
-
-        {/* Order Items */}
-        <div className="space-y-2">
-          <h4 className="font-medium text-sm">Itens do Pedido:</h4>
-          {order.items.map((item, index) => (
-            <div key={index} className="text-sm">
-              <div className="flex justify-between">
-                <span className="font-medium">{item.quantity}x {item.name}</span>
-                <span>{formatCurrency(item.price * item.quantity)}</span>
-              </div>
-              {item.options && item.options.length > 0 && (
-                <div className="ml-4 text-xs text-muted-foreground">
-                  {item.options.join(', ')}
-                </div>
-              )}
-              {item.notes && (
-                <div className="ml-4 text-xs italic text-muted-foreground">
-                  Obs: {item.notes}
-                </div>
-              )}
+        
+        <Separator className="my-2" />
+        
+        <div className="space-y-1 max-h-20 overflow-y-auto">
+          {order.items.slice(0, 3).map((item, index) => (
+            <div key={index} className="text-xs flex justify-between">
+              <span className="truncate">{item.quantity}x {item.name}</span>
+              <span className="text-muted-foreground">{formatCurrency(item.price * item.quantity)}</span>
             </div>
           ))}
+          {order.items.length > 3 && (
+            <div className="text-xs text-muted-foreground">
+              +{order.items.length - 3} itens...
+            </div>
+          )}
         </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-3">
+      </CardContent>
+      
+      <CardContent className="pt-0 pb-2">
+        <div className="flex items-center gap-1 text-xs">
+          <DollarSign size={10} />
+          <span className="capitalize">{order.payment_method}</span>
+          {order.estimated_time && (
+            <>
+              <span className="mx-1">•</span>
+              <span>{order.estimated_time}</span>
+            </>
+          )}
+        </div>
+      </CardContent>
+      
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 gap-2">
           {canAdvance && (
             <Button 
               onClick={handleStatusUpdate}
-              className="flex-1"
-              variant={order.status === 'new' ? 'default' : 'outline'}
+              size="sm"
+              className="w-full text-xs"
             >
               {getNextStatusLabel(order.status)}
             </Button>
           )}
           
-          {canCancel && (
-            <Button 
-              onClick={() => onStatusChange(order.id, 'cancelled')}
-              variant="destructive"
-              size="sm"
-            >
-              Cancelar
-            </Button>
-          )}
-          
-          {onViewDetails && (
-            <Button 
-              onClick={() => onViewDetails(order.id)}
-              variant="outline"
-              size="sm"
-            >
-              Detalhes
-            </Button>
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            {onViewDetails && (
+              <Button 
+                variant="outline" 
+                onClick={() => onViewDetails(order.id)}
+                size="sm"
+                className="text-xs"
+              >
+                Detalhes
+              </Button>
+            )}
+            
+            {canCancel && (
+              <Button 
+                variant="destructive" 
+                onClick={() => onStatusChange(order.id, 'cancelled')}
+                size="sm"
+                className="text-xs"
+              >
+                Cancelar
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

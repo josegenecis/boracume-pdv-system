@@ -227,7 +227,8 @@ const PDV = () => {
       return;
     }
 
-    if (!customerName.trim()) {
+    // Para pedidos no local, nome não é obrigatório
+    if (orderType !== 'dine_in' && !customerName.trim()) {
       toast({
         title: "Nome obrigatório",
         description: "Por favor, informe o nome do cliente.",
@@ -302,7 +303,7 @@ const PDV = () => {
       }));
 
       const orderData = {
-        customer_name: customerName.trim(),
+        customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : customerName.trim(),
         customer_phone: customerPhone.trim() || null,
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
         order_type: orderType,
@@ -313,7 +314,7 @@ const PDV = () => {
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
-        status: 'pending', // Mudei de 'new' para 'pending'
+        status: 'pending',
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min'
@@ -573,10 +574,10 @@ const PDV = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
-              placeholder="Nome do cliente *"
+              placeholder={orderType === 'dine_in' ? "Nome do cliente (opcional)" : "Nome do cliente *"}
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              required
+              required={orderType !== 'dine_in'}
             />
             <Input
               placeholder="Telefone"
