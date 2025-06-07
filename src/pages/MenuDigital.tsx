@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 import WhatsAppButton from '@/components/chat/WhatsAppButton';
+import DigitalMenuCheckout from '@/components/digital-menu/DigitalMenuCheckout';
 
 interface Product {
   id: string;
@@ -52,6 +52,7 @@ const MenuDigital = () => {
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const userId = searchParams.get('user');
 
@@ -187,6 +188,27 @@ const MenuDigital = () => {
     return acc;
   }, {} as Record<string, Product[]>);
 
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Carrinho vazio",
+        description: "Adicione produtos ao carrinho antes de fazer o pedido.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setShowCheckout(true);
+  };
+
+  const handleCheckoutSuccess = () => {
+    setCart([]);
+    setShowCheckout(false);
+    toast({
+      title: "Pedido realizado com sucesso!",
+      description: "Você receberá confirmação em breve.",
+    });
+  };
+
   const handleWhatsAppOrder = () => {
     if (cart.length === 0) {
       toast({
@@ -233,6 +255,18 @@ const MenuDigital = () => {
           <p className="text-gray-600">Verifique o link do cardápio.</p>
         </div>
       </div>
+    );
+  }
+
+  if (showCheckout) {
+    return (
+      <DigitalMenuCheckout
+        cart={cart}
+        deliveryZones={deliveryZones}
+        userId={userId!}
+        onBack={() => setShowCheckout(false)}
+        onSuccess={handleCheckoutSuccess}
+      />
     );
   }
 
@@ -383,11 +417,20 @@ const MenuDigital = () => {
                       </div>
                       
                       <Button 
-                        onClick={handleWhatsAppOrder}
+                        onClick={handleCheckout}
                         className="w-full"
                         size="lg"
                       >
-                        Fazer Pedido via WhatsApp
+                        Finalizar Pedido
+                      </Button>
+
+                      <Button 
+                        onClick={handleWhatsAppOrder}
+                        variant="outline"
+                        className="w-full"
+                        size="lg"
+                      >
+                        Pedir via WhatsApp
                       </Button>
                     </div>
                   </div>
