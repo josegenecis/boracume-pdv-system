@@ -48,14 +48,32 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
 
       if (error) throw error;
       
-      // Transform database data to match our interface
-      const transformedData = data?.map(item => ({
-        id: item.id,
-        name: item.name,
-        required: item.required,
-        max_selections: item.max_selections,
-        options: Array.isArray(item.options) ? item.options as VariationOption[] : []
-      })) || [];
+      // Transform database data to match our interface with proper type checking
+      const transformedData = data?.map(item => {
+        let options: VariationOption[] = [];
+        
+        // Safely parse the options field
+        if (item.options) {
+          try {
+            if (Array.isArray(item.options)) {
+              options = item.options.filter((opt: any) => 
+                opt && typeof opt === 'object' && 'name' in opt && 'price' in opt
+              ) as VariationOption[];
+            }
+          } catch (e) {
+            console.error('Error parsing options:', e);
+            options = [];
+          }
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          required: item.required || false,
+          max_selections: item.max_selections || 1,
+          options
+        };
+      }) || [];
       
       setVariations(transformedData);
     } catch (error) {
@@ -123,7 +141,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
           name: v.name,
           required: v.required,
           max_selections: v.max_selections,
-          options: v.options.filter(o => o.name.trim()),
+          options: JSON.parse(JSON.stringify(v.options.filter(o => o.name.trim()))), // Convert to Json type
           price: 0 // Campo obrigatório na tabela
         }));
 
