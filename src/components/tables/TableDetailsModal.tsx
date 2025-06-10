@@ -98,7 +98,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           if (typeof order.items === 'string') {
             parsedItems = JSON.parse(order.items);
           } else if (Array.isArray(order.items)) {
-            parsedItems = order.items as OrderItem[];
+            parsedItems = order.items as unknown as OrderItem[];
           }
         } catch (e) {
           console.error('Error parsing order items:', e);
