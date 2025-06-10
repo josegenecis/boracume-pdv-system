@@ -206,7 +206,7 @@ const Subscription = () => {
         </div>
         
         {/* Trial Info */}
-        {subscription?.status === 'trialing' && renderTrialInfo()}
+        {subscription?.status === 'trial' && renderTrialInfo()}
         
         {/* Current Plan */}
         {subscription?.status === 'active' && renderCurrentPlan()}
@@ -287,7 +287,7 @@ const Subscription = () => {
         </div>
 
         {/* Upgrade CTA */}
-        {subscription?.status === 'trialing' && (
+        {subscription?.status === 'trial' && (
           <Card className="bg-gradient-to-r from-boracume-orange to-amber-500 text-white">
             <CardContent className="pt-6">
               <div className="text-center">
