@@ -90,7 +90,25 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       if (error) throw error;
 
       if (orderData && orderData.length > 0) {
-        setCurrentOrder(orderData[0]);
+        const order = orderData[0];
+        
+        // Parse items properly
+        let parsedItems: OrderItem[] = [];
+        try {
+          if (typeof order.items === 'string') {
+            parsedItems = JSON.parse(order.items);
+          } else if (Array.isArray(order.items)) {
+            parsedItems = order.items as OrderItem[];
+          }
+        } catch (e) {
+          console.error('Error parsing order items:', e);
+          parsedItems = [];
+        }
+
+        setCurrentOrder({
+          ...order,
+          items: parsedItems
+        });
       } else {
         setCurrentOrder(null);
       }

@@ -23,6 +23,7 @@ interface Product {
   category: string;
   description?: string;
   weight_based?: boolean;
+  send_to_kds?: boolean;
 }
 
 interface CartItem extends Product {
@@ -251,7 +252,20 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       if (existingOrders && existingOrders.length > 0) {
         // Adicionar itens ao pedido existente
         const existingOrder = existingOrders[0];
-        const currentItems = existingOrder.items || [];
+        
+        // Parse existing items properly
+        let currentItems = [];
+        try {
+          if (typeof existingOrder.items === 'string') {
+            currentItems = JSON.parse(existingOrder.items);
+          } else if (Array.isArray(existingOrder.items)) {
+            currentItems = existingOrder.items;
+          }
+        } catch (e) {
+          console.error('Error parsing existing items:', e);
+          currentItems = [];
+        }
+        
         const updatedItems = [...currentItems, ...orderItems];
         const newTotal = existingOrder.total + getTotalValue();
 
@@ -269,7 +283,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         // Enviar apenas os novos itens para a cozinha
         const itemsForKitchen = orderItems.filter(item => {
           const product = products.find(p => p.id === item.product_id);
-          return product?.send_to_kds;
+          return product?.send_to_kds === true;
         });
 
         if (itemsForKitchen.length > 0) {
@@ -319,7 +333,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         // Enviar para a cozinha
         const itemsForKitchen = orderItems.filter(item => {
           const product = products.find(p => p.id === item.product_id);
-          return product?.send_to_kds;
+          return product?.send_to_kds === true;
         });
 
         if (itemsForKitchen.length > 0) {
