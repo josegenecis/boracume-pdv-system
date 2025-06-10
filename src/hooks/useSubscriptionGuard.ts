@@ -27,7 +27,7 @@ export const useSubscriptionGuard = (options: SubscriptionGuardOptions = {}) => 
     if (!user) return false;
     if (!subscription) return false;
 
-    if (allowTrial && subscription.status === 'trialing') {
+    if (allowTrial && subscription.status === 'trial') {
       return true;
     }
 
@@ -61,7 +61,7 @@ export const useSubscriptionGuard = (options: SubscriptionGuardOptions = {}) => 
     hasAccess: hasAccess(),
     checkAccess,
     subscription,
-    isTrialing: subscription?.status === 'trialing',
+    isTrialing: subscription?.status === 'trial',
     isActive: subscription?.status === 'active',
   };
 };

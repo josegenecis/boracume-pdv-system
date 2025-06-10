@@ -28,7 +28,7 @@ const DashboardHeader: React.FC = () => {
   const getSubscriptionBadge = () => {
     if (!subscription) return null;
 
-    if (subscription.status === 'trialing') {
+    if (subscription.status === 'trial') {
       return (
         <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
           <Crown className="w-3 h-3 mr-1" />
@@ -54,7 +54,7 @@ const DashboardHeader: React.FC = () => {
   };
 
   const hasActiveSubscription = () => {
-    return subscription?.status === 'active' || subscription?.status === 'trialing';
+    return subscription?.status === 'active' || subscription?.status === 'trial';
   };
 
   return (

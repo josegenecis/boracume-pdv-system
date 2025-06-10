@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,7 +53,7 @@ const SecurityMonitor: React.FC = () => {
       setLoading(true);
 
       // Calculate security score and status
-      const subscriptionValid = subscription?.status === 'active' || subscription?.status === 'trialing';
+      const subscriptionValid = subscription?.status === 'active' || subscription?.status === 'trial';
       const securityScore = calculateSecurityScore({
         subscriptionValid,
         dataBackupEnabled: true,
