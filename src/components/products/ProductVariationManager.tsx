@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,9 +55,17 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
         if (item.options) {
           try {
             if (Array.isArray(item.options)) {
-              options = item.options.filter((opt: any) => 
-                opt && typeof opt === 'object' && 'name' in opt && 'price' in opt
-              ) as VariationOption[];
+              // Properly validate and transform each option
+              options = item.options
+                .filter((opt: unknown): opt is VariationOption => {
+                  return opt !== null && 
+                         typeof opt === 'object' && 
+                         'name' in opt && 
+                         'price' in opt &&
+                         typeof (opt as any).name === 'string' &&
+                         typeof (opt as any).price === 'number';
+                })
+                .map((opt: unknown) => opt as VariationOption);
             }
           } catch (e) {
             console.error('Error parsing options:', e);
