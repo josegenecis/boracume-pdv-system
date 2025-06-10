@@ -54,10 +54,25 @@ const Orders = () => {
       if (error) throw error;
       
       // Transform the data to match our interface with proper status typing
-      const transformedData = (data || []).map(item => ({
-        ...item,
-        status: item.status as OrderStatusType
-      }));
+      const transformedData = (data || []).map(item => {
+        let parsedItems = [];
+        try {
+          if (typeof item.items === 'string') {
+            parsedItems = JSON.parse(item.items);
+          } else if (Array.isArray(item.items)) {
+            parsedItems = item.items;
+          }
+        } catch (e) {
+          console.error('Error parsing items:', e);
+          parsedItems = [];
+        }
+
+        return {
+          ...item,
+          status: item.status as OrderStatusType,
+          items: parsedItems
+        };
+      });
       
       setOrders(transformedData);
     } catch (error) {

@@ -159,13 +159,27 @@ const PDVForm = () => {
       if (error) throw error;
       
       // Transform the data to match our interface
-      const transformedData = (data || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        required: item.required,
-        max_selections: item.max_selections,
-        options: Array.isArray(item.options) ? item.options : []
-      }));
+      const transformedData = (data || []).map(item => {
+        let parsedOptions = [];
+        try {
+          if (typeof item.options === 'string') {
+            parsedOptions = JSON.parse(item.options);
+          } else if (Array.isArray(item.options)) {
+            parsedOptions = item.options;
+          }
+        } catch (e) {
+          console.error('Error parsing options:', e);
+          parsedOptions = [];
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          required: item.required,
+          max_selections: item.max_selections,
+          options: Array.isArray(parsedOptions) ? parsedOptions : []
+        };
+      });
       
       return transformedData;
     } catch (error) {
