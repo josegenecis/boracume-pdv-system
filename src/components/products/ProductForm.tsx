@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -247,8 +248,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             <Input
               id="price"
               type="number"
+              step="0.01"
               value={formData.price}
-              onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, price: Number(e.target.value) || 0 }))}
               required
             />
           </div>

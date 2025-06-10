@@ -46,7 +46,14 @@ const TableManager: React.FC = () => {
         .order('table_number');
 
       if (error) throw error;
-      setTables(data || []);
+      
+      // Transform data to ensure proper typing
+      const transformedTables = (data || []).map(table => ({
+        ...table,
+        status: table.status as 'available' | 'occupied' | 'reserved'
+      }));
+      
+      setTables(transformedTables);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
       toast({

@@ -19,6 +19,7 @@ interface Product {
   name: string;
   description?: string;
   price: number;
+  category: string; // Added required category field
   category_id?: string;
   image_url?: string;
   available: boolean;
@@ -69,7 +70,14 @@ const Products = () => {
         .order('name');
       
       if (error) throw error;
-      setProducts(data || []);
+      
+      // Transform data to ensure category field is present
+      const transformedProducts = (data || []).map(product => ({
+        ...product,
+        category: product.category || 'Sem categoria' // Ensure category is always present
+      }));
+      
+      setProducts(transformedProducts);
     } catch (error: any) {
       console.error('Erro ao carregar produtos:', error);
       toast({
