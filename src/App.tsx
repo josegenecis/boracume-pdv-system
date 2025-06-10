@@ -1,87 +1,259 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
-import RouteGuard from "@/components/auth/RouteGuard";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import Login from "@/pages/Login";
-import Index from "@/pages/Index";
-import Dashboard from "@/pages/Dashboard";
-import Products from "@/pages/Products";
-import Orders from "@/pages/Orders";
-import Kitchen from "@/pages/Kitchen";
-import PDV from "@/pages/PDV";
-import Configuracoes from "@/pages/Configuracoes";
-import BairrosEntrega from "@/pages/BairrosEntrega";
-import Entregadores from "@/pages/Entregadores";
-import Mesas from "@/pages/Mesas";
-import Relatorios from "@/pages/Relatorios";
-import Financeiro from "@/pages/Financeiro";
-import Menu from "@/pages/Menu";
-import MenuDigital from "@/pages/MenuDigital";
-import Subscription from "@/pages/Subscription";
-import Loyalty from "@/pages/Loyalty";
-import WhatsAppBot from "@/pages/WhatsAppBot";
-import NotFound from "@/pages/NotFound";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
+import { Toaster } from '@/components/ui/toaster';
+import RouteGuard from '@/components/auth/RouteGuard';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import Login from '@/pages/Login';
+import Dashboard from '@/pages/Dashboard';
+import Products from '@/pages/Products';
+import Orders from '@/pages/Orders';
+import PDV from '@/pages/PDV';
+import MenuDigital from '@/pages/MenuDigital';
+import Subscription from '@/pages/Subscription';
+import Configuracoes from '@/pages/Configuracoes';
+import Mesas from '@/pages/Mesas';
+import Kitchen from '@/pages/Kitchen';
+import Entregadores from '@/pages/Entregadores';
+import BairrosEntrega from '@/pages/BairrosEntrega';
+import Loyalty from '@/pages/Loyalty';
+import Relatorios from '@/pages/Relatorios';
+import Financeiro from '@/pages/Financeiro';
+import WhatsAppBot from '@/pages/WhatsAppBot';
+import SecurityDashboard from '@/pages/SecurityDashboard';
+import NotFound from '@/pages/NotFound';
+import Index from '@/pages/Index';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import SupportChat from '@/components/support/SupportChat';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import './App.css';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+    },
+  },
+});
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <BrowserRouter>
+function AppContent() {
+  const { user, profile } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (user && profile && !profile.onboarding_completed) {
+      setShowOnboarding(true);
+    }
+  }, [user, profile]);
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    window.location.reload(); // Refresh to load updated profile
+  };
+
+  if (showOnboarding) {
+    return <OnboardingWizard onComplete={handleOnboardingComplete} />;
+  }
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/menu/:userId" element={<MenuDigital />} />
+        
+        <Route
+          path="/dashboard"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Dashboard />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/produtos"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Products />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/pedidos"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Orders />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/pdv"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <PDV />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/mesas"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Mesas />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/cozinha"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Kitchen />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/entregadores"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Entregadores />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/bairros-entrega"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <BairrosEntrega />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/loyalty"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Loyalty />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/relatorios"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Relatorios />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/financeiro"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Financeiro />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/whatsapp-bot"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <WhatsAppBot />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/subscription"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Subscription />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route
+          path="/configuracoes"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <Configuracoes />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+
+        <Route
+          path="/security-dashboard"
+          element={
+            <RouteGuard>
+              <DashboardLayout>
+                <SecurityDashboard />
+              </DashboardLayout>
+            </RouteGuard>
+          }
+        />
+        
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      
+      {/* Support Chat - Show only for authenticated users */}
+      {user && <SupportChat />}
+      
+      <Toaster />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Router>
         <AuthProvider>
           <SubscriptionProvider>
-            <Toaster />
-            <Sonner />
-            <Routes>
-              <Route path="/login" element={
-                <RouteGuard requireAuth={false}>
-                  <Login />
-                </RouteGuard>
-              } />
-              <Route path="/menu-digital" element={<MenuDigital />} />
-              
-              {/* Routes that use DashboardLayout */}
-              <Route path="/" element={
-                <RouteGuard>
-                  <DashboardLayout />
-                </RouteGuard>
-              }>
-                <Route index element={<Index />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="products" element={<Products />} />
-                <Route path="produtos" element={<Products />} />
-                <Route path="orders" element={<Orders />} />
-                <Route path="pedidos" element={<Orders />} />
-                <Route path="kitchen" element={<Kitchen />} />
-                <Route path="cozinha" element={<Kitchen />} />
-                <Route path="pdv" element={<PDV />} />
-                <Route path="menu" element={<Menu />} />
-                <Route path="cardapio" element={<Menu />} />
-                <Route path="loyalty" element={<Loyalty />} />
-                <Route path="whatsapp-bot" element={<WhatsAppBot />} />
-                <Route path="configuracoes" element={<Configuracoes />} />
-                <Route path="bairros-entrega" element={<BairrosEntrega />} />
-                <Route path="entregadores" element={<Entregadores />} />
-                <Route path="mesas" element={<Mesas />} />
-                <Route path="relatorios" element={<Relatorios />} />
-                <Route path="financeiro" element={<Financeiro />} />
-                <Route path="subscription" element={<Subscription />} />
-                <Route path="assinatura" element={<Subscription />} />
-              </Route>
-              
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppContent />
           </SubscriptionProvider>
         </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      </Router>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
