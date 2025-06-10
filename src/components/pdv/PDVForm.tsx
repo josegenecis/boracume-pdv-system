@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
+import ProductSelectionModal from './ProductSelectionModal';
 
 interface Product {
   id: string;
@@ -55,6 +56,14 @@ interface CustomerData {
   tableId: string;
 }
 
+interface ProductVariation {
+  id: string;
+  name: string;
+  required: boolean;
+  max_selections: number;
+  options: any[];
+}
+
 const PDVForm = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -72,9 +81,12 @@ const PDVForm = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-	const [searchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
@@ -129,35 +141,63 @@ const PDVForm = () => {
         .order('table_number');
 
       if (error) throw error;
-      // Map database fields to interface
-      const mappedTables = data?.map(table => ({
-        id: table.id,
-        table_number: table.table_number,
-        capacity: table.capacity,
-        status: table.status,
-        location: table.location
-      })) || [];
-      setTables(mappedTables);
+      setTables(data || []);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const fetchProductVariations = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_variations')
+        .select('*')
+        .eq('product_id', productId)
+        .order('name');
 
-  const addToCart = (product: Product) => {
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao carregar variações:', error);
+      return [];
+    }
+  };
+
+  const handleProductClick = async (product: Product) => {
+    const variations = await fetchProductVariations(product.id);
+    
+    if (variations.length > 0) {
+      setSelectedProduct(product);
+      setProductVariations(variations);
+      setShowProductModal(true);
+    } else {
+      // Adicionar diretamente se não há variações
+      addToCart(product, 1, [], '');
+    }
+  };
+
+  const addToCart = (product: Product, quantity: number = 1, options: string[] = [], notes: string = '') => {
     setCartItems(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const existing = prev.find(item => 
+        item.id === product.id && 
+        JSON.stringify(item.options) === JSON.stringify(options) &&
+        item.notes === notes
+      );
+      
       if (existing) {
         return prev.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+          item === existing
+            ? { ...item, quantity: item.quantity + quantity }
             : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      
+      return [...prev, { 
+        ...product, 
+        quantity, 
+        options: options.length > 0 ? options : undefined,
+        notes: notes || undefined
+      }];
     });
   };
 
@@ -323,6 +363,11 @@ const PDVForm = () => {
     setChangeAmount(change > 0 ? change : null);
   };
 
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    product.available_pdv !== false
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Product List */}
@@ -360,7 +405,7 @@ const PDVForm = () => {
                   variant="outline"
                   size="sm"
                   className="mt-2 w-full"
-                  onClick={() => addToCart(product)}
+                  onClick={() => handleProductClick(product)}
                 >
                   Adicionar
                 </Button>
@@ -383,39 +428,56 @@ const PDVForm = () => {
               </p>
             ) : (
               <div className="space-y-3">
-                {cartItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      >
-                        <Minus size={16} />
-                      </Button>
-                      <span className="w-6 text-center">{item.quantity}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      >
-                        <Plus size={16} />
-                      </Button>
-                      <span className="ml-2">{item.name}</span>
+                {cartItems.map((item, index) => (
+                  <div key={`${item.id}-${index}`} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                          <Minus size={16} />
+                        </Button>
+                        <span className="w-6 text-center">{item.quantity}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <Plus size={16} />
+                        </Button>
+                        <span className="ml-2 font-medium">{item.name}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <span>{formatCurrency(item.price * item.quantity)}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFromCart(item.id)}
+                          className="ml-2"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <span>{formatCurrency(item.price * item.quantity)}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeFromCart(item.id)}
-                        className="ml-2"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
+                    
+                    {item.options && item.options.length > 0 && (
+                      <div className="ml-8 text-sm text-gray-600">
+                        {item.options.map((option, optIndex) => (
+                          <div key={optIndex}>• {option}</div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {item.notes && (
+                      <div className="ml-8 text-sm text-gray-600 italic">
+                        Obs: {item.notes}
+                      </div>
+                    )}
                   </div>
                 ))}
+                
                 <Separator />
                 <div className="flex justify-between font-bold">
                   <span>Subtotal:</span>
@@ -543,6 +605,8 @@ const PDVForm = () => {
                     {tables.map(table => (
                       <SelectItem key={table.id} value={table.id}>
                         Mesa {table.table_number}
+                        {table.location && ` - ${table.location}`}
+                        {table.capacity && ` (${table.capacity} pessoas)`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -601,8 +665,23 @@ const PDVForm = () => {
           </Button>
         </form>
       </div>
+
+      {/* Product Selection Modal */}
+      <ProductSelectionModal
+        product={selectedProduct}
+        variations={productVariations}
+        isOpen={showProductModal}
+        onClose={() => {
+          setShowProductModal(false);
+          setSelectedProduct(null);
+          setProductVariations([]);
+        }}
+        onAddToCart={addToCart}
+      />
     </div>
   );
 };
 
 export default PDVForm;
+
+}

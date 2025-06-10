@@ -3,14 +3,15 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, CreditCard } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface CartItem {
   id: string;
@@ -26,7 +27,7 @@ interface DeliveryZone {
   minimum_order: number;
 }
 
-interface CheckoutProps {
+interface DigitalMenuCheckoutProps {
   cart: CartItem[];
   deliveryZones: DeliveryZone[];
   userId: string;
@@ -34,21 +35,19 @@ interface CheckoutProps {
   onSuccess: () => void;
 }
 
-const DigitalMenuCheckout: React.FC<CheckoutProps> = ({ 
-  cart, 
-  deliveryZones, 
-  userId, 
-  onBack, 
-  onSuccess 
+const DigitalMenuCheckout: React.FC<DigitalMenuCheckoutProps> = ({
+  cart,
+  deliveryZones,
+  userId,
+  onBack,
+  onSuccess
 }) => {
   const [customerData, setCustomerData] = useState({
     name: '',
     phone: '',
-    email: '',
     address: '',
     deliveryZoneId: '',
-    paymentMethod: 'pix',
-    notes: ''
+    deliveryInstructions: ''
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -57,10 +56,13 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  const getSelectedZone = () => {
+    return deliveryZones.find(zone => zone.id === customerData.deliveryZoneId);
+  };
+
   const getDeliveryFee = () => {
-    if (!customerData.deliveryZoneId) return 0;
-    const zone = deliveryZones.find(z => z.id === customerData.deliveryZoneId);
-    return zone?.delivery_fee || 0;
+    const zone = getSelectedZone();
+    return zone ? zone.delivery_fee : 0;
   };
 
   const getFinalTotal = () => {
@@ -75,7 +77,10 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
   };
 
   const generateOrderNumber = () => {
-    return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const now = new Date();
+    const formattedDate = format(now, 'yyMMdd', { locale: ptBR });
+    const randomNumber = Math.floor(Math.random() * 1000);
+    return `WEB-${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,28 +89,27 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
     if (!customerData.name || !customerData.phone || !customerData.address) {
       toast({
         title: "Dados obrigatórios",
-        description: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive"
+        description: "Preencha nome, telefone e endereço.",
+        variant: "destructive",
       });
       return;
     }
 
     if (!customerData.deliveryZoneId) {
       toast({
-        title: "Bairro obrigatório",
-        description: "Por favor, selecione o bairro para entrega.",
-        variant: "destructive"
+        title: "Zona de entrega obrigatória",
+        description: "Selecione uma zona de entrega.",
+        variant: "destructive",
       });
       return;
     }
 
-    // Verificar valor mínimo
-    const selectedZone = deliveryZones.find(z => z.id === customerData.deliveryZoneId);
+    const selectedZone = getSelectedZone();
     if (selectedZone && getTotalValue() < selectedZone.minimum_order) {
       toast({
-        title: "Valor mínimo não atingido",
-        description: `O valor mínimo para entrega neste bairro é ${formatCurrency(selectedZone.minimum_order)}.`,
-        variant: "destructive"
+        title: "Pedido mínimo não atingido",
+        description: `O pedido mínimo para ${selectedZone.name} é ${formatCurrency(selectedZone.minimum_order)}.`,
+        variant: "destructive",
       });
       return;
     }
@@ -120,7 +124,9 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
         product_name: item.name,
         price: item.price,
         quantity: item.quantity,
-        subtotal: item.price * item.quantity
+        subtotal: item.price * item.quantity,
+        options: [],
+        notes: ''
       }));
 
       const orderData = {
@@ -128,16 +134,15 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
         order_number: orderNumber,
         customer_name: customerData.name,
         customer_phone: customerData.phone,
-        customer_email: customerData.email || null,
         customer_address: customerData.address,
         delivery_zone_id: customerData.deliveryZoneId,
+        delivery_instructions: customerData.deliveryInstructions || null,
         items: orderItems,
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
-        payment_method: customerData.paymentMethod,
-        status: 'pending',
+        payment_method: 'pending',
+        status: 'new',
         order_type: 'delivery',
-        notes: customerData.notes || null,
         estimated_time: '30-45 min'
       };
 
@@ -149,15 +154,15 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
 
       toast({
         title: "Pedido realizado com sucesso!",
-        description: `Pedido #${orderNumber} foi registrado. Você receberá confirmação em breve.`,
+        description: `Pedido #${orderNumber} foi enviado. Você receberá confirmação em breve.`,
       });
 
       onSuccess();
     } catch (error: any) {
       console.error('Erro ao criar pedido:', error);
       toast({
-        title: "Erro ao finalizar pedido",
-        description: "Não foi possível processar seu pedido. Tente novamente.",
+        title: "Erro ao realizar pedido",
+        description: error.message || "Não foi possível processar o pedido.",
         variant: "destructive"
       });
     } finally {
@@ -166,182 +171,152 @@ const DigitalMenuCheckout: React.FC<CheckoutProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft size={16} />
-        </Button>
-        <h1 className="text-2xl font-bold">Finalizar Pedido</h1>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Button onClick={onBack} variant="outline" size="icon">
+            <ArrowLeft size={20} />
+          </Button>
+          <h1 className="text-2xl font-bold">Finalizar Pedido</h1>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo do Pedido</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
+        {/* Resumo do Pedido */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumo do Pedido</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             {cart.map((item) => (
-              <div key={item.id} className="flex justify-between">
+              <div key={item.id} className="flex justify-between items-center">
                 <span>{item.quantity}x {item.name}</span>
                 <span>{formatCurrency(item.price * item.quantity)}</span>
               </div>
             ))}
+            
             <Separator />
+            
             <div className="flex justify-between">
               <span>Subtotal:</span>
               <span>{formatCurrency(getTotalValue())}</span>
             </div>
+            
             {getDeliveryFee() > 0 && (
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between">
                 <span>Taxa de entrega:</span>
                 <span>{formatCurrency(getDeliveryFee())}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-lg">
+            
+            <div className="flex justify-between font-bold text-lg pt-2 border-t">
               <span>Total:</span>
-              <span>{formatCurrency(getFinalTotal())}</span>
+              <span className="text-green-600">{formatCurrency(getFinalTotal())}</span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dados Pessoais</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Formulário de Dados */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User size={20} />
+                Seus Dados
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="name">Nome Completo *</Label>
+                <Label htmlFor="name">Nome completo *</Label>
                 <Input
                   id="name"
                   value={customerData.name}
-                  onChange={(e) => setCustomerData(prev => ({...prev, name: e.target.value}))}
+                  onChange={(e) => setCustomerData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Seu nome completo"
                   required
                 />
               </div>
+
               <div>
                 <Label htmlFor="phone">Telefone *</Label>
                 <Input
                   id="phone"
+                  type="tel"
                   value={customerData.phone}
-                  onChange={(e) => setCustomerData(prev => ({...prev, phone: e.target.value}))}
+                  onChange={(e) => setCustomerData(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="(11) 99999-9999"
                   required
                 />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={customerData.email}
-                onChange={(e) => setCustomerData(prev => ({...prev, email: e.target.value}))}
-                placeholder="seu@email.com"
-              />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Endereço de Entrega</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="address">Endereço Completo *</Label>
-              <Textarea
-                id="address"
-                value={customerData.address}
-                onChange={(e) => setCustomerData(prev => ({...prev, address: e.target.value}))}
-                placeholder="Rua, número, complemento, bairro"
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="deliveryZone">Bairro *</Label>
-              <Select 
-                value={customerData.deliveryZoneId} 
-                onValueChange={(value) => setCustomerData(prev => ({...prev, deliveryZoneId: value}))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o bairro" />
-                </SelectTrigger>
-                <SelectContent>
-                  {deliveryZones.map((zone) => (
-                    <SelectItem key={zone.id} value={zone.id}>
-                      <div className="flex flex-col">
-                        <div className="flex justify-between items-center w-full">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin size={20} />
+                Endereço de Entrega
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="address">Endereço completo *</Label>
+                <Input
+                  id="address"
+                  value={customerData.address}
+                  onChange={(e) => setCustomerData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Rua, número, bairro, complemento"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="deliveryZone">Zona de Entrega *</Label>
+                <Select
+                  value={customerData.deliveryZoneId}
+                  onValueChange={(value) => setCustomerData(prev => ({ ...prev, deliveryZoneId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione sua zona de entrega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryZones.map(zone => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        <div className="flex flex-col">
                           <span>{zone.name}</span>
-                          <span className="ml-2 text-green-600 font-medium">
-                            {formatCurrency(zone.delivery_fee)}
+                          <span className="text-xs text-gray-500">
+                            Taxa: {formatCurrency(zone.delivery_fee)} • 
+                            Mín: {formatCurrency(zone.minimum_order)}
                           </span>
                         </div>
-                        {zone.minimum_order > 0 && (
-                          <div className="text-xs text-gray-500">
-                            Mínimo: {formatCurrency(zone.minimum_order)}
-                          </div>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Forma de Pagamento</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup
-              value={customerData.paymentMethod}
-              onValueChange={(value) => setCustomerData(prev => ({...prev, paymentMethod: value}))}
-              className="space-y-3"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="pix" id="pix" />
-                <Label htmlFor="pix">PIX</Label>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="cartao" id="cartao" />
-                <Label htmlFor="cartao">Cartão (na entrega)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="dinheiro" id="dinheiro" />
-                <Label htmlFor="dinheiro">Dinheiro (na entrega)</Label>
-              </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Observações</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={customerData.notes}
-              onChange={(e) => setCustomerData(prev => ({...prev, notes: e.target.value}))}
-              placeholder="Alguma observação especial? (opcional)"
-            />
-          </CardContent>
-        </Card>
+              <div>
+                <Label htmlFor="instructions">Instruções de entrega</Label>
+                <Textarea
+                  id="instructions"
+                  value={customerData.deliveryInstructions}
+                  onChange={(e) => setCustomerData(prev => ({ ...prev, deliveryInstructions: e.target.value }))}
+                  placeholder="Ponto de referência, observações..."
+                  rows={3}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-        <Button 
-          type="submit" 
-          className="w-full" 
-          size="lg"
-          disabled={loading}
-        >
-          <CreditCard size={16} className="mr-2" />
-          {loading ? 'Processando...' : `Finalizar Pedido - ${formatCurrency(getFinalTotal())}`}
-        </Button>
-      </form>
+          <Button 
+            type="submit" 
+            className="w-full" 
+            size="lg"
+            disabled={loading}
+          >
+            {loading ? 'Processando...' : `Confirmar Pedido - ${formatCurrency(getFinalTotal())}`}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 };
