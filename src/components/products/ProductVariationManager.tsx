@@ -53,7 +53,18 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
         .order('name');
 
       if (error) throw error;
-      setVariations(data || []);
+      
+      // Transform the data to match our interface
+      const transformedData = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        required: item.required,
+        max_selections: item.max_selections,
+        options: Array.isArray(item.options) ? item.options : [],
+        product_id: item.product_id
+      }));
+      
+      setVariations(transformedData);
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       toast({
@@ -76,7 +87,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
             name: variationData.name,
             required: variationData.required,
             max_selections: variationData.max_selections,
-            options: variationData.options,
+            options: JSON.stringify(variationData.options),
             price: 0,
             updated_at: new Date().toISOString()
           })
@@ -87,15 +98,15 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
         // Criar nova variação
         const { error } = await supabase
           .from('product_variations')
-          .insert([{
+          .insert({
             product_id: productId,
             user_id: user?.id,
             name: variationData.name,
             required: variationData.required,
             max_selections: variationData.max_selections,
-            options: variationData.options,
+            options: JSON.stringify(variationData.options),
             price: 0
-          }]);
+          });
 
         if (error) throw error;
       }

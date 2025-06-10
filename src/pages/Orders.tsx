@@ -52,7 +52,14 @@ const Orders = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Transform the data to match our interface with proper status typing
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        status: item.status as OrderStatusType
+      }));
+      
+      setOrders(transformedData);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({

@@ -62,7 +62,7 @@ interface ProductVariation {
   name: string;
   required: boolean;
   max_selections: number;
-  options: any[];
+  options: Array<{name: string; price: number}>;
 }
 
 const PDVForm = () => {
@@ -157,7 +157,17 @@ const PDVForm = () => {
         .order('name');
 
       if (error) throw error;
-      return data || [];
+      
+      // Transform the data to match our interface
+      const transformedData = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        required: item.required,
+        max_selections: item.max_selections,
+        options: Array.isArray(item.options) ? item.options : []
+      }));
+      
+      return transformedData;
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       return [];
@@ -366,7 +376,7 @@ const PDVForm = () => {
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    product.available_pdv !== false
+    product.available !== false
   );
 
   return (
