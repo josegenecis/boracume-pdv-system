@@ -7,13 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Minus, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Minus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useSearchParams } from 'react-router-dom';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from './ProductSelectionModal';
 
@@ -26,6 +25,7 @@ interface Product {
   category: string;
   description?: string;
   weight_based?: boolean;
+  send_to_kds?: boolean;
 }
 
 interface CartItem extends Product {
@@ -87,7 +87,6 @@ const PDVForm = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
   const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
@@ -103,6 +102,7 @@ const PDVForm = () => {
         .select('*')
         .eq('user_id', user?.id)
         .eq('available', true)
+        .eq('available_pdv', true)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -139,6 +139,7 @@ const PDVForm = () => {
         .from('tables')
         .select('*')
         .eq('user_id', user?.id)
+        .eq('status', 'available')
         .order('table_number');
 
       if (error) throw error;
@@ -226,26 +227,18 @@ const PDVForm = () => {
     });
   };
 
-  const removeFromCart = (productId: string) => {
-    setCartItems(prev => prev.filter(item => item.id !== productId));
+  const removeFromCart = (index: number) => {
+    setCartItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
+  const updateQuantity = (index: number, newQuantity: number) => {
     if (newQuantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(index);
       return;
     }
     setCartItems(prev =>
-      prev.map(item =>
-        item.id === productId ? { ...item, quantity: newQuantity } : item
-      )
-    );
-  };
-
-  const updateCartItem = (productId: string, updates: Partial<CartItem>) => {
-    setCartItems(prev =>
-      prev.map(item =>
-        item.id === productId ? { ...item, ...updates } : item
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: newQuantity } : item
       )
     );
   };
@@ -291,6 +284,12 @@ const PDVForm = () => {
     });
   };
 
+  const calculateChange = (amountPaid: number) => {
+    const total = getFinalTotal();
+    const change = amountPaid - total;
+    setChangeAmount(change > 0 ? change : null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -315,6 +314,16 @@ const PDVForm = () => {
       }
     }
 
+    // Validação da mesa para pedidos no local
+    if (orderType === 'dine_in' && !customerData.tableId) {
+      toast({
+        title: "Mesa obrigatória",
+        description: "Selecione uma mesa para o pedido.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -333,7 +342,7 @@ const PDVForm = () => {
       const orderData = {
         user_id: user?.id,
         order_number: orderNumber,
-        customer_name: orderType === 'dine_in' ? 'Cliente Local' : customerData.name,
+        customer_name: orderType === 'dine_in' ? (customerData.name || 'Cliente Local') : customerData.name,
         customer_phone: orderType === 'dine_in' ? null : customerData.phone,
         customer_address: orderType === 'dine_in' ? null : customerData.address,
         delivery_zone_id: orderType === 'delivery' ? customerData.deliveryZoneId : null,
@@ -357,19 +366,36 @@ const PDVForm = () => {
 
       if (error) throw error;
 
-      // Enviar para a cozinha
-      await sendToKitchen({
-        ...orderData,
-        order_number: orderNumber,
-        items: orderItems
+      // Atualizar status da mesa se for pedido no local
+      if (orderType === 'dine_in' && customerData.tableId) {
+        await supabase
+          .from('tables')
+          .update({ status: 'occupied' })
+          .eq('id', customerData.tableId);
+      }
+
+      // Enviar para a cozinha apenas produtos que devem ir para o KDS
+      const itemsForKitchen = orderItems.filter(item => {
+        const product = products.find(p => p.id === item.product_id);
+        return product?.send_to_kds;
       });
+
+      if (itemsForKitchen.length > 0) {
+        await sendToKitchen({
+          ...orderData,
+          order_number: orderNumber,
+          items: itemsForKitchen
+        });
+      }
 
       toast({
         title: "Pedido criado com sucesso!",
-        description: `Pedido #${orderNumber} foi registrado e enviado para a cozinha.`,
+        description: `Pedido #${orderNumber} foi registrado${itemsForKitchen.length > 0 ? ' e enviado para a cozinha' : ''}.`,
       });
 
       resetForm();
+      // Recarregar mesas para atualizar status
+      fetchTables();
     } catch (error: any) {
       console.error('Erro ao criar pedido:', error);
       toast({
@@ -380,12 +406,6 @@ const PDVForm = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateChange = (amountPaid: number) => {
-    const total = getFinalTotal();
-    const change = amountPaid - total;
-    setChangeAmount(change > 0 ? change : null);
   };
 
   const filteredProducts = products.filter(product =>
@@ -454,13 +474,13 @@ const PDVForm = () => {
             ) : (
               <div className="space-y-3">
                 {cartItems.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className="space-y-2">
+                  <div key={index} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(index, item.quantity - 1)}
                         >
                           <Minus size={16} />
                         </Button>
@@ -468,7 +488,7 @@ const PDVForm = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(index, item.quantity + 1)}
                         >
                           <Plus size={16} />
                         </Button>
@@ -479,7 +499,7 @@ const PDVForm = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(index)}
                           className="ml-2"
                         >
                           <Trash2 size={16} />
@@ -551,66 +571,71 @@ const PDVForm = () => {
             </CardContent>
           </Card>
 
-          {/* Customer Data - Only required for delivery */}
-          {orderType !== 'dine_in' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Dados do Cliente</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Nome</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    value={customerData.name}
-                    onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
-                    required={orderType === 'delivery'}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={customerData.phone}
-                    onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
-                    required={orderType === 'delivery'}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="address">Endereço</Label>
-                  <Input
-                    id="address"
-                    type="text"
-                    value={customerData.address}
-                    onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
-                    required={orderType === 'delivery'}
-                  />
-                </div>
-                {orderType === 'delivery' && (
+          {/* Customer Data */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Dados do Cliente</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="name">Nome</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={customerData.name}
+                  onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
+                  required={orderType === 'delivery'}
+                  placeholder={orderType === 'dine_in' ? 'Nome (opcional)' : 'Nome do cliente *'}
+                />
+              </div>
+              {orderType !== 'dine_in' && (
+                <>
                   <div>
-                    <Label htmlFor="deliveryZone">Zona de Entrega</Label>
-                    <Select
-                      value={customerData.deliveryZoneId}
-                      onValueChange={(value) => setCustomerData({ ...customerData, deliveryZoneId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a zona" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {deliveryZones.map(zone => (
-                          <SelectItem key={zone.id} value={zone.id}>
-                            {zone.name} ({formatCurrency(zone.delivery_fee)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="phone">Telefone</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={customerData.phone}
+                      onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
+                      required={orderType === 'delivery'}
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  {orderType === 'delivery' && (
+                    <>
+                      <div>
+                        <Label htmlFor="address">Endereço</Label>
+                        <Input
+                          id="address"
+                          type="text"
+                          value={customerData.address}
+                          onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="deliveryZone">Zona de Entrega</Label>
+                        <Select
+                          value={customerData.deliveryZoneId}
+                          onValueChange={(value) => setCustomerData({ ...customerData, deliveryZoneId: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a zona" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {deliveryZones.map(zone => (
+                              <SelectItem key={zone.id} value={zone.id}>
+                                {zone.name} ({formatCurrency(zone.delivery_fee)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Table Selection - Only for Dine-In */}
           {orderType === 'dine_in' && (
@@ -622,9 +647,10 @@ const PDVForm = () => {
                 <Select
                   value={customerData.tableId}
                   onValueChange={(value) => setCustomerData({ ...customerData, tableId: value })}
+                  required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione a mesa" />
+                    <SelectValue placeholder="Selecione a mesa *" />
                   </SelectTrigger>
                   <SelectContent>
                     {tables.map(table => (

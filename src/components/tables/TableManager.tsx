@@ -6,10 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, MousePointer, ShoppingCart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import TableDetailsModal from './TableDetailsModal';
+import AddProductToTableModal from './AddProductToTableModal';
 
 interface Table {
   id: string;
@@ -25,6 +27,10 @@ const TableManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTable, setEditingTable] = useState<Table | null>(null);
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [showTableDetails, setShowTableDetails] = useState(false);
+  const [showAddProducts, setShowAddProducts] = useState(false);
+  const [tableForProducts, setTableForProducts] = useState<Table | null>(null);
   const [formData, setFormData] = useState({
     table_number: '',
     capacity: 4,
@@ -139,6 +145,17 @@ const TableManager: React.FC = () => {
     }
   };
 
+  const handleTableClick = (table: Table) => {
+    setSelectedTable(table);
+    setShowTableDetails(true);
+  };
+
+  const handleAddProductsClick = (table: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTableForProducts(table);
+    setShowAddProducts(true);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
@@ -232,9 +249,24 @@ const TableManager: React.FC = () => {
         </Dialog>
       </div>
 
+      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-center gap-2 mb-2">
+          <MousePointer size={16} className="text-blue-600" />
+          <span className="font-medium text-blue-800">Como usar as mesas:</span>
+        </div>
+        <p className="text-sm text-blue-700">
+          <strong>Clique na mesa</strong> para ver detalhes, transferir ou finalizar. 
+          <strong>Botão carrinho</strong> para adicionar produtos à mesa.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {tables.map((table) => (
-          <Card key={table.id} className="hover:shadow-md transition-shadow">
+          <Card 
+            key={table.id} 
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => handleTableClick(table)}
+          >
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-lg">Mesa {table.table_number}</CardTitle>
@@ -254,12 +286,27 @@ const TableManager: React.FC = () => {
                     📍 {table.location}
                   </div>
                 )}
+                {table.status === 'occupied' && (
+                  <div className="text-xs text-blue-600 font-medium mt-2">
+                    👆 Clique para ver detalhes
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
+                  onClick={(e) => handleAddProductsClick(table, e)}
+                  className="flex-1"
+                  title="Adicionar produtos"
+                >
+                  <ShoppingCart size={14} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setEditingTable(table);
                     setFormData({
                       table_number: table.table_number.toString(),
@@ -268,14 +315,16 @@ const TableManager: React.FC = () => {
                     });
                     setShowForm(true);
                   }}
-                  className="flex-1"
                 >
                   <Edit size={14} />
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDelete(table.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(table.id);
+                  }}
                 >
                   <Trash2 size={14} />
                 </Button>
@@ -299,6 +348,29 @@ const TableManager: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Detalhes da Mesa */}
+      <TableDetailsModal
+        table={selectedTable}
+        isOpen={showTableDetails}
+        onClose={() => {
+          setShowTableDetails(false);
+          setSelectedTable(null);
+        }}
+        onRefresh={fetchTables}
+        availableTables={tables}
+      />
+
+      {/* Modal de Adicionar Produtos */}
+      <AddProductToTableModal
+        table={tableForProducts}
+        isOpen={showAddProducts}
+        onClose={() => {
+          setShowAddProducts(false);
+          setTableForProducts(null);
+        }}
+        onSuccess={fetchTables}
+      />
     </div>
   );
 };
