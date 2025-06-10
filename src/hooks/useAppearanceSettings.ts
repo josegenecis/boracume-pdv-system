@@ -24,46 +24,68 @@ export const useAppearanceSettings = () => {
     compact_mode: false,
     show_animations: true,
     high_contrast: false,
-    reduced_motion: false
+    reduced_motion: false,
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
-      loadSettings();
+      fetchSettings();
     }
   }, [user]);
 
-  const loadSettings = async () => {
+  const fetchSettings = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('appearance_settings')
         .select('*')
         .eq('user_id', user?.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
 
       if (data) {
-        setSettings(data);
-        applySettings(data);
+        setSettings({
+          theme: data.theme || 'light',
+          primary_color: data.primary_color || 'orange',
+          font_size: data.font_size || 'medium',
+          compact_mode: data.compact_mode || false,
+          show_animations: data.show_animations || true,
+          high_contrast: data.high_contrast || false,
+          reduced_motion: data.reduced_motion || false,
+        });
+        
+        // Aplicar configurações ao documento
+        applySettings({
+          theme: data.theme || 'light',
+          primary_color: data.primary_color || 'orange',
+          font_size: data.font_size || 'medium',
+          compact_mode: data.compact_mode || false,
+          show_animations: data.show_animations || true,
+          high_contrast: data.high_contrast || false,
+          reduced_motion: data.reduced_motion || false,
+        });
       }
     } catch (error) {
-      console.error('Erro ao carregar configurações:', error);
+      console.error('Erro ao carregar configurações de aparência:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveSettings = async (newSettings: Partial<AppearanceSettings>) => {
-    if (!user) return;
-
-    setLoading(true);
+  const updateSettings = async (newSettings: Partial<AppearanceSettings>) => {
     try {
       const updatedSettings = { ...settings, ...newSettings };
       
       const { error } = await supabase
         .from('appearance_settings')
-        .upsert([{ user_id: user.id, ...updatedSettings }], { 
-          onConflict: 'user_id' 
+        .upsert({
+          user_id: user?.id,
+          ...updatedSettings,
+          updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
@@ -73,7 +95,7 @@ export const useAppearanceSettings = () => {
 
       toast({
         title: "Configurações salvas",
-        description: "As configurações de aparência foram salvas com sucesso.",
+        description: "As configurações de aparência foram atualizadas.",
       });
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
@@ -82,52 +104,64 @@ export const useAppearanceSettings = () => {
         description: "Erro ao salvar configurações de aparência.",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
   };
 
-  const applySettings = (settingsToApply: AppearanceSettings) => {
-    const root = document.documentElement;
-    
+  const applySettings = (settings: AppearanceSettings) => {
     // Aplicar tema
-    document.documentElement.classList.toggle('dark', settingsToApply.theme === 'dark');
-    
+    if (settings.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
     // Aplicar cor primária
-    const colorMap: Record<string, string> = {
-      orange: '24.6 95% 53.1%',
-      blue: '221.2 83.2% 53.3%',
-      green: '142.1 76.2% 36.3%',
-      red: '346.8 77.2% 49.8%',
-      purple: '262.1 83.3% 57.8%'
-    };
-    
-    if (colorMap[settingsToApply.primary_color]) {
-      root.style.setProperty('--primary', colorMap[settingsToApply.primary_color]);
+    const root = document.documentElement;
+    switch (settings.primary_color) {
+      case 'blue':
+        root.style.setProperty('--primary', '221 83% 53%');
+        break;
+      case 'green':
+        root.style.setProperty('--primary', '142 76% 36%');
+        break;
+      case 'red':
+        root.style.setProperty('--primary', '0 84% 60%');
+        break;
+      case 'purple':
+        root.style.setProperty('--primary', '262 83% 58%');
+        break;
+      case 'orange':
+      default:
+        root.style.setProperty('--primary', '25 95% 53%');
+        break;
     }
 
     // Aplicar tamanho da fonte
-    const fontSizeMap: Record<string, string> = {
-      small: '14px',
-      medium: '16px',
-      large: '18px'
-    };
-    
-    if (fontSizeMap[settingsToApply.font_size]) {
-      root.style.setProperty('--base-font-size', fontSizeMap[settingsToApply.font_size]);
+    switch (settings.font_size) {
+      case 'small':
+        root.style.setProperty('--font-size', '14px');
+        break;
+      case 'large':
+        root.style.setProperty('--font-size', '18px');
+        break;
+      case 'medium':
+      default:
+        root.style.setProperty('--font-size', '16px');
+        break;
     }
 
     // Aplicar outras configurações
-    root.classList.toggle('compact-mode', settingsToApply.compact_mode);
-    root.classList.toggle('no-animations', !settingsToApply.show_animations);
-    root.classList.toggle('high-contrast', settingsToApply.high_contrast);
-    root.classList.toggle('reduced-motion', settingsToApply.reduced_motion);
+    if (settings.reduced_motion) {
+      root.style.setProperty('--animation-duration', '0s');
+    } else {
+      root.style.removeProperty('--animation-duration');
+    }
   };
 
   return {
     settings,
     loading,
-    saveSettings,
-    loadSettings
+    updateSettings,
+    applySettings
   };
 };

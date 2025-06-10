@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Clock, Phone, MapPin, DollarSign } from 'lucide-react';
+import { Clock, Phone, MapPin } from 'lucide-react';
 import OrderStatusBadge, { OrderStatusType } from './OrderStatusBadge';
+import PaymentIcon from '../payment/PaymentIcons';
 
 interface OrderItem {
   id: string;
@@ -14,6 +15,10 @@ interface OrderItem {
   price: number;
   options?: string[];
   notes?: string;
+  variations?: Array<{
+    name: string;
+    options: string[];
+  }>;
 }
 
 interface Order {
@@ -97,6 +102,27 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
     }
   };
 
+  const getCardBorderColor = (status: OrderStatusType): string => {
+    switch (status) {
+      case 'new':
+        return 'border-l-4 border-l-red-500';
+      case 'confirmed':
+        return 'border-l-4 border-l-blue-500';
+      case 'preparing':
+        return 'border-l-4 border-l-yellow-500';
+      case 'ready':
+        return 'border-l-4 border-l-green-500';
+      case 'in_delivery':
+        return 'border-l-4 border-l-purple-500';
+      case 'delivered':
+        return 'border-l-4 border-l-emerald-500';
+      case 'cancelled':
+        return 'border-l-4 border-l-red-600';
+      default:
+        return 'border-l-4 border-l-gray-400';
+    }
+  };
+
   const handleStatusUpdate = () => {
     const nextStatus = getNextStatus(order.status);
     if (nextStatus) {
@@ -108,7 +134,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
   const canAdvance = getNextStatus(order.status) !== null;
 
   return (
-    <Card className={`w-full max-w-sm ${order.status === 'new' ? 'border-red-500 border-2 shadow-lg' : ''}`}>
+    <Card className={`w-full max-w-sm ${getCardBorderColor(order.status)} ${order.status === 'new' ? 'shadow-lg' : ''}`}>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
@@ -156,11 +182,27 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
         
         <Separator className="my-2" />
         
-        <div className="space-y-1 max-h-20 overflow-y-auto">
+        <div className="space-y-1 max-h-24 overflow-y-auto">
           {order.items.slice(0, 3).map((item, index) => (
-            <div key={index} className="text-xs flex justify-between">
-              <span className="truncate">{item.quantity}x {item.name}</span>
-              <span className="text-muted-foreground">{formatCurrency(item.price * item.quantity)}</span>
+            <div key={index} className="text-xs">
+              <div className="flex justify-between">
+                <span className="truncate">{item.quantity}x {item.name}</span>
+                <span className="text-muted-foreground">{formatCurrency(item.price * item.quantity)}</span>
+              </div>
+              {item.variations && item.variations.length > 0 && (
+                <div className="ml-2 text-xs text-gray-500">
+                  {item.variations.map((variation, vIndex) => (
+                    <div key={vIndex}>
+                      • {variation.name}: {variation.options.join(', ')}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {item.options && item.options.length > 0 && (
+                <div className="ml-2 text-xs text-gray-500">
+                  • {item.options.join(', ')}
+                </div>
+              )}
             </div>
           ))}
           {order.items.length > 3 && (
@@ -173,7 +215,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
       
       <CardContent className="pt-0 pb-2">
         <div className="flex items-center gap-1 text-xs">
-          <DollarSign size={10} />
+          <PaymentIcon method={order.payment_method} size={12} />
           <span className="capitalize">{order.payment_method}</span>
           {order.estimated_time && (
             <>

@@ -409,6 +409,7 @@ export type Database = {
           total: number
           updated_at: string
           user_id: string
+          variations: Json | null
         }
         Insert: {
           change_amount?: number | null
@@ -431,6 +432,7 @@ export type Database = {
           total: number
           updated_at?: string
           user_id: string
+          variations?: Json | null
         }
         Update: {
           change_amount?: number | null
@@ -453,6 +455,7 @@ export type Database = {
           total?: number
           updated_at?: string
           user_id?: string
+          variations?: Json | null
         }
         Relationships: [
           {
@@ -503,6 +506,42 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      product_variation_links: {
+        Row: {
+          created_at: string | null
+          id: string
+          product_id: string | null
+          variation_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          product_id?: string | null
+          variation_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          product_id?: string | null
+          variation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variation_links_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variation_links_variation_id_fkey"
+            columns: ["variation_id"]
+            isOneToOne: false
+            referencedRelation: "product_variations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_variations: {
         Row: {
@@ -565,6 +604,8 @@ export type Database = {
           name: string
           price: number
           send_to_kds: boolean | null
+          show_in_delivery: boolean | null
+          show_in_pdv: boolean | null
           updated_at: string
           user_id: string
           weight_based: boolean | null
@@ -582,6 +623,8 @@ export type Database = {
           name: string
           price: number
           send_to_kds?: boolean | null
+          show_in_delivery?: boolean | null
+          show_in_pdv?: boolean | null
           updated_at?: string
           user_id: string
           weight_based?: boolean | null
@@ -599,6 +642,8 @@ export type Database = {
           name?: string
           price?: number
           send_to_kds?: boolean | null
+          show_in_delivery?: boolean | null
+          show_in_pdv?: boolean | null
           updated_at?: string
           user_id?: string
           weight_based?: boolean | null

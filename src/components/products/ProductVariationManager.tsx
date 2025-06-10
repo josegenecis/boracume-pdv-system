@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, Copy } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,7 +54,6 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
 
       if (error) throw error;
       
-      // Transform the data to match our interface
       const transformedData = (data || []).map(item => {
         let parsedOptions = [];
         try {
@@ -94,40 +93,43 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
   const handleSaveVariation = async (variationData: ProductVariation) => {
     try {
       if (editingVariation?.id) {
-        // Atualizar variação existente
+        const updateData = {
+          name: variationData.name,
+          required: variationData.required,
+          max_selections: variationData.max_selections,
+          options: JSON.stringify(variationData.options),
+          price: 0,
+          updated_at: new Date().toISOString()
+        };
+
         const { error } = await supabase
           .from('product_variations')
-          .update({
-            name: variationData.name,
-            required: variationData.required,
-            max_selections: variationData.max_selections,
-            options: JSON.stringify(variationData.options),
-            price: 0,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', editingVariation.id);
 
         if (error) throw error;
       } else {
-        // Criar nova variação
+        const insertData = {
+          product_id: productId,
+          user_id: user?.id,
+          name: variationData.name,
+          required: variationData.required,
+          max_selections: variationData.max_selections,
+          options: JSON.stringify(variationData.options),
+          price: 0
+        };
+
         const { error } = await supabase
           .from('product_variations')
-          .insert({
-            product_id: productId,
-            user_id: user?.id,
-            name: variationData.name,
-            required: variationData.required,
-            max_selections: variationData.max_selections,
-            options: JSON.stringify(variationData.options),
-            price: 0
-          });
+          .insert(insertData);
 
         if (error) throw error;
       }
 
+      const successMessage = `Variação ${editingVariation ? 'atualizada' : 'criada'} com sucesso.`;
       toast({
         title: "Sucesso",
-        description: `Variação ${editingVariation ? 'atualizada' : 'criada'} com sucesso.`,
+        description: successMessage,
       });
 
       setShowForm(false);
