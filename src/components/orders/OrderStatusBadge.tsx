@@ -2,62 +2,37 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 
-export type OrderStatusType = 'new' | 'confirmed' | 'preparing' | 'ready' | 'in_delivery' | 'delivered' | 'cancelled';
-
 interface OrderStatusBadgeProps {
-  status: OrderStatusType;
+  status: string;
+  className?: string;
 }
 
-const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status }) => {
-  const getStatusConfig = (status: OrderStatusType) => {
+const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, className = "" }) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'new':
-        return {
-          label: 'Novo',
-          className: 'bg-red-500 hover:bg-red-600 text-white animate-pulse',
-        };
+      case 'pending':
+        return { label: 'Pendente', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' };
       case 'confirmed':
-        return {
-          label: 'Confirmado',
-          className: 'bg-blue-500 hover:bg-blue-600 text-white',
-        };
+        return { label: 'Confirmado', color: 'bg-blue-100 text-blue-800 border-blue-300' };
       case 'preparing':
-        return {
-          label: 'Preparando',
-          className: 'bg-amber-500 hover:bg-amber-600 text-white',
-        };
+        return { label: 'Em Produção', color: 'bg-green-100 text-green-800 border-green-300' };
       case 'ready':
-        return {
-          label: 'Pronto',
-          className: 'bg-purple-500 hover:bg-purple-600 text-white',
-        };
-      case 'in_delivery':
-        return {
-          label: 'Em Entrega',
-          className: 'bg-indigo-500 hover:bg-indigo-600 text-white',
-        };
+        return { label: 'Pronto', color: 'bg-amber-100 text-amber-800 border-amber-300' };
+      case 'delivering':
+        return { label: 'Saiu para Entrega', color: 'bg-purple-100 text-purple-800 border-purple-300' };
       case 'delivered':
-        return {
-          label: 'Entregue',
-          className: 'bg-green-500 hover:bg-green-600 text-white',
-        };
+        return { label: 'Entregue', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
       case 'cancelled':
-        return {
-          label: 'Cancelado',
-          className: 'bg-gray-500 hover:bg-gray-600 text-white',
-        };
+        return { label: 'Cancelado', color: 'bg-red-100 text-red-800 border-red-300' };
       default:
-        return {
-          label: 'Desconhecido',
-          className: 'bg-gray-400 hover:bg-gray-500 text-white',
-        };
+        return { label: status, color: 'bg-gray-100 text-gray-800 border-gray-300' };
     }
   };
 
   const config = getStatusConfig(status);
 
   return (
-    <Badge className={config.className}>
+    <Badge className={`${config.color} ${className}`} variant="outline">
       {config.label}
     </Badge>
   );

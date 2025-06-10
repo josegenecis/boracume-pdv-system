@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +9,13 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
 
 const Subscription = () => {
-  const { subscription, refreshSubscription } = useAuth();
-  const { plans, handleSubscribe, isLoading } = useSubscription();
+  const { subscription, refreshSubscription, user } = useAuth();
+  const { plans, isLoading } = useSubscription();
   const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     refreshSubscription();
@@ -30,28 +32,37 @@ const Subscription = () => {
     return Math.max(0, differenceInDays(endDate, new Date()));
   };
 
-  const handlePlanSelection = async (planId: number) => {
-    try {
-      await handleSubscribe(planId);
+  const handleSubscribeStripe = async (planId: number) => {
+    if (!user) {
       toast({
-        title: "Plano selecionado com sucesso!",
-        description: "Seu plano foi atualizado.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro ao selecionar plano",
-        description: error.message,
+        title: "Erro",
+        description: "Você precisa estar logado para assinar um plano.",
         variant: "destructive",
       });
+      return;
     }
-  };
 
-  const handleUpgrade = () => {
-    // Simular redirecionamento para checkout
-    toast({
-      title: "Redirecionando para checkout",
-      description: "Você será direcionado para finalizar a assinatura.",
-    });
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-stripe-subscription', {
+        body: { planId }
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar assinatura:', error);
+      toast({
+        title: "Erro ao processar pagamento",
+        description: "Não foi possível processar o pagamento. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderTrialInfo = () => {
@@ -91,7 +102,11 @@ const Subscription = () => {
         </CardContent>
         {days <= 3 && (
           <CardFooter>
-            <Button onClick={handleUpgrade} className="w-full bg-amber-600 hover:bg-amber-700">
+            <Button 
+              onClick={() => handleSubscribeStripe(2)} 
+              className="w-full bg-amber-600 hover:bg-amber-700"
+              disabled={loading}
+            >
               <Crown size={16} className="mr-2" />
               Fazer Upgrade Agora
             </Button>
@@ -159,10 +174,11 @@ const Subscription = () => {
           'Relatórios básicos',
           'Suporte por email'
         ];
-      case 'Elite':
+      case 'Pro':
         return [
           'Tudo do plano Basic',
           'Gestão de entregadores',
+          'Sistema KDS (Cozinha)',
           'Relatórios avançados',
           'Sistema financeiro completo',
           'Marketing e promoções',
@@ -178,7 +194,7 @@ const Subscription = () => {
   };
 
   const getPlanIcon = (planName: string) => {
-    return planName === 'Elite' ? <Crown size={20} /> : <Zap size={20} />;
+    return planName === 'Pro' ? <Crown size={20} /> : <Zap size={20} />;
   };
 
   return (
@@ -190,7 +206,7 @@ const Subscription = () => {
         </div>
         
         {/* Trial Info */}
-        {subscription?.status === 'trial' && renderTrialInfo()}
+        {subscription?.status === 'trialing' && renderTrialInfo()}
         
         {/* Current Plan */}
         {subscription?.status === 'active' && renderCurrentPlan()}
@@ -199,38 +215,38 @@ const Subscription = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {plans.map((plan) => {
             const isCurrentPlan = subscription?.plan_id === plan.id;
-            const isElite = plan.name === 'Elite';
+            const isPro = plan.name === 'Pro';
             
             return (
               <Card 
                 key={plan.id} 
-                className={`relative ${isCurrentPlan ? "border-2 border-boracume-green" : ""} ${isElite ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50" : ""}`}
+                className={`relative ${isCurrentPlan ? "border-2 border-boracume-green" : ""} ${isPro ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50" : ""}`}
               >
                 {isCurrentPlan && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-boracume-green text-white px-4 py-1 rounded-full text-xs font-bold">
                     Plano Atual
                   </div>
                 )}
-                {isElite && !isCurrentPlan && (
+                {isPro && !isCurrentPlan && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                     <Crown size={12} />
                     Mais Popular
                   </div>
                 )}
                 
-                <CardHeader className={isElite ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-t-lg" : ""}>
+                <CardHeader className={isPro ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-t-lg" : ""}>
                   <CardTitle className="flex items-center gap-2">
                     {getPlanIcon(plan.name)}
                     {plan.name}
                   </CardTitle>
-                  <CardDescription className={isElite ? "text-amber-100" : ""}>
+                  <CardDescription className={isPro ? "text-amber-100" : ""}>
                     {plan.description}
                   </CardDescription>
                   <div className="mt-4">
-                    <span className={`text-4xl font-bold ${isElite ? "text-white" : "text-boracume-orange"}`}>
+                    <span className={`text-4xl font-bold ${isPro ? "text-white" : "text-boracume-orange"}`}>
                       R$ {plan.price.toFixed(2)}
                     </span>
-                    <span className={`text-sm ${isElite ? "text-amber-100" : "text-muted-foreground"}`}>
+                    <span className={`text-sm ${isPro ? "text-amber-100" : "text-muted-foreground"}`}>
                       /mês
                     </span>
                   </div>
@@ -250,17 +266,17 @@ const Subscription = () => {
                 
                 <CardFooter>
                   <Button
-                    className={`w-full ${isElite ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600" : ""}`}
-                    onClick={() => handlePlanSelection(plan.id)}
-                    disabled={isLoading || isCurrentPlan}
-                    variant={isElite && !isCurrentPlan ? "default" : isCurrentPlan ? "outline" : "outline"}
+                    className={`w-full ${isPro ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600" : ""}`}
+                    onClick={() => handleSubscribeStripe(plan.id)}
+                    disabled={loading || isCurrentPlan}
+                    variant={isPro && !isCurrentPlan ? "default" : isCurrentPlan ? "outline" : "outline"}
                   >
                     {isCurrentPlan ? (
                       "Plano Atual"
                     ) : (
                       <>
-                        {isElite && <Crown size={16} className="mr-2" />}
-                        Escolher {plan.name}
+                        {isPro && <Crown size={16} className="mr-2" />}
+                        {loading ? "Processando..." : `Escolher ${plan.name}`}
                       </>
                     )}
                   </Button>
@@ -271,7 +287,7 @@ const Subscription = () => {
         </div>
 
         {/* Upgrade CTA */}
-        {subscription?.status === 'trial' && (
+        {subscription?.status === 'trialing' && (
           <Card className="bg-gradient-to-r from-boracume-orange to-amber-500 text-white">
             <CardContent className="pt-6">
               <div className="text-center">
@@ -279,9 +295,14 @@ const Subscription = () => {
                 <p className="mb-4 text-orange-100">
                   Mantenha todas as funcionalidades ativas escolhendo um plano hoje mesmo.
                 </p>
-                <Button onClick={handleUpgrade} variant="secondary" size="lg">
+                <Button 
+                  onClick={() => handleSubscribeStripe(2)} 
+                  variant="secondary" 
+                  size="lg"
+                  disabled={loading}
+                >
                   <Crown size={16} className="mr-2" />
-                  Fazer Upgrade Agora
+                  {loading ? "Processando..." : "Fazer Upgrade Agora"}
                 </Button>
               </div>
             </CardContent>

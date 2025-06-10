@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Minus, ShoppingCart, MapPin, Clock, Phone } from 'lucide-react';
@@ -10,6 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 import WhatsAppButton from '@/components/chat/WhatsAppButton';
 import DigitalMenuCheckout from '@/components/digital-menu/DigitalMenuCheckout';
+import MobileCartButton from '@/components/digital-menu/MobileCartButton';
+import MobileCartDrawer from '@/components/digital-menu/MobileCartDrawer';
 
 interface Product {
   id: string;
@@ -53,6 +55,7 @@ const MenuDigital = () => {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
 
   const userId = searchParams.get('user');
 
@@ -89,6 +92,7 @@ const MenuDigital = () => {
         .select('*')
         .eq('user_id', userId)
         .eq('available', true)
+        .eq('available_delivery', true)
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
@@ -271,35 +275,35 @@ const MenuDigital = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20 md:pb-0">
       {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
+      <div className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center gap-3">
             {profile?.logo_url && (
               <img 
                 src={profile.logo_url} 
                 alt="Logo" 
-                className="w-16 h-16 object-cover rounded-lg"
+                className="w-12 h-12 object-cover rounded-lg"
               />
             )}
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-xl font-bold text-gray-900">
                 {profile?.restaurant_name || 'Cardápio Digital'}
               </h1>
               {profile?.description && (
-                <p className="text-gray-600 mt-1">{profile.description}</p>
+                <p className="text-gray-600 text-sm mt-1">{profile.description}</p>
               )}
-              <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                 {profile?.opening_hours && (
                   <div className="flex items-center gap-1">
-                    <Clock size={16} />
+                    <Clock size={12} />
                     {profile.opening_hours}
                   </div>
                 )}
                 {profile?.phone && (
                   <div className="flex items-center gap-1">
-                    <Phone size={16} />
+                    <Phone size={12} />
                     {profile.phone}
                   </div>
                 )}
@@ -309,41 +313,42 @@ const MenuDigital = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto px-4 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Menu */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4">
             {Object.entries(groupedProducts).map(([category, categoryProducts]) => (
-              <Card key={category}>
-                <CardHeader>
-                  <CardTitle>{category}</CardTitle>
+              <Card key={category} className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">{category}</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4">
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
                     {categoryProducts.map((product) => (
-                      <div key={product.id} className="flex gap-4 p-4 border rounded-lg hover:shadow-md transition-shadow">
+                      <div key={product.id} className="flex gap-3 p-3 border rounded-lg hover:shadow-sm transition-shadow">
                         {product.image_url && (
                           <img 
                             src={product.image_url} 
                             alt={product.name}
-                            className="w-20 h-20 object-cover rounded-lg"
+                            className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
                           />
                         )}
-                        <div className="flex-1">
-                          <h3 className="font-medium text-lg">{product.name}</h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-base leading-tight">{product.name}</h3>
                           {product.description && (
-                            <p className="text-gray-600 text-sm mt-1">{product.description}</p>
+                            <p className="text-gray-600 text-sm mt-1 line-clamp-2">{product.description}</p>
                           )}
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-xl font-bold text-primary">
+                            <span className="text-lg font-bold text-primary">
                               {formatCurrency(product.price)}
-                              {product.weight_based && <span className="text-sm text-gray-500 ml-1">/kg</span>}
+                              {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </span>
                             <Button 
                               onClick={() => addToCart(product)}
-                              className="flex items-center gap-2"
+                              size="sm"
+                              className="flex items-center gap-1"
                             >
-                              <Plus size={16} />
+                              <Plus size={14} />
                               Adicionar
                             </Button>
                           </div>
@@ -362,46 +367,48 @@ const MenuDigital = () => {
             )}
           </div>
 
-          {/* Carrinho */}
-          <div className="space-y-4">
-            <Card className="sticky top-4">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart size={20} />
+          {/* Carrinho Desktop */}
+          <div className="space-y-4 hidden lg:block">
+            <Card className="sticky top-24">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShoppingCart size={18} />
                   Carrinho ({cart.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {cart.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">
+                  <p className="text-center text-gray-500 py-6">
                     Seu carrinho está vazio
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {cart.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between p-2 border rounded">
+                        <div key={item.id} className="flex items-center justify-between p-2 border rounded text-sm">
                           <div className="flex-1">
-                            <p className="font-medium text-sm">{item.name}</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-medium leading-tight">{item.name}</p>
+                            <p className="text-gray-600 text-xs">
                               {formatCurrency(item.price)} cada
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              className="h-6 w-6 p-0"
                             >
-                              <Minus size={12} />
+                              <Minus size={10} />
                             </Button>
-                            <span className="w-8 text-center">{item.quantity}</span>
+                            <span className="w-6 text-center text-xs">{item.quantity}</span>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              className="h-6 w-6 p-0"
                             >
-                              <Plus size={12} />
+                              <Plus size={10} />
                             </Button>
                           </div>
                         </div>
@@ -410,7 +417,7 @@ const MenuDigital = () => {
                     
                     <Separator />
                     
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total:</span>
                         <span>{formatCurrency(getTotalValue())}</span>
@@ -428,7 +435,6 @@ const MenuDigital = () => {
                         onClick={handleWhatsAppOrder}
                         variant="outline"
                         className="w-full"
-                        size="lg"
                       >
                         Pedir via WhatsApp
                       </Button>
@@ -441,19 +447,19 @@ const MenuDigital = () => {
             {/* Informações de Entrega */}
             {deliveryZones.length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin size={20} />
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <MapPin size={18} />
                     Zonas de Entrega
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     {deliveryZones.map((zone) => (
-                      <div key={zone.id} className="flex justify-between items-center p-2 border rounded">
-                        <span className="text-sm">{zone.name}</span>
+                      <div key={zone.id} className="flex justify-between items-center p-2 border rounded text-sm">
+                        <span>{zone.name}</span>
                         <div className="text-right">
-                          <p className="text-sm font-medium text-green-600">
+                          <p className="font-medium text-green-600">
                             {formatCurrency(zone.delivery_fee)}
                           </p>
                           {zone.minimum_order > 0 && (
@@ -471,6 +477,23 @@ const MenuDigital = () => {
           </div>
         </div>
       </div>
+
+      {/* Mobile Cart Button */}
+      <MobileCartButton 
+        cart={cart} 
+        onOpenCart={() => setShowMobileCart(true)} 
+      />
+
+      {/* Mobile Cart Drawer */}
+      <MobileCartDrawer
+        isOpen={showMobileCart}
+        onClose={() => setShowMobileCart(false)}
+        cart={cart}
+        updateQuantity={updateQuantity}
+        removeFromCart={removeFromCart}
+        onCheckout={handleCheckout}
+        onWhatsAppOrder={handleWhatsAppOrder}
+      />
 
       {/* WhatsApp Button */}
       {profile?.phone && (

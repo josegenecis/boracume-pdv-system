@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
 import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
+import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 
 interface Product {
   id: string;
@@ -22,6 +23,9 @@ interface Product {
   image_url?: string;
   available: boolean;
   weight_based?: boolean;
+  available_delivery?: boolean;
+  available_pdv?: boolean;
+  send_to_kds?: boolean;
 }
 
 interface Category {
@@ -276,13 +280,27 @@ const Products = () => {
                         )}
                       </CardHeader>
                       <CardContent>
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-3">
                           <span className="text-2xl font-bold text-primary">
                             {formatCurrency(product.price)}
                             {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                           </span>
                           <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
                         </div>
+
+                        {/* Status badges */}
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {product.available_delivery && (
+                            <Badge variant="outline" className="text-xs">Delivery</Badge>
+                          )}
+                          {product.available_pdv && (
+                            <Badge variant="outline" className="text-xs">PDV</Badge>
+                          )}
+                          {product.send_to_kds && (
+                            <Badge variant="outline" className="text-xs">KDS</Badge>
+                          )}
+                        </div>
+
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
@@ -293,6 +311,9 @@ const Products = () => {
                             <Edit className="h-4 w-4 mr-1" />
                             Editar
                           </Button>
+                          
+                          <ProductVariationsButton productId={product.id} />
+                          
                           <Button
                             variant="outline"
                             size="sm"

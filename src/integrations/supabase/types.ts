@@ -120,34 +120,40 @@ export type Database = {
       delivery_zones: {
         Row: {
           active: boolean | null
+          coverage_area: Json | null
           created_at: string
           delivery_fee: number
           delivery_time: string | null
           id: string
           minimum_order: number | null
           name: string
+          postal_codes: string[] | null
           updated_at: string
           user_id: string
         }
         Insert: {
           active?: boolean | null
+          coverage_area?: Json | null
           created_at?: string
           delivery_fee?: number
           delivery_time?: string | null
           id?: string
           minimum_order?: number | null
           name: string
+          postal_codes?: string[] | null
           updated_at?: string
           user_id: string
         }
         Update: {
           active?: boolean | null
+          coverage_area?: Json | null
           created_at?: string
           delivery_fee?: number
           delivery_time?: string | null
           id?: string
           minimum_order?: number | null
           name?: string
+          postal_codes?: string[] | null
           updated_at?: string
           user_id?: string
         }
@@ -389,7 +395,9 @@ export type Database = {
           customer_name: string | null
           customer_phone: string | null
           delivery_fee: number | null
+          delivery_instructions: string | null
           delivery_zone_id: string | null
+          estimated_delivery_time: string | null
           estimated_time: string | null
           id: string
           items: Json
@@ -409,7 +417,9 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
+          delivery_instructions?: string | null
           delivery_zone_id?: string | null
+          estimated_delivery_time?: string | null
           estimated_time?: string | null
           id?: string
           items: Json
@@ -429,7 +439,9 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
+          delivery_instructions?: string | null
           delivery_zone_id?: string | null
+          estimated_delivery_time?: string | null
           estimated_time?: string | null
           id?: string
           items?: Json
@@ -542,6 +554,8 @@ export type Database = {
       products: {
         Row: {
           available: boolean | null
+          available_delivery: boolean | null
+          available_pdv: boolean | null
           category: string
           category_id: string | null
           created_at: string
@@ -550,12 +564,15 @@ export type Database = {
           image_url: string | null
           name: string
           price: number
+          send_to_kds: boolean | null
           updated_at: string
           user_id: string
           weight_based: boolean | null
         }
         Insert: {
           available?: boolean | null
+          available_delivery?: boolean | null
+          available_pdv?: boolean | null
           category: string
           category_id?: string | null
           created_at?: string
@@ -564,12 +581,15 @@ export type Database = {
           image_url?: string | null
           name: string
           price: number
+          send_to_kds?: boolean | null
           updated_at?: string
           user_id: string
           weight_based?: boolean | null
         }
         Update: {
           available?: boolean | null
+          available_delivery?: boolean | null
+          available_pdv?: boolean | null
           category?: string
           category_id?: string | null
           created_at?: string
@@ -578,6 +598,7 @@ export type Database = {
           image_url?: string | null
           name?: string
           price?: number
+          send_to_kds?: boolean | null
           updated_at?: string
           user_id?: string
           weight_based?: boolean | null
