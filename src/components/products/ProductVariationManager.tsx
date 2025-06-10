@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface VariationOption {
   name: string;
@@ -32,6 +33,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
   const [variations, setVariations] = useState<Variation[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchVariations();
@@ -45,7 +47,17 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
         .eq('product_id', productId);
 
       if (error) throw error;
-      setVariations(data || []);
+      
+      // Transform database data to match our interface
+      const transformedData = data?.map(item => ({
+        id: item.id,
+        name: item.name,
+        required: item.required,
+        max_selections: item.max_selections,
+        options: Array.isArray(item.options) ? item.options as VariationOption[] : []
+      })) || [];
+      
+      setVariations(transformedData);
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
     }
@@ -107,6 +119,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({ produ
         .filter(v => v.name.trim() && v.options.some(o => o.name.trim()))
         .map(v => ({
           product_id: productId,
+          user_id: user?.id,
           name: v.name,
           required: v.required,
           max_selections: v.max_selections,

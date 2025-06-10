@@ -41,7 +41,10 @@ interface DeliveryZone {
 
 interface Table {
   id: string;
-  name: string;
+  table_number: number;
+  capacity: number;
+  status: string;
+  location?: string;
 }
 
 interface CustomerData {
@@ -123,10 +126,18 @@ const PDVForm = () => {
         .from('tables')
         .select('*')
         .eq('user_id', user?.id)
-        .order('name');
+        .order('table_number');
 
       if (error) throw error;
-      setTables(data || []);
+      // Map database fields to interface
+      const mappedTables = data?.map(table => ({
+        id: table.id,
+        table_number: table.table_number,
+        capacity: table.capacity,
+        status: table.status,
+        location: table.location
+      })) || [];
+      setTables(mappedTables);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
     }
@@ -531,7 +542,7 @@ const PDVForm = () => {
                   <SelectContent>
                     {tables.map(table => (
                       <SelectItem key={table.id} value={table.id}>
-                        {table.name}
+                        Mesa {table.table_number}
                       </SelectItem>
                     ))}
                   </SelectContent>
