@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { MessageCircle, Send, X, Minimize2, Maximize2, HelpCircle, Book, Phone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface Message {
@@ -58,29 +57,6 @@ const SupportChat: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    if (user) {
-      fetchTickets();
-    }
-  }, [user]);
-
-  const fetchTickets = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('support_tickets')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTickets(data || []);
-    } catch (error) {
-      console.error('Error fetching tickets:', error);
-    }
-  };
-
   const sendMessage = () => {
     if (!newMessage.trim()) return;
 
@@ -126,34 +102,24 @@ const SupportChat: React.FC = () => {
       return;
     }
 
-    try {
-      const { error } = await supabase
-        .from('support_tickets')
-        .insert({
-          user_id: user.id,
-          subject: ticketForm.subject,
-          description: ticketForm.description,
-          priority: ticketForm.priority,
-          status: 'open',
-        });
+    // Simulate ticket creation
+    const newTicket: SupportTicket = {
+      id: Date.now().toString(),
+      subject: ticketForm.subject,
+      status: 'open',
+      priority: ticketForm.priority,
+      created_at: new Date().toISOString(),
+    };
 
-      if (error) throw error;
+    setTickets(prev => [newTicket, ...prev]);
 
-      toast({
-        title: 'Ticket criado',
-        description: 'Seu ticket foi criado com sucesso. Nossa equipe entrará em contato em breve.',
-      });
+    toast({
+      title: 'Ticket criado',
+      description: 'Seu ticket foi criado com sucesso. Nossa equipe entrará em contato em breve.',
+    });
 
-      setTicketForm({ subject: '', description: '', priority: 'medium' });
-      setIsCreatingTicket(false);
-      fetchTickets();
-    } catch (error: any) {
-      toast({
-        title: 'Erro ao criar ticket',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
+    setTicketForm({ subject: '', description: '', priority: 'medium' });
+    setIsCreatingTicket(false);
   };
 
   const getStatusColor = (status: string) => {

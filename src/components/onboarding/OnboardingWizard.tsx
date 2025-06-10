@@ -1,9 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
@@ -12,7 +11,7 @@ import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ChefHat, Store, MapPin, CreditCard, CheckCircle } from 'lucide-react';
+import { ChefHat, Store, CheckCircle } from 'lucide-react';
 
 const onboardingSchema = z.object({
   restaurantName: z.string().min(2, 'Nome do restaurante é obrigatório'),
@@ -29,7 +28,6 @@ interface OnboardingWizardProps {
 }
 
 const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
-  const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -68,10 +66,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         .from('profiles')
         .update({
           restaurant_name: values.restaurantName,
-          restaurant_type: values.restaurantType,
           address: values.address,
           phone: values.phone,
-          delivery_enabled: values.deliveryEnabled,
           onboarding_completed: true,
           updated_at: new Date().toISOString()
         })
@@ -79,7 +75,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       if (profileError) throw profileError;
 
-      // Create default categories
+      // Create default categories using product_categories table
       const defaultCategories = [
         { name: 'Pratos Principais', description: 'Pratos principais do cardápio' },
         { name: 'Bebidas', description: 'Bebidas variadas' },
@@ -88,7 +84,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       for (const category of defaultCategories) {
         await supabase
-          .from('categories')
+          .from('product_categories')
           .insert({
             ...category,
             user_id: user.id,
@@ -124,16 +120,16 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
   const createSampleProducts = async (userId: string, type: string) => {
     const sampleProducts = {
       pizza: [
-        { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão' },
-        { name: 'Pizza Pepperoni', price: 29.90, description: 'Molho de tomate, mussarela e pepperoni' },
+        { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão', category: 'Pratos Principais' },
+        { name: 'Pizza Pepperoni', price: 29.90, description: 'Molho de tomate, mussarela e pepperoni', category: 'Pratos Principais' },
       ],
       burger: [
-        { name: 'Hambúrguer Clássico', price: 18.90, description: 'Pão, carne, queijo, alface e tomate' },
-        { name: 'Batata Frita', price: 8.90, description: 'Porção de batata frita crocante' },
+        { name: 'Hambúrguer Clássico', price: 18.90, description: 'Pão, carne, queijo, alface e tomate', category: 'Pratos Principais' },
+        { name: 'Batata Frita', price: 8.90, description: 'Porção de batata frita crocante', category: 'Pratos Principais' },
       ],
       general: [
-        { name: 'Prato do Dia', price: 15.90, description: 'Prato especial do dia' },
-        { name: 'Refrigerante', price: 4.50, description: 'Refrigerante gelado' },
+        { name: 'Prato do Dia', price: 15.90, description: 'Prato especial do dia', category: 'Pratos Principais' },
+        { name: 'Refrigerante', price: 4.50, description: 'Refrigerante gelado', category: 'Bebidas' },
       ]
     };
 
@@ -145,33 +141,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         .insert({
           ...product,
           user_id: userId,
-          active: true,
+          available: true,
         });
-    }
-  };
-
-  const steps = [
-    {
-      title: 'Informações do Restaurante',
-      description: 'Vamos começar com as informações básicas',
-      icon: Store,
-    },
-    {
-      title: 'Configuração Concluída',
-      description: 'Seu restaurante está pronto para começar!',
-      icon: CheckCircle,
-    },
-  ];
-
-  const nextStep = () => {
-    if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
     }
   };
 
@@ -189,140 +160,94 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         </CardHeader>
 
         <CardContent>
-          {/* Progress bar */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              {steps.map((step, index) => {
-                const StepIcon = step.icon;
-                return (
-                  <div
-                    key={index}
-                    className={`flex items-center ${
-                      index < steps.length - 1 ? 'flex-1' : ''
-                    }`}
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        currentStep > index + 1
-                          ? 'bg-green-500 text-white'
-                          : currentStep === index + 1
-                          ? 'bg-boracume-orange text-white'
-                          : 'bg-gray-200 text-gray-400'
-                      }`}
-                    >
-                      <StepIcon className="w-5 h-5" />
-                    </div>
-                    {index < steps.length - 1 && (
-                      <div
-                        className={`flex-1 h-1 mx-4 ${
-                          currentStep > index + 1 ? 'bg-green-500' : 'bg-gray-200'
-                        }`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+            <div className="flex items-center justify-center mb-2">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-boracume-orange text-white">
+                <Store className="w-5 h-5" />
+              </div>
             </div>
             <div className="text-center">
-              <h3 className="font-semibold">{steps[currentStep - 1].title}</h3>
-              <p className="text-sm text-gray-600">{steps[currentStep - 1].description}</p>
+              <h3 className="font-semibold">Informações do Restaurante</h3>
+              <p className="text-sm text-gray-600">Vamos começar com as informações básicas</p>
             </div>
           </div>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {currentStep === 1 && (
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="restaurantName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nome do Restaurante</FormLabel>
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="restaurantName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome do Restaurante</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Digite o nome do seu restaurante" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="restaurantType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de Restaurante</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <Input placeholder="Digite o nome do seu restaurante" {...field} />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <SelectContent>
+                          {restaurantTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="restaurantType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Restaurante</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {restaurantTypes.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Endereço</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Endereço completo do restaurante" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Endereço</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Endereço completo do restaurante" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(11) 99999-9999" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Telefone</FormLabel>
-                        <FormControl>
-                          <Input placeholder="(11) 99999-9999" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-between">
-                    <Button type="button" variant="outline" disabled>
-                      Anterior
-                    </Button>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? 'Configurando...' : 'Concluir Configuração'}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {currentStep === 2 && (
-                <div className="text-center space-y-4">
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
-                  <h3 className="text-xl font-semibold">Configuração Concluída!</h3>
-                  <p className="text-gray-600">
-                    Seu restaurante foi configurado com sucesso. Você pode começar a usar o sistema agora.
-                  </p>
-                  <Button onClick={onComplete} className="w-full">
-                    Ir para o Dashboard
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? 'Configurando...' : 'Concluir Configuração'}
                   </Button>
                 </div>
-              )}
+              </div>
             </form>
           </Form>
         </CardContent>

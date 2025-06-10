@@ -28,7 +28,7 @@ const DashboardHeader: React.FC = () => {
   const getSubscriptionBadge = () => {
     if (!subscription) return null;
 
-    if (subscription.status === 'trial' || subscription.status === 'trialing') {
+    if (subscription.status === 'trialing') {
       return (
         <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
           <Crown className="w-3 h-3 mr-1" />
@@ -38,11 +38,10 @@ const DashboardHeader: React.FC = () => {
     }
 
     if (subscription.status === 'active') {
-      const planName = subscription.plan?.name || 'Pro';
       return (
         <Badge variant="default" className="bg-green-100 text-green-700 border-green-300">
           <Crown className="w-3 h-3 mr-1" />
-          {planName}
+          Pro
         </Badge>
       );
     }
@@ -55,7 +54,7 @@ const DashboardHeader: React.FC = () => {
   };
 
   const hasActiveSubscription = () => {
-    return subscription?.status === 'active' || subscription?.status === 'trial' || subscription?.status === 'trialing';
+    return subscription?.status === 'active' || subscription?.status === 'trialing';
   };
 
   return (
@@ -96,7 +95,7 @@ const DashboardHeader: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/configuracoes')}
+            onClick={() => navigate('/security-dashboard')}
             className="text-green-600 hover:bg-green-50"
           >
             <Shield className="w-4 h-4 mr-1" />
