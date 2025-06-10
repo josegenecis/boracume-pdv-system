@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +8,7 @@ interface Profile {
   restaurant_name: string | null;
   phone: string | null;
   address: string | null;
+  onboarding_completed: boolean | null;
 }
 
 interface Subscription {
@@ -420,3 +420,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthProvider;
