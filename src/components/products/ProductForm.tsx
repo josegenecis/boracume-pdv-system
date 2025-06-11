@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,24 +12,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductImageUpload from './ProductImageUpload';
 
+// Defining the interface here to ensure consistency
 interface ProductItem {
   id?: string;
   name: string;
-  description?: string; // Making description optional
+  description?: string; 
   price: number;
   category: string;
   category_id?: string;
   image_url?: string;
   available: boolean;
-  weight_based: boolean;
+  weight_based: boolean; // Ensuring this is not optional
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
 }
 
 interface ProductFormProps {
-  product?: ProductItem; // Updated to use ProductItem
-  onSave: () => void; // Simplified the callback
+  product?: ProductItem;
+  onSave: () => void;
   onCancel: () => void;
 }
 

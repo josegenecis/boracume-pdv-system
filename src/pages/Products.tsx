@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,22 +13,20 @@ import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 
-// Renaming the interface to ProductItem to avoid type conflicts
+// Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
   id: string;
   name: string;
-  description?: string; // Making description optional to match how it's used
+  description?: string;
   price: number;
   category: string;
   category_id?: string;
   image_url?: string;
   available: boolean;
-  weight_based?: boolean;
-  available_delivery?: boolean;
-  available_pdv?: boolean;
+  weight_based: boolean; // Ensuring this is not optional
   send_to_kds?: boolean;
-  show_in_pdv?: boolean;
-  show_in_delivery?: boolean;
+  show_in_pdv: boolean;
+  show_in_delivery: boolean;
 }
 
 interface Category {
@@ -38,13 +35,13 @@ interface Category {
 }
 
 const Products = () => {
-  const [products, setProducts] = useState<ProductItem[]>([]); // Updated type
+  const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]); // Updated type
+  const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null); // Updated type
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -79,8 +76,9 @@ const Products = () => {
         ...product,
         category: product.category || 'Sem categoria', // Ensure category is always present
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
-        show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true
-      }));
+        show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
+        weight_based: product.weight_based !== undefined ? product.weight_based : false // Ensure weight_based is always present
+      })) as ProductItem[];
       
       setProducts(transformedProducts);
     } catch (error: any) {
@@ -157,7 +155,7 @@ const Products = () => {
     }
   };
 
-  const handleEditProduct = (product: ProductItem) => { // Updated type
+  const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
     setShowForm(true);
   };
