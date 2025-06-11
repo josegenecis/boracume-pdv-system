@@ -40,9 +40,32 @@ async function buildDesktop() {
     console.log('🖥️ Building desktop application...');
     await runCommand('npm', ['run', 'build'], electronDir);
     
+    // Step 5: Create public dist folder for downloads
+    console.log('📁 Creating public download directory...');
+    const publicDistDir = path.join(process.cwd(), 'public', 'electron-dist');
+    
+    if (!fs.existsSync(publicDistDir)) {
+      fs.mkdirSync(publicDistDir, { recursive: true });
+    }
+    
+    // Copy built files to public directory
+    const builtFilesDir = path.join(process.cwd(), 'dist-electron');
+    if (fs.existsSync(builtFilesDir)) {
+      console.log('📋 Copying built files to public directory...');
+      await copyDirectory(builtFilesDir, publicDistDir);
+    }
+    
     console.log('✅ Desktop application built successfully!');
     console.log('📂 Output directory: dist-electron/');
+    console.log('🌐 Public downloads: public/electron-dist/');
     console.log('💡 Tip: Use the portable version if you encounter installation issues');
+    
+    // List built files
+    if (fs.existsSync(builtFilesDir)) {
+      const files = fs.readdirSync(builtFilesDir);
+      console.log('\n📋 Built files:');
+      files.forEach(file => console.log(`  - ${file}`));
+    }
     
   } catch (error) {
     console.error('❌ Build failed:', error.message);
@@ -50,8 +73,34 @@ async function buildDesktop() {
     console.log('- Make sure you have Visual Studio Build Tools installed on Windows');
     console.log('- Try running as administrator');
     console.log('- Check if Python 3.x is installed and accessible');
+    console.log('- Verify Node.js version is 18+');
     process.exit(1);
   }
+}
+
+function copyDirectory(src, dest) {
+  return new Promise((resolve, reject) => {
+    const isWindows = process.platform === 'win32';
+    const command = isWindows ? 'xcopy' : 'cp';
+    const args = isWindows ? [src, dest, '/E', '/I', '/Y'] : ['-r', src + '/.', dest];
+    
+    const child = spawn(command, args, {
+      stdio: 'inherit',
+      shell: true
+    });
+    
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Copy failed with exit code ${code}`));
+      }
+    });
+    
+    child.on('error', (error) => {
+      reject(error);
+    });
+  });
 }
 
 function runCommand(command, args, cwd) {

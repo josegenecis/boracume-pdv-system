@@ -6,8 +6,11 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
-    "rebuild": "electron-rebuild",
+    "build": "electron-builder --publish=never",
+    "build-win": "electron-builder --win --publish=never",
+    "build-mac": "electron-builder --mac --publish=never",
+    "build-linux": "electron-builder --linux --publish=never",
+    "rebuild": "electron-rebuild -f -w serialport",
     "postinstall": "electron-builder install-app-deps && npm run rebuild"
   },
   "devDependencies": {
@@ -48,7 +51,9 @@
       ],
       "icon": "../public/favicon.ico",
       "requestedExecutionLevel": "asInvoker",
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "artifactName": "${productName}-${version}.${ext}",
+      "publisherName": "Bora Cume Hub"
     },
     "nsis": {
       "oneClick": false,
@@ -56,10 +61,32 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "allowElevation": false,
-      "runAfterFinish": false
+      "runAfterFinish": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "../public/favicon.ico",
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../public/favicon.ico",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "nodeGypRebuild": true,
     "npmRebuild": true,
