@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useInputValidation } from '@/hooks/useInputValidation';
 import { loginSchema, signupSchema, type LoginData, type SignupData } from '@/schemas/authSchemas';
-import { logSecurityEvent } from '@/utils/securityLogger';
+import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
 
 const AuthForm: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();
@@ -64,7 +64,8 @@ const AuthForm: React.FC = () => {
     
     try {
       await signUp(signupData.email, signupData.password, signupData.restaurantName);
-      await logSecurityEvent('login', `New user registration: ${signupData.email}`, 'low');
+      // Log usando a função específica que evita o erro de tipo
+      await logSignupEvent(signupData.email);
       console.log('Signup successful, will redirect');
     } catch (error: any) {
       console.error('Signup error:', error);

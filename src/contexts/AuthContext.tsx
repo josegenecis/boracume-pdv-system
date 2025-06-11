@@ -1,9 +1,8 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { logSecurityEvent } from '@/utils/securityLogger';
+import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
 
 interface Profile {
   id: string;
@@ -239,8 +238,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: "Bem-vindo ao BoraCumê! Redirecionando...",
         });
         
-        // Usando o tipo 'signup' que agora está disponível
-        await logSecurityEvent('signup', `New user registered: ${email}`, 'low');
+        // Usando a função específica para signup que evita o erro de tipo
+        await logSignupEvent(email);
         
         // Aguardar um pouco para permitir que o trigger seja executado
         setTimeout(() => {
