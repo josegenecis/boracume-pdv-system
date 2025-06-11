@@ -103,10 +103,13 @@ const EnhancedWhatsAppChatbot = () => {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        // Safely parse auto_responses with fallback
+        // Safely parse auto_responses with proper type checking
         let autoResponses = defaultAutoResponses;
-        if (data.auto_responses && typeof data.auto_responses === 'object') {
-          autoResponses = data.auto_responses as AutoResponses;
+        if (data.auto_responses && typeof data.auto_responses === 'object' && !Array.isArray(data.auto_responses)) {
+          const responses = data.auto_responses as Record<string, any>;
+          if (responses.greeting && responses.menu_request && responses.order_confirmation && responses.business_hours) {
+            autoResponses = responses as AutoResponses;
+          }
         }
 
         const settingsData: WhatsAppSettings = {
@@ -222,9 +225,14 @@ const EnhancedWhatsAppChatbot = () => {
 
   const saveSettings = async () => {
     try {
+      // Convert AutoResponses to JSON-compatible format
       const settingsData = {
         user_id: user?.id,
-        ...settingsForm
+        phone_number: settingsForm.phone_number,
+        default_message: settingsForm.default_message,
+        enabled: settingsForm.enabled,
+        auto_responses: settingsForm.auto_responses as any, // Type assertion to bypass strict typing
+        ai_enabled: settingsForm.ai_enabled
       };
 
       if (settings) {

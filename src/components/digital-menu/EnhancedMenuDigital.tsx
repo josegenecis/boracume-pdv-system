@@ -124,22 +124,22 @@ const EnhancedMenuDigital = () => {
 
   const fetchCombos = async () => {
     try {
-      // Using raw SQL to fetch from combos table since it's not in the generated types yet
+      // Direct access to combos table with fallback handling
       const { data, error } = await supabase
-        .rpc('get_table_data', { 
-          table_name: 'combos',
-          user_filter_id: userId 
-        });
+        .from('combos' as any)
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true);
 
       if (error) {
-        console.log('Combos functionality not available yet');
+        console.log('Combos functionality not available yet:', error);
         setCombos([]);
         return;
       }
       
-      // Type the response as Combo array
+      // Type assertion for the response
       const typedCombos = (data || []) as Combo[];
-      setCombos(typedCombos.filter(combo => combo.active));
+      setCombos(typedCombos);
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
       setCombos([]);
