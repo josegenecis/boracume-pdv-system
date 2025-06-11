@@ -1,7 +1,24 @@
 
 import { Capacitor } from '@capacitor/core';
-import { Serial } from '@capacitor-community/serial';
-import { BluetoothLe } from '@capacitor-community/bluetooth-le';
+
+// Conditional imports for Capacitor plugins
+let Serial: any = null;
+let BluetoothLe: any = null;
+
+// Only import native plugins when running on native platform
+if (Capacitor.isNativePlatform()) {
+  import('@capacitor-community/serial').then(module => {
+    Serial = module.Serial;
+  }).catch(() => {
+    console.log('Serial plugin not available');
+  });
+  
+  import('@capacitor-community/bluetooth-le').then(module => {
+    BluetoothLe = module.BluetoothLe;
+  }).catch(() => {
+    console.log('BluetoothLe plugin not available');
+  });
+}
 
 export interface ScaleDevice {
   id: string;
@@ -19,7 +36,7 @@ export class ScaleService {
   async scanForScales(): Promise<ScaleDevice[]> {
     const devices: ScaleDevice[] = [];
 
-    if (Capacitor.isNativePlatform()) {
+    if (Capacitor.isNativePlatform() && Serial) {
       // Scan for USB Serial devices
       try {
         const serialDevices = await Serial.requestPort();
@@ -44,7 +61,9 @@ export class ScaleService {
       } catch (error) {
         console.log('Nenhuma balança USB encontrada');
       }
+    }
 
+    if (Capacitor.isNativePlatform() && BluetoothLe) {
       // Scan for Bluetooth devices
       try {
         await BluetoothLe.initialize();
@@ -59,8 +78,10 @@ export class ScaleService {
       } catch (error) {
         console.log('Erro ao escanear Bluetooth:', error);
       }
-    } else {
-      // Web fallback
+    }
+
+    // Web fallback or if no native devices found
+    if (!Capacitor.isNativePlatform() || devices.length === 0) {
       devices.push({
         id: 'mock_scale',
         name: 'Balança Simulada',
@@ -75,7 +96,7 @@ export class ScaleService {
 
   async connectToScale(scale: ScaleDevice): Promise<boolean> {
     try {
-      if (scale.type === 'usb' && Capacitor.isNativePlatform()) {
+      if (scale.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
         await Serial.open({
           baudRate: this.getBaudRate(scale.protocol),
           dataBits: 8,
@@ -85,7 +106,7 @@ export class ScaleService {
 
         // Start listening for weight data
         this.startWeightListener(scale.protocol);
-      } else if (scale.type === 'bluetooth' && Capacitor.isNativePlatform()) {
+      } else if (scale.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
         await BluetoothLe.connect({
           deviceId: scale.id
         });
@@ -103,9 +124,9 @@ export class ScaleService {
     if (!this.connectedScale) return;
 
     try {
-      if (this.connectedScale.type === 'usb' && Capacitor.isNativePlatform()) {
+      if (this.connectedScale.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
         await Serial.close();
-      } else if (this.connectedScale.type === 'bluetooth' && Capacitor.isNativePlatform()) {
+      } else if (this.connectedScale.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
         await BluetoothLe.disconnect({
           deviceId: this.connectedScale.id
         });
@@ -159,9 +180,9 @@ export class ScaleService {
     const command = this.getWeightCommand(this.connectedScale.protocol);
     
     try {
-      if (this.connectedScale.type === 'usb') {
+      if (this.connectedScale.type === 'usb' && Serial) {
         await Serial.write({ data: command });
-      } else if (this.connectedScale.type === 'bluetooth') {
+      } else if (this.connectedScale.type === 'bluetooth' && BluetoothLe) {
         await BluetoothLe.write({
           deviceId: this.connectedScale.id,
           service: '000018f0-0000-1000-8000-00805f9b34fb',
@@ -184,9 +205,9 @@ export class ScaleService {
   }
 
   private startWeightListener(protocol: string): void {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!Capacitor.isNativePlatform() || !Serial) return;
 
-    Serial.addListener('dataReceived', (data) => {
+    Serial.addListener('dataReceived', (data: any) => {
       try {
         const weight = this.parseWeight(data.data, protocol);
         if (weight !== null && this.weightCallback) {
