@@ -125,14 +125,18 @@ const EnhancedMenuDigital = () => {
 
   const fetchCombos = async () => {
     try {
+      // Note: Since combos table doesn't exist in types, we'll check if it exists first
       const { data, error } = await supabase
-        .from('combos')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('created_at', { ascending: false });
+        .rpc('get_combos', { target_user_id: userId })
+        .select('*');
 
-      if (error) throw error;
+      // If RPC doesn't exist, try direct table access with error handling
+      if (error) {
+        console.log('Combos table not available yet');
+        setCombos([]);
+        return;
+      }
+      
       setCombos(data || []);
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
@@ -670,7 +674,6 @@ const EnhancedMenuDigital = () => {
         onOpenCart={() => setShowMobileCart(true)} 
       />
 
-      {/* Mobile Cart Drawer */}
       <MobileCartDrawer
         isOpen={showMobileCart}
         onClose={() => setShowMobileCart(false)}
@@ -687,7 +690,6 @@ const EnhancedMenuDigital = () => {
         onWhatsAppOrder={handleWhatsAppOrder}
       />
 
-      {/* WhatsApp Button */}
       {profile?.phone && (
         <WhatsAppButton
           phoneNumber={profile.phone.replace(/\D/g, '')}

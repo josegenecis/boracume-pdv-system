@@ -25,9 +25,15 @@ interface Combo {
   created_at: string;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+
 const ComboManager = () => {
   const [combos, setCombos] = useState<Combo[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCombo, setEditingCombo] = useState<Combo | null>(null);
@@ -54,19 +60,27 @@ const ComboManager = () => {
 
   const fetchCombos = async () => {
     try {
+      // Using a simple select that will work with the combos table
       const { data, error } = await supabase
-        .from('combos')
+        .from('combos' as any)
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // If combos table doesn't exist, log it and set empty array
+        console.log('Combos table not available yet:', error);
+        setCombos([]);
+        return;
+      }
+      
       setCombos(data || []);
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
+      setCombos([]);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os combos.",
+        title: "Aviso",
+        description: "A tabela de combos ainda não foi criada no banco de dados.",
         variant: "destructive"
       });
     } finally {
@@ -103,7 +117,7 @@ const ComboManager = () => {
 
       if (editingCombo) {
         const { error } = await supabase
-          .from('combos')
+          .from('combos' as any)
           .update(comboData)
           .eq('id', editingCombo.id);
 
@@ -115,7 +129,7 @@ const ComboManager = () => {
         });
       } else {
         const { error } = await supabase
-          .from('combos')
+          .from('combos' as any)
           .insert([comboData]);
 
         if (error) throw error;
@@ -132,7 +146,7 @@ const ComboManager = () => {
       console.error('Erro ao salvar combo:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível salvar o combo.",
+        description: "Não foi possível salvar o combo. Verifique se a tabela de combos foi criada.",
         variant: "destructive"
       });
     }
@@ -158,7 +172,7 @@ const ComboManager = () => {
 
     try {
       const { error } = await supabase
-        .from('combos')
+        .from('combos' as any)
         .delete()
         .eq('id', id);
 

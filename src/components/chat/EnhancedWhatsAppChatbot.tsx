@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,7 +99,16 @@ const EnhancedWhatsAppChatbot = () => {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        setSettings(data);
+        const settingsData: WhatsAppSettings = {
+          id: data.id,
+          phone_number: data.phone_number,
+          default_message: data.default_message,
+          enabled: data.enabled,
+          auto_responses: data.auto_responses || settingsForm.auto_responses,
+          ai_enabled: data.ai_enabled || false
+        };
+        
+        setSettings(settingsData);
         setSettingsForm({
           phone_number: data.phone_number,
           default_message: data.default_message,
@@ -125,7 +133,17 @@ const EnhancedWhatsAppChatbot = () => {
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setConversations(data || []);
+      
+      const typedConversations: Conversation[] = (data || []).map(conv => ({
+        id: conv.id,
+        customer_phone: conv.customer_phone,
+        customer_name: conv.customer_name,
+        status: (conv.status === 'closed' ? 'closed' : 'active') as 'active' | 'closed',
+        created_at: conv.created_at,
+        updated_at: conv.updated_at
+      }));
+      
+      setConversations(typedConversations);
     } catch (error) {
       console.error('Erro ao carregar conversas:', error);
     }
@@ -140,7 +158,18 @@ const EnhancedWhatsAppChatbot = () => {
         .order('sent_at', { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      
+      const typedMessages: Message[] = (data || []).map(msg => ({
+        id: msg.id,
+        content: msg.content,
+        sender: ['customer', 'bot', 'staff'].includes(msg.sender) 
+          ? msg.sender as 'customer' | 'bot' | 'staff' 
+          : 'customer',
+        sent_at: msg.sent_at,
+        conversation_id: msg.conversation_id
+      }));
+      
+      setMessages(typedMessages);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
     }
@@ -320,7 +349,17 @@ const EnhancedWhatsAppChatbot = () => {
       if (error) throw error;
 
       fetchConversations();
-      setSelectedConversation(data);
+      
+      const newConversation: Conversation = {
+        id: data.id,
+        customer_phone: data.customer_phone,
+        customer_name: data.customer_name,
+        status: data.status as 'active' | 'closed',
+        created_at: data.created_at,
+        updated_at: data.updated_at
+      };
+      
+      setSelectedConversation(newConversation);
 
       toast({
         title: "Conversa criada",

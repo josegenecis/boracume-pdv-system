@@ -4,9 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, MapPin, Phone, Car, Bike, Motorcycle } from 'lucide-react';
+import { Plus, Edit, Trash2, User, Phone, Bike, Car } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,10 +14,11 @@ interface DeliveryPerson {
   id: string;
   name: string;
   phone: string;
-  vehicle_type: string;
+  vehicle_type: 'bike' | 'motorcycle' | 'car';
   vehicle_plate?: string;
   status: 'available' | 'busy' | 'offline';
   created_at: string;
+  updated_at: string;
 }
 
 const DeliveryPersonnelManager = () => {
@@ -32,9 +32,9 @@ const DeliveryPersonnelManager = () => {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    vehicle_type: 'motorcycle',
+    vehicle_type: 'bike' as 'bike' | 'motorcycle' | 'car',
     vehicle_plate: '',
-    status: 'available' as const
+    status: 'available' as 'available' | 'busy' | 'offline'
   });
 
   useEffect(() => {
@@ -52,7 +52,21 @@ const DeliveryPersonnelManager = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPersonnel(data || []);
+      
+      const typedPersonnel: DeliveryPerson[] = (data || []).map(person => ({
+        id: person.id,
+        name: person.name,
+        phone: person.phone,
+        vehicle_type: person.vehicle_type as 'bike' | 'motorcycle' | 'car',
+        vehicle_plate: person.vehicle_plate,
+        status: ['available', 'busy', 'offline'].includes(person.status) 
+          ? person.status as 'available' | 'busy' | 'offline'
+          : 'available',
+        created_at: person.created_at,
+        updated_at: person.updated_at
+      }));
+      
+      setPersonnel(typedPersonnel);
     } catch (error) {
       console.error('Erro ao carregar entregadores:', error);
       toast({
@@ -95,7 +109,7 @@ const DeliveryPersonnelManager = () => {
 
         toast({
           title: "Sucesso",
-          description: "Entregador cadastrado com sucesso!"
+          description: "Entregador adicionado com sucesso!"
         });
       }
 
@@ -179,7 +193,7 @@ const DeliveryPersonnelManager = () => {
     setFormData({
       name: '',
       phone: '',
-      vehicle_type: 'motorcycle',
+      vehicle_type: 'bike',
       vehicle_plate: '',
       status: 'available'
     });
@@ -187,42 +201,42 @@ const DeliveryPersonnelManager = () => {
     setShowForm(false);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getVehicleIcon = (type: string) => {
+    switch (type) {
+      case 'bike':
+        return <Bike size={20} />;
+      case 'motorcycle':
+        return <Bike size={20} />;
+      case 'car':
+        return <Car size={20} />;
+      default:
+        return <Bike size={20} />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
-        return <Badge variant="default" className="bg-green-500">Disponível</Badge>;
+        return 'bg-green-100 text-green-800';
       case 'busy':
-        return <Badge variant="secondary" className="bg-yellow-500 text-white">Ocupado</Badge>;
+        return 'bg-yellow-100 text-yellow-800';
       case 'offline':
-        return <Badge variant="outline">Offline</Badge>;
+        return 'bg-gray-100 text-gray-800';
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getVehicleIcon = (vehicleType: string) => {
-    switch (vehicleType) {
-      case 'car':
-        return <Car size={16} />;
-      case 'motorcycle':
-        return <Motorcycle size={16} />;
-      case 'bicycle':
-        return <Bike size={16} />;
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'Disponível';
+      case 'busy':
+        return 'Ocupado';
+      case 'offline':
+        return 'Offline';
       default:
-        return <MapPin size={16} />;
-    }
-  };
-
-  const getVehicleLabel = (vehicleType: string) => {
-    switch (vehicleType) {
-      case 'car':
-        return 'Carro';
-      case 'motorcycle':
-        return 'Moto';
-      case 'bicycle':
-        return 'Bicicleta';
-      default:
-        return vehicleType;
+        return 'Desconhecido';
     }
   };
 
@@ -238,62 +252,13 @@ const DeliveryPersonnelManager = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Equipe de Entregadores</h2>
-          <p className="text-gray-600">Gerencie sua equipe de delivery</p>
+          <h2 className="text-2xl font-bold">Entregadores</h2>
+          <p className="text-gray-600">Gerencie sua equipe de entrega</p>
         </div>
         <Button onClick={() => setShowForm(true)}>
           <Plus size={16} className="mr-2" />
           Novo Entregador
         </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Disponíveis</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {personnel.filter(p => p.status === 'available').length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <MapPin className="text-green-600" size={24} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Em Entrega</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {personnel.filter(p => p.status === 'busy').length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Motorcycle className="text-yellow-600" size={24} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-blue-600">{personnel.length}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Car className="text-blue-600" size={24} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {showForm && (
@@ -305,7 +270,7 @@ const DeliveryPersonnelManager = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="name">Nome Completo</Label>
+                  <Label htmlFor="name">Nome</Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -319,7 +284,6 @@ const DeliveryPersonnelManager = () => {
                     id="phone"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    placeholder="(11) 99999-9999"
                     required
                   />
                 </div>
@@ -328,22 +292,19 @@ const DeliveryPersonnelManager = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="vehicle_type">Tipo de Veículo</Label>
-                  <Select 
-                    value={formData.vehicle_type} 
-                    onValueChange={(value) => setFormData({...formData, vehicle_type: value})}
+                  <select
+                    id="vehicle_type"
+                    value={formData.vehicle_type}
+                    onChange={(e) => setFormData({...formData, vehicle_type: e.target.value as 'bike' | 'motorcycle' | 'car'})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="motorcycle">Moto</SelectItem>
-                      <SelectItem value="car">Carro</SelectItem>
-                      <SelectItem value="bicycle">Bicicleta</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <option value="bike">Bicicleta</option>
+                    <option value="motorcycle">Moto</option>
+                    <option value="car">Carro</option>
+                  </select>
                 </div>
                 <div>
-                  <Label htmlFor="vehicle_plate">Placa do Veículo (opcional)</Label>
+                  <Label htmlFor="vehicle_plate">Placa do Veículo</Label>
                   <Input
                     id="vehicle_plate"
                     value={formData.vehicle_plate}
@@ -354,24 +315,22 @@ const DeliveryPersonnelManager = () => {
               </div>
 
               <div>
-                <Label htmlFor="status">Status Inicial</Label>
-                <Select 
-                  value={formData.status} 
-                  onValueChange={(value: 'available' | 'busy' | 'offline') => setFormData({...formData, status: value})}
+                <Label htmlFor="status">Status</Label>
+                <select
+                  id="status"
+                  value={formData.status}
+                  onChange={(e) => setFormData({...formData, status: e.target.value as 'available' | 'busy' | 'offline'})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="available">Disponível</SelectItem>
-                    <SelectItem value="offline">Offline</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <option value="available">Disponível</option>
+                  <option value="busy">Ocupado</option>
+                  <option value="offline">Offline</option>
+                </select>
               </div>
 
               <div className="flex gap-2">
                 <Button type="submit">
-                  {editingPerson ? 'Atualizar' : 'Cadastrar'}
+                  {editingPerson ? 'Atualizar' : 'Adicionar'} Entregador
                 </Button>
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancelar
@@ -382,46 +341,60 @@ const DeliveryPersonnelManager = () => {
         </Card>
       )}
 
-      {/* Personnel List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {personnel.map((person) => (
           <Card key={person.id}>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
-                <CardTitle className="text-lg">{person.name}</CardTitle>
-                {getStatusBadge(person.status)}
+                <div className="flex items-center gap-2">
+                  <User size={20} />
+                  <CardTitle className="text-lg">{person.name}</CardTitle>
+                </div>
+                <Badge className={getStatusColor(person.status)}>
+                  {getStatusText(person.status)}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Phone size={14} />
+                  <Phone size={16} />
                   {person.phone}
                 </div>
                 
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   {getVehicleIcon(person.vehicle_type)}
-                  {getVehicleLabel(person.vehicle_type)}
-                  {person.vehicle_plate && ` - ${person.vehicle_plate}`}
+                  <span className="capitalize">{person.vehicle_type}</span>
+                  {person.vehicle_plate && (
+                    <span className="text-gray-400">({person.vehicle_plate})</span>
+                  )}
                 </div>
 
-                <div className="flex gap-2 mt-4">
-                  <Select 
-                    value={person.status} 
-                    onValueChange={(value: 'available' | 'busy' | 'offline') => updateStatus(person.id, value)}
+                <div className="flex gap-1 flex-wrap">
+                  <Button
+                    variant={person.status === 'available' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateStatus(person.id, 'available')}
                   >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="available">Disponível</SelectItem>
-                      <SelectItem value="busy">Ocupado</SelectItem>
-                      <SelectItem value="offline">Offline</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    Disponível
+                  </Button>
+                  <Button
+                    variant={person.status === 'busy' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateStatus(person.id, 'busy')}
+                  >
+                    Ocupado
+                  </Button>
+                  <Button
+                    variant={person.status === 'offline' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => updateStatus(person.id, 'offline')}
+                  >
+                    Offline
+                  </Button>
                 </div>
 
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2 pt-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -447,16 +420,16 @@ const DeliveryPersonnelManager = () => {
 
       {personnel.length === 0 && (
         <div className="text-center py-12">
-          <MapPin size={48} className="mx-auto text-gray-400 mb-4" />
+          <User size={48} className="mx-auto text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             Nenhum entregador cadastrado
           </h3>
           <p className="text-gray-500 mb-4">
-            Cadastre entregadores para gerenciar seu delivery.
+            Adicione entregadores à sua equipe para começar.
           </p>
           <Button onClick={() => setShowForm(true)}>
             <Plus size={16} className="mr-2" />
-            Cadastrar Primeiro Entregador
+            Adicionar Primeiro Entregador
           </Button>
         </div>
       )}
