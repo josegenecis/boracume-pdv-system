@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,21 +49,21 @@ const PDVForm: React.FC = () => {
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: any, quantity: number = 1, selectedOptions: string[] = [], notes: string = '') => {
     const existingItem = cart.find(item => item.product_id === product.id);
     
     if (existingItem) {
-      updateQuantity(existingItem.id, existingItem.quantity + 1);
+      updateQuantity(existingItem.id, existingItem.quantity + quantity);
     } else {
       const newItem: CartItem = {
         id: Date.now().toString(),
         product_id: product.id,
         product_name: product.name,
         price: product.price,
-        quantity: 1,
-        subtotal: product.price,
-        options: product.selectedOptions || [],
-        notes: product.notes || ''
+        quantity,
+        subtotal: product.price * quantity,
+        options: selectedOptions.length > 0 ? selectedOptions : undefined,
+        notes: notes || undefined
       };
       setCart([...cart, newItem]);
     }
@@ -112,6 +113,7 @@ const PDVForm: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Convert CartItem[] to the format expected by the database
       const orderItems = cart.map(item => ({
         product_id: item.product_id,
         product_name: item.product_name,
@@ -122,7 +124,7 @@ const PDVForm: React.FC = () => {
         notes: item.notes || ''
       }));
 
-      const { data: existingAccount } = await (supabase as any)
+      const { data: existingAccount } = await supabase
         .from('table_accounts')
         .select('*')
         .eq('table_id', selectedTable)
@@ -130,10 +132,10 @@ const PDVForm: React.FC = () => {
         .single();
 
       if (existingAccount) {
-        const updatedItems = [...existingAccount.items, ...orderItems];
+        const updatedItems = [...existingAccount.items as any[], ...orderItems];
         const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('table_accounts')
           .update({
             items: updatedItems,
@@ -145,7 +147,7 @@ const PDVForm: React.FC = () => {
       } else {
         const total = getTotalValue();
         
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('table_accounts')
           .insert({
             user_id: user?.id,
@@ -189,12 +191,23 @@ const PDVForm: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Convert CartItem[] to the format expected by the database
+      const orderItems = cart.map(item => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+        options: item.options || [],
+        notes: item.notes || ''
+      }));
+
       const orderData = {
         user_id: user?.id,
         order_number: generateOrderNumber(),
         customer_name: customerName || 'Cliente Balcão',
         customer_phone: customerPhone || null,
-        items: cart,
+        items: orderItems, // This is now in the correct format for jsonb
         total: getTotalValue(),
         payment_method: paymentMethod,
         change_amount: changeAmount ? parseFloat(changeAmount) : null,
@@ -299,6 +312,18 @@ const PDVForm: React.FC = () => {
                       <p className="text-sm text-gray-600">
                         {formatCurrency(item.price)} cada
                       </p>
+                      {item.options && item.options.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {item.options.map((option, index) => (
+                            <div key={index}>• {option}</div>
+                          ))}
+                        </div>
+                      )}
+                      {item.notes && (
+                        <div className="text-xs text-gray-500 mt-1 italic">
+                          Obs: {item.notes}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -462,7 +487,7 @@ const PDVForm: React.FC = () => {
       <ProductSelectionModal
         isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
-        onSelectProduct={addToCart}
+        onAddToCart={addToCart}
       />
     </div>
   );
