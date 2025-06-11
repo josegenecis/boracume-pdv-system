@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Minus, Search } from 'lucide-react';
+import { Plus, Minus, Search, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -52,6 +52,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [variations, setVariations] = useState<ProductVariation[]>([]);
+  const [showVariations, setShowVariations] = useState(false);
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -63,10 +64,10 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   }, [isOpen, user]);
 
   useEffect(() => {
-    if (selectedProduct) {
+    if (selectedProduct && showVariations) {
       fetchProductVariations(selectedProduct.id);
     }
-  }, [selectedProduct]);
+  }, [selectedProduct, showVariations]);
 
   const fetchProducts = async () => {
     try {
@@ -76,6 +77,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .select('*')
         .eq('user_id', user?.id)
         .eq('available', true)
+        .eq('show_in_pdv', true)
         .order('name');
 
       if (error) throw error;
@@ -101,7 +103,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
       if (error) throw error;
       
-      // Parse the options JSON safely
       const parsedVariations: ProductVariation[] = (data || []).map(variation => ({
         id: variation.id,
         name: variation.name,
@@ -125,23 +126,54 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = async (product: Product) => {
     setSelectedProduct(product);
     setSelectedOptions([]);
     setQuantity(1);
     setNotes('');
+    
+    // Check if product has variations
+    const { data: variationsData } = await supabase
+      .from('product_variations')
+      .select('id')
+      .eq('product_id', product.id);
+    
+    if (variationsData && variationsData.length > 0) {
+      setShowVariations(true);
+    } else {
+      // No variations, add directly to cart
+      onAddToCart(product, 1, [], '');
+      handleReset();
+      toast({
+        title: "Produto adicionado",
+        description: `${product.name} foi adicionado ao carrinho.`,
+      });
+    }
   };
 
   const handleAddToCart = () => {
     if (!selectedProduct) return;
 
-    onAddToCart(selectedProduct, quantity, selectedOptions, notes);
+    // Validate required variations
+    const requiredVariations = variations.filter(v => v.required);
+    const selectedVariationNames = selectedOptions;
     
-    // Reset form
-    setSelectedProduct(null);
-    setSelectedOptions([]);
-    setQuantity(1);
-    setNotes('');
+    for (const requiredVar of requiredVariations) {
+      const hasSelection = requiredVar.options.some(option => 
+        selectedVariationNames.includes(option.name)
+      );
+      if (!hasSelection) {
+        toast({
+          title: "Variação obrigatória",
+          description: `Selecione uma opção para: ${requiredVar.name}`,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    onAddToCart(selectedProduct, quantity, selectedOptions, notes);
+    handleReset();
     
     toast({
       title: "Produto adicionado",
@@ -149,11 +181,21 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     });
   };
 
-  const handleBack = () => {
+  const handleReset = () => {
     setSelectedProduct(null);
     setSelectedOptions([]);
     setQuantity(1);
     setNotes('');
+    setShowVariations(false);
+  };
+
+  const handleBack = () => {
+    if (showVariations) {
+      setShowVariations(false);
+      setSelectedProduct(null);
+    } else {
+      onClose();
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -165,19 +207,39 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
   const getTotalPrice = () => {
     if (!selectedProduct) return 0;
-    return selectedProduct.price * quantity;
+    let total = selectedProduct.price;
+    
+    // Add variation prices
+    selectedOptions.forEach(optionName => {
+      variations.forEach(variation => {
+        const option = variation.options.find(opt => opt.name === optionName);
+        if (option) {
+          total += option.price;
+        }
+      });
+    });
+    
+    return total * quantity;
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {selectedProduct ? `Adicionar ${selectedProduct.name}` : 'Selecionar Produto'}
+          <DialogTitle className="flex items-center gap-2">
+            {(selectedProduct || showVariations) && (
+              <Button variant="ghost" size="sm" onClick={handleBack}>
+                <ArrowLeft size={16} />
+              </Button>
+            )}
+            {selectedProduct && showVariations 
+              ? `Configurar ${selectedProduct.name}` 
+              : 'Selecionar Produto'
+            }
           </DialogTitle>
         </DialogHeader>
 
-        {!selectedProduct ? (
+        {!selectedProduct || !showVariations ? (
           <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -278,13 +340,18 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                             type={variation.max_selections === 1 ? "radio" : "checkbox"}
                             name={variation.id}
                             value={option.name}
+                            checked={selectedOptions.includes(option.name)}
                             onChange={(e) => {
                               if (variation.max_selections === 1) {
-                                setSelectedOptions(prev => 
-                                  prev.filter(opt => !variation.options.some(o => o.name === opt))
-                                    .concat(e.target.checked ? [option.name] : [])
-                                );
+                                // Radio behavior
+                                setSelectedOptions(prev => {
+                                  const filtered = prev.filter(opt => 
+                                    !variation.options.some(o => o.name === opt)
+                                  );
+                                  return e.target.checked ? [...filtered, option.name] : filtered;
+                                });
                               } else {
+                                // Checkbox behavior
                                 setSelectedOptions(prev => 
                                   e.target.checked 
                                     ? [...prev, option.name]
@@ -293,7 +360,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                               }
                             }}
                           />
-                          <Label className="flex-1">
+                          <Label className="flex-1 cursor-pointer">
                             {option.name}
                             {option.price > 0 && (
                               <span className="ml-2 text-green-600">
@@ -361,9 +428,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={handleBack} className="flex-1">
-                Voltar
-              </Button>
               <Button onClick={handleAddToCart} className="flex-1">
                 <Plus size={16} className="mr-2" />
                 Adicionar ao Carrinho

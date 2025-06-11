@@ -31,8 +31,14 @@ export const useAppearanceSettings = () => {
   useEffect(() => {
     if (user) {
       fetchSettings();
+    } else {
+      setLoading(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    applySettings(settings);
+  }, [settings]);
 
   const fetchSettings = async () => {
     try {
@@ -41,14 +47,15 @@ export const useAppearanceSettings = () => {
         .from('appearance_settings')
         .select('*')
         .eq('user_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        throw error;
+        console.error('Erro ao carregar configurações:', error);
+        return;
       }
 
       if (data) {
-        setSettings({
+        const newSettings = {
           theme: data.theme || 'light',
           primary_color: data.primary_color || 'orange',
           font_size: data.font_size || 'medium',
@@ -56,18 +63,8 @@ export const useAppearanceSettings = () => {
           show_animations: data.show_animations || true,
           high_contrast: data.high_contrast || false,
           reduced_motion: data.reduced_motion || false,
-        });
-        
-        // Aplicar configurações ao documento
-        applySettings({
-          theme: data.theme || 'light',
-          primary_color: data.primary_color || 'orange',
-          font_size: data.font_size || 'medium',
-          compact_mode: data.compact_mode || false,
-          show_animations: data.show_animations || true,
-          high_contrast: data.high_contrast || false,
-          reduced_motion: data.reduced_motion || false,
-        });
+        };
+        setSettings(newSettings);
       }
     } catch (error) {
       console.error('Erro ao carregar configurações de aparência:', error);
@@ -84,18 +81,25 @@ export const useAppearanceSettings = () => {
         .from('appearance_settings')
         .upsert({
           user_id: user?.id,
-          ...updatedSettings,
+          theme: updatedSettings.theme,
+          primary_color: updatedSettings.primary_color,
+          font_size: updatedSettings.font_size,
+          compact_mode: updatedSettings.compact_mode,
+          show_animations: updatedSettings.show_animations,
+          high_contrast: updatedSettings.high_contrast,
+          reduced_motion: updatedSettings.reduced_motion,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
         });
 
       if (error) throw error;
 
       setSettings(updatedSettings);
-      applySettings(updatedSettings);
 
       toast({
         title: "Configurações salvas",
-        description: "As configurações de aparência foram atualizadas.",
+        description: "As configurações de aparência foram atualizadas com sucesso.",
       });
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
@@ -108,53 +112,62 @@ export const useAppearanceSettings = () => {
   };
 
   const applySettings = (settings: AppearanceSettings) => {
-    // Aplicar tema
-    if (settings.theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
-    // Aplicar cor primária
     const root = document.documentElement;
-    switch (settings.primary_color) {
-      case 'blue':
-        root.style.setProperty('--primary', '221 83% 53%');
-        break;
-      case 'green':
-        root.style.setProperty('--primary', '142 76% 36%');
-        break;
-      case 'red':
-        root.style.setProperty('--primary', '0 84% 60%');
-        break;
-      case 'purple':
-        root.style.setProperty('--primary', '262 83% 58%');
-        break;
-      case 'orange':
-      default:
-        root.style.setProperty('--primary', '25 95% 53%');
-        break;
-    }
-
-    // Aplicar tamanho da fonte
-    switch (settings.font_size) {
-      case 'small':
-        root.style.setProperty('--font-size', '14px');
-        break;
-      case 'large':
-        root.style.setProperty('--font-size', '18px');
-        break;
-      case 'medium':
-      default:
-        root.style.setProperty('--font-size', '16px');
-        break;
-    }
-
-    // Aplicar outras configurações
-    if (settings.reduced_motion) {
-      root.style.setProperty('--animation-duration', '0s');
+    
+    // Apply theme
+    if (settings.theme === 'dark') {
+      root.classList.add('dark');
     } else {
-      root.style.removeProperty('--animation-duration');
+      root.classList.remove('dark');
+    }
+
+    // Apply primary color with correct HSL values
+    const colorMap = {
+      orange: { primary: '25 95% 53%', accent: '25 95% 53%' },
+      blue: { primary: '221 83% 53%', accent: '217 91% 60%' },
+      green: { primary: '142 76% 36%', accent: '138 76% 49%' },
+      purple: { primary: '258 90% 66%', accent: '266 85% 58%' },
+      red: { primary: '0 72% 51%', accent: '0 84% 60%' }
+    };
+
+    const colors = colorMap[settings.primary_color as keyof typeof colorMap];
+    if (colors) {
+      root.style.setProperty('--primary', colors.primary);
+      root.style.setProperty('--accent', colors.accent);
+    }
+
+    // Apply font size
+    const fontSizes = {
+      small: '14px',
+      medium: '16px',
+      large: '18px',
+      'extra-large': '20px'
+    };
+    root.style.fontSize = fontSizes[settings.font_size as keyof typeof fontSizes];
+
+    // Apply other settings
+    if (settings.compact_mode) {
+      root.classList.add('compact-mode');
+    } else {
+      root.classList.remove('compact-mode');
+    }
+
+    if (settings.high_contrast) {
+      root.classList.add('high-contrast');
+    } else {
+      root.classList.remove('high-contrast');
+    }
+
+    if (settings.reduced_motion) {
+      root.classList.add('reduced-motion');
+    } else {
+      root.classList.remove('reduced-motion');
+    }
+
+    if (!settings.show_animations) {
+      root.classList.add('no-animations');
+    } else {
+      root.classList.remove('no-animations');
     }
   };
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,13 +8,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { ShoppingCart, Plus, Minus, Search, Phone, MapPin, Clock, Trash2, ArrowLeft, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
-import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Logo from '@/components/Logo';
@@ -80,7 +78,6 @@ const MenuDigital = () => {
   });
 
   const { cart, addToCart, updateCartItem, removeFromCart, clearCart, getCartTotal, getCartItemCount } = useDigitalMenuCart();
-  const { sendToKitchen } = useKitchenIntegration();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -97,7 +94,7 @@ const MenuDigital = () => {
       setLoading(true);
       setError(null);
 
-      // Buscar perfil do restaurante
+      // Buscar perfil do restaurante - PÚBLICO
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -107,7 +104,7 @@ const MenuDigital = () => {
       if (profileError) throw new Error('Restaurante não encontrado');
       setRestaurant(profileData);
 
-      // Buscar produtos
+      // Buscar produtos - PÚBLICO
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
@@ -122,7 +119,7 @@ const MenuDigital = () => {
         setProducts(productsData || []);
       }
 
-      // Buscar categorias
+      // Buscar categorias - PÚBLICO
       const { data: categoriesData, error: categoriesError } = await supabase
         .from('product_categories')
         .select('*')
@@ -136,7 +133,7 @@ const MenuDigital = () => {
         setCategories(categoriesData || []);
       }
 
-      // Buscar zonas de entrega
+      // Buscar zonas de entrega - PÚBLICO
       const { data: zonesData, error: zonesError } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -245,28 +242,12 @@ const MenuDigital = () => {
         estimated_time: '30-45 min'
       };
 
-      // Salvar pedido
+      // Salvar pedido - SEM necessidade de autenticação
       const { error } = await supabase
         .from('orders')
         .insert([orderData]);
 
       if (error) throw error;
-
-      // Enviar para KDS
-      try {
-        await sendToKitchen({
-          user_id: userId!,
-          order_number: orderNumber,
-          customer_name: customerData.name,
-          customer_phone: customerData.phone,
-          items: orderItems,
-          total: getFinalTotal(),
-          payment_method: 'pending',
-          order_type: 'delivery'
-        });
-      } catch (kdsError) {
-        console.error('Erro ao enviar para KDS:', kdsError);
-      }
 
       toast({
         title: "Pedido realizado com sucesso!",
