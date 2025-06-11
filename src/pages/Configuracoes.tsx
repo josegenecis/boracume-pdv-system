@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
@@ -9,6 +10,8 @@ import ScaleIntegrationSettings from '@/components/settings/ScaleIntegrationSett
 import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 import DeviceManager from '@/components/devices/DeviceManager';
+import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
+import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Configuracoes: React.FC = () => {
@@ -31,13 +34,15 @@ const Configuracoes: React.FC = () => {
       <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
       
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 grid grid-cols-4 lg:grid-cols-8">
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="devices">Dispositivos</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="appearance">Aparência</TabsTrigger>
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
           <TabsTrigger value="qrcode">QR Code</TabsTrigger>
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
@@ -69,6 +74,14 @@ const Configuracoes: React.FC = () => {
         
         <TabsContent value="delivery">
           <DeliverySettings />
+        </TabsContent>
+        
+        <TabsContent value="whatsapp">
+          <WhatsAppIntegration />
+        </TabsContent>
+        
+        <TabsContent value="fiscal">
+          <FiscalSettings />
         </TabsContent>
         
         <TabsContent value="qrcode">

@@ -21,12 +21,14 @@ interface Order {
   customer_address: string;
   total: number;
   status: OrderStatusType;
+  status_color: string;
   payment_method: string;
   order_type: string;
   items: any[];
   created_at: string;
   delivery_fee: number;
   estimated_time: string;
+  variations: any[];
 }
 
 const Orders = () => {
@@ -53,9 +55,10 @@ const Orders = () => {
 
       if (error) throw error;
       
-      // Transform the data to match our interface with proper status typing
       const transformedData = (data || []).map(item => {
         let parsedItems = [];
+        let parsedVariations = [];
+        
         try {
           if (typeof item.items === 'string') {
             parsedItems = JSON.parse(item.items);
@@ -67,10 +70,22 @@ const Orders = () => {
           parsedItems = [];
         }
 
+        try {
+          if (typeof item.variations === 'string') {
+            parsedVariations = JSON.parse(item.variations);
+          } else if (Array.isArray(item.variations)) {
+            parsedVariations = item.variations;
+          }
+        } catch (e) {
+          console.error('Error parsing variations:', e);
+          parsedVariations = [];
+        }
+
         return {
           ...item,
           status: item.status as OrderStatusType,
-          items: parsedItems
+          items: parsedItems,
+          variations: parsedVariations
         };
       });
       
@@ -137,6 +152,41 @@ const Orders = () => {
       case 'pix': return 'PIX';
       default: return method;
     }
+  };
+
+  const renderItemWithVariations = (item: any, orderVariations: any[]) => {
+    const itemVariations = orderVariations?.filter(v => v.item_id === item.id) || [];
+    
+    return (
+      <div key={item.id || Math.random()} className="py-1 border-b border-gray-100 last:border-0">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <span className="font-medium">{item.quantity}x {item.product_name}</span>
+            {itemVariations.length > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                {itemVariations.map((variation, idx) => (
+                  <div key={idx}>
+                    <strong>{variation.variation_name}:</strong> {
+                      Array.isArray(variation.selection) 
+                        ? variation.selection.map((sel: any) => sel.name).join(', ')
+                        : variation.selection?.name || ''
+                    }
+                  </div>
+                ))}
+              </div>
+            )}
+            {item.notes && (
+              <div className="text-xs text-gray-500 italic mt-1">
+                Obs: {item.notes}
+              </div>
+            )}
+          </div>
+          <span className="font-medium text-gray-900 ml-2">
+            {formatCurrency(item.subtotal)}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   const filteredOrders = orders.filter(order => {
@@ -223,7 +273,11 @@ const Orders = () => {
       {/* Lista de Pedidos */}
       <div className="grid gap-4">
         {filteredOrders.map((order) => (
-          <Card key={order.id} className="overflow-hidden">
+          <Card 
+            key={order.id} 
+            className="overflow-hidden border-l-4"
+            style={{ borderLeftColor: order.status_color }}
+          >
             <CardContent className="p-0">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
                 
@@ -279,26 +333,9 @@ const Orders = () => {
                 <div className="lg:col-span-5 p-6">
                   <h4 className="font-medium mb-3 text-gray-900">Itens do Pedido</h4>
                   <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {order.items?.map((item: any, index: number) => (
-                      <div key={index} className="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-0">
-                        <div>
-                          <span className="font-medium">{item.quantity}x {item.product_name}</span>
-                          {item.options && item.options.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {item.options.join(', ')}
-                            </div>
-                          )}
-                          {item.notes && (
-                            <div className="text-xs text-gray-500 italic mt-1">
-                              Obs: {item.notes}
-                            </div>
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-900">
-                          {formatCurrency(item.subtotal)}
-                        </span>
-                      </div>
-                    ))}
+                    {order.items?.map((item: any, index: number) => 
+                      renderItemWithVariations(item, order.variations)
+                    )}
                   </div>
                 </div>
 
