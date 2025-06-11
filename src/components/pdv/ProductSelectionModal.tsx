@@ -3,29 +3,26 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, Minus, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface Product {
   id: string;
   name: string;
   price: number;
   image_url?: string;
-  description?: string;
   available: boolean;
-}
-
-interface VariationOption {
-  name: string;
-  price: number;
+  category_id?: string;
+  description?: string;
+  weight_based?: boolean;
+  send_to_kds?: boolean;
 }
 
 interface ProductVariation {
@@ -33,45 +30,43 @@ interface ProductVariation {
   name: string;
   required: boolean;
   max_selections: number;
-  options: VariationOption[];
+  options: Array<{name: string; price: number}>;
 }
 
 interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number, selectedOptions: string[], notes: string) => void;
-  product?: Product;
-  variations?: ProductVariation[];
+  onAddToCart: (product: Product, quantity: number, options: string[], notes: string) => void;
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   isOpen,
   onClose,
-  onAddToCart,
-  product: propProduct,
-  variations: propVariations = []
+  onAddToCart
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(propProduct || null);
-  const [variations, setVariations] = useState<ProductVariation[]>(propVariations);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-
+  const [variations, setVariations] = useState<ProductVariation[]>([]);
+  
   const { user } = useAuth();
+  const { toast } = useToast();
 
-  // Update state when props change
   useEffect(() => {
-    if (propProduct) {
-      setSelectedProduct(propProduct);
-      setVariations(propVariations);
-      setQuantity(1);
-      setSelectedOptions({});
-      setNotes('');
+    if (isOpen && user) {
+      fetchProducts();
     }
-  }, [propProduct, propVariations]);
+  }, [isOpen, user]);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      fetchProductVariations(selectedProduct.id);
+    }
+  }, [selectedProduct]);
 
   const fetchProducts = async () => {
     try {
@@ -87,7 +82,11 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
       setProducts(data || []);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
-      setProducts([]);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os produtos.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -98,107 +97,49 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
       const { data, error } = await supabase
         .from('product_variations')
         .select('*')
-        .eq('product_id', productId)
-        .order('name');
+        .eq('product_id', productId);
 
       if (error) throw error;
-      
-      const transformedData = (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
-
-        return {
-          id: item.id,
-          name: item.name,
-          required: item.required,
-          max_selections: item.max_selections,
-          options: Array.isArray(parsedOptions) ? parsedOptions : []
-        };
-      });
-      
-      return transformedData;
+      setVariations(data || []);
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
-      return [];
+      setVariations([]);
     }
   };
-
-  useEffect(() => {
-    if (isOpen && user && !propProduct) {
-      fetchProducts();
-    }
-  }, [isOpen, user, propProduct]);
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleProductClick = async (product: Product) => {
-    const productVariations = await fetchProductVariations(product.id);
-    
+  const handleProductSelect = (product: Product) => {
     setSelectedProduct(product);
-    setVariations(productVariations);
+    setSelectedOptions([]);
     setQuantity(1);
-    setSelectedOptions({});
     setNotes('');
   };
 
-  const handleVariationChange = (variationId: string, optionName: string, checked: boolean) => {
-    const variation = variations.find(v => v.id === variationId);
-    if (!variation) return;
+  const handleAddToCart = () => {
+    if (!selectedProduct) return;
 
-    setSelectedOptions(prev => {
-      const current = prev[variationId] || [];
-      
-      if (variation.max_selections === 1) {
-        return { ...prev, [variationId]: checked ? [optionName] : [] };
-      } else {
-        if (checked) {
-          if (current.length < variation.max_selections) {
-            return { ...prev, [variationId]: [...current, optionName] };
-          }
-          return prev;
-        } else {
-          return { ...prev, [variationId]: current.filter(opt => opt !== optionName) };
-        }
-      }
+    onAddToCart(selectedProduct, quantity, selectedOptions, notes);
+    
+    // Reset form
+    setSelectedProduct(null);
+    setSelectedOptions([]);
+    setQuantity(1);
+    setNotes('');
+    
+    toast({
+      title: "Produto adicionado",
+      description: `${selectedProduct.name} foi adicionado ao carrinho.`,
     });
   };
 
-  const isVariationValid = (variation: ProductVariation) => {
-    const selected = selectedOptions[variation.id] || [];
-    return !variation.required || selected.length > 0;
-  };
-
-  const canAddToCart = () => {
-    return variations.every(variation => isVariationValid(variation));
-  };
-
-  const getTotalPrice = () => {
-    if (!selectedProduct) return 0;
-    
-    let total = selectedProduct.price;
-    
-    variations.forEach(variation => {
-      const selected = selectedOptions[variation.id] || [];
-      selected.forEach(optionName => {
-        const option = variation.options.find(opt => opt.name === optionName);
-        if (option) {
-          total += option.price;
-        }
-      });
-    });
-    
-    return total * quantity;
+  const handleBack = () => {
+    setSelectedProduct(null);
+    setSelectedOptions([]);
+    setQuantity(1);
+    setNotes('');
   };
 
   const formatCurrency = (value: number) => {
@@ -208,33 +149,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     }).format(value);
   };
 
-  const handleAddToCart = () => {
-    if (!selectedProduct || !canAddToCart()) return;
-
-    const formattedOptions = variations.map(variation => {
-      const selected = selectedOptions[variation.id] || [];
-      return selected.map(optionName => {
-        const option = variation.options.find(opt => opt.name === optionName);
-        return `${variation.name}: ${optionName}${option?.price ? ` (+${formatCurrency(option.price)})` : ''}`;
-      });
-    }).flat();
-
-    onAddToCart(selectedProduct, quantity, formattedOptions, notes);
-    
-    setSelectedProduct(null);
-    setVariations([]);
-    setQuantity(1);
-    setSelectedOptions({});
-    setNotes('');
-    onClose();
-  };
-
-  const handleBackToProducts = () => {
-    setSelectedProduct(null);
-    setVariations([]);
-    setQuantity(1);
-    setSelectedOptions({});
-    setNotes('');
+  const getTotalPrice = () => {
+    if (!selectedProduct) return 0;
+    return selectedProduct.price * quantity;
   };
 
   return (
@@ -242,12 +159,12 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {selectedProduct ? selectedProduct.name : 'Selecionar Produto'}
+            {selectedProduct ? `Adicionar ${selectedProduct.name}` : 'Selecionar Produto'}
           </DialogTitle>
         </DialogHeader>
 
         {!selectedProduct ? (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
@@ -259,24 +176,22 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             </div>
 
             {loading ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Carregando produtos...</p>
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">
-                  {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
-                </p>
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
                 {filteredProducts.map((product) => (
-                  <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <Card 
+                    key={product.id} 
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => handleProductSelect(product)}
+                  >
                     <div className="aspect-square relative overflow-hidden rounded-t-lg">
                       {product.image_url ? (
                         <img 
                           src={product.image_url} 
-                          alt={product.name}
+                          alt={product.name} 
                           className="object-cover w-full h-full"
                         />
                       ) : (
@@ -287,146 +202,121 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                     </div>
                     <CardContent className="p-3">
                       <h3 className="font-medium text-sm mb-1 line-clamp-2">{product.name}</h3>
-                      <p className="text-lg font-bold text-primary mb-2">
+                      <p className="text-lg font-bold text-primary">
                         {formatCurrency(product.price)}
+                        {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                       </p>
-                      <Button 
-                        onClick={() => handleProductClick(product)}
-                        className="w-full"
-                        size="sm"
-                      >
-                        <Plus size={16} className="mr-1" />
-                        Selecionar
-                      </Button>
                     </CardContent>
                   </Card>
                 ))}
               </div>
             )}
+
+            {!loading && filteredProducts.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">
+                  {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
-            {!propProduct && (
-              <Button variant="outline" onClick={handleBackToProducts}>
-                ← Voltar aos produtos
-              </Button>
-            )}
-
-            <div className="flex gap-4">
-              {selectedProduct.image_url && (
-                <img
-                  src={selectedProduct.image_url}
-                  alt={selectedProduct.name}
-                  className="w-32 h-32 object-cover rounded-lg"
-                />
-              )}
-              <div className="flex-1">
-                <p className="text-2xl font-bold text-primary mb-2">
-                  {formatCurrency(selectedProduct.price)}
-                </p>
-                {selectedProduct.description && (
-                  <p className="text-gray-600">{selectedProduct.description}</p>
-                )}
-              </div>
-            </div>
-
-            {variations.map((variation) => (
-              <div key={variation.id} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">{variation.name}</h3>
-                  {variation.required && (
-                    <Badge variant="destructive" className="text-xs">
-                      Obrigatório
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="text-xs">
-                    {variation.max_selections === 1 ? 'Escolha 1' : `Máx: ${variation.max_selections}`}
-                  </Badge>
-                </div>
-
-                {variation.max_selections === 1 ? (
-                  <RadioGroup
-                    value={selectedOptions[variation.id]?.[0] || ''}
-                    onValueChange={(value) => handleVariationChange(variation.id, value, !!value)}
-                  >
-                    {variation.options.map((option) => (
-                      <div key={option.name} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value={option.name} id={`${variation.id}-${option.name}`} />
-                          <Label htmlFor={`${variation.id}-${option.name}`}>
-                            {option.name}
-                          </Label>
-                        </div>
-                        <span className="text-sm text-gray-600">
-                          {option.price > 0 ? `+${formatCurrency(option.price)}` : 'Grátis'}
-                        </span>
-                      </div>
-                    ))}
-                  </RadioGroup>
+            <div className="flex items-start gap-4">
+              <div className="w-32 h-32 rounded-lg overflow-hidden flex-shrink-0">
+                {selectedProduct.image_url ? (
+                  <img 
+                    src={selectedProduct.image_url} 
+                    alt={selectedProduct.name} 
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  <div className="space-y-2">
-                    {variation.options.map((option) => (
-                      <div key={option.name} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`${variation.id}-${option.name}`}
-                            checked={selectedOptions[variation.id]?.includes(option.name) || false}
-                            onCheckedChange={(checked) => 
-                              handleVariationChange(variation.id, option.name, checked as boolean)
-                            }
-                            disabled={
-                              !selectedOptions[variation.id]?.includes(option.name) &&
-                              (selectedOptions[variation.id] || []).length >= variation.max_selections
-                            }
-                          />
-                          <Label htmlFor={`${variation.id}-${option.name}`}>
-                            {option.name}
-                          </Label>
-                        </div>
-                        <span className="text-sm text-gray-600">
-                          {option.price > 0 ? `+${formatCurrency(option.price)}` : 'Grátis'}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-gray-400 text-xs">Sem imagem</span>
                   </div>
                 )}
-
-                {!isVariationValid(variation) && (
-                  <p className="text-sm text-red-600">
-                    {variation.name} é obrigatório
-                  </p>
-                )}
-
-                <Separator />
               </div>
-            ))}
-
-            <div>
-              <Label htmlFor="notes">Observações</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Observações especiais..."
-                rows={3}
-              />
+              <div className="flex-1">
+                <h3 className="text-xl font-bold">{selectedProduct.name}</h3>
+                <p className="text-2xl font-bold text-primary mt-2">
+                  {formatCurrency(selectedProduct.price)}
+                  {selectedProduct.weight_based && <span className="text-sm text-gray-500 ml-1">/kg</span>}
+                </p>
+                {selectedProduct.description && (
+                  <p className="text-gray-600 mt-2">{selectedProduct.description}</p>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Label>Quantidade:</Label>
-                <div className="flex items-center gap-2">
+            {variations.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-semibold">Opções</h4>
+                {variations.map((variation) => (
+                  <div key={variation.id} className="space-y-2">
+                    <Label className="font-medium">
+                      {variation.name}
+                      {variation.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                    <div className="space-y-2">
+                      {variation.options.map((option, index) => (
+                        <div key={index} className="flex items-center space-x-2">
+                          <input
+                            type={variation.max_selections === 1 ? "radio" : "checkbox"}
+                            name={variation.id}
+                            value={option.name}
+                            onChange={(e) => {
+                              if (variation.max_selections === 1) {
+                                setSelectedOptions(prev => 
+                                  prev.filter(opt => !variation.options.some(o => o.name === opt))
+                                    .concat(e.target.checked ? [option.name] : [])
+                                );
+                              } else {
+                                setSelectedOptions(prev => 
+                                  e.target.checked 
+                                    ? [...prev, option.name]
+                                    : prev.filter(opt => opt !== option.name)
+                                );
+                              }
+                            }}
+                          />
+                          <Label className="flex-1">
+                            {option.name}
+                            {option.price > 0 && (
+                              <span className="ml-2 text-green-600">
+                                +{formatCurrency(option.price)}
+                              </span>
+                            )}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="quantity">Quantidade</Label>
+                <div className="flex items-center gap-2 mt-2">
                   <Button
                     variant="outline"
-                    size="icon"
+                    size="sm"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                   >
                     <Minus size={16} />
                   </Button>
-                  <span className="w-12 text-center">{quantity}</span>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 text-center"
+                    min="1"
+                  />
                   <Button
                     variant="outline"
-                    size="icon"
+                    size="sm"
                     onClick={() => setQuantity(quantity + 1)}
                   >
                     <Plus size={16} />
@@ -434,23 +324,34 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                 </div>
               </div>
 
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Total:</p>
-                <p className="text-2xl font-bold text-primary">
-                  {formatCurrency(getTotalPrice())}
-                </p>
+              <div>
+                <Label htmlFor="notes">Observações</Label>
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Observações especiais..."
+                  rows={3}
+                  className="mt-2"
+                />
               </div>
             </div>
 
+            <Separator />
+
+            <div className="flex justify-between items-center">
+              <span className="text-lg font-bold">Total:</span>
+              <span className="text-xl font-bold text-primary">
+                {formatCurrency(getTotalPrice())}
+              </span>
+            </div>
+
             <div className="flex gap-3">
-              <Button variant="outline" onClick={onClose} className="flex-1">
-                Cancelar
+              <Button variant="outline" onClick={handleBack} className="flex-1">
+                Voltar
               </Button>
-              <Button 
-                onClick={handleAddToCart} 
-                className="flex-1"
-                disabled={!canAddToCart()}
-              >
+              <Button onClick={handleAddToCart} className="flex-1">
+                <Plus size={16} className="mr-2" />
                 Adicionar ao Carrinho
               </Button>
             </div>

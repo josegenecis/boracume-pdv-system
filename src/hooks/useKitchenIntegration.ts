@@ -41,7 +41,15 @@ export const useKitchenIntegration = () => {
         subtotal: item.subtotal
       }));
 
-      console.log('🔄 Sending order to KDS with items:', kitchenItems);
+      console.log('🔄 Sending order to KDS with full details:', {
+        order_number: orderData.order_number,
+        customer_name: orderData.customer_name,
+        customer_phone: orderData.customer_phone,
+        payment_method: orderData.payment_method,
+        order_type: orderData.order_type,
+        total: orderData.total,
+        items: kitchenItems
+      });
 
       const kitchenOrder = {
         user_id: orderData.user_id,
@@ -62,7 +70,7 @@ export const useKitchenIntegration = () => {
         throw error;
       }
 
-      console.log('✅ Order sent to KDS successfully');
+      console.log('✅ Order sent to KDS successfully with all details');
     } catch (error) {
       console.error('❌ Failed to send order to KDS:', error);
       throw error;

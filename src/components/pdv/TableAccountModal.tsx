@@ -8,10 +8,20 @@ import { Trash2, Plus, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+interface TableAccountItem {
+  product_id: string;
+  product_name: string;
+  price: number;
+  quantity: number;
+  subtotal: number;
+  options?: string[];
+  notes?: string;
+}
+
 interface TableAccount {
   id: string;
   table_id: string;
-  items: any[];
+  items: TableAccountItem[];
   total: number;
   status: 'open' | 'pending_payment' | 'closed';
   created_at: string;
@@ -23,7 +33,7 @@ interface TableAccountModalProps {
   tableId: string;
   tableNumber: number;
   onAccountUpdate: () => void;
-  onFinalize?: (items: any[], total: number, tableNumber: number) => void;
+  onFinalize?: (items: TableAccountItem[], total: number, tableNumber: number) => void;
 }
 
 const TableAccountModal: React.FC<TableAccountModalProps> = ({
@@ -59,21 +69,23 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
       }
 
       if (data) {
-        // Parse items if they come as JSON string
-        let parsedItems = data.items;
-        if (typeof data.items === 'string') {
-          try {
+        // Parse items safely
+        let parsedItems: TableAccountItem[] = [];
+        try {
+          if (typeof data.items === 'string') {
             parsedItems = JSON.parse(data.items);
-          } catch (e) {
-            console.error('Error parsing items:', e);
-            parsedItems = [];
+          } else if (Array.isArray(data.items)) {
+            parsedItems = data.items as TableAccountItem[];
           }
+        } catch (e) {
+          console.error('Error parsing items:', e);
+          parsedItems = [];
         }
 
         setAccount({
           id: data.id,
           table_id: data.table_id,
-          items: Array.isArray(parsedItems) ? parsedItems : [],
+          items: parsedItems,
           total: data.total,
           status: data.status as 'open' | 'pending_payment' | 'closed',
           created_at: data.created_at
@@ -83,6 +95,11 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
       }
     } catch (error) {
       console.error('Erro ao carregar conta da mesa:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar a conta da mesa.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
