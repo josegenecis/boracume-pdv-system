@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -75,6 +74,10 @@ serve(async (req) => {
   }
 });
 
+import { loadCertificateFromBase64, validateCertificate } from './certificate-utils.ts';
+import { SefazClient } from './sefaz-client.ts';
+import { generateQRCodeData } from './qrcode-generator.ts';
+
 async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
   console.log('Iniciando emissão de NFC-e para ordem:', data.order_id);
 
@@ -100,6 +103,30 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
 
   if (orderError || !order) {
     throw new Error('Pedido não encontrado');
+  }
+
+  // Validar e carregar certificado
+  if (!fiscalSettings.certificado_a1_base64 || !fiscalSettings.certificado_senha) {
+    throw new Error('Certificado digital A1 não configurado');
+  }
+
+  let certInfo;
+  let sefazClient;
+  
+  try {
+    console.log('Carregando certificado digital...');
+    certInfo = loadCertificateFromBase64(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
+    
+    const validation = validateCertificate(certInfo);
+    if (!validation.valid) {
+      throw new Error(`Certificado inválido: ${validation.errors.join(', ')}`);
+    }
+    
+    sefazClient = new SefazClient(certInfo);
+    console.log('Certificado carregado e validado com sucesso');
+  } catch (error) {
+    console.error('Erro ao carregar certificado:', error);
+    throw new Error(`Erro no certificado: ${error.message}`);
   }
 
   // 3. Gerar próximo número da NFC-e
@@ -197,13 +224,33 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     throw new Error('Erro ao criar itens do cupom: ' + itemsError.message);
   }
 
-  // 7. Gerar XML da NFC-e
-  const xmlContent = await generateNFCeXML(fiscalSettings, cupom, items, data.consumer_data, data.observacoes);
+  // 7. Gerar XML da NFC-e (versão real)
+  const xmlContent = await generateNFCeXMLReal(fiscalSettings, cupom, items, data.consumer_data, data.observacoes);
 
-  // 8. Simular envio para Sefaz (em produção, aqui seria feita a comunicação real)
-  const transmissionResult = await simulateTransmissionToSefaz(xmlContent, fiscalSettings.ambiente);
+  // 8. Enviar para Sefaz usando bibliotecas reais
+  console.log('Enviando NFC-e para Sefaz...');
+  const transmissionResult = await sefazClient.enviarNFCe(
+    xmlContent, 
+    fiscalSettings.endereco_uf,
+    fiscalSettings.ambiente as 'producao' | 'homologacao'
+  );
 
-  // 9. Atualizar cupom com resultado da transmissão
+  // 9. Gerar QR Code real se autorizado
+  let qrCodeUrl = '';
+  if (transmissionResult.success && transmissionResult.chaveAcesso) {
+    qrCodeUrl = generateQRCodeData(
+      transmissionResult.chaveAcesso,
+      fiscalSettings.endereco_uf,
+      fiscalSettings.ambiente as 'producao' | 'homologacao',
+      cupom.data_hora_emissao,
+      cupom.valor_total,
+      data.consumer_data?.cpf_cnpj,
+      fiscalSettings.csc_id,
+      fiscalSettings.csc_token
+    );
+  }
+
+  // 10. Atualizar cupom com resultado da transmissão
   const updateData: any = {
     xml_content: xmlContent,
     status: transmissionResult.success ? 'autorizado' : 'rejeitado',
@@ -213,10 +260,15 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
   if (transmissionResult.success) {
     updateData.protocolo_autorizacao = transmissionResult.protocolo;
     updateData.data_hora_autorizacao = new Date().toISOString();
-    updateData.xml_autorizado = transmissionResult.xmlAutorizado;
-    updateData.qr_code_url = generateQRCodeURL(chaveAcesso, fiscalSettings.endereco_uf);
+    updateData.xml_autorizado = transmissionResult.xmlRetorno;
+    updateData.qr_code_url = qrCodeUrl;
   } else {
-    updateData.motivo_rejeicao = transmissionResult.motivo;
+    updateData.motivo_rejeicao = transmissionResult.xMotivo;
+  }
+
+  // Atualizar com QR Code real
+  if (qrCodeUrl) {
+    updateData.qr_code_url = qrCodeUrl;
   }
 
   const { error: updateError } = await supabase
@@ -228,7 +280,7 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
     console.error('Erro ao atualizar cupom:', updateError);
   }
 
-  // 10. Registrar log de transmissão
+  // 11. Registrar log de transmissão
   await supabase
     .from('nfce_transmissions')
     .insert([{
@@ -236,8 +288,8 @@ async function emitirNFCe(supabase: any, userId: string, data: NFCeData) {
       tipo_operacao: 'emissao',
       xml_enviado: xmlContent,
       xml_retorno: transmissionResult.xmlRetorno,
-      codigo_status: transmissionResult.codigoStatus,
-      motivo: transmissionResult.motivo,
+      codigo_status: transmissionResult.cStat,
+      motivo: transmissionResult.xMotivo,
       protocolo: transmissionResult.protocolo,
       sucesso: transmissionResult.success
     }]);
@@ -270,41 +322,66 @@ async function consultarNFCe(supabase: any, userId: string, cupomId: string) {
     throw new Error('Cupom não encontrado');
   }
 
-  // Simular consulta na Sefaz
-  const consultaResult = await simulateConsultationSefaz(cupom.chave_acesso);
+  // Carregar certificado e criar cliente Sefaz
+  const { data: fiscalSettings, error: fiscalError } = await supabase
+    .from('fiscal_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
 
-  // Atualizar status se necessário
-  if (consultaResult.status !== cupom.status) {
-    await supabase
-      .from('nfce_cupons')
-      .update({
-        status: consultaResult.status,
-        protocolo_autorizacao: consultaResult.protocolo,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', cupomId);
+  if (fiscalError || !fiscalSettings) {
+    throw new Error('Configurações fiscais não encontradas');
   }
 
-  // Registrar log de consulta
-  await supabase
-    .from('nfce_transmissions')
-    .insert([{
-      cupom_id: cupomId,
-      tipo_operacao: 'consulta',
-      xml_retorno: consultaResult.xmlRetorno,
-      codigo_status: consultaResult.codigoStatus,
-      protocolo: consultaResult.protocolo,
-      sucesso: true
-    }]);
+  try {
+    const certInfo = loadCertificateFromBase64(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
+    const sefazClient = new SefazClient(certInfo);
+    
+    // Consultar real na Sefaz
+    const consultaResult = await sefazClient.consultarNFCe(
+      cupom.chave_acesso,
+      fiscalSettings.endereco_uf,
+      fiscalSettings.ambiente as 'producao' | 'homologacao'
+    );
 
-  return new Response(
-    JSON.stringify({
-      success: true,
-      status: consultaResult.status,
-      protocolo: consultaResult.protocolo
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+    // Atualizar status se necessário
+    if (consultaResult.success && consultaResult.cStat !== cupom.status) {
+      await supabase
+        .from('nfce_cupons')
+        .update({
+          status: consultaResult.success ? 'autorizado' : 'rejeitado',
+          protocolo_autorizacao: consultaResult.protocolo,
+          motivo_rejeicao: consultaResult.xMotivo,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', cupomId);
+    }
+
+    // Registrar log de consulta
+    await supabase
+      .from('nfce_transmissions')
+      .insert([{
+        cupom_id: cupomId,
+        tipo_operacao: 'consulta',
+        xml_retorno: consultaResult.xmlRetorno,
+        codigo_status: consultaResult.cStat,
+        protocolo: consultaResult.protocolo,
+        sucesso: consultaResult.success
+      }]);
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        status: consultaResult.success ? 'autorizado' : cupom.status,
+        protocolo: consultaResult.protocolo,
+        motivo: consultaResult.xMotivo
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Erro na consulta real:', error);
+    throw new Error(`Erro ao consultar NFC-e: ${error.message}`);
+  }
 }
 
 async function cancelarNFCe(supabase: any, userId: string, cupomId: string, motivo: string) {
@@ -326,40 +403,65 @@ async function cancelarNFCe(supabase: any, userId: string, cupomId: string, moti
     throw new Error('Apenas cupons autorizados podem ser cancelados');
   }
 
-  // Simular cancelamento na Sefaz
-  const cancelResult = await simulateCancellationSefaz(cupom.chave_acesso, motivo);
+  // Carregar certificado e criar cliente Sefaz
+  const { data: fiscalSettings, error: fiscalError } = await supabase
+    .from('fiscal_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
 
-  if (cancelResult.success) {
-    // Atualizar status do cupom
-    await supabase
-      .from('nfce_cupons')
-      .update({
-        status: 'cancelado',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', cupomId);
+  if (fiscalError || !fiscalSettings) {
+    throw new Error('Configurações fiscais não encontradas');
   }
 
-  // Registrar log de cancelamento
-  await supabase
-    .from('nfce_transmissions')
-    .insert([{
-      cupom_id: cupomId,
-      tipo_operacao: 'cancelamento',
-      xml_retorno: cancelResult.xmlRetorno,
-      codigo_status: cancelResult.codigoStatus,
-      motivo: motivo,
-      protocolo: cancelResult.protocolo,
-      sucesso: cancelResult.success
-    }]);
+  try {
+    const certInfo = loadCertificateFromBase64(fiscalSettings.certificado_a1_base64, fiscalSettings.certificado_senha);
+    const sefazClient = new SefazClient(certInfo);
+    
+    // Cancelar real na Sefaz
+    const cancelResult = await sefazClient.cancelarNFCe(
+      cupom.chave_acesso,
+      cupom.protocolo_autorizacao,
+      motivo,
+      fiscalSettings.endereco_uf,
+      fiscalSettings.ambiente as 'producao' | 'homologacao'
+    );
 
-  return new Response(
-    JSON.stringify({
-      success: cancelResult.success,
-      motivo: cancelResult.success ? 'Cancelado com sucesso' : cancelResult.motivo
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+    // Atualizar status do cupom
+    if (cancelResult.success) {
+      await supabase
+        .from('nfce_cupons')
+        .update({
+          status: 'cancelado',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', cupomId);
+    }
+
+    // Registrar log de cancelamento
+    await supabase
+      .from('nfce_transmissions')
+      .insert([{
+        cupom_id: cupomId,
+        tipo_operacao: 'cancelamento',
+        xml_retorno: cancelResult.xmlRetorno,
+        codigo_status: cancelResult.cStat,
+        motivo: motivo,
+        protocolo: cancelResult.protocolo,
+        sucesso: cancelResult.success
+      }]);
+    
+    return new Response(
+      JSON.stringify({
+        success: cancelResult.success,
+        motivo: cancelResult.success ? 'Cancelado com sucesso' : cancelResult.xMotivo
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Erro no cancelamento real:', error);
+    throw new Error(`Erro ao cancelar NFC-e: ${error.message}`);
+  }
 }
 
 async function downloadXML(supabase: any, userId: string, cupomId: string) {
@@ -405,206 +507,164 @@ function calculateTaxes(total: number): number {
   return total * 0.0765; // Aproximadamente 7.65% para Simples Nacional
 }
 
-function generateQRCodeURL(chaveAcesso: string, uf: string): string {
-  // URL do QR Code para consulta pelo consumidor
-  const baseUrl = `https://www.sefaz.${uf.toLowerCase()}.gov.br/nfce/consulta`;
-  return `${baseUrl}?chave=${chaveAcesso}`;
-}
-
-async function generateNFCeXML(
+async function generateNFCeXMLReal(
   fiscalSettings: any,
   cupom: any,
   items: any[],
   consumerData?: any,
   observacoes?: string
 ): Promise<string> {
-  // Esta é uma versão simplificada. Em produção, usar biblioteca específica para gerar XML conforme layout da Sefaz
+  // XML mais completo e conforme especificação real da Receita Federal
+  const dataEmissao = new Date(cupom.data_hora_emissao);
+  const dhEmi = dataEmissao.toISOString().replace(/\.\d{3}Z$/, '-03:00');
+  
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
-  <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
-    <infNFe Id="NFe${cupom.chave_acesso}">
-      <ide>
-        <cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF>
-        <cNF>${cupom.numero.toString().padStart(8, '0')}</cNF>
-        <natOp>Venda</natOp>
-        <mod>65</mod>
-        <serie>${cupom.serie}</serie>
-        <nNF>${cupom.numero}</nNF>
-        <dhEmi>${cupom.data_hora_emissao}</dhEmi>
-        <tpNF>1</tpNF>
-        <idDest>1</idDest>
-        <cMunFG>${fiscalSettings.codigo_municipio}</cMunFG>
-        <tpImp>4</tpImp>
-        <tpEmis>1</tpEmis>
-        <cDV>${cupom.chave_acesso.slice(-1)}</cDV>
-        <tpAmb>${fiscalSettings.ambiente === 'producao' ? '1' : '2'}</tpAmb>
-        <finNFe>1</finNFe>
-        <indFinal>1</indFinal>
-        <indPres>1</indPres>
-      </ide>
-      <emit>
-        <CNPJ>${fiscalSettings.cnpj.replace(/\D/g, '')}</CNPJ>
-        <xNome>${fiscalSettings.razao_social}</xNome>
-        <enderEmit>
-          <xLgr>${fiscalSettings.endereco_logradouro}</xLgr>
-          <nro>${fiscalSettings.endereco_numero}</nro>
-          <xBairro>${fiscalSettings.endereco_bairro}</xBairro>
-          <cMun>${fiscalSettings.codigo_municipio}</cMun>
-          <xMun>${fiscalSettings.endereco_municipio}</xMun>
-          <UF>${fiscalSettings.endereco_uf}</UF>
-          <CEP>${fiscalSettings.endereco_cep.replace(/\D/g, '')}</CEP>
-        </enderEmit>
-        <IE>${fiscalSettings.inscricao_estadual || ''}</IE>
-        <CRT>${fiscalSettings.regime_tributario}</CRT>
-      </emit>
-      ${consumerData?.cpf_cnpj ? `
-      <dest>
-        ${consumerData.cpf_cnpj.length === 11 ? 
-          `<CPF>${consumerData.cpf_cnpj}</CPF>` : 
-          `<CNPJ>${consumerData.cpf_cnpj}</CNPJ>`
-        }
-        ${consumerData.nome ? `<xNome>${consumerData.nome}</xNome>` : ''}
-      </dest>
-      ` : ''}
-      ${items.map((item, index) => `
-      <det nItem="${index + 1}">
-        <prod>
-          <cProd>${item.codigo_produto}</cProd>
-          <cEAN />
-          <xProd>${item.descricao}</xProd>
-          <NCM>${item.ncm}</NCM>
-          <CFOP>${item.cfop}</CFOP>
-          <uCom>${item.unidade}</uCom>
-          <qCom>${item.quantidade}</qCom>
-          <vUnCom>${item.valor_unitario.toFixed(4)}</vUnCom>
-          <vProd>${item.valor_total.toFixed(2)}</vProd>
-          <cEANTrib />
-          <uTrib>${item.unidade}</uTrib>
-          <qTrib>${item.quantidade}</qTrib>
-          <vUnTrib>${item.valor_unitario.toFixed(4)}</vUnTrib>
-          <indTot>1</indTot>
-        </prod>
-        <imposto>
-          <ICMS>
-            <ICMSSN102>
-              <orig>0</orig>
-              <CSOSN>${item.cst_icms}</CSOSN>
-            </ICMSSN102>
-          </ICMS>
-          <PIS>
-            <PISOutr>
-              <CST>${item.cst_pis}</CST>
-              <vBC>0.00</vBC>
-              <pPIS>0.0000</pPIS>
-              <vPIS>0.00</vPIS>
-            </PISOutr>
-          </PIS>
-          <COFINS>
-            <COFINSOutr>
-              <CST>${item.cst_cofins}</CST>
-              <vBC>0.00</vBC>
-              <pCOFINS>0.0000</pCOFINS>
-              <vCOFINS>0.00</vCOFINS>
-            </COFINSOutr>
-          </COFINS>
-        </imposto>
-      </det>
-      `).join('')}
-      <total>
-        <ICMSTot>
-          <vBC>0.00</vBC>
-          <vICMS>0.00</vICMS>
-          <vICMSDeson>0.00</vICMSDeson>
-          <vFCP>0.00</vFCP>
-          <vBCST>0.00</vBCST>
-          <vST>0.00</vST>
-          <vFCPST>0.00</vFCPST>
-          <vFCPSTRet>0.00</vFCPSTRet>
-          <vProd>${cupom.valor_total.toFixed(2)}</vProd>
-          <vFrete>0.00</vFrete>
-          <vSeg>0.00</vSeg>
-          <vDesc>0.00</vDesc>
-          <vII>0.00</vII>
-          <vIPI>0.00</vIPI>
-          <vIPIDevol>0.00</vIPIDevol>
-          <vPIS>0.00</vPIS>
-          <vCOFINS>0.00</vCOFINS>
-          <vOutro>0.00</vOutro>
-          <vNF>${cupom.valor_total.toFixed(2)}</vNF>
-          <vTotTrib>${cupom.valor_tributos.toFixed(2)}</vTotTrib>
-        </ICMSTot>
-      </total>
-      <transp>
-        <modFrete>9</modFrete>
-      </transp>
-      <pag>
-        <detPag>
-          <tPag>01</tPag>
-          <vPag>${cupom.valor_total.toFixed(2)}</vPag>
-        </detPag>
-      </pag>
-      ${observacoes ? `<infAdic><infCpl>${observacoes}</infCpl></infAdic>` : ''}
-    </infNFe>
-  </NFe>
-</nfeProc>`;
+<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+  <infNFe Id="NFe${cupom.chave_acesso}" versao="4.00">
+    <ide>
+      <cUF>${getCodigoUF(fiscalSettings.endereco_uf)}</cUF>
+      <cNF>${cupom.chave_acesso.substring(35, 43)}</cNF>
+      <natOp>Venda</natOp>
+      <mod>65</mod>
+      <serie>${cupom.serie}</serie>
+      <nNF>${cupom.numero}</nNF>
+      <dhEmi>${dhEmi}</dhEmi>
+      <tpNF>1</tpNF>
+      <idDest>${consumerData?.cpf_cnpj ? '1' : '0'}</idDest>
+      <cMunFG>${fiscalSettings.codigo_municipio}</cMunFG>
+      <tpImp>4</tpImp>
+      <tpEmis>1</tpEmis>
+      <cDV>${cupom.chave_acesso.slice(-1)}</cDV>
+      <tpAmb>${fiscalSettings.ambiente === 'producao' ? '1' : '2'}</tpAmb>
+      <finNFe>1</finNFe>
+      <indFinal>1</indFinal>
+      <indPres>1</indPres>
+      <procEmi>0</procEmi>
+      <verProc>1.0.0</verProc>
+    </ide>
+    <emit>
+      <CNPJ>${fiscalSettings.cnpj.replace(/\D/g, '')}</CNPJ>
+      <xNome>${fiscalSettings.razao_social}</xNome>
+      <xFant>${fiscalSettings.nome_fantasia || fiscalSettings.razao_social}</xFant>
+      <enderEmit>
+        <xLgr>${fiscalSettings.endereco_logradouro}</xLgr>
+        <nro>${fiscalSettings.endereco_numero}</nro>
+        ${fiscalSettings.endereco_complemento ? `<xCpl>${fiscalSettings.endereco_complemento}</xCpl>` : ''}
+        <xBairro>${fiscalSettings.endereco_bairro}</xBairro>
+        <cMun>${fiscalSettings.codigo_municipio}</cMun>
+        <xMun>${fiscalSettings.endereco_municipio}</xMun>
+        <UF>${fiscalSettings.endereco_uf}</UF>
+        <CEP>${fiscalSettings.endereco_cep.replace(/\D/g, '')}</CEP>
+        <cPais>1058</cPais>
+        <xPais>BRASIL</xPais>
+      </enderEmit>
+      ${fiscalSettings.inscricao_estadual ? `<IE>${fiscalSettings.inscricao_estadual}</IE>` : '<IE>ISENTO</IE>'}
+      <CRT>${fiscalSettings.regime_tributario}</CRT>
+    </emit>
+    ${consumerData?.cpf_cnpj ? `
+    <dest>
+      ${consumerData.cpf_cnpj.replace(/\D/g, '').length === 11 ? 
+        `<CPF>${consumerData.cpf_cnpj.replace(/\D/g, '')}</CPF>` : 
+        `<CNPJ>${consumerData.cpf_cnpj.replace(/\D/g, '')}</CNPJ>`
+      }
+      ${consumerData.nome ? `<xNome>${consumerData.nome}</xNome>` : ''}
+      <indIEDest>9</indIEDest>
+    </dest>
+    ` : ''}
+    ${items.map((item, index) => `
+    <det nItem="${index + 1}">
+      <prod>
+        <cProd>${item.codigo_produto}</cProd>
+        <cEAN/>
+        <xProd>${item.descricao}</xProd>
+        <NCM>${item.ncm}</NCM>
+        <CFOP>${item.cfop}</CFOP>
+        <uCom>${item.unidade}</uCom>
+        <qCom>${item.quantidade.toFixed(4)}</qCom>
+        <vUnCom>${item.valor_unitario.toFixed(4)}</vUnCom>
+        <vProd>${item.valor_total.toFixed(2)}</vProd>
+        <cEANTrib/>
+        <uTrib>${item.unidade}</uTrib>
+        <qTrib>${item.quantidade.toFixed(4)}</qTrib>
+        <vUnTrib>${item.valor_unitario.toFixed(4)}</vUnTrib>
+        <indTot>1</indTot>
+      </prod>
+      <imposto>
+        <vTotTrib>${(item.valor_total * 0.0765).toFixed(2)}</vTotTrib>
+        <ICMS>
+          <ICMSSN102>
+            <orig>0</orig>
+            <CSOSN>${item.cst_icms}</CSOSN>
+          </ICMSSN102>
+        </ICMS>
+        <PIS>
+          <PISOutr>
+            <CST>${item.cst_pis}</CST>
+            <vBC>0.00</vBC>
+            <pPIS>0.0000</pPIS>
+            <vPIS>0.00</vPIS>
+          </PISOutr>
+        </PIS>
+        <COFINS>
+          <COFINSOutr>
+            <CST>${item.cst_cofins}</CST>
+            <vBC>0.00</vBC>
+            <pCOFINS>0.0000</pCOFINS>
+            <vCOFINS>0.00</vCOFINS>
+          </COFINSOutr>
+        </COFINS>
+      </imposto>
+    </det>
+    `).join('')}
+    <total>
+      <ICMSTot>
+        <vBC>0.00</vBC>
+        <vICMS>0.00</vICMS>
+        <vICMSDeson>0.00</vICMSDeson>
+        <vFCP>0.00</vFCP>
+        <vBCST>0.00</vBCST>
+        <vST>0.00</vST>
+        <vFCPST>0.00</vFCPST>
+        <vFCPSTRet>0.00</vFCPSTRet>
+        <vProd>${cupom.valor_total.toFixed(2)}</vProd>
+        <vFrete>0.00</vFrete>
+        <vSeg>0.00</vSeg>
+        <vDesc>0.00</vDesc>
+        <vII>0.00</vII>
+        <vIPI>0.00</vIPI>
+        <vIPIDevol>0.00</vIPIDevol>
+        <vPIS>0.00</vPIS>
+        <vCOFINS>0.00</vCOFINS>
+        <vOutro>0.00</vOutro>
+        <vNF>${cupom.valor_total.toFixed(2)}</vNF>
+        <vTotTrib>${cupom.valor_tributos.toFixed(2)}</vTotTrib>
+      </ICMSTot>
+    </total>
+    <transp>
+      <modFrete>9</modFrete>
+    </transp>
+    <pag>
+      <detPag>
+        <indPag>0</indPag>
+        <tPag>01</tPag>
+        <vPag>${cupom.valor_total.toFixed(2)}</vPag>
+      </detPag>
+    </pag>
+    ${observacoes ? `<infAdic><infCpl>${observacoes}</infCpl></infAdic>` : ''}
+    <infRespTec>
+      <CNPJ>00000000000000</CNPJ>
+      <xContato>Suporte Técnico</xContato>
+      <email>suporte@exemplo.com</email>
+      <fone>1133334444</fone>
+    </infRespTec>
+  </infNFe>
+</NFe>`;
 
   return xml;
 }
 
-async function simulateTransmissionToSefaz(xml: string, ambiente: string) {
-  // Simular comunicação com Sefaz - em produção usar bibliotecas específicas
-  console.log('Simulando transmissão para Sefaz no ambiente:', ambiente);
-  
-  // Simular delay de rede
-  await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-  
-  // Simular sucesso na maioria dos casos
-  const success = Math.random() > 0.1; // 90% de sucesso
-  
-  if (success) {
-    return {
-      success: true,
-      protocolo: `${ambiente === 'producao' ? '1' : '2'}${Date.now().toString().slice(-8)}`,
-      codigoStatus: '100',
-      motivo: 'Autorizado o uso da NFC-e',
-      xmlRetorno: '<retEnviNFe>...</retEnviNFe>',
-      xmlAutorizado: xml // Em produção, seria o XML retornado pela Sefaz
-    };
-  } else {
-    return {
-      success: false,
-      protocolo: null,
-      codigoStatus: '999',
-      motivo: 'Erro de simulação - teste de rejeição',
-      xmlRetorno: '<retEnviNFe><cStat>999</cStat><xMotivo>Erro de simulação</xMotivo></retEnviNFe>',
-      xmlAutorizado: null
-    };
-  }
-}
-
-async function simulateConsultationSefaz(chaveAcesso: string) {
-  console.log('Simulando consulta na Sefaz para chave:', chaveAcesso);
-  
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  return {
-    status: 'autorizado',
-    protocolo: `1${Date.now().toString().slice(-8)}`,
-    codigoStatus: '100',
-    xmlRetorno: '<retConsReciNFe>...</retConsReciNFe>'
-  };
-}
-
-async function simulateCancellationSefaz(chaveAcesso: string, motivo: string) {
-  console.log('Simulando cancelamento na Sefaz:', chaveAcesso, motivo);
-  
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  return {
-    success: true,
-    protocolo: `1${Date.now().toString().slice(-8)}`,
-    codigoStatus: '101',
-    motivo: 'Cancelamento homologado',
-    xmlRetorno: '<retCancNFe>...</retCancNFe>'
-  };
+function generateQRCodeURL(chaveAcesso: string, uf: string): string {
+  // URL do QR Code para consulta pelo consumidor
+  const baseUrl = `https://www.sefaz.${uf.toLowerCase()}.gov.br/nfce/consulta`;
+  return `${baseUrl}?chave=${chaveAcesso}`;
 }
