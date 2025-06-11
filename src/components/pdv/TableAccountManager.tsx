@@ -25,7 +25,11 @@ interface TableAccount {
   created_at: string;
 }
 
-const TableAccountManager: React.FC = () => {
+interface TableAccountManagerProps {
+  onFinalize?: () => void;
+}
+
+const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize }) => {
   const [tables, setTables] = useState<Table[]>([]);
   const [tableAccounts, setTableAccounts] = useState<Record<string, TableAccount>>({});
   const [selectedTable, setSelectedTable] = useState<{ id: string; number: number } | null>(null);
@@ -111,7 +115,7 @@ const TableAccountManager: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users size={20} />
-            Contas das Mesas
+            Gerenciar Mesas
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -197,6 +201,7 @@ const TableAccountManager: React.FC = () => {
             fetchTableAccounts();
             fetchTables();
           }}
+          onFinalize={onFinalize}
         />
       )}
     </div>

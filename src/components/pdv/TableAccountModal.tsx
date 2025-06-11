@@ -24,6 +24,7 @@ interface TableAccountModalProps {
   tableId: string;
   tableNumber: number;
   onAccountUpdate: () => void;
+  onFinalize?: () => void;
 }
 
 const TableAccountModal: React.FC<TableAccountModalProps> = ({
@@ -31,7 +32,8 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
   onClose,
   tableId,
   tableNumber,
-  onAccountUpdate
+  onAccountUpdate,
+  onFinalize
 }) => {
   const [account, setAccount] = useState<TableAccount | null>(null);
   const [loading, setLoading] = useState(false);
@@ -110,7 +112,10 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
 
   const handleFinalizeAccount = () => {
     onClose();
-    // Trigger finalization in parent component
+    // Trigger finalization in parent component - navigate back to PDV
+    if (onFinalize) {
+      onFinalize();
+    }
     onAccountUpdate();
   };
 

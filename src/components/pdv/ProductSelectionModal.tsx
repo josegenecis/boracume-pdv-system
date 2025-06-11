@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -39,23 +40,38 @@ interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddToCart: (product: Product, quantity: number, selectedOptions: string[], notes: string) => void;
+  product?: Product;
+  variations?: ProductVariation[];
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   isOpen,
   onClose,
-  onAddToCart
+  onAddToCart,
+  product: propProduct,
+  variations: propVariations = []
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [variations, setVariations] = useState<ProductVariation[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(propProduct || null);
+  const [variations, setVariations] = useState<ProductVariation[]>(propVariations);
   const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { user } = useAuth();
+
+  // Update state when props change
+  useEffect(() => {
+    if (propProduct) {
+      setSelectedProduct(propProduct);
+      setVariations(propVariations);
+      setQuantity(1);
+      setSelectedOptions({});
+      setNotes('');
+    }
+  }, [propProduct, propVariations]);
 
   const fetchProducts = async () => {
     try {
@@ -117,10 +133,10 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && user) {
+    if (isOpen && user && !propProduct) {
       fetchProducts();
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, propProduct]);
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -295,9 +311,11 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
-            <Button variant="outline" onClick={handleBackToProducts}>
-              ← Voltar aos produtos
-            </Button>
+            {!propProduct && (
+              <Button variant="outline" onClick={handleBackToProducts}>
+                ← Voltar aos produtos
+              </Button>
+            )}
 
             <div className="flex gap-4">
               {selectedProduct.image_url && (

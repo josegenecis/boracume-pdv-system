@@ -506,7 +506,7 @@ const PDV = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="products">Vendas</TabsTrigger>
-          <TabsTrigger value="accounts">Contas das Mesas</TabsTrigger>
+          <TabsTrigger value="accounts">MESAS</TabsTrigger>
         </TabsList>
 
         <TabsContent value="products" className="space-y-6">
@@ -779,17 +779,11 @@ const PDV = () => {
                         <SelectValue placeholder="Selecione a mesa" />
                       </SelectTrigger>
                       <SelectContent>
-                        {tables.length === 0 ? (
-                          <div className="p-2 text-sm text-gray-500">
-                            Nenhuma mesa disponível
-                          </div>
-                        ) : (
-                          tables.map((table) => (
-                            <SelectItem key={table.id} value={table.id}>
-                              Mesa {table.table_number}
-                            </SelectItem>
-                          ))
-                        )}
+                        {tables.map((table) => (
+                          <SelectItem key={table.id} value={table.id}>
+                            Mesa {table.table_number}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   )}
@@ -800,72 +794,65 @@ const PDV = () => {
                 <CardHeader>
                   <CardTitle>Pagamento</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2">
-                    <Button
-                      variant={paymentMethod === 'pix' ? 'default' : 'outline'}
-                      onClick={() => setPaymentMethod('pix')}
-                      className="justify-start"
-                    >
-                      PIX
-                    </Button>
-                    <Button
-                      variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
-                      onClick={() => setPaymentMethod('cartao')}
-                      className="justify-start"
-                    >
-                      Cartão
-                    </Button>
-                    <Button
-                      variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
-                      onClick={() => setPaymentMethod('dinheiro')}
-                      className="justify-start"
-                    >
-                      Dinheiro
-                    </Button>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">Método de Pagamento</label>
+                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o método" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pix">PIX</SelectItem>
+                        <SelectItem value="cartao">Cartão</SelectItem>
+                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  
+
                   {paymentMethod === 'dinheiro' && (
-                    <Input
-                      placeholder="Valor recebido"
-                      value={changeAmount}
-                      onChange={(e) => setChangeAmount(e.target.value)}
-                      type="number"
-                      step="0.01"
-                      min={getFinalTotal()}
-                    />
+                    <div>
+                      <label className="text-sm font-medium">Valor recebido</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={changeAmount}
+                        onChange={(e) => setChangeAmount(e.target.value)}
+                        placeholder="0,00"
+                      />
+                    </div>
                   )}
                 </CardContent>
               </Card>
 
               <div className="space-y-2">
-                {orderType === 'dine_in' && (
-                  <Button 
+                {selectedTable && (
+                  <Button
                     onClick={addToTable}
-                    className="w-full"
-                    size="lg"
-                    variant="outline"
                     disabled={cart.length === 0 || processing}
+                    className="w-full bg-blue-900 hover:bg-blue-800"
+                    size="lg"
                   >
-                    {processing ? 'Adicionando...' : 'Adicionar à Mesa'}
+                    <UtensilsCrossed size={16} className="mr-2" />
+                    Adicionar à Mesa
                   </Button>
                 )}
                 
-                <Button 
+                <Button
                   onClick={handleFinalizeSale}
-                  className="w-full"
+                  disabled={cart.length === 0 || !paymentMethod || processing}
+                  className="w-full bg-green-600 hover:bg-green-700"
                   size="lg"
-                  disabled={cart.length === 0 || processing}
                 >
-                  {processing ? 'Finalizando...' : 'Finalizar Venda'}
+                  <Calculator size={16} className="mr-2" />
+                  Finalizar Venda
                 </Button>
               </div>
             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="accounts">
-          <TableAccountManager />
+        <TabsContent value="accounts" className="space-y-6">
+          <TableAccountManager onFinalize={() => setActiveTab('products')} />
         </TabsContent>
       </Tabs>
 
