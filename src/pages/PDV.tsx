@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -327,7 +328,7 @@ const PDV = () => {
       }));
 
       // Check if table already has an open account
-      const { data: existingAccount } = await supabase
+      const { data: existingAccount } = await (supabase as any)
         .from('table_accounts')
         .select('*')
         .eq('table_id', selectedTable)
@@ -337,9 +338,9 @@ const PDV = () => {
       if (existingAccount) {
         // Add to existing account
         const updatedItems = [...existingAccount.items, ...orderItems];
-        const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('table_accounts')
           .update({
             items: updatedItems,
@@ -352,7 +353,7 @@ const PDV = () => {
         // Create new account
         const total = getTotalValue();
         
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('table_accounts')
           .insert({
             user_id: user?.id,

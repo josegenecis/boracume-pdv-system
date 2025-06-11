@@ -46,7 +46,7 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
   const fetchTableAccount = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('table_accounts')
         .select('*')
         .eq('table_id', tableId)
@@ -79,7 +79,7 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
     const newTotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('table_accounts')
         .update({
           items: updatedItems,

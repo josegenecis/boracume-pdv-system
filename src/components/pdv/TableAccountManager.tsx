@@ -54,7 +54,8 @@ const TableAccountManager: React.FC = () => {
 
   const fetchTableAccounts = async () => {
     try {
-      const { data, error } = await supabase
+      // Use rpc ou query direta para contornar problemas de tipagem
+      const { data, error } = await (supabase as any)
         .from('table_accounts')
         .select('*')
         .eq('user_id', user?.id)
@@ -62,10 +63,10 @@ const TableAccountManager: React.FC = () => {
 
       if (error) throw error;
       
-      const accountsMap = (data || []).reduce((acc, account) => {
+      const accountsMap = (data || []).reduce((acc: Record<string, TableAccount>, account: any) => {
         acc[account.table_id] = account;
         return acc;
-      }, {} as Record<string, TableAccount>);
+      }, {});
       
       setTableAccounts(accountsMap);
     } catch (error) {
