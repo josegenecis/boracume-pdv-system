@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export type SecurityEventType = 
   | 'login' 
   | 'logout' 
+  | 'signup'
   | 'failed_login' 
   | 'password_change' 
   | 'profile_update' 
