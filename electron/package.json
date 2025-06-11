@@ -1,11 +1,13 @@
 
 {
-  "name": "electron-app",
+  "name": "bora-cume-hub-desktop",
   "version": "1.0.0",
+  "description": "Desktop application for Bora Cume Hub",
   "main": "main.js",
   "scripts": {
-    "electron": "electron .",
-    "electron:build": "electron-builder"
+    "start": "electron .",
+    "build": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -14,5 +16,36 @@
   "dependencies": {
     "serialport": "^12.0.0",
     "node-thermal-printer": "^4.5.0"
+  },
+  "build": {
+    "appId": "com.boracumehub.desktop",
+    "productName": "Bora Cume Hub Desktop",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "../dist/**/*",
+      "**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../public/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "nodeGypRebuild": false,
+    "npmRebuild": false
   }
 }
