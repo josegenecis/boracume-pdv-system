@@ -207,13 +207,19 @@ const PDV = () => {
 
   // Helper function to format selected variations for display
   const formatSelectedVariations = (selectedVariations?: any[]) => {
-    if (!selectedVariations || selectedVariations.length === 0) return null;
+    if (!selectedVariations || selectedVariations.length === 0) return [];
     
-    const optionNames = selectedVariations.flatMap(variation => 
-      variation.options?.map((option: any) => option.name) || []
-    );
-    
-    return optionNames;
+    try {
+      return selectedVariations.flatMap(variation => {
+        if (variation && variation.options && Array.isArray(variation.options)) {
+          return variation.options.map((option: any) => option.name || String(option));
+        }
+        return [];
+      });
+    } catch (error) {
+      console.error('Error formatting variations:', error);
+      return [];
+    }
   };
 
   const removeFromCart = (productId: string) => {
@@ -947,5 +953,3 @@ const PDV = () => {
 };
 
 export default PDV;
-
-}
