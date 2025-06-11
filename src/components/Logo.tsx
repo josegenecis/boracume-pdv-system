@@ -19,12 +19,12 @@ const Logo: React.FC<LogoProps> = ({ size = 'md', variant = 'full', className = 
       {variant === 'full' ? (
         <div className={`flex items-center ${sizeClasses[size]} font-montserrat font-bold`}>
           <span className="text-green-600">Bora</span>
-          <span className="text-orange-600">Cumê</span>
+          <span className="text-orange-500">Cumê</span>
         </div>
       ) : (
         <div className={`${sizeClasses[size]} font-montserrat font-bold`}>
           <span className="text-green-600">B</span>
-          <span className="text-orange-600">C</span>
+          <span className="text-orange-500">C</span>
         </div>
       )}
     </div>

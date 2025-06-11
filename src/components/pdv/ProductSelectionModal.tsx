@@ -276,7 +276,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                       {product.image_url ? (
                         <img 
                           src={product.image_url} 
-                          alt={product.name} 
+                          alt={product.name}
                           className="object-cover w-full h-full"
                         />
                       ) : (

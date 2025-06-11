@@ -12,6 +12,7 @@ import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 
@@ -73,6 +74,7 @@ const PDV = () => {
   const [activeTab, setActiveTab] = useState('products');
   const { toast } = useToast();
   const { user } = useAuth();
+  const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
     if (user) {
@@ -274,18 +276,18 @@ const PDV = () => {
         notes: item.notes || ''
       }));
 
-      const { data: existingAccount } = await (supabase as any)
+      const { data: existingAccount } = await supabase
         .from('table_accounts')
         .select('*')
         .eq('table_id', selectedTable)
         .eq('status', 'open')
-        .single();
+        .maybeSingle();
 
       if (existingAccount) {
         const updatedItems = [...existingAccount.items, ...orderItems];
         const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('table_accounts')
           .update({
             items: updatedItems,
@@ -297,7 +299,7 @@ const PDV = () => {
       } else {
         const total = getTotalValue();
         
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('table_accounts')
           .insert({
             user_id: user?.id,
@@ -375,7 +377,6 @@ const PDV = () => {
       }
     }
 
-    // Remover validação de mesa para dine_in quando vem de mesa finalizada
     if (orderType === 'dine_in' && !selectedTable && !customerName.includes('Mesa ')) {
       toast({
         title: "Mesa obrigatória",
@@ -416,7 +417,9 @@ const PDV = () => {
         product_name: item.name,
         price: item.price,
         quantity: item.quantity,
-        subtotal: item.price * item.quantity
+        subtotal: item.price * item.quantity,
+        options: item.options || [],
+        notes: item.notes || ''
       }));
 
       const orderData = {
@@ -448,6 +451,18 @@ const PDV = () => {
         console.error('Erro ao criar pedido:', error);
         throw error;
       }
+
+      // Send to KDS with all additional information
+      await sendToKitchen({
+        user_id: user?.id || '',
+        order_number: orderNumber,
+        customer_name: orderData.customer_name,
+        customer_phone: orderData.customer_phone || '',
+        items: orderItems,
+        total: getFinalTotal(),
+        payment_method: paymentMethod,
+        order_type: orderType
+      });
 
       if (orderType === 'dine_in' && selectedTable) {
         try {
@@ -502,7 +517,6 @@ const PDV = () => {
     setCart(cartItems);
     setCustomerName(`Mesa ${tableNumber}`);
     setOrderType('dine_in');
-    // Não definir selectedTable para evitar validação desnecessária
     setActiveTab('products');
 
     toast({
