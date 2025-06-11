@@ -3,7 +3,7 @@ export interface ElectronAPI {
   scanSerialPorts: () => Promise<Array<{
     id: string;
     name: string;
-    type: string;
+    type: 'usb' | 'bluetooth';
     manufacturer?: string;
     connected: boolean;
   }>>;

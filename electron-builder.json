@@ -7,8 +7,7 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*",
-    "node_modules/**/*"
+    "electron/**/*"
   ],
   "extraMetadata": {
     "main": "electron/main.js"
@@ -30,5 +29,7 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true
   },
-  "publish": null
+  "publish": null,
+  "nodeGypRebuild": false,
+  "npmRebuild": false
 }

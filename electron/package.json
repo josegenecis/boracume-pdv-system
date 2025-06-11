@@ -1,0 +1,18 @@
+
+{
+  "name": "electron-app",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "electron": "electron .",
+    "electron:build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "node-thermal-printer": "^4.5.0"
+  }
+}

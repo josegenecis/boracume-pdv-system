@@ -18,7 +18,13 @@ export class ElectronDeviceService {
 
     try {
       const ports = await window.electronAPI.scanSerialPorts();
-      return ports;
+      return ports.map(port => ({
+        id: port.id,
+        name: port.name,
+        type: port.type === 'bluetooth' ? 'bluetooth' as const : 'usb' as const,
+        manufacturer: port.manufacturer,
+        connected: port.connected
+      }));
     } catch (error) {
       console.error('Error scanning devices:', error);
       return [];
