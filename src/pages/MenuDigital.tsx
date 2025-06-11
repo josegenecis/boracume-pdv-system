@@ -129,7 +129,31 @@ const MenuDigital: React.FC = () => {
         .eq('product_id', productId);
 
       if (error) throw error;
-      return data || [];
+      
+      // Convert Json type to proper ProductVariation[]
+      const transformedData = (data || []).map(item => {
+        let parsedOptions = [];
+        try {
+          if (typeof item.options === 'string') {
+            parsedOptions = JSON.parse(item.options);
+          } else if (Array.isArray(item.options)) {
+            parsedOptions = item.options;
+          }
+        } catch (e) {
+          console.error('Error parsing options:', e);
+          parsedOptions = [];
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          options: Array.isArray(parsedOptions) ? parsedOptions : [],
+          max_selections: item.max_selections,
+          required: item.required
+        };
+      });
+      
+      return transformedData;
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       return [];

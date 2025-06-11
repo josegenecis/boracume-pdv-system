@@ -32,13 +32,13 @@ interface ProductVariation {
 interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddProduct: (product: Product, quantity: number, variations?: any[], notes?: string) => void;
+  onAddToCart: (product: Product, quantity: number, variations?: any[], notes?: string) => void;
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   isOpen,
   onClose,
-  onAddProduct
+  onAddToCart
 }) => {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,7 +80,31 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .eq('product_id', productId);
 
       if (error) throw error;
-      return data || [];
+      
+      // Convert Json type to proper ProductVariation[]
+      const transformedData = (data || []).map(item => {
+        let parsedOptions = [];
+        try {
+          if (typeof item.options === 'string') {
+            parsedOptions = JSON.parse(item.options);
+          } else if (Array.isArray(item.options)) {
+            parsedOptions = item.options;
+          }
+        } catch (e) {
+          console.error('Error parsing options:', e);
+          parsedOptions = [];
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          options: Array.isArray(parsedOptions) ? parsedOptions : [],
+          max_selections: item.max_selections,
+          required: item.required
+        };
+      });
+      
+      return transformedData;
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       return [];
@@ -98,13 +122,13 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
       setShowVariations(true);
     } else {
       // Add directly to cart without variations
-      onAddProduct(product, 1);
+      onAddToCart(product, 1);
       onClose();
     }
   };
 
   const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string) => {
-    onAddProduct(product, quantity, variations, notes);
+    onAddToCart(product, quantity, variations, notes);
     setShowVariations(false);
     setSelectedProduct(null);
     onClose();
