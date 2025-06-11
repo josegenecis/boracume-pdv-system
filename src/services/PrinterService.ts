@@ -114,64 +114,47 @@ export class PrinterService {
     }
 
     try {
-      // Create ESC/POS buffer
-      const buffer = new escpos.BufferBuilder();
-      
-      // Header
-      buffer
-        .textAlign('center')
-        .textBold(true)
+      // Create ESC/POS buffer using the correct API
+      const buffer = escpos()
+        .align('center')
+        .style('B')
         .text('BORA CUME HUB')
-        .newLine()
-        .textBold(false)
-        .text('--------------------------------')
-        .newLine()
-        .textAlign('left')
-        .text(`Pedido: #${orderData.order_number}`)
-        .newLine()
-        .text(`Cliente: ${orderData.customer_name}`)
-        .newLine();
+        .style('NORMAL')
+        .text('\n--------------------------------\n')
+        .align('left')
+        .text(`Pedido: #${orderData.order_number}\n`)
+        .text(`Cliente: ${orderData.customer_name}\n`);
 
       if (orderData.customer_phone) {
-        buffer.text(`Telefone: ${orderData.customer_phone}`).newLine();
+        buffer.text(`Telefone: ${orderData.customer_phone}\n`);
       }
 
-      buffer
-        .text('--------------------------------')
-        .newLine();
+      buffer.text('--------------------------------\n');
 
       // Items
       orderData.items.forEach((item: any) => {
         buffer
-          .text(`${item.quantity}x ${item.product_name}`)
-          .newLine()
-          .textAlign('right')
-          .text(`R$ ${item.subtotal.toFixed(2)}`)
-          .newLine()
-          .textAlign('left');
+          .text(`${item.quantity}x ${item.product_name}\n`)
+          .align('right')
+          .text(`R$ ${item.subtotal.toFixed(2)}\n`)
+          .align('left');
 
         if (item.notes) {
-          buffer.text(`Obs: ${item.notes}`).newLine();
+          buffer.text(`Obs: ${item.notes}\n`);
         }
       });
 
       buffer
-        .text('--------------------------------')
-        .newLine()
-        .textAlign('right')
-        .textBold(true)
-        .text(`TOTAL: R$ ${orderData.total.toFixed(2)}`)
-        .newLine()
-        .textBold(false)
-        .textAlign('center')
-        .text('--------------------------------')
-        .newLine()
-        .text('Obrigado pela preferência!')
-        .newLine()
-        .newLine()
-        .newLine();
+        .text('--------------------------------\n')
+        .align('right')
+        .style('B')
+        .text(`TOTAL: R$ ${orderData.total.toFixed(2)}\n`)
+        .style('NORMAL')
+        .align('center')
+        .text('--------------------------------\n')
+        .text('Obrigado pela preferência!\n\n\n');
 
-      const data = buffer.build();
+      const data = buffer.encode();
 
       // Send to printer
       if (Capacitor.isNativePlatform()) {
