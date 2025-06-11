@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -125,19 +124,22 @@ const EnhancedMenuDigital = () => {
 
   const fetchCombos = async () => {
     try {
-      // Note: Since combos table doesn't exist in types, we'll check if it exists first
+      // Using raw SQL to fetch from combos table since it's not in the generated types yet
       const { data, error } = await supabase
-        .rpc('get_combos', { target_user_id: userId })
-        .select('*');
+        .rpc('get_table_data', { 
+          table_name: 'combos',
+          user_filter_id: userId 
+        });
 
-      // If RPC doesn't exist, try direct table access with error handling
       if (error) {
-        console.log('Combos table not available yet');
+        console.log('Combos functionality not available yet');
         setCombos([]);
         return;
       }
       
-      setCombos(data || []);
+      // Type the response as Combo array
+      const typedCombos = (data || []) as Combo[];
+      setCombos(typedCombos.filter(combo => combo.active));
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
       setCombos([]);

@@ -60,7 +60,7 @@ const ComboManager = () => {
 
   const fetchCombos = async () => {
     try {
-      // Using a simple select that will work with the combos table
+      // Direct SQL query to fetch combos since types are not updated yet
       const { data, error } = await supabase
         .from('combos' as any)
         .select('*')
@@ -74,13 +74,15 @@ const ComboManager = () => {
         return;
       }
       
-      setCombos(data || []);
+      // Type assertion for the response
+      const typedCombos = (data || []) as Combo[];
+      setCombos(typedCombos);
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
       setCombos([]);
       toast({
         title: "Aviso",
-        description: "A tabela de combos ainda não foi criada no banco de dados.",
+        description: "A funcionalidade de combos ainda está sendo configurada.",
         variant: "destructive"
       });
     } finally {

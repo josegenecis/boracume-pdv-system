@@ -28,17 +28,19 @@ interface Conversation {
   updated_at: string;
 }
 
+interface AutoResponses {
+  greeting: string;
+  menu_request: string;
+  order_confirmation: string;
+  business_hours: string;
+}
+
 interface WhatsAppSettings {
   id: string;
   phone_number: string;
   default_message: string;
   enabled: boolean;
-  auto_responses: {
-    greeting: string;
-    menu_request: string;
-    order_confirmation: string;
-    business_hours: string;
-  };
+  auto_responses: AutoResponses;
   ai_enabled: boolean;
 }
 
@@ -54,16 +56,18 @@ const EnhancedWhatsAppChatbot = () => {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const defaultAutoResponses: AutoResponses = {
+    greeting: 'Olá! Bem-vindo ao nosso restaurante. Como posso ajudar você hoje?',
+    menu_request: 'Aqui está nosso cardápio! Você pode ver todos os produtos disponíveis em: [MENU_LINK]',
+    order_confirmation: 'Recebemos seu pedido! Em breve entraremos em contato para confirmar os detalhes.',
+    business_hours: 'Nosso horário de funcionamento é de segunda a domingo, das 10h às 22h.'
+  };
+
   const [settingsForm, setSettingsForm] = useState({
     phone_number: '',
     default_message: '',
     enabled: true,
-    auto_responses: {
-      greeting: 'Olá! Bem-vindo ao nosso restaurante. Como posso ajudar você hoje?',
-      menu_request: 'Aqui está nosso cardápio! Você pode ver todos os produtos disponíveis em: [MENU_LINK]',
-      order_confirmation: 'Recebemos seu pedido! Em breve entraremos em contato para confirmar os detalhes.',
-      business_hours: 'Nosso horário de funcionamento é de segunda a domingo, das 10h às 22h.'
-    },
+    auto_responses: defaultAutoResponses,
     ai_enabled: false
   });
 
@@ -99,12 +103,18 @@ const EnhancedWhatsAppChatbot = () => {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
+        // Safely parse auto_responses with fallback
+        let autoResponses = defaultAutoResponses;
+        if (data.auto_responses && typeof data.auto_responses === 'object') {
+          autoResponses = data.auto_responses as AutoResponses;
+        }
+
         const settingsData: WhatsAppSettings = {
           id: data.id,
           phone_number: data.phone_number,
           default_message: data.default_message,
           enabled: data.enabled,
-          auto_responses: data.auto_responses || settingsForm.auto_responses,
+          auto_responses: autoResponses,
           ai_enabled: data.ai_enabled || false
         };
         
@@ -113,7 +123,7 @@ const EnhancedWhatsAppChatbot = () => {
           phone_number: data.phone_number,
           default_message: data.default_message,
           enabled: data.enabled,
-          auto_responses: data.auto_responses || settingsForm.auto_responses,
+          auto_responses: autoResponses,
           ai_enabled: data.ai_enabled || false
         });
       }
