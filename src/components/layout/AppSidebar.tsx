@@ -10,12 +10,9 @@ import {
   Settings, 
   BarChart3, 
   CreditCard,
-  Users,
   Calendar,
   Gift,
-  Truck,
   ChefHat,
-  QrCode,
   Heart,
   Menu,
   Bike,
@@ -122,10 +119,16 @@ export function AppSidebar() {
   const location = useLocation();
 
   return (
-    <Sidebar>
+    <Sidebar variant="inset">
       <SidebarHeader>
-        <div className="px-4 py-2">
-          <h2 className="text-lg font-semibold">Boracumê</h2>
+        <div className="flex items-center gap-2 px-4 py-2">
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            <LayoutDashboard className="size-4" />
+          </div>
+          <div className="grid flex-1 text-left text-sm leading-tight">
+            <span className="truncate font-semibold">Boracumê</span>
+            <span className="truncate text-xs">Sistema de Gestão</span>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -141,7 +144,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link to={item.path}>
-                        <Icon size={18} />
+                        <Icon />
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -153,8 +156,8 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="px-4 py-2 text-sm text-gray-500">
-          v1.0.0
+        <div className="px-4 py-2 text-xs text-sidebar-foreground/70">
+          v1.0.0 - Sistema completo
         </div>
       </SidebarFooter>
     </Sidebar>
