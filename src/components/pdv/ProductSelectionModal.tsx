@@ -1,61 +1,51 @@
 
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Minus, Search, ArrowLeft } from 'lucide-react';
+import { Search, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import ProductVariationSelector from './ProductVariationSelector';
 
 interface Product {
   id: string;
   name: string;
   price: number;
-  image_url?: string;
-  available: boolean;
-  category_id?: string;
   description?: string;
-  weight_based?: boolean;
-  send_to_kds?: boolean;
+  image_url?: string;
+  category_id?: string;
 }
 
 interface ProductVariation {
   id: string;
   name: string;
-  required: boolean;
+  options: Array<{
+    name: string;
+    price: number;
+  }>;
   max_selections: number;
-  options: Array<{name: string; price: number}>;
+  required: boolean;
 }
 
 interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number, options: string[], notes: string) => void;
+  onAddProduct: (product: Product, quantity: number, variations?: any[], notes?: string) => void;
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   isOpen,
   onClose,
-  onAddToCart
+  onAddProduct
 }) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [quantity, setQuantity] = useState(1);
-  const [notes, setNotes] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [variations, setVariations] = useState<ProductVariation[]>([]);
-  const [showVariations, setShowVariations] = useState(false);
-  
   const { user } = useAuth();
-  const { toast } = useToast();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
+  const [showVariations, setShowVariations] = useState(false);
 
   useEffect(() => {
     if (isOpen && user) {
@@ -63,34 +53,22 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     }
   }, [isOpen, user]);
 
-  useEffect(() => {
-    if (selectedProduct && showVariations) {
-      fetchProductVariations(selectedProduct.id);
-    }
-  }, [selectedProduct, showVariations]);
-
   const fetchProducts = async () => {
+    if (!user) return;
+
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('available', true)
+        .eq('user_id', user.id)
         .eq('show_in_pdv', true)
+        .eq('available', true)
         .order('name');
 
       if (error) throw error;
       setProducts(data || []);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os produtos.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -102,339 +80,122 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .eq('product_id', productId);
 
       if (error) throw error;
-      
-      const parsedVariations: ProductVariation[] = (data || []).map(variation => ({
-        id: variation.id,
-        name: variation.name,
-        required: variation.required,
-        max_selections: variation.max_selections,
-        options: typeof variation.options === 'string' 
-          ? JSON.parse(variation.options) 
-          : Array.isArray(variation.options) 
-            ? variation.options as Array<{name: string; price: number}>
-            : []
-      }));
-      
-      setVariations(parsedVariations);
+      return data || [];
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
-      setVariations([]);
+      return [];
     }
   };
-
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const handleProductSelect = async (product: Product) => {
     setSelectedProduct(product);
-    setSelectedOptions([]);
-    setQuantity(1);
-    setNotes('');
     
     // Check if product has variations
-    const { data: variationsData } = await supabase
-      .from('product_variations')
-      .select('id')
-      .eq('product_id', product.id);
+    const variations = await fetchProductVariations(product.id);
     
-    if (variationsData && variationsData.length > 0) {
+    if (variations.length > 0) {
+      setProductVariations(variations);
       setShowVariations(true);
     } else {
-      // No variations, add directly to cart
-      onAddToCart(product, 1, [], '');
-      handleReset();
-      toast({
-        title: "Produto adicionado",
-        description: `${product.name} foi adicionado ao carrinho.`,
-      });
-    }
-  };
-
-  const handleAddToCart = () => {
-    if (!selectedProduct) return;
-
-    // Validate required variations
-    const requiredVariations = variations.filter(v => v.required);
-    const selectedVariationNames = selectedOptions;
-    
-    for (const requiredVar of requiredVariations) {
-      const hasSelection = requiredVar.options.some(option => 
-        selectedVariationNames.includes(option.name)
-      );
-      if (!hasSelection) {
-        toast({
-          title: "Variação obrigatória",
-          description: `Selecione uma opção para: ${requiredVar.name}`,
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
-    onAddToCart(selectedProduct, quantity, selectedOptions, notes);
-    handleReset();
-    
-    toast({
-      title: "Produto adicionado",
-      description: `${selectedProduct.name} foi adicionado ao carrinho.`,
-    });
-  };
-
-  const handleReset = () => {
-    setSelectedProduct(null);
-    setSelectedOptions([]);
-    setQuantity(1);
-    setNotes('');
-    setShowVariations(false);
-  };
-
-  const handleBack = () => {
-    if (showVariations) {
-      setShowVariations(false);
-      setSelectedProduct(null);
-    } else {
+      // Add directly to cart without variations
+      onAddProduct(product, 1);
       onClose();
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+  const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string) => {
+    onAddProduct(product, quantity, variations, notes);
+    setShowVariations(false);
+    setSelectedProduct(null);
+    onClose();
   };
 
-  const getTotalPrice = () => {
-    if (!selectedProduct) return 0;
-    let total = selectedProduct.price;
-    
-    // Add variation prices
-    selectedOptions.forEach(optionName => {
-      variations.forEach(variation => {
-        const option = variation.options.find(opt => opt.name === optionName);
-        if (option) {
-          total += option.price;
-        }
-      });
-    });
-    
-    return total * quantity;
-  };
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (showVariations && selectedProduct) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Personalizar Produto</DialogTitle>
+          </DialogHeader>
+          <ProductVariationSelector
+            product={selectedProduct}
+            variations={productVariations}
+            onAddToCart={handleAddToCart}
+            onClose={() => {
+              setShowVariations(false);
+              setSelectedProduct(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {(selectedProduct || showVariations) && (
-              <Button variant="ghost" size="sm" onClick={handleBack}>
-                <ArrowLeft size={16} />
-              </Button>
-            )}
-            {selectedProduct && showVariations 
-              ? `Configurar ${selectedProduct.name}` 
-              : 'Selecionar Produto'
-            }
-          </DialogTitle>
+          <DialogTitle>Selecionar Produto</DialogTitle>
         </DialogHeader>
-
-        {!selectedProduct || !showVariations ? (
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar produtos..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                {filteredProducts.map((product) => (
-                  <Card 
-                    key={product.id} 
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => handleProductSelect(product)}
-                  >
-                    <div className="aspect-square relative overflow-hidden rounded-t-lg">
-                      {product.image_url ? (
-                        <img 
-                          src={product.image_url} 
-                          alt={product.name} 
-                          className="object-cover w-full h-full"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-gray-400 text-xs">Sem imagem</span>
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-3">
-                      <h3 className="font-medium text-sm mb-1 line-clamp-2">{product.name}</h3>
-                      <p className="text-lg font-bold text-primary">
-                        {formatCurrency(product.price)}
-                        {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {!loading && filteredProducts.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-500">
-                  {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
-                </p>
-              </div>
-            )}
+        
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar produtos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-start gap-4">
-              <div className="w-32 h-32 rounded-lg overflow-hidden flex-shrink-0">
-                {selectedProduct.image_url ? (
-                  <img 
-                    src={selectedProduct.image_url} 
-                    alt={selectedProduct.name} 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <span className="text-gray-400 text-xs">Sem imagem</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold">{selectedProduct.name}</h3>
-                <p className="text-2xl font-bold text-primary mt-2">
-                  {formatCurrency(selectedProduct.price)}
-                  {selectedProduct.weight_based && <span className="text-sm text-gray-500 ml-1">/kg</span>}
-                </p>
-                {selectedProduct.description && (
-                  <p className="text-gray-600 mt-2">{selectedProduct.description}</p>
-                )}
-              </div>
-            </div>
 
-            {variations.length > 0 && (
-              <div className="space-y-4">
-                <h4 className="font-semibold">Opções</h4>
-                {variations.map((variation) => (
-                  <div key={variation.id} className="space-y-2">
-                    <Label className="font-medium">
-                      {variation.name}
-                      {variation.required && <span className="text-red-500 ml-1">*</span>}
-                    </Label>
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
+                {searchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto disponível'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProducts.map((product) => (
+                <Card 
+                  key={product.id} 
+                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  onClick={() => handleProductSelect(product)}
+                >
+                  <CardContent className="p-4">
+                    {product.image_url && (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-full h-32 object-cover rounded-md mb-3"
+                      />
+                    )}
                     <div className="space-y-2">
-                      {variation.options.map((option, index) => (
-                        <div key={index} className="flex items-center space-x-2">
-                          <input
-                            type={variation.max_selections === 1 ? "radio" : "checkbox"}
-                            name={variation.id}
-                            value={option.name}
-                            checked={selectedOptions.includes(option.name)}
-                            onChange={(e) => {
-                              if (variation.max_selections === 1) {
-                                // Radio behavior
-                                setSelectedOptions(prev => {
-                                  const filtered = prev.filter(opt => 
-                                    !variation.options.some(o => o.name === opt)
-                                  );
-                                  return e.target.checked ? [...filtered, option.name] : filtered;
-                                });
-                              } else {
-                                // Checkbox behavior
-                                setSelectedOptions(prev => 
-                                  e.target.checked 
-                                    ? [...prev, option.name]
-                                    : prev.filter(opt => opt !== option.name)
-                                );
-                              }
-                            }}
-                          />
-                          <Label className="flex-1 cursor-pointer">
-                            {option.name}
-                            {option.price > 0 && (
-                              <span className="ml-2 text-green-600">
-                                +{formatCurrency(option.price)}
-                              </span>
-                            )}
-                          </Label>
-                        </div>
-                      ))}
+                      <h3 className="font-semibold text-sm">{product.name}</h3>
+                      {product.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {product.description}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="text-xs">
+                          R$ {product.price.toFixed(2)}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="quantity">Quantidade</Label>
-                <div className="flex items-center gap-2 mt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  >
-                    <Minus size={16} />
-                  </Button>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-20 text-center"
-                    min="1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setQuantity(quantity + 1)}
-                  >
-                    <Plus size={16} />
-                  </Button>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="notes">Observações</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Observações especiais..."
-                  rows={3}
-                  className="mt-2"
-                />
-              </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-
-            <Separator />
-
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-bold">Total:</span>
-              <span className="text-xl font-bold text-primary">
-                {formatCurrency(getTotalPrice())}
-              </span>
-            </div>
-
-            <div className="flex gap-3">
-              <Button onClick={handleAddToCart} className="flex-1">
-                <Plus size={16} className="mr-2" />
-                Adicionar ao Carrinho
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

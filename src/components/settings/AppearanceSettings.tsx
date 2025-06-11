@@ -1,211 +1,22 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Palette, Monitor, Sun, Moon, Save } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAppearanceSettings } from '@/hooks/useAppearanceSettings';
 
 const AppearanceSettings = () => {
-  const [appearance, setAppearance] = useState({
-    theme: 'light',
-    primaryColor: 'orange',
-    fontSize: 'medium',
-    compactMode: false,
-    showAnimations: true,
-    highContrast: false,
-    reducedMotion: false
-  });
+  const { settings, loading, updateSettings } = useAppearanceSettings();
 
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (user) {
-      loadSettings();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    applyThemeChanges();
-  }, [appearance]);
-
-  const loadSettings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('appearance_settings')
-        .select('*')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao carregar configurações:', error);
-        return;
-      }
-
-      if (data) {
-        setAppearance({
-          theme: data.theme,
-          primaryColor: data.primary_color,
-          fontSize: data.font_size,
-          compactMode: data.compact_mode,
-          showAnimations: data.show_animations,
-          highContrast: data.high_contrast,
-          reducedMotion: data.reduced_motion
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao carregar configurações:', error);
-    }
+  const handleToggle = (field: keyof typeof settings) => {
+    updateSettings({ [field]: !settings[field] });
   };
 
-  const applyThemeChanges = () => {
-    const root = document.documentElement;
-    
-    // Aplicar tema
-    if (appearance.theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-
-    // Aplicar cor principal - Fixed color mapping
-    const colorMap = {
-      orange: { primary: '16 100% 56%', accent: '25 95% 53%' },
-      blue: { primary: '221 83% 53%', accent: '217 91% 60%' },
-      green: { primary: '142 76% 36%', accent: '138 76% 49%' },
-      purple: { primary: '258 90% 66%', accent: '266 85% 58%' },
-      red: { primary: '0 72% 51%', accent: '0 84% 60%' }
-    };
-
-    const colors = colorMap[appearance.primaryColor as keyof typeof colorMap];
-    if (colors) {
-      root.style.setProperty('--primary', colors.primary);
-      root.style.setProperty('--accent', colors.accent);
-      
-      // Also update the boracume colors to match
-      if (appearance.primaryColor === 'orange') {
-        root.style.setProperty('--boracume-orange', '#FF5722');
-      } else if (appearance.primaryColor === 'blue') {
-        root.style.setProperty('--boracume-orange', '#2563eb');
-      } else if (appearance.primaryColor === 'green') {
-        root.style.setProperty('--boracume-orange', '#16a34a');
-      } else if (appearance.primaryColor === 'purple') {
-        root.style.setProperty('--boracume-orange', '#9333ea');
-      } else if (appearance.primaryColor === 'red') {
-        root.style.setProperty('--boracume-orange', '#dc2626');
-      }
-    }
-
-    // Aplicar tamanho da fonte
-    const fontSizes = {
-      small: '14px',
-      medium: '16px',
-      large: '18px',
-      'extra-large': '20px'
-    };
-    root.style.fontSize = fontSizes[appearance.fontSize as keyof typeof fontSizes];
-
-    // Aplicar modo compacto
-    if (appearance.compactMode) {
-      root.classList.add('compact-mode');
-    } else {
-      root.classList.remove('compact-mode');
-    }
-
-    // Aplicar alto contraste
-    if (appearance.highContrast) {
-      root.classList.add('high-contrast');
-    } else {
-      root.classList.remove('high-contrast');
-    }
-
-    // Aplicar movimento reduzido
-    if (appearance.reducedMotion) {
-      root.classList.add('reduced-motion');
-    } else {
-      root.classList.remove('reduced-motion');
-    }
-
-    // Aplicar animações
-    if (!appearance.showAnimations) {
-      root.classList.add('no-animations');
-    } else {
-      root.classList.remove('no-animations');
-    }
-  };
-
-  const handleToggle = (field: string) => {
-    setAppearance(prev => ({
-      ...prev,
-      [field]: !prev[field as keyof typeof prev]
-    }));
-  };
-
-  const handleSelectChange = (field: string, value: string) => {
-    setAppearance(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleSave = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      const { data: existingData } = await supabase
-        .from('appearance_settings')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      const settingsData = {
-        user_id: user.id,
-        theme: appearance.theme,
-        primary_color: appearance.primaryColor,
-        font_size: appearance.fontSize,
-        compact_mode: appearance.compactMode,
-        show_animations: appearance.showAnimations,
-        high_contrast: appearance.highContrast,
-        reduced_motion: appearance.reducedMotion,
-        updated_at: new Date().toISOString()
-      };
-
-      if (existingData) {
-        const { error } = await supabase
-          .from('appearance_settings')
-          .update(settingsData)
-          .eq('user_id', user.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('appearance_settings')
-          .insert(settingsData);
-
-        if (error) throw error;
-      }
-      
-      toast({
-        title: "Aparência atualizada!",
-        description: "As configurações de aparência foram salvas com sucesso.",
-      });
-    } catch (error) {
-      console.error('Erro ao salvar:', error);
-      toast({
-        title: "Erro ao salvar",
-        description: "Não foi possível salvar as configurações. Tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleSelectChange = (field: keyof typeof settings, value: string) => {
+    updateSettings({ [field]: value });
   };
 
   const colorOptions = [
@@ -232,7 +43,7 @@ const AppearanceSettings = () => {
           <div className="space-y-2">
             <Label htmlFor="theme">Tema</Label>
             <Select
-              value={appearance.theme}
+              value={settings.theme}
               onValueChange={(value) => handleSelectChange('theme', value)}
             >
               <SelectTrigger>
@@ -264,8 +75,8 @@ const AppearanceSettings = () => {
           <div className="space-y-2">
             <Label htmlFor="primary-color">Cor Principal</Label>
             <Select
-              value={appearance.primaryColor}
-              onValueChange={(value) => handleSelectChange('primaryColor', value)}
+              value={settings.primary_color}
+              onValueChange={(value) => handleSelectChange('primary_color', value)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -286,8 +97,8 @@ const AppearanceSettings = () => {
           <div className="space-y-2">
             <Label htmlFor="font-size">Tamanho da Fonte</Label>
             <Select
-              value={appearance.fontSize}
-              onValueChange={(value) => handleSelectChange('fontSize', value)}
+              value={settings.font_size}
+              onValueChange={(value) => handleSelectChange('font_size', value)}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -320,8 +131,8 @@ const AppearanceSettings = () => {
             </div>
             <Switch
               id="compact-mode"
-              checked={appearance.compactMode}
-              onCheckedChange={() => handleToggle('compactMode')}
+              checked={settings.compact_mode}
+              onCheckedChange={() => handleToggle('compact_mode')}
             />
           </div>
 
@@ -334,8 +145,8 @@ const AppearanceSettings = () => {
             </div>
             <Switch
               id="show-animations"
-              checked={appearance.showAnimations}
-              onCheckedChange={() => handleToggle('showAnimations')}
+              checked={settings.show_animations}
+              onCheckedChange={() => handleToggle('show_animations')}
             />
           </div>
         </CardContent>
@@ -358,8 +169,8 @@ const AppearanceSettings = () => {
             </div>
             <Switch
               id="high-contrast"
-              checked={appearance.highContrast}
-              onCheckedChange={() => handleToggle('highContrast')}
+              checked={settings.high_contrast}
+              onCheckedChange={() => handleToggle('high_contrast')}
             />
           </div>
 
@@ -372,17 +183,21 @@ const AppearanceSettings = () => {
             </div>
             <Switch
               id="reduced-motion"
-              checked={appearance.reducedMotion}
-              onCheckedChange={() => handleToggle('reducedMotion')}
+              checked={settings.reduced_motion}
+              onCheckedChange={() => handleToggle('reduced_motion')}
             />
           </div>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
+        <Button 
+          onClick={() => {}} 
+          className="w-full md:w-auto" 
+          disabled={loading}
+        >
           <Save size={16} className="mr-2" />
-          {loading ? 'Salvando...' : 'Salvar Alterações'}
+          Configurações salvas automaticamente
         </Button>
       </div>
     </div>

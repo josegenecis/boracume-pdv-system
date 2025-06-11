@@ -22,8 +22,18 @@ export const useDigitalMenuCart = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const { toast } = useToast();
 
-  const addToCart = (product: Product, quantity: number = 1, selectedOptions: string[] = [], notes: string = '') => {
-    const subtotal = product.price * quantity;
+  const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
+    const selectedOptions = selectedVariations.flatMap(variation => 
+      variation.options.map((option: any) => option.name)
+    );
+    
+    const variationPrice = selectedVariations.reduce((total, variation) => 
+      total + variation.options.reduce((vTotal: number, option: any) => vTotal + option.price, 0), 0
+    );
+    
+    const itemPrice = product.price + variationPrice;
+    const subtotal = itemPrice * quantity;
+    
     const newItem: CartItem = {
       ...product,
       quantity,
@@ -42,7 +52,7 @@ export const useDigitalMenuCart = () => {
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
-        updated[existingIndex].subtotal = updated[existingIndex].price * updated[existingIndex].quantity;
+        updated[existingIndex].subtotal = (updated[existingIndex].price + variationPrice) * updated[existingIndex].quantity;
         return updated;
       }
 
@@ -63,8 +73,13 @@ export const useDigitalMenuCart = () => {
 
     setCart(prev => {
       const updated = [...prev];
-      updated[index].quantity = quantity;
-      updated[index].subtotal = updated[index].price * quantity;
+      const item = updated[index];
+      const basePrice = item.subtotal / item.quantity; // Get price per unit including variations
+      updated[index] = {
+        ...item,
+        quantity,
+        subtotal: basePrice * quantity
+      };
       return updated;
     });
   };
