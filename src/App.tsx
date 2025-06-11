@@ -34,8 +34,9 @@ const queryClient = new QueryClient();
 function AppContent() {
   return (
     <Routes>
-      {/* Rota pública para o menu digital */}
+      {/* Rotas públicas para o menu digital - aceita ambos os formatos */}
       <Route path="/menu/:userId" element={<MenuDigital />} />
+      <Route path="/menu-digital" element={<MenuDigital />} />
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />

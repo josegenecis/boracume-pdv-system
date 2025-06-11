@@ -18,7 +18,8 @@ const onboardingSchema = z.object({
   restaurantType: z.string().min(1, 'Tipo de restaurante é obrigatório'),
   address: z.string().min(5, 'Endereço é obrigatório'),
   phone: z.string().min(10, 'Telefone é obrigatório'),
-  deliveryEnabled: z.boolean().default(false),
+  openingHours: z.string().min(1, 'Horário de funcionamento é obrigatório'),
+  description: z.string().optional(),
 });
 
 type OnboardingFormValues = z.infer<typeof onboardingSchema>;
@@ -39,7 +40,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       restaurantType: '',
       address: '',
       phone: '',
-      deliveryEnabled: false,
+      openingHours: '10:00 - 22:00',
+      description: '',
     },
   });
 
@@ -68,6 +70,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           restaurant_name: values.restaurantName,
           address: values.address,
           phone: values.phone,
+          opening_hours: values.openingHours,
+          description: values.description,
           onboarding_completed: true,
           updated_at: new Date().toISOString()
         })
@@ -91,6 +95,18 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           });
       }
 
+      // Create default delivery zone
+      await supabase
+        .from('delivery_zones')
+        .insert({
+          user_id: user.id,
+          name: 'Região Central',
+          delivery_fee: 5.00,
+          minimum_order: 25.00,
+          delivery_time: '30-45 min',
+          active: true
+        });
+
       // Create sample products based on restaurant type
       if (values.restaurantType === 'Pizzaria') {
         await createSampleProducts(user.id, 'pizza');
@@ -100,9 +116,19 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         await createSampleProducts(user.id, 'general');
       }
 
+      // Create default WhatsApp settings
+      await supabase
+        .from('whatsapp_settings')
+        .insert({
+          user_id: user.id,
+          phone_number: values.phone,
+          default_message: `Olá! Bem-vindo ao ${values.restaurantName}. Como posso ajudar você hoje?`,
+          enabled: true
+        });
+
       toast({
         title: 'Configuração concluída!',
-        description: 'Seu restaurante foi configurado com sucesso.',
+        description: 'Seu restaurante foi configurado com sucesso. Você já pode começar a receber pedidos!',
       });
 
       onComplete();
@@ -122,14 +148,17 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       pizza: [
         { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão', category: 'Pratos Principais' },
         { name: 'Pizza Pepperoni', price: 29.90, description: 'Molho de tomate, mussarela e pepperoni', category: 'Pratos Principais' },
+        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
       ],
       burger: [
         { name: 'Hambúrguer Clássico', price: 18.90, description: 'Pão, carne, queijo, alface e tomate', category: 'Pratos Principais' },
         { name: 'Batata Frita', price: 8.90, description: 'Porção de batata frita crocante', category: 'Pratos Principais' },
+        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
       ],
       general: [
         { name: 'Prato do Dia', price: 15.90, description: 'Prato especial do dia', category: 'Pratos Principais' },
-        { name: 'Refrigerante', price: 4.50, description: 'Refrigerante gelado', category: 'Bebidas' },
+        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
+        { name: 'Pudim', price: 6.90, description: 'Pudim de leite condensado', category: 'Sobremesas' },
       ]
     };
 
@@ -142,6 +171,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           ...product,
           user_id: userId,
           available: true,
+          show_in_delivery: true,
+          show_in_pdv: true,
         });
     }
   };
@@ -236,6 +267,34 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                       <FormLabel>Telefone</FormLabel>
                       <FormControl>
                         <Input placeholder="(11) 99999-9999" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="openingHours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Horário de Funcionamento</FormLabel>
+                      <FormControl>
+                        <Input placeholder="10:00 - 22:00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descrição (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Breve descrição do seu restaurante" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

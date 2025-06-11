@@ -9,6 +9,7 @@ import WhatsAppSettings from '@/components/settings/WhatsAppSettings';
 import ScaleIntegrationSettings from '@/components/settings/ScaleIntegrationSettings';
 import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
+import MenuLinkGenerator from '@/components/menu/MenuLinkGenerator';
 import DeviceManager from '@/components/devices/DeviceManager';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
@@ -36,6 +37,7 @@ const Configuracoes: React.FC = () => {
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="mb-4 grid grid-cols-4 lg:grid-cols-8">
           <TabsTrigger value="general">Geral</TabsTrigger>
+          <TabsTrigger value="menu">Cardápio</TabsTrigger>
           <TabsTrigger value="devices">Dispositivos</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
@@ -43,7 +45,6 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-          <TabsTrigger value="qrcode">QR Code</TabsTrigger>
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
           )}
@@ -53,6 +54,13 @@ const Configuracoes: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WhatsAppSettings />
             <ScaleIntegrationSettings />
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="menu">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <MenuLinkGenerator />
+            <QRCodeGenerator />
           </div>
         </TabsContent>
         
@@ -82,10 +90,6 @@ const Configuracoes: React.FC = () => {
         
         <TabsContent value="fiscal">
           <FiscalSettings />
-        </TabsContent>
-        
-        <TabsContent value="qrcode">
-          <QRCodeGenerator />
         </TabsContent>
         
         {hasMarketingFeature() && (

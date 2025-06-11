@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
@@ -55,8 +55,13 @@ interface DeliveryZone {
 }
 
 const MenuDigital = () => {
+  const { userId: paramUserId } = useParams();
   const [searchParams] = useSearchParams();
-  const userId = searchParams.get('u');
+  const queryUserId = searchParams.get('u');
+  
+  // Usar parâmetro da URL ou query parameter
+  const userId = paramUserId || queryUserId;
+  
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
@@ -103,6 +108,11 @@ const MenuDigital = () => {
       ]);
     } catch (error) {
       console.error('❌ Erro ao carregar dados:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o cardápio. Verifique se o link está correto.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -127,11 +137,7 @@ const MenuDigital = () => {
       setProfile(data);
     } catch (error) {
       console.error('❌ Erro ao carregar dados do restaurante:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os dados do restaurante.",
-        variant: "destructive",
-      });
+      throw error;
     }
   };
 
@@ -160,11 +166,7 @@ const MenuDigital = () => {
       
     } catch (error) {
       console.error('❌ Erro ao carregar produtos:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar o cardápio.",
-        variant: "destructive",
-      });
+      throw error;
     }
   };
 
@@ -202,49 +204,30 @@ const MenuDigital = () => {
 
       if (error) {
         console.error('❌ Erro ao carregar variações:', error);
-        throw error;
+        return [];
       }
 
       console.log('✅ Variações raw carregadas:', data?.length || 0, data);
       
-      // Converter os dados do Supabase para o formato correto com validação robusta
       const formattedVariations: ProductVariation[] = (data || [])
         .map(item => {
           try {
             let options: Array<{ name: string; price: number; }> = [];
             
-            // Validação robusta das opções
-            if (item.options) {
-              if (Array.isArray(item.options)) {
-                options = item.options
-                  .filter((opt: any) => {
-                    return opt && 
-                           typeof opt === 'object' && 
-                           opt.name && 
-                           typeof opt.name === 'string' &&
-                           opt.price !== undefined && 
-                           !isNaN(Number(opt.price));
-                  })
-                  .map((opt: any) => ({
-                    name: String(opt.name).trim(),
-                    price: Number(opt.price)
-                  }));
-              } else if (typeof item.options === 'string') {
-                // Tentar fazer parse se for string JSON
-                try {
-                  const parsed = JSON.parse(item.options);
-                  if (Array.isArray(parsed)) {
-                    options = parsed
-                      .filter((opt: any) => opt && opt.name && opt.price !== undefined)
-                      .map((opt: any) => ({
-                        name: String(opt.name).trim(),
-                        price: Number(opt.price)
-                      }));
-                  }
-                } catch (parseError) {
-                  console.warn('❌ Erro ao fazer parse das opções:', parseError);
-                }
-              }
+            if (item.options && Array.isArray(item.options)) {
+              options = item.options
+                .filter((opt: any) => {
+                  return opt && 
+                         typeof opt === 'object' && 
+                         opt.name && 
+                         typeof opt.name === 'string' &&
+                         opt.price !== undefined && 
+                         !isNaN(Number(opt.price));
+                })
+                .map((opt: any) => ({
+                  name: String(opt.name).trim(),
+                  price: Number(opt.price)
+                }));
             }
 
             return {
@@ -316,7 +299,6 @@ const MenuDigital = () => {
 
       console.log('✅ Pedido criado:', data);
 
-      // Enviar para o KDS se aplicável
       try {
         await sendToKitchen(orderData);
       } catch (kdsError) {
@@ -354,6 +336,17 @@ const MenuDigital = () => {
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
           <p className="text-muted-foreground">Verifique se o link está correto.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (products.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">{profile?.restaurant_name || 'Restaurante'}</h1>
+          <p className="text-muted-foreground">Este restaurante ainda não possui produtos disponíveis para delivery.</p>
         </div>
       </div>
     );
