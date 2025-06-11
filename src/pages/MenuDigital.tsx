@@ -45,6 +45,15 @@ interface Profile {
   logo_url?: string;
 }
 
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
+  delivery_time: string;
+  active: boolean;
+}
+
 const MenuDigital = () => {
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('u');
@@ -59,6 +68,7 @@ const MenuDigital = () => {
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
   const {
     cart,
@@ -82,6 +92,7 @@ const MenuDigital = () => {
 
     fetchRestaurantData();
     fetchProducts();
+    fetchDeliveryZones();
   }, [userId]);
 
   const fetchRestaurantData = async () => {
@@ -145,7 +156,29 @@ const MenuDigital = () => {
     }
   };
 
-  const fetchProductVariations = async (productId: string) => {
+  const fetchDeliveryZones = async () => {
+    try {
+      console.log('🔄 Carregando zonas de entrega para userId:', userId);
+      
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true);
+
+      if (error) {
+        console.error('❌ Erro ao carregar zonas de entrega:', error);
+        throw error;
+      }
+
+      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.error('❌ Erro ao carregar zonas de entrega:', error);
+    }
+  };
+
+  const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
       console.log('🔄 Carregando variações para produto:', productId);
       
@@ -159,8 +192,19 @@ const MenuDigital = () => {
         throw error;
       }
 
-      console.log('✅ Variações carregadas:', data?.length || 0, data);
-      return data || [];
+      console.log('✅ Variações raw carregadas:', data?.length || 0, data);
+      
+      // Converter os dados do Supabase para o formato correto
+      const formattedVariations: ProductVariation[] = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        options: Array.isArray(item.options) ? item.options : [],
+        max_selections: item.max_selections,
+        required: item.required
+      }));
+      
+      console.log('✅ Variações formatadas:', formattedVariations);
+      return formattedVariations;
     } catch (error) {
       console.error('❌ Erro ao carregar variações:', error);
       return [];
@@ -373,6 +417,7 @@ const MenuDigital = () => {
         onClose={() => setShowCheckoutModal(false)}
         cart={cart}
         total={getCartTotal()}
+        deliveryZones={deliveryZones}
         onPlaceOrder={handlePlaceOrder}
         userId={userId}
       />
