@@ -239,6 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: "Bem-vindo ao BoraCumê! Redirecionando...",
         });
         
+        // Usando o tipo 'signup' que agora está disponível
         await logSecurityEvent('signup', `New user registered: ${email}`, 'low');
         
         // Aguardar um pouco para permitir que o trigger seja executado
