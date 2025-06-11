@@ -27,12 +27,15 @@ export const logSecurityEvent = async (
       return;
     }
 
-    const { error } = await supabase.rpc('log_security_event', {
-      p_user_id: user.id,
-      p_event_type: eventType,
-      p_description: description,
-      p_severity: severity
-    });
+    // Direct insert since RPC might not be available
+    const { error } = await supabase
+      .from('security_logs')
+      .insert({
+        user_id: user.id,
+        event_type: eventType,
+        description,
+        severity
+      });
 
     if (error) {
       console.error('Failed to log security event:', error);

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, AlertTriangle, CheckCircle, Activity, Eye, Lock, Refresh } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Activity, Eye, Lock, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -71,7 +71,12 @@ const SecurityMonitor: React.FC = () => {
       if (logsError) {
         console.error('Error fetching security logs:', logsError);
       } else {
-        setSecurityLogs(logs || []);
+        // Type assertion to ensure proper typing
+        const typedLogs = (logs || []).map(log => ({
+          ...log,
+          severity: log.severity as 'low' | 'medium' | 'high'
+        }));
+        setSecurityLogs(typedLogs);
       }
 
       // Calculate security score and status
@@ -209,7 +214,7 @@ const SecurityMonitor: React.FC = () => {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Monitor de Segurança</h2>
         <Button onClick={fetchSecurityData} variant="outline">
-          <Refresh className="w-4 h-4 mr-2" />
+          <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
       </div>
