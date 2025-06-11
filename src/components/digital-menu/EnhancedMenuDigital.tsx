@@ -79,12 +79,17 @@ const EnhancedMenuDigital = () => {
   useEffect(() => {
     if (userId) {
       fetchData();
+    } else {
+      console.log('No user ID provided in URL');
+      setLoading(false);
     }
   }, [userId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      console.log('Fetching data for user:', userId);
+      
       await Promise.all([
         fetchProducts(),
         fetchCombos(),
@@ -105,6 +110,7 @@ const EnhancedMenuDigital = () => {
 
   const fetchProducts = async () => {
     try {
+      console.log('Fetching products for user:', userId);
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -114,7 +120,12 @@ const EnhancedMenuDigital = () => {
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching products:', error);
+        throw error;
+      }
+      
+      console.log('Products fetched:', data?.length || 0);
       setProducts(data || []);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
@@ -124,6 +135,7 @@ const EnhancedMenuDigital = () => {
 
   const fetchCombos = async () => {
     try {
+      console.log('Fetching combos for user:', userId);
       // Direct access to combos table with proper error handling
       const { data, error } = await supabase
         .from('combos' as any)
@@ -138,9 +150,11 @@ const EnhancedMenuDigital = () => {
       }
       
       // Check if data is valid before type assertion
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
+        console.log('Combos fetched:', data.length);
         setCombos(data as unknown as Combo[]);
       } else {
+        console.log('No combos found');
         setCombos([]);
       }
     } catch (error) {
@@ -151,13 +165,19 @@ const EnhancedMenuDigital = () => {
 
   const fetchProfile = async () => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+        throw error;
+      }
+      
+      console.log('Profile fetched:', data?.restaurant_name || 'No name');
       setProfile(data);
     } catch (error) {
       console.error('Erro ao carregar perfil:', error);
@@ -167,6 +187,7 @@ const EnhancedMenuDigital = () => {
 
   const fetchDeliveryZones = async () => {
     try {
+      console.log('Fetching delivery zones for user:', userId);
       const { data, error } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -174,7 +195,12 @@ const EnhancedMenuDigital = () => {
         .eq('active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching delivery zones:', error);
+        throw error;
+      }
+      
+      console.log('Delivery zones fetched:', data?.length || 0);
       setDeliveryZones(data || []);
     } catch (error) {
       console.error('Erro ao carregar zonas de entrega:', error);
@@ -330,7 +356,10 @@ const EnhancedMenuDigital = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando cardápio...</p>
+        </div>
       </div>
     );
   }
