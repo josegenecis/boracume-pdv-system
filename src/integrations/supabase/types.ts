@@ -78,51 +78,6 @@ export type Database = {
         }
         Relationships: []
       }
-      combos: {
-        Row: {
-          active: boolean | null
-          created_at: string
-          description: string | null
-          discount_percentage: number
-          id: string
-          image_url: string | null
-          name: string
-          original_price: number
-          price: number
-          products: string[] | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          active?: boolean | null
-          created_at?: string
-          description?: string | null
-          discount_percentage?: number
-          id?: string
-          image_url?: string | null
-          name: string
-          original_price?: number
-          price?: number
-          products?: string[] | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          active?: boolean | null
-          created_at?: string
-          description?: string | null
-          discount_percentage?: number
-          id?: string
-          image_url?: string | null
-          name?: string
-          original_price?: number
-          price?: number
-          products?: string[] | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       delivery_personnel: {
         Row: {
           created_at: string
@@ -1143,8 +1098,6 @@ export type Database = {
       }
       whatsapp_settings: {
         Row: {
-          ai_enabled: boolean | null
-          auto_responses: Json | null
           created_at: string
           default_message: string
           enabled: boolean | null
@@ -1154,8 +1107,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          ai_enabled?: boolean | null
-          auto_responses?: Json | null
           created_at?: string
           default_message: string
           enabled?: boolean | null
@@ -1165,8 +1116,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          ai_enabled?: boolean | null
-          auto_responses?: Json | null
           created_at?: string
           default_message?: string
           enabled?: boolean | null
