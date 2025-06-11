@@ -16,6 +16,7 @@ interface CartItem extends Product {
   selectedOptions?: string[];
   notes?: string;
   subtotal: number;
+  variationPrice: number;
 }
 
 export const useDigitalMenuCart = () => {
@@ -24,12 +25,15 @@ export const useDigitalMenuCart = () => {
 
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
     const selectedOptions = selectedVariations.flatMap(variation => 
-      variation.options.map((option: any) => option.name)
+      Array.isArray(variation.options) ? variation.options.map((option: any) => option.name) : []
     );
     
-    const variationPrice = selectedVariations.reduce((total, variation) => 
-      total + variation.options.reduce((vTotal: number, option: any) => vTotal + option.price, 0), 0
-    );
+    const variationPrice = selectedVariations.reduce((total, variation) => {
+      if (Array.isArray(variation.options)) {
+        return total + variation.options.reduce((vTotal: number, option: any) => vTotal + (option.price || 0), 0);
+      }
+      return total;
+    }, 0);
     
     const itemPrice = product.price + variationPrice;
     const subtotal = itemPrice * quantity;
@@ -39,7 +43,8 @@ export const useDigitalMenuCart = () => {
       quantity,
       selectedOptions,
       notes,
-      subtotal
+      subtotal,
+      variationPrice
     };
 
     setCart(prev => {
@@ -52,7 +57,7 @@ export const useDigitalMenuCart = () => {
       if (existingIndex >= 0) {
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
-        updated[existingIndex].subtotal = (updated[existingIndex].price + variationPrice) * updated[existingIndex].quantity;
+        updated[existingIndex].subtotal = (updated[existingIndex].price + updated[existingIndex].variationPrice) * updated[existingIndex].quantity;
         return updated;
       }
 
@@ -74,7 +79,7 @@ export const useDigitalMenuCart = () => {
     setCart(prev => {
       const updated = [...prev];
       const item = updated[index];
-      const basePrice = item.subtotal / item.quantity; // Get price per unit including variations
+      const basePrice = item.price + item.variationPrice;
       updated[index] = {
         ...item,
         quantity,

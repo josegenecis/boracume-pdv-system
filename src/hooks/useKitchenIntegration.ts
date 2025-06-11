@@ -27,10 +27,7 @@ export const useKitchenIntegration = () => {
   const { user } = useAuth();
 
   const sendToKitchen = async (orderData: OrderData) => {
-    if (!user) return;
-
     try {
-      // Transform items to include all additional information
       const kitchenItems = orderData.items.map(item => ({
         id: item.product_id,
         name: item.product_name,
@@ -41,7 +38,7 @@ export const useKitchenIntegration = () => {
         subtotal: item.subtotal
       }));
 
-      console.log('🔄 Sending order to KDS with full details:', {
+      console.log('🔄 Enviando pedido para o KDS:', {
         order_number: orderData.order_number,
         customer_name: orderData.customer_name,
         customer_phone: orderData.customer_phone,
@@ -66,13 +63,26 @@ export const useKitchenIntegration = () => {
         .insert([kitchenOrder]);
 
       if (error) {
-        console.error('❌ Error sending to KDS:', error);
+        console.error('❌ Erro ao enviar para o KDS:', error);
         throw error;
       }
 
-      console.log('✅ Order sent to KDS successfully with all details');
+      console.log('✅ Pedido enviado para o KDS com sucesso');
+      
+      // Enviar notificação em tempo real
+      const channel = supabase.channel('kitchen-notifications');
+      channel.send({
+        type: 'broadcast',
+        event: 'new_order',
+        payload: { 
+          order_number: orderData.order_number,
+          customer_name: orderData.customer_name,
+          user_id: orderData.user_id
+        }
+      });
+
     } catch (error) {
-      console.error('❌ Failed to send order to KDS:', error);
+      console.error('❌ Falha ao enviar pedido para o KDS:', error);
       throw error;
     }
   };

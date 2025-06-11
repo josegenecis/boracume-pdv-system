@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, Banknote, Smartphone, MapPin, Phone, User } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CartItem {
   id: string;
@@ -21,12 +23,21 @@ interface CartItem {
   subtotal: number;
 }
 
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
+  delivery_time: string;
+}
+
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
   total: number;
   onPlaceOrder: (orderData: any) => void;
+  userId?: string;
 }
 
 const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -34,7 +45,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   cart,
   total,
-  onPlaceOrder
+  onPlaceOrder,
+  userId
 }) => {
   const [customerData, setCustomerData] = useState({
     name: '',
@@ -44,8 +56,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   });
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('');
 
-  const deliveryFee = 5.00;
+  const selectedZoneData = deliveryZones.find(zone => zone.id === selectedZone);
+  const deliveryFee = selectedZoneData?.delivery_fee || 0;
+  const minimumOrder = selectedZoneData?.minimum_order || 0;
   const totalWithDelivery = total + deliveryFee;
 
   const paymentOptions = [
@@ -55,11 +71,37 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     { value: 'cash', label: 'Dinheiro', icon: Banknote }
   ];
 
+  useEffect(() => {
+    if (isOpen && userId) {
+      fetchDeliveryZones();
+    }
+  }, [isOpen, userId]);
+
+  const fetchDeliveryZones = async () => {
+    if (!userId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('name');
+
+      if (error) throw error;
+      setDeliveryZones(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar zonas de entrega:', error);
+    }
+  };
+
   const handlePlaceOrder = () => {
     const orderData = {
+      user_id: userId,
       customer_name: customerData.name,
       customer_phone: customerData.phone,
       customer_address: customerData.address,
+      delivery_zone_id: selectedZone,
       items: cart.map(item => ({
         product_id: item.id,
         product_name: item.name,
@@ -74,7 +116,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       payment_method: paymentMethod,
       change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
       order_type: 'delivery',
-      delivery_instructions: customerData.notes
+      delivery_instructions: customerData.notes,
+      estimated_time: selectedZoneData?.delivery_time || '30-45 min'
     };
 
     onPlaceOrder(orderData);
@@ -85,6 +128,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       customerData.name.trim() !== '' &&
       customerData.phone.trim() !== '' &&
       customerData.address.trim() !== '' &&
+      selectedZone !== '' &&
+      total >= minimumOrder &&
       paymentMethod !== '' &&
       (paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
     );
@@ -136,6 +181,40 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>Total</span>
                   <span>R$ {totalWithDelivery.toFixed(2)}</span>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Seleção de Zona de Entrega */}
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <h3 className="font-semibold">Área de Entrega</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="delivery-zone">Selecione seu bairro</Label>
+                <Select value={selectedZone} onValueChange={setSelectedZone}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha sua área de entrega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryZones.map(zone => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        {zone.name} - R$ {zone.delivery_fee.toFixed(2)} 
+                        (Mín: R$ {zone.minimum_order.toFixed(2)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedZoneData && (
+                  <div className="text-sm text-muted-foreground">
+                    <p>Tempo estimado: {selectedZoneData.delivery_time}</p>
+                    {total < minimumOrder && (
+                      <p className="text-red-500">
+                        Pedido mínimo para esta área: R$ {minimumOrder.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

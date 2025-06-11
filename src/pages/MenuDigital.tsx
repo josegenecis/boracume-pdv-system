@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import { Search, ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
+import { Search, Plus, Minus, Trash2 } from 'lucide-react';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
+import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductVariationModal from '@/components/menu/ProductVariationModal';
 import CheckoutModal from '@/components/menu/CheckoutModal';
+import CartBottomBar from '@/components/menu/CartBottomBar';
 import WhatsAppButton from '@/components/chat/WhatsAppButton';
 import { useToast } from '@/hooks/use-toast';
 
@@ -50,6 +52,7 @@ interface Profile {
 const MenuDigital: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const { toast } = useToast();
+  const { sendToKitchen } = useKitchenIntegration();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -130,7 +133,6 @@ const MenuDigital: React.FC = () => {
 
       if (error) throw error;
       
-      // Convert Json type to proper ProductVariation[]
       const transformedData = (data || []).map(item => {
         let parsedOptions = [];
         try {
@@ -174,19 +176,35 @@ const MenuDigital: React.FC = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      // Calculate order number
       const orderNumber = `WEB-${Date.now()}`;
       
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('orders')
         .insert([{
-          user_id: userId,
-          order_number: orderNumber,
           ...orderData,
+          order_number: orderNumber,
           status: 'pending'
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Send to kitchen
+      try {
+        await sendToKitchen({
+          user_id: orderData.user_id,
+          order_number: orderNumber,
+          customer_name: orderData.customer_name,
+          customer_phone: orderData.customer_phone,
+          items: orderData.items,
+          total: orderData.total,
+          payment_method: orderData.payment_method,
+          order_type: orderData.order_type
+        });
+      } catch (kitchenError) {
+        console.error('Erro ao enviar para a cozinha:', kitchenError);
+      }
 
       toast({
         title: "Pedido enviado!",
@@ -213,7 +231,7 @@ const MenuDigital: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -233,105 +251,6 @@ const MenuDigital: React.FC = () => {
                 <p className="text-sm text-muted-foreground">{profile.description}</p>
               )}
             </div>
-            
-            <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-              <DrawerTrigger asChild>
-                <Button variant="outline" size="icon" className="relative">
-                  <ShoppingCart className="h-4 w-4" />
-                  {getCartItemCount() > 0 && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                    >
-                      {getCartItemCount()}
-                    </Badge>
-                  )}
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent className="max-h-[80vh]">
-                <DrawerHeader>
-                  <DrawerTitle>Carrinho ({getCartItemCount()} itens)</DrawerTitle>
-                </DrawerHeader>
-                <div className="p-4 space-y-4 overflow-y-auto">
-                  {cart.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">
-                      Seu carrinho está vazio
-                    </p>
-                  ) : (
-                    <>
-                      {cart.map((item, index) => (
-                        <Card key={index}>
-                          <CardContent className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="flex-1">
-                                <h4 className="font-medium">{item.name}</h4>
-                                {item.selectedOptions && item.selectedOptions.length > 0 && (
-                                  <p className="text-sm text-muted-foreground">
-                                    {item.selectedOptions.join(', ')}
-                                  </p>
-                                )}
-                                {item.notes && (
-                                  <p className="text-sm text-muted-foreground italic">
-                                    Obs: {item.notes}
-                                  </p>
-                                )}
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeFromCart(index)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => updateCartItem(index, item.quantity - 1)}
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <span className="font-medium w-8 text-center">{item.quantity}</span>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => updateCartItem(index, item.quantity + 1)}
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                              <span className="font-bold">R$ {item.subtotal.toFixed(2)}</span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                      
-                      <div className="border-t pt-4">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-lg font-bold">Total:</span>
-                          <span className="text-lg font-bold">R$ {getCartTotal().toFixed(2)}</span>
-                        </div>
-                        <Button 
-                          onClick={() => {
-                            setIsDrawerOpen(false);
-                            setShowCheckout(true);
-                          }}
-                          className="w-full"
-                          size="lg"
-                        >
-                          Finalizar Pedido
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </DrawerContent>
-            </Drawer>
           </div>
         </div>
       </div>
@@ -370,7 +289,7 @@ const MenuDigital: React.FC = () => {
       </div>
 
       {/* Products Grid */}
-      <div className="max-w-4xl mx-auto px-4 pb-20">
+      <div className="max-w-4xl mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredProducts.map(product => (
             <Card 
@@ -411,6 +330,100 @@ const MenuDigital: React.FC = () => {
         </div>
       </div>
 
+      {/* Cart Bottom Bar */}
+      <CartBottomBar
+        itemCount={getCartItemCount()}
+        total={getCartTotal()}
+        onOpenCart={() => setIsDrawerOpen(true)}
+      />
+
+      {/* Cart Drawer */}
+      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <DrawerContent className="max-h-[80vh]">
+          <DrawerHeader>
+            <DrawerTitle>Carrinho ({getCartItemCount()} itens)</DrawerTitle>
+          </DrawerHeader>
+          <div className="p-4 space-y-4 overflow-y-auto">
+            {cart.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                Seu carrinho está vazio
+              </p>
+            ) : (
+              <>
+                {cart.map((item, index) => (
+                  <Card key={index}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-medium">{item.name}</h4>
+                          {item.selectedOptions && item.selectedOptions.length > 0 && (
+                            <p className="text-sm text-muted-foreground">
+                              {item.selectedOptions.join(', ')}
+                            </p>
+                          )}
+                          {item.notes && (
+                            <p className="text-sm text-muted-foreground italic">
+                              Obs: {item.notes}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFromCart(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateCartItem(index, item.quantity - 1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="font-medium w-8 text-center">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateCartItem(index, item.quantity + 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <span className="font-bold">R$ {item.subtotal.toFixed(2)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-lg font-bold">Total:</span>
+                    <span className="text-lg font-bold">R$ {getCartTotal().toFixed(2)}</span>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      setIsDrawerOpen(false);
+                      setShowCheckout(true);
+                    }}
+                    className="w-full"
+                    size="lg"
+                  >
+                    Finalizar Pedido
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
+
       {/* Modals */}
       {selectedProduct && (
         <ProductVariationModal
@@ -431,6 +444,7 @@ const MenuDigital: React.FC = () => {
         cart={cart}
         total={getCartTotal()}
         onPlaceOrder={handlePlaceOrder}
+        userId={userId}
       />
 
       {/* WhatsApp Button */}
