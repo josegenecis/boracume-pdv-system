@@ -47,15 +47,24 @@ const LoyaltyCard: React.FC<LoyaltyCardProps> = ({ customer, onRewardRedeem }) =
 
   const loadHistory = async () => {
     try {
-      const { data, error } = await supabase
-        .from('loyalty_history')
-        .select('*')
-        .eq('customer_id', customer.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      setHistory(data || []);
+      // Simular carregamento do histórico
+      const mockHistory = [
+        {
+          id: '1',
+          points_earned: 50,
+          points_used: 0,
+          description: 'Pontos ganhos por compra - Pedido #1234',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: '2',
+          points_earned: 25,
+          points_used: 0,
+          description: 'Pontos ganhos por compra - Pedido #1235',
+          created_at: new Date(Date.now() - 86400000).toISOString()
+        }
+      ];
+      setHistory(mockHistory);
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
     }

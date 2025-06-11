@@ -8,8 +8,6 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Receipt, Settings, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 
 const FiscalSettings: React.FC = () => {
   const [settings, setSettings] = useState({
@@ -27,45 +25,13 @@ const FiscalSettings: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('fiscal_settings')
-        .select('*')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      if (data) {
-        setSettings(data);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar configurações fiscais:', error);
-    }
-  };
 
   const saveSettings = async () => {
     try {
       setLoading(true);
       
-      const { error } = await supabase
-        .from('fiscal_settings')
-        .upsert({
-          ...settings,
-          user_id: user?.id,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
+      // Simular salvamento das configurações fiscais
+      localStorage.setItem('fiscal_settings', JSON.stringify(settings));
 
       toast({
         title: "Sucesso",
@@ -104,6 +70,14 @@ const FiscalSettings: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Carregar configurações do localStorage
+    const saved = localStorage.getItem('fiscal_settings');
+    if (saved) {
+      setSettings(JSON.parse(saved));
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
