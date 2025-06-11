@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,7 +38,7 @@ interface ProductVariation {
 
 interface CartItem extends Product {
   quantity: number;
-  options?: string[];
+  selectedVariations?: any[];
   notes?: string;
 }
 
@@ -175,11 +174,12 @@ const PDV = () => {
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const addToCart = (product: Product, quantity: number = 1, options: string[] = [], notes: string = '') => {
+  const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
     setCart(prev => {
+      const variationKey = JSON.stringify(selectedVariations) + notes;
       const existing = prev.find(item => 
         item.id === product.id && 
-        JSON.stringify(item.options) === JSON.stringify(options) &&
+        JSON.stringify(item.selectedVariations) === JSON.stringify(selectedVariations) &&
         item.notes === notes
       );
       
@@ -194,7 +194,7 @@ const PDV = () => {
       return [...prev, { 
         ...product, 
         quantity, 
-        options: options.length > 0 ? options : undefined,
+        selectedVariations: selectedVariations.length > 0 ? selectedVariations : undefined,
         notes: notes || undefined
       }];
     });
@@ -203,6 +203,17 @@ const PDV = () => {
       title: "Produto adicionado",
       description: `${product.name} foi adicionado ao carrinho.`,
     });
+  };
+
+  // Helper function to format selected variations for display
+  const formatSelectedVariations = (selectedVariations?: any[]) => {
+    if (!selectedVariations || selectedVariations.length === 0) return null;
+    
+    const optionNames = selectedVariations.flatMap(variation => 
+      variation.options?.map((option: any) => option.name) || []
+    );
+    
+    return optionNames;
   };
 
   const removeFromCart = (productId: string) => {
@@ -274,7 +285,7 @@ const PDV = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
-        options: item.options || [],
+        options: item.selectedVariations || [],
         notes: item.notes || ''
       }));
 
@@ -433,7 +444,7 @@ const PDV = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
-        options: item.options || [],
+        options: item.selectedVariations || [],
         notes: item.notes || ''
       }));
 
@@ -532,7 +543,7 @@ const PDV = () => {
       name: item.product_name,
       price: item.price,
       quantity: item.quantity,
-      options: item.options,
+      selectedVariations: item.options,
       notes: item.notes,
       available: true
     }));
@@ -684,52 +695,56 @@ const PDV = () => {
                   ) : (
                     <>
                       <div className="space-y-3 max-h-60 overflow-y-auto">
-                        {cart.map((item, index) => (
-                          <div key={`${item.id}-${index}`} className="flex items-center justify-between p-2 border rounded">
-                            <div className="flex-1">
-                              <p className="font-medium text-sm">{item.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {formatCurrency(item.price)} cada
-                              </p>
-                              {item.options && item.options.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {item.options.map((option, optIndex) => (
-                                    <div key={optIndex}>• {option}</div>
-                                  ))}
-                                </div>
-                              )}
-                              {item.notes && (
-                                <div className="text-xs text-gray-500 mt-1 italic">
-                                  Obs: {item.notes}
-                                </div>
-                              )}
+                        {cart.map((item, index) => {
+                          const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                          
+                          return (
+                            <div key={`${item.id}-${index}`} className="flex items-center justify-between p-2 border rounded">
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{item.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatCurrency(item.price)} cada
+                                </p>
+                                {formattedVariations && formattedVariations.length > 0 && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {formattedVariations.map((option, optIndex) => (
+                                      <div key={optIndex}>• {option}</div>
+                                    ))}
+                                  </div>
+                                )}
+                                {item.notes && (
+                                  <div className="text-xs text-gray-500 mt-1 italic">
+                                    Obs: {item.notes}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                >
+                                  <Minus size={12} />
+                                </Button>
+                                <span className="w-8 text-center">{item.quantity}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                >
+                                  <Plus size={12} />
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => removeFromCart(item.id)}
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              >
-                                <Minus size={12} />
-                              </Button>
-                              <span className="w-8 text-center">{item.quantity}</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              >
-                                <Plus size={12} />
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => removeFromCart(item.id)}
-                              >
-                                <Trash2 size={12} />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       
                       <Separator />
@@ -932,3 +947,5 @@ const PDV = () => {
 };
 
 export default PDV;
+
+}
