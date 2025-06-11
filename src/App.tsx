@@ -26,6 +26,7 @@ import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
 import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
+import Downloads from '@/pages/Downloads';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ function AppContent() {
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
+          <Route path="/downloads" element={<Downloads />} />
         </Route>
       </Route>
       

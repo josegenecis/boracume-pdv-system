@@ -16,7 +16,8 @@ import {
   Utensils,
   Crown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 
 const CollapsibleSidebar = () => {
@@ -36,6 +37,7 @@ const CollapsibleSidebar = () => {
     { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
     { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
+    { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
   ];
