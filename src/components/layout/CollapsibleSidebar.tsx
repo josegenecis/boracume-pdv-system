@@ -15,8 +15,8 @@ import {
   ChefHat,
   Utensils,
   Crown,
-  Menu,
-  X
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 const CollapsibleSidebar = () => {
@@ -41,21 +41,21 @@ const CollapsibleSidebar = () => {
   ];
 
   return (
-    <aside className={`bg-white shadow-md min-h-screen transition-all duration-300 ${
+    <aside className={`bg-white shadow-md h-screen fixed left-0 top-16 z-30 transition-all duration-300 ${
       isCollapsed ? 'w-16' : 'w-64'
     }`}>
-      <div className="p-4 border-b">
+      <div className="p-2 border-b">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="w-full flex justify-center"
+          className="w-full flex justify-center hover:bg-gray-50 text-gray-400 hover:text-gray-600"
         >
-          {isCollapsed ? <Menu size={20} /> : <X size={20} />}
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </Button>
       </div>
       
-      <nav className="mt-4 px-2">
+      <nav className="mt-4 px-2 h-full overflow-y-auto pb-20">
         <ul className="space-y-1">
           {links.map((link) => {
             const Icon = link.icon;

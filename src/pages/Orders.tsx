@@ -194,274 +194,276 @@ const Orders = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
-        <Button onClick={fetchOrders} variant="outline">
-          Atualizar
-        </Button>
+    <div className="h-[calc(100vh-120px)] overflow-y-auto">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
+          <Button onClick={fetchOrders} variant="outline">
+            Atualizar
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Buscar por número, cliente ou telefone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="preparing">Preparando</SelectItem>
+                  <SelectItem value="ready">Pronto</SelectItem>
+                  <SelectItem value="completed">Finalizado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Tipos</SelectItem>
+                  <SelectItem value="delivery">Entrega</SelectItem>
+                  <SelectItem value="pickup">Retirada</SelectItem>
+                  <SelectItem value="dine_in">No Local</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Orders Tabs */}
+        <Tabs defaultValue="pending" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="pending" className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+              Pendentes ({pendingOrders.length})
+            </TabsTrigger>
+            <TabsTrigger value="active" className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              Ativos ({activeOrders.length})
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Finalizados ({completedOrders.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="space-y-4">
+            {pendingOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido pendente</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {pendingOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-yellow-500">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                            {getStatusBadge(order.status)}
+                            <div className="flex items-center gap-1">
+                              {getOrderTypeIcon(order.order_type)}
+                              <span className="text-sm text-gray-600">
+                                {getOrderTypeLabel(order.order_type)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="font-medium">{order.customer_name}</span>
+                            {order.customer_phone && (
+                              <div className="flex items-center gap-1">
+                                <Phone size={14} />
+                                {order.customer_phone}
+                              </div>
+                            )}
+                            <span>{formatDate(order.created_at)}</span>
+                          </div>
+
+                          {order.customer_address && (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <MapPin size={14} />
+                              {order.customer_address}
+                            </div>
+                          )}
+
+                          <div className="text-sm text-gray-600">
+                            {order.items.length} item(s) • {formatCurrency(order.total)}
+                            {order.estimated_time && ` • ${order.estimated_time}`}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateOrderStatus(order.id, 'preparing')}
+                          >
+                            Aceitar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="active" className="space-y-4">
+            {activeOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido ativo</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {activeOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-blue-500">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                            {getStatusBadge(order.status)}
+                            <div className="flex items-center gap-1">
+                              {getOrderTypeIcon(order.order_type)}
+                              <span className="text-sm text-gray-600">
+                                {getOrderTypeLabel(order.order_type)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="font-medium">{order.customer_name}</span>
+                            {order.customer_phone && (
+                              <div className="flex items-center gap-1">
+                                <Phone size={14} />
+                                {order.customer_phone}
+                              </div>
+                            )}
+                            <span>{formatDate(order.created_at)}</span>
+                          </div>
+
+                          {order.customer_address && (
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <MapPin size={14} />
+                              {order.customer_address}
+                            </div>
+                          )}
+
+                          <div className="text-sm text-gray-600">
+                            {order.items.length} item(s) • {formatCurrency(order.total)}
+                            {order.estimated_time && ` • ${order.estimated_time}`}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          {order.status === 'preparing' && (
+                            <Button
+                              size="sm"
+                              onClick={() => updateOrderStatus(order.id, 'ready')}
+                            >
+                              Marcar Pronto
+                            </Button>
+                          )}
+                          {order.status === 'ready' && (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => updateOrderStatus(order.id, order.order_type === 'delivery' ? 'delivered' : 'completed')}
+                            >
+                              <Check size={16} className="mr-1" />
+                              {order.order_type === 'delivery' ? 'Entregue' : 'Finalizar'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="completed" className="space-y-4">
+            {completedOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido finalizado</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {completedOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-green-500">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                            {getStatusBadge(order.status)}
+                            <div className="flex items-center gap-1">
+                              {getOrderTypeIcon(order.order_type)}
+                              <span className="text-sm text-gray-600">
+                                {getOrderTypeLabel(order.order_type)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="font-medium">{order.customer_name}</span>
+                            {order.customer_phone && (
+                              <div className="flex items-center gap-1">
+                                <Phone size={14} />
+                                {order.customer_phone}
+                              </div>
+                            )}
+                            <span>{formatDate(order.created_at)}</span>
+                          </div>
+
+                          <div className="text-sm text-gray-600">
+                            {order.items.length} item(s) • {formatCurrency(order.total)}
+                            • {order.payment_method.toUpperCase()}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline">
+                            <Eye size={16} className="mr-1" />
+                            Ver Detalhes
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar por número, cliente ou telefone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="preparing">Preparando</SelectItem>
-                <SelectItem value="ready">Pronto</SelectItem>
-                <SelectItem value="completed">Finalizado</SelectItem>
-                <SelectItem value="cancelled">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Tipos</SelectItem>
-                <SelectItem value="delivery">Entrega</SelectItem>
-                <SelectItem value="pickup">Retirada</SelectItem>
-                <SelectItem value="dine_in">No Local</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Orders Tabs */}
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="pending" className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            Pendentes ({pendingOrders.length})
-          </TabsTrigger>
-          <TabsTrigger value="active" className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            Ativos ({activeOrders.length})
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            Finalizados ({completedOrders.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending" className="space-y-4">
-          {pendingOrders.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Nenhum pedido pendente</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {pendingOrders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-yellow-500">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                          {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
-                            {getOrderTypeIcon(order.order_type)}
-                            <span className="text-sm text-gray-600">
-                              {getOrderTypeLabel(order.order_type)}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span className="font-medium">{order.customer_name}</span>
-                          {order.customer_phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {order.customer_phone}
-                            </div>
-                          )}
-                          <span>{formatDate(order.created_at)}</span>
-                        </div>
-
-                        {order.customer_address && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <MapPin size={14} />
-                            {order.customer_address}
-                          </div>
-                        )}
-
-                        <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)}
-                          {order.estimated_time && ` • ${order.estimated_time}`}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateOrderStatus(order.id, 'preparing')}
-                        >
-                          Aceitar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="active" className="space-y-4">
-          {activeOrders.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Nenhum pedido ativo</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {activeOrders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-blue-500">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                          {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
-                            {getOrderTypeIcon(order.order_type)}
-                            <span className="text-sm text-gray-600">
-                              {getOrderTypeLabel(order.order_type)}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span className="font-medium">{order.customer_name}</span>
-                          {order.customer_phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {order.customer_phone}
-                            </div>
-                          )}
-                          <span>{formatDate(order.created_at)}</span>
-                        </div>
-
-                        {order.customer_address && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <MapPin size={14} />
-                            {order.customer_address}
-                          </div>
-                        )}
-
-                        <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)}
-                          {order.estimated_time && ` • ${order.estimated_time}`}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        {order.status === 'preparing' && (
-                          <Button
-                            size="sm"
-                            onClick={() => updateOrderStatus(order.id, 'ready')}
-                          >
-                            Marcar Pronto
-                          </Button>
-                        )}
-                        {order.status === 'ready' && (
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => updateOrderStatus(order.id, order.order_type === 'delivery' ? 'delivered' : 'completed')}
-                          >
-                            <Check size={16} className="mr-1" />
-                            {order.order_type === 'delivery' ? 'Entregue' : 'Finalizar'}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="completed" className="space-y-4">
-          {completedOrders.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Nenhum pedido finalizado</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {completedOrders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-green-500">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                          {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
-                            {getOrderTypeIcon(order.order_type)}
-                            <span className="text-sm text-gray-600">
-                              {getOrderTypeLabel(order.order_type)}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span className="font-medium">{order.customer_name}</span>
-                          {order.customer_phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {order.customer_phone}
-                            </div>
-                          )}
-                          <span>{formatDate(order.created_at)}</span>
-                        </div>
-
-                        <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)}
-                          • {order.payment_method.toUpperCase()}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Eye size={16} className="mr-1" />
-                          Ver Detalhes
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
     </div>
   );
 };

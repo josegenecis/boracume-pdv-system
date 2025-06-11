@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -376,7 +375,8 @@ const PDV = () => {
       }
     }
 
-    if (orderType === 'dine_in' && !selectedTable) {
+    // Remover validação de mesa para dine_in quando vem de mesa finalizada
+    if (orderType === 'dine_in' && !selectedTable && !customerName.includes('Mesa ')) {
       toast({
         title: "Mesa obrigatória",
         description: "Por favor, selecione uma mesa.",
@@ -502,6 +502,7 @@ const PDV = () => {
     setCart(cartItems);
     setCustomerName(`Mesa ${tableNumber}`);
     setOrderType('dine_in');
+    // Não definir selectedTable para evitar validação desnecessária
     setActiveTab('products');
 
     toast({
@@ -590,7 +591,7 @@ const PDV = () => {
                               {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </p>
                             <Button 
-                              onClick={() => addToCart(product, 1, [], '')}
+                              onClick={() => setShowProductModal(true)}
                               className="w-full"
                               size="sm"
                             >
