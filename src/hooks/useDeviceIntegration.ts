@@ -1,6 +1,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { PrinterService, PrinterDevice } from '@/services/PrinterService';
+import { ScaleService, ScaleDevice } from '@/services/ScaleService';
 
 export interface Device {
   id: string;
@@ -16,36 +18,46 @@ export const useDeviceIntegration = () => {
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
 
-  // Simular dispositivos disponíveis
-  const mockDevices: Device[] = [
-    { id: 'scale_001', name: 'Balança Toledo 3400', type: 'scale', connectionType: 'bluetooth', status: 'disconnected' },
-    { id: 'scale_002', name: 'Balança Filizola BP-15', type: 'scale', connectionType: 'usb', status: 'disconnected' },
-    { id: 'printer_001', name: 'Impressora Bematech MP-4200', type: 'printer', connectionType: 'usb', status: 'disconnected' },
-    { id: 'printer_002', name: 'Impressora Epson TM-T20', type: 'printer', connectionType: 'wifi', status: 'disconnected' },
-  ];
-
-  useEffect(() => {
-    setDevices(mockDevices);
-  }, []);
+  // Initialize services
+  const printerService = new PrinterService();
+  const scaleService = new ScaleService();
 
   const scanForDevices = useCallback(async () => {
     setIsScanning(true);
     
     try {
-      // Simular escaneamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Atualizar lista de dispositivos
-      setDevices(prev => prev.map(device => ({
-        ...device,
-        status: Math.random() > 0.5 ? 'disconnected' : 'connected' as any
-      })));
+      const [printers, scales] = await Promise.all([
+        printerService.scanForPrinters(),
+        scaleService.scanForScales()
+      ]);
+
+      const deviceList: Device[] = [
+        ...printers.map((printer: PrinterDevice) => ({
+          id: printer.id,
+          name: printer.name,
+          type: 'printer' as const,
+          connectionType: printer.type as any,
+          status: printer.connected ? 'connected' as const : 'disconnected' as const,
+          address: printer.address
+        })),
+        ...scales.map((scale: ScaleDevice) => ({
+          id: scale.id,
+          name: scale.name,
+          type: 'scale' as const,
+          connectionType: scale.type as any,
+          status: scale.connected ? 'connected' as const : 'disconnected' as const,
+          address: scale.address
+        }))
+      ];
+
+      setDevices(deviceList);
       
       toast({
         title: "Escaneamento concluído",
-        description: "Dispositivos encontrados e atualizados.",
+        description: `${deviceList.length} dispositivos encontrados.`,
       });
     } catch (error) {
+      console.error('Erro no escaneamento:', error);
       toast({
         title: "Erro no escaneamento",
         description: "Não foi possível escanear dispositivos.",
@@ -65,18 +77,36 @@ export const useDeviceIntegration = () => {
     ));
 
     try {
-      // Simular conexão
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setDevices(prev => prev.map(d => 
-        d.id === deviceId ? { ...d, status: 'connected' } : d
-      ));
+      let success = false;
 
-      toast({
-        title: "Dispositivo conectado",
-        description: `${device.name} conectado com sucesso.`,
-      });
+      if (device.type === 'printer') {
+        const printers = await printerService.scanForPrinters();
+        const printer = printers.find(p => p.id === deviceId);
+        if (printer) {
+          success = await printerService.connectToPrinter(printer);
+        }
+      } else if (device.type === 'scale') {
+        const scales = await scaleService.scanForScales();
+        const scale = scales.find(s => s.id === deviceId);
+        if (scale) {
+          success = await scaleService.connectToScale(scale);
+        }
+      }
+
+      if (success) {
+        setDevices(prev => prev.map(d => 
+          d.id === deviceId ? { ...d, status: 'connected' } : d
+        ));
+
+        toast({
+          title: "Dispositivo conectado",
+          description: `${device.name} conectado com sucesso.`,
+        });
+      } else {
+        throw new Error('Falha na conexão');
+      }
     } catch (error) {
+      console.error('Erro na conexão:', error);
       setDevices(prev => prev.map(d => 
         d.id === deviceId ? { ...d, status: 'disconnected' } : d
       ));
@@ -90,15 +120,33 @@ export const useDeviceIntegration = () => {
   }, [devices, toast]);
 
   const disconnectDevice = useCallback(async (deviceId: string) => {
-    setDevices(prev => prev.map(d => 
-      d.id === deviceId ? { ...d, status: 'disconnected' } : d
-    ));
-    
-    toast({
-      title: "Dispositivo desconectado",
-      description: "Dispositivo desconectado com sucesso.",
-    });
-  }, [toast]);
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) return;
+
+    try {
+      if (device.type === 'printer') {
+        await printerService.disconnectPrinter();
+      } else if (device.type === 'scale') {
+        await scaleService.disconnectScale();
+      }
+
+      setDevices(prev => prev.map(d => 
+        d.id === deviceId ? { ...d, status: 'disconnected' } : d
+      ));
+      
+      toast({
+        title: "Dispositivo desconectado",
+        description: "Dispositivo desconectado com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao desconectar:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível desconectar o dispositivo.",
+        variant: "destructive"
+      });
+    }
+  }, [devices, toast]);
 
   const getWeight = useCallback(async (): Promise<number> => {
     const connectedScale = devices.find(d => d.type === 'scale' && d.status === 'connected');
@@ -107,9 +155,12 @@ export const useDeviceIntegration = () => {
       throw new Error('Nenhuma balança conectada');
     }
 
-    // Simular leitura de peso
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return parseFloat((Math.random() * 5).toFixed(3));
+    try {
+      return await scaleService.getWeight();
+    } catch (error) {
+      console.error('Erro ao obter peso:', error);
+      throw new Error('Erro ao ler peso da balança');
+    }
   }, [devices]);
 
   const printReceipt = useCallback(async (orderData: any): Promise<void> => {
@@ -119,14 +170,32 @@ export const useDeviceIntegration = () => {
       throw new Error('Nenhuma impressora conectada');
     }
 
-    // Simular impressão
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Comprovante impresso",
-      description: `Pedido #${orderData.order_number} impresso com sucesso.`,
-    });
+    try {
+      const success = await printerService.printReceipt(orderData);
+      
+      if (success) {
+        toast({
+          title: "Comprovante impresso",
+          description: `Pedido #${orderData.order_number} impresso com sucesso.`,
+        });
+      } else {
+        throw new Error('Falha na impressão');
+      }
+    } catch (error) {
+      console.error('Erro na impressão:', error);
+      toast({
+        title: "Erro na impressão",
+        description: "Não foi possível imprimir o comprovante.",
+        variant: "destructive"
+      });
+      throw error;
+    }
   }, [devices, toast]);
+
+  // Auto-scan on mount
+  useEffect(() => {
+    scanForDevices();
+  }, []);
 
   return {
     devices,
