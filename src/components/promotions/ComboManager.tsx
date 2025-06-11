@@ -74,8 +74,12 @@ const ComboManager = () => {
         return;
       }
       
-      // Type assertion for the response with proper error handling
-      setCombos((data || []) as Combo[]);
+      // Check if data is valid before type assertion
+      if (data && Array.isArray(data)) {
+        setCombos(data as unknown as Combo[]);
+      } else {
+        setCombos([]);
+      }
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
       setCombos([]);

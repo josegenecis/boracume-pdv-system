@@ -124,7 +124,7 @@ const EnhancedMenuDigital = () => {
 
   const fetchCombos = async () => {
     try {
-      // Direct access to combos table with fallback handling
+      // Direct access to combos table with proper error handling
       const { data, error } = await supabase
         .from('combos' as any)
         .select('*')
@@ -137,9 +137,12 @@ const EnhancedMenuDigital = () => {
         return;
       }
       
-      // Type assertion for the response
-      const typedCombos = (data || []) as Combo[];
-      setCombos(typedCombos);
+      // Check if data is valid before type assertion
+      if (data && Array.isArray(data)) {
+        setCombos(data as unknown as Combo[]);
+      } else {
+        setCombos([]);
+      }
     } catch (error) {
       console.error('Erro ao carregar combos:', error);
       setCombos([]);
