@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,6 +50,7 @@ const MenuDigital = () => {
   const [profile, setProfile] = useState<any>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Customer data
   const [customerName, setCustomerName] = useState('');
@@ -64,16 +64,21 @@ const MenuDigital = () => {
 
   useEffect(() => {
     if (userId) {
+      console.log('🔄 Loading menu for user:', userId);
       loadProfile();
-      loadProducts();
-      loadDeliveryZones();
     } else {
+      console.error('❌ No userId provided');
+      setError('ID do usuário não fornecido');
       setLoading(false);
     }
   }, [userId]);
 
   const loadProfile = async () => {
     try {
+      console.log('🔄 Loading profile for userId:', userId);
+      setLoading(true);
+      setError(null);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -81,19 +86,31 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('Erro ao carregar perfil:', error);
+        console.error('❌ Error loading profile:', error);
+        if (error.code === 'PGRST116') {
+          setError('Restaurante não encontrado');
+        } else {
+          setError('Erro ao carregar dados do restaurante');
+        }
+        setLoading(false);
         return;
       }
       
+      console.log('✅ Profile loaded:', data);
       setProfile(data);
+      
+      // Load products and delivery zones after profile is loaded
+      await Promise.all([loadProducts(), loadDeliveryZones()]);
     } catch (error) {
-      console.error('Erro ao carregar perfil:', error);
+      console.error('❌ Unexpected error loading profile:', error);
+      setError('Erro inesperado ao carregar restaurante');
+      setLoading(false);
     }
   };
 
   const loadProducts = async () => {
     try {
-      setLoading(true);
+      console.log('🔄 Loading products for user:', userId);
       
       const { data: productsData, error: productsError } = await supabase
         .from('products')
@@ -112,41 +129,48 @@ const MenuDigital = () => {
         .eq('available', true)
         .eq('show_in_delivery', true);
 
-      if (productsError) throw productsError;
+      if (productsError) {
+        console.error('❌ Error loading products:', productsError);
+        throw productsError;
+      }
 
       const formattedProducts = productsData?.map(product => ({
         ...product,
         variations: product.product_variations || []
       })) || [];
 
+      console.log('✅ Products loaded:', formattedProducts.length);
       setProducts(formattedProducts);
       
       const uniqueCategories = [...new Set(formattedProducts.map(p => p.category))];
       setCategories(uniqueCategories);
     } catch (error) {
-      console.error('Erro ao carregar produtos:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar cardápio.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+      console.error('❌ Error loading products:', error);
+      setError('Erro ao carregar cardápio');
     }
   };
 
   const loadDeliveryZones = async () => {
     try {
+      console.log('🔄 Loading delivery zones for user:', userId);
+      
       const { data, error } = await supabase
         .from('delivery_zones')
         .select('*')
         .eq('user_id', userId)
         .eq('active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error loading delivery zones:', error);
+        throw error;
+      }
+      
+      console.log('✅ Delivery zones loaded:', data?.length || 0);
       setDeliveryZones(data || []);
     } catch (error) {
-      console.error('Erro ao carregar zonas de entrega:', error);
+      console.error('❌ Error loading delivery zones:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -325,18 +349,25 @@ const MenuDigital = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando cardápio...</p>
+        </div>
       </div>
     );
   }
 
-  if (!profile) {
+  if (error || !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Restaurante não encontrado</h1>
-          <p className="text-gray-600">Verifique o link e tente novamente.</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {error || 'Restaurante não encontrado'}
+          </h1>
+          <p className="text-gray-600">
+            {error ? 'Tente novamente mais tarde.' : 'Verifique o link e tente novamente.'}
+          </p>
         </div>
       </div>
     );
@@ -552,51 +583,62 @@ const MenuDigital = () => {
         </div>
 
         {/* Produtos */}
-        <div className="space-y-4">
-          {filteredProducts.map(product => (
-            <Card key={product.id} className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex">
-                  {product.image_url && (
-                    <div className="w-24 h-24 flex-shrink-0">
-                      <img 
-                        src={product.image_url} 
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="flex-1 p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-gray-900">{product.name}</h3>
-                      <span className="text-lg font-bold text-green-600">
-                        {formatCurrency(product.price)}
-                      </span>
-                    </div>
-                    {product.description && (
-                      <p className="text-sm text-gray-600 mb-3">{product.description}</p>
+        {filteredProducts.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
+            <p className="text-gray-600">
+              {selectedCategory === 'all' 
+                ? 'Este restaurante ainda não possui produtos cadastrados.' 
+                : 'Nenhum produto encontrado nesta categoria.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredProducts.map(product => (
+              <Card key={product.id} className="overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="flex">
+                    {product.image_url && (
+                      <div className="w-24 h-24 flex-shrink-0">
+                        <img 
+                          src={product.image_url} 
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
                     )}
-                    
-                    {product.variations && product.variations.length > 0 && (
-                      <Badge variant="outline" className="mb-2">
-                        Personalizável
-                      </Badge>
-                    )}
+                    <div className="flex-1 p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-medium text-gray-900">{product.name}</h3>
+                        <span className="text-lg font-bold text-green-600">
+                          {formatCurrency(product.price)}
+                        </span>
+                      </div>
+                      {product.description && (
+                        <p className="text-sm text-gray-600 mb-3">{product.description}</p>
+                      )}
+                      
+                      {product.variations && product.variations.length > 0 && (
+                        <Badge variant="outline" className="mb-2">
+                          Personalizável
+                        </Badge>
+                      )}
 
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleProductClick(product)}
-                      className="w-full"
-                    >
-                      <Plus size={16} className="mr-1" />
-                      Adicionar
-                    </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={() => handleProductClick(product)}
+                        className="w-full"
+                      >
+                        <Plus size={16} className="mr-1" />
+                        Adicionar
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Carrinho fixo */}
         {cart.length > 0 && (
