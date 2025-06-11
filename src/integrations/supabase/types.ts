@@ -231,6 +231,90 @@ export type Database = {
         }
         Relationships: []
       }
+      fiscal_settings: {
+        Row: {
+          ambiente: string
+          ativo: boolean | null
+          certificado_a1_base64: string | null
+          certificado_senha: string | null
+          cnpj: string
+          codigo_municipio: string
+          created_at: string
+          csc_id: string | null
+          csc_token: string | null
+          endereco_bairro: string
+          endereco_cep: string
+          endereco_complemento: string | null
+          endereco_logradouro: string
+          endereco_municipio: string
+          endereco_numero: string
+          endereco_uf: string
+          id: string
+          inscricao_estadual: string | null
+          nfce_numero_atual: number
+          nfce_serie: string
+          nome_fantasia: string | null
+          razao_social: string
+          regime_tributario: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ambiente?: string
+          ativo?: boolean | null
+          certificado_a1_base64?: string | null
+          certificado_senha?: string | null
+          cnpj: string
+          codigo_municipio: string
+          created_at?: string
+          csc_id?: string | null
+          csc_token?: string | null
+          endereco_bairro: string
+          endereco_cep: string
+          endereco_complemento?: string | null
+          endereco_logradouro: string
+          endereco_municipio: string
+          endereco_numero: string
+          endereco_uf: string
+          id?: string
+          inscricao_estadual?: string | null
+          nfce_numero_atual?: number
+          nfce_serie?: string
+          nome_fantasia?: string | null
+          razao_social: string
+          regime_tributario?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ambiente?: string
+          ativo?: boolean | null
+          certificado_a1_base64?: string | null
+          certificado_senha?: string | null
+          cnpj?: string
+          codigo_municipio?: string
+          created_at?: string
+          csc_id?: string | null
+          csc_token?: string | null
+          endereco_bairro?: string
+          endereco_cep?: string
+          endereco_complemento?: string | null
+          endereco_logradouro?: string
+          endereco_municipio?: string
+          endereco_numero?: string
+          endereco_uf?: string
+          id?: string
+          inscricao_estadual?: string | null
+          nfce_numero_atual?: number
+          nfce_serie?: string
+          nome_fantasia?: string | null
+          razao_social?: string
+          regime_tributario?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       kitchen_orders: {
         Row: {
           created_at: string
@@ -407,6 +491,267 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      nfce_contingency: {
+        Row: {
+          cupom_id: string
+          data_hora_contingencia: string
+          data_hora_transmissao: string | null
+          id: string
+          motivo_contingencia: string
+          transmitido: boolean | null
+          user_id: string
+        }
+        Insert: {
+          cupom_id: string
+          data_hora_contingencia?: string
+          data_hora_transmissao?: string | null
+          id?: string
+          motivo_contingencia: string
+          transmitido?: boolean | null
+          user_id: string
+        }
+        Update: {
+          cupom_id?: string
+          data_hora_contingencia?: string
+          data_hora_transmissao?: string | null
+          id?: string
+          motivo_contingencia?: string
+          transmitido?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_contingency_cupom_id_fkey"
+            columns: ["cupom_id"]
+            isOneToOne: false
+            referencedRelation: "nfce_cupons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_cupons: {
+        Row: {
+          chave_acesso: string | null
+          consumidor_cpf_cnpj: string | null
+          consumidor_nome: string | null
+          contingencia: boolean | null
+          created_at: string
+          data_hora_autorizacao: string | null
+          data_hora_emissao: string
+          id: string
+          motivo_rejeicao: string | null
+          numero: number
+          order_id: string | null
+          protocolo_autorizacao: string | null
+          qr_code_url: string | null
+          serie: string
+          status: string
+          updated_at: string
+          user_id: string
+          valor_desconto: number | null
+          valor_total: number
+          valor_tributos: number | null
+          xml_autorizado: string | null
+          xml_content: string | null
+        }
+        Insert: {
+          chave_acesso?: string | null
+          consumidor_cpf_cnpj?: string | null
+          consumidor_nome?: string | null
+          contingencia?: boolean | null
+          created_at?: string
+          data_hora_autorizacao?: string | null
+          data_hora_emissao?: string
+          id?: string
+          motivo_rejeicao?: string | null
+          numero: number
+          order_id?: string | null
+          protocolo_autorizacao?: string | null
+          qr_code_url?: string | null
+          serie: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          valor_desconto?: number | null
+          valor_total: number
+          valor_tributos?: number | null
+          xml_autorizado?: string | null
+          xml_content?: string | null
+        }
+        Update: {
+          chave_acesso?: string | null
+          consumidor_cpf_cnpj?: string | null
+          consumidor_nome?: string | null
+          contingencia?: boolean | null
+          created_at?: string
+          data_hora_autorizacao?: string | null
+          data_hora_emissao?: string
+          id?: string
+          motivo_rejeicao?: string | null
+          numero?: number
+          order_id?: string | null
+          protocolo_autorizacao?: string | null
+          qr_code_url?: string | null
+          serie?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          valor_desconto?: number | null
+          valor_total?: number
+          valor_tributos?: number | null
+          xml_autorizado?: string | null
+          xml_content?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_cupons_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_items: {
+        Row: {
+          aliquota_cofins: number | null
+          aliquota_icms: number | null
+          aliquota_pis: number | null
+          cfop: string | null
+          codigo_produto: string
+          created_at: string
+          cst_cofins: string | null
+          cst_icms: string | null
+          cst_pis: string | null
+          cupom_id: string
+          descricao: string
+          id: string
+          informacoes_adicionais: string | null
+          ncm: string | null
+          product_id: string | null
+          quantidade: number
+          unidade: string | null
+          valor_cofins: number | null
+          valor_desconto: number | null
+          valor_icms: number | null
+          valor_pis: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Insert: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_pis?: number | null
+          cfop?: string | null
+          codigo_produto: string
+          created_at?: string
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_pis?: string | null
+          cupom_id: string
+          descricao: string
+          id?: string
+          informacoes_adicionais?: string | null
+          ncm?: string | null
+          product_id?: string | null
+          quantidade: number
+          unidade?: string | null
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Update: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_pis?: number | null
+          cfop?: string | null
+          codigo_produto?: string
+          created_at?: string
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_pis?: string | null
+          cupom_id?: string
+          descricao?: string
+          id?: string
+          informacoes_adicionais?: string | null
+          ncm?: string | null
+          product_id?: string | null
+          quantidade?: number
+          unidade?: string | null
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_items_cupom_id_fkey"
+            columns: ["cupom_id"]
+            isOneToOne: false
+            referencedRelation: "nfce_cupons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfce_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_transmissions: {
+        Row: {
+          codigo_status: string | null
+          cupom_id: string
+          data_hora: string
+          id: string
+          motivo: string | null
+          protocolo: string | null
+          sucesso: boolean
+          tipo_operacao: string
+          xml_enviado: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          codigo_status?: string | null
+          cupom_id: string
+          data_hora?: string
+          id?: string
+          motivo?: string | null
+          protocolo?: string | null
+          sucesso?: boolean
+          tipo_operacao: string
+          xml_enviado?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          codigo_status?: string | null
+          cupom_id?: string
+          data_hora?: string
+          id?: string
+          motivo?: string | null
+          protocolo?: string | null
+          sucesso?: boolean
+          tipo_operacao?: string
+          xml_enviado?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_transmissions_cupom_id_fkey"
+            columns: ["cupom_id"]
+            isOneToOne: false
+            referencedRelation: "nfce_cupons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_settings: {
         Row: {
@@ -1182,7 +1527,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_dv_mod11: {
+        Args: { p_numero: string }
+        Returns: number
+      }
+      generate_nfce_access_key: {
+        Args: {
+          p_uf: string
+          p_aamm: string
+          p_cnpj: string
+          p_modelo: string
+          p_serie: string
+          p_numero: string
+          p_tipo_emissao: string
+          p_codigo_numerico: string
+        }
+        Returns: string
+      }
+      get_next_nfce_number: {
+        Args: { p_user_id: string; p_serie: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

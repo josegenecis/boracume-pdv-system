@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Clock, Package, User, Phone, MapPin, DollarSign } from 'lucide-react';
+import { Clock, Package, User, Phone, MapPin, DollarSign, Receipt } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import NFCeEmissionModal from '@/components/nfce/NFCeEmissionModal';
 
 interface Order {
   id: string;
@@ -20,7 +21,7 @@ interface Order {
   status: string;
   order_type: string;
   total: number;
-  items: any[]; // Garantir que items é definido como array
+  items: any[];
   variations?: any[];
   created_at: string;
   estimated_delivery_time?: string;
@@ -33,6 +34,8 @@ const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showNFCeModal, setShowNFCeModal] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -58,16 +61,13 @@ const Orders = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Converter o tipo dos dados para garantir que items é um array
       const processedOrders: Order[] = (data || []).map(order => ({
         ...order,
-        // Garantir que items é um array, convertendo se for string JSON
         items: Array.isArray(order.items) 
           ? order.items 
           : (typeof order.items === 'string' 
               ? JSON.parse(order.items) 
               : (order.items ? [order.items] : [])),
-        // Garantir que variations é um array, convertendo se for string JSON
         variations: Array.isArray(order.variations) 
           ? order.variations 
           : (typeof order.variations === 'string' 
@@ -113,16 +113,21 @@ const Orders = () => {
     }
   };
 
+  const handleEmitirNFCe = (order: Order) => {
+    setSelectedOrder(order);
+    setShowNFCeModal(true);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return '#F59E0B';    // amarelo
-      case 'confirmed': return '#3B82F6';  // azul
-      case 'preparing': return '#EF4444';  // vermelho
-      case 'ready': return '#10B981';      // verde
-      case 'out_for_delivery': return '#8B5CF6'; // roxo
-      case 'delivered': return '#059669';  // verde escuro
-      case 'completed': return '#059669';  // verde escuro
-      case 'cancelled': return '#6B7280';  // cinza
+      case 'pending': return '#F59E0B';
+      case 'confirmed': return '#3B82F6';
+      case 'preparing': return '#EF4444';
+      case 'ready': return '#10B981';
+      case 'out_for_delivery': return '#8B5CF6';
+      case 'delivered': return '#059669';
+      case 'completed': return '#059669';
+      case 'cancelled': return '#6B7280';
       default: return '#6B7280';
     }
   };
@@ -305,6 +310,20 @@ const Orders = () => {
 
                 {/* Ações */}
                 <div className="border-t pt-4 flex gap-2 flex-wrap">
+                  {/* Botão para emitir NFC-e */}
+                  {(order.status === 'completed' || order.status === 'delivered') && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleEmitirNFCe(order)}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <Receipt className="w-4 h-4 mr-1" />
+                      Emitir NFC-e
+                    </Button>
+                  )}
+
+                  {/* Ações de status existentes */}
                   {order.status === 'pending' && (
                     <>
                       <Button 
@@ -373,6 +392,23 @@ const Orders = () => {
           ))}
         </div>
       )}
+
+      {/* Modal de emissão de NFC-e */}
+      <NFCeEmissionModal
+        isOpen={showNFCeModal}
+        onClose={() => {
+          setShowNFCeModal(false);
+          setSelectedOrder(null);
+        }}
+        order={selectedOrder}
+        onSuccess={() => {
+          toast({
+            title: "NFC-e emitida",
+            description: "Cupom fiscal emitido com sucesso!",
+          });
+          fetchOrders();
+        }}
+      />
     </div>
   );
 };
