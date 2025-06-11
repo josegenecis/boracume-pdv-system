@@ -100,7 +100,21 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .eq('product_id', productId);
 
       if (error) throw error;
-      setVariations(data || []);
+      
+      // Parse the options JSON safely
+      const parsedVariations: ProductVariation[] = (data || []).map(variation => ({
+        id: variation.id,
+        name: variation.name,
+        required: variation.required,
+        max_selections: variation.max_selections,
+        options: typeof variation.options === 'string' 
+          ? JSON.parse(variation.options) 
+          : Array.isArray(variation.options) 
+            ? variation.options as Array<{name: string; price: number}>
+            : []
+      }));
+      
+      setVariations(parsedVariations);
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       setVariations([]);

@@ -75,7 +75,7 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
           if (typeof data.items === 'string') {
             parsedItems = JSON.parse(data.items);
           } else if (Array.isArray(data.items)) {
-            parsedItems = data.items as TableAccountItem[];
+            parsedItems = data.items as unknown as TableAccountItem[];
           }
         } catch (e) {
           console.error('Error parsing items:', e);
@@ -122,7 +122,7 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
       const { error } = await supabase
         .from('table_accounts')
         .update({
-          items: updatedItems,
+          items: JSON.stringify(updatedItems),
           total: newTotal
         })
         .eq('id', account.id);
