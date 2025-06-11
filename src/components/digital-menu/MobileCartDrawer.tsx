@@ -16,10 +16,14 @@ interface MobileCartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  updateQuantity: (productId: string, newQuantity: number) => void;
-  removeFromCart: (productId: string) => void;
+  updateQuantity?: (productId: string, newQuantity: number) => void;
+  removeFromCart?: (productId: string) => void;
+  onUpdateItem?: (index: number, quantity: number) => void;
+  onRemoveItem?: (index: number) => void;
   onCheckout: () => void;
-  onWhatsAppOrder: () => void;
+  onWhatsAppOrder?: () => void;
+  deliveryFee?: number;
+  total?: number;
 }
 
 const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
@@ -28,10 +32,15 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
   cart,
   updateQuantity,
   removeFromCart,
+  onUpdateItem,
+  onRemoveItem,
   onCheckout,
-  onWhatsAppOrder
+  onWhatsAppOrder,
+  deliveryFee = 0,
+  total
 }) => {
   const getTotalValue = () => {
+    if (total !== undefined) return total;
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
@@ -42,6 +51,22 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
     }).format(value);
   };
 
+  const handleUpdateQuantity = (item: CartItem, index: number, newQuantity: number) => {
+    if (onUpdateItem) {
+      onUpdateItem(index, newQuantity);
+    } else if (updateQuantity) {
+      updateQuantity(item.id, newQuantity);
+    }
+  };
+
+  const handleRemoveItem = (item: CartItem, index: number) => {
+    if (onRemoveItem) {
+      onRemoveItem(index);
+    } else if (removeFromCart) {
+      removeFromCart(item.id);
+    }
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="bottom" className="h-[80vh] flex flex-col">
@@ -50,14 +75,14 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
         </SheetHeader>
         
         <div className="flex-1 overflow-y-auto space-y-3 py-4">
-          {cart.map((item) => (
-            <div key={item.id} className="bg-gray-50 rounded-lg p-3">
+          {cart.map((item, index) => (
+            <div key={`${item.id}-${index}`} className="bg-gray-50 rounded-lg p-3">
               <div className="flex justify-between items-start mb-2">
                 <h4 className="font-medium text-sm leading-tight">{item.name}</h4>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => removeFromCart(item.id)}
+                  onClick={() => handleRemoveItem(item, index)}
                   className="h-6 w-6 p-0 text-red-500"
                 >
                   <Trash2 size={14} />
@@ -73,7 +98,7 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                    onClick={() => handleUpdateQuantity(item, index, item.quantity - 1)}
                     className="h-8 w-8 p-0"
                   >
                     <Minus size={12} />
@@ -82,7 +107,7 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    onClick={() => handleUpdateQuantity(item, index, item.quantity + 1)}
                     className="h-8 w-8 p-0"
                   >
                     <Plus size={12} />
@@ -100,6 +125,13 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
         </div>
 
         <div className="border-t pt-4 space-y-3">
+          {deliveryFee > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span>Taxa de entrega:</span>
+              <span>{formatCurrency(deliveryFee)}</span>
+            </div>
+          )}
+          
           <div className="flex justify-between items-center">
             <span className="text-lg font-bold">Total:</span>
             <span className="text-xl font-bold text-primary">
@@ -111,14 +143,16 @@ const MobileCartDrawer: React.FC<MobileCartDrawerProps> = ({
             <Button onClick={onCheckout} className="w-full" size="lg">
               Finalizar Pedido
             </Button>
-            <Button 
-              onClick={onWhatsAppOrder}
-              variant="outline" 
-              className="w-full"
-              size="lg"
-            >
-              Pedir via WhatsApp
-            </Button>
+            {onWhatsAppOrder && (
+              <Button 
+                onClick={onWhatsAppOrder}
+                variant="outline" 
+                className="w-full"
+                size="lg"
+              >
+                Pedir via WhatsApp
+              </Button>
+            )}
           </div>
         </div>
       </SheetContent>

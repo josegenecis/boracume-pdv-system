@@ -27,8 +27,20 @@ interface DeliveryZone {
   minimum_order: number;
 }
 
+interface RestaurantProfile {
+  restaurant_name?: string;
+  description?: string;
+  phone?: string;
+  address?: string;
+  opening_hours?: string;
+  logo_url?: string;
+  delivery_fee?: number;
+  minimum_order?: number;
+}
+
 interface DigitalMenuCheckoutProps {
   cart: CartItem[];
+  restaurant?: RestaurantProfile;
   deliveryZones: DeliveryZone[];
   userId: string;
   onBack: () => void;
@@ -37,6 +49,7 @@ interface DigitalMenuCheckoutProps {
 
 const DigitalMenuCheckout: React.FC<DigitalMenuCheckoutProps> = ({
   cart,
+  restaurant,
   deliveryZones,
   userId,
   onBack,
@@ -62,7 +75,7 @@ const DigitalMenuCheckout: React.FC<DigitalMenuCheckoutProps> = ({
 
   const getDeliveryFee = () => {
     const zone = getSelectedZone();
-    return zone ? zone.delivery_fee : 0;
+    return zone ? zone.delivery_fee : (restaurant?.delivery_fee || 0);
   };
 
   const getFinalTotal = () => {

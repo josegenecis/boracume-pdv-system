@@ -22,7 +22,7 @@ const Configuracoes: React.FC = () => {
       return true;
     }
     
-    if (subscription?.status === 'active' && subscription?.plan?.name === 'Elite') {
+    if (subscription?.status === 'active' && subscription?.plan_id === 2) {
       return true;
     }
     

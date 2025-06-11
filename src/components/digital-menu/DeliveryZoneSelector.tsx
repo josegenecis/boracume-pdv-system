@@ -18,23 +18,29 @@ interface DeliveryZone {
 }
 
 interface DeliveryZoneSelectorProps {
+  deliveryZones?: DeliveryZone[];
   selectedZone: string | null;
-  onZoneSelect: (zoneId: string, deliveryFee: number) => void;
-  onClose: () => void;
+  onZoneSelect?: (zoneId: string, deliveryFee: number) => void;
+  onZoneChange?: React.Dispatch<React.SetStateAction<string>>;
+  onClose?: () => void;
 }
 
 const DeliveryZoneSelector: React.FC<DeliveryZoneSelectorProps> = ({
+  deliveryZones: propDeliveryZones,
   selectedZone,
   onZoneSelect,
+  onZoneChange,
   onClose
 }) => {
-  const [zones, setZones] = useState<DeliveryZone[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [zones, setZones] = useState<DeliveryZone[]>(propDeliveryZones || []);
+  const [loading, setLoading] = useState(!propDeliveryZones);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchDeliveryZones();
-  }, []);
+    if (!propDeliveryZones) {
+      fetchDeliveryZones();
+    }
+  }, [propDeliveryZones]);
 
   const fetchDeliveryZones = async () => {
     try {
@@ -66,13 +72,28 @@ const DeliveryZoneSelector: React.FC<DeliveryZoneSelectorProps> = ({
     }).format(value);
   };
 
+  const handleZoneSelect = (zoneId: string) => {
+    if (onZoneChange) {
+      onZoneChange(zoneId);
+    }
+    
+    if (onZoneSelect) {
+      const zone = zones.find(z => z.id === zoneId);
+      if (zone) {
+        onZoneSelect(zone.id, zone.delivery_fee);
+      }
+    }
+  };
+
   const handleConfirm = () => {
-    if (selectedZone) {
+    if (selectedZone && onZoneSelect) {
       const zone = zones.find(z => z.id === selectedZone);
       if (zone) {
         onZoneSelect(zone.id, zone.delivery_fee);
-        onClose();
       }
+    }
+    if (onClose) {
+      onClose();
     }
   };
 
@@ -108,7 +129,7 @@ const DeliveryZoneSelector: React.FC<DeliveryZoneSelectorProps> = ({
                   <RadioGroupItem 
                     value={zone.id} 
                     id={zone.id}
-                    onClick={() => onZoneSelect(zone.id, zone.delivery_fee)}
+                    onClick={() => handleZoneSelect(zone.id)}
                   />
                   <Label htmlFor={zone.id} className="flex-1 cursor-pointer">
                     <div className="flex justify-between items-start">
@@ -132,18 +153,20 @@ const DeliveryZoneSelector: React.FC<DeliveryZoneSelectorProps> = ({
               ))}
             </RadioGroup>
             
-            <div className="flex gap-2">
-              <Button 
-                onClick={handleConfirm} 
-                disabled={!selectedZone}
-                className="flex-1"
-              >
-                Confirmar região
-              </Button>
-              <Button variant="outline" onClick={onClose}>
-                Cancelar
-              </Button>
-            </div>
+            {onClose && (
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleConfirm} 
+                  disabled={!selectedZone}
+                  className="flex-1"
+                >
+                  Confirmar região
+                </Button>
+                <Button variant="outline" onClick={onClose}>
+                  Cancelar
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

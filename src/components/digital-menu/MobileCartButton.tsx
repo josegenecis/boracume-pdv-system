@@ -14,10 +14,20 @@ interface CartItem {
 interface MobileCartButtonProps {
   cart: CartItem[];
   onOpenCart: () => void;
+  cartCount?: number;
+  cartTotal?: number;
+  onClick?: () => void;
 }
 
-const MobileCartButton: React.FC<MobileCartButtonProps> = ({ cart, onOpenCart }) => {
+const MobileCartButton: React.FC<MobileCartButtonProps> = ({ 
+  cart, 
+  onOpenCart, 
+  cartCount,
+  cartTotal,
+  onClick 
+}) => {
   const getTotalValue = () => {
+    if (cartTotal !== undefined) return cartTotal;
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
@@ -28,14 +38,17 @@ const MobileCartButton: React.FC<MobileCartButtonProps> = ({ cart, onOpenCart })
     }).format(value);
   };
 
-  const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
+  const totalItems = cartCount !== undefined ? cartCount : cart.reduce((total, item) => total + item.quantity, 0);
+  const hasItems = cartCount !== undefined ? cartCount > 0 : cart.length > 0;
 
-  if (cart.length === 0) return null;
+  if (!hasItems) return null;
+
+  const handleClick = onClick || onOpenCart;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-50 md:hidden">
       <Button 
-        onClick={onOpenCart}
+        onClick={handleClick}
         className="w-full flex items-center justify-between py-4 h-auto"
         size="lg"
       >
