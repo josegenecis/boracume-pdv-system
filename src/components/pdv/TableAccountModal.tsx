@@ -13,7 +13,7 @@ interface TableAccount {
   table_id: string;
   items: any[];
   total: number;
-  status: 'open' | 'pending_payment';
+  status: 'open' | 'pending_payment' | 'closed';
   created_at: string;
 }
 
@@ -71,8 +71,12 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
         }
 
         setAccount({
-          ...data,
-          items: Array.isArray(parsedItems) ? parsedItems : []
+          id: data.id,
+          table_id: data.table_id,
+          items: Array.isArray(parsedItems) ? parsedItems : [],
+          total: data.total,
+          status: data.status as 'open' | 'pending_payment' | 'closed',
+          created_at: data.created_at
         });
       } else {
         setAccount(null);

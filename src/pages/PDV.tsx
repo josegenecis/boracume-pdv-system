@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -285,7 +286,20 @@ const PDV = () => {
         .maybeSingle();
 
       if (existingAccount) {
-        const updatedItems = [...existingAccount.items, ...orderItems];
+        // Parse existing items properly
+        let existingItems = [];
+        try {
+          if (typeof existingAccount.items === 'string') {
+            existingItems = JSON.parse(existingAccount.items);
+          } else if (Array.isArray(existingAccount.items)) {
+            existingItems = existingAccount.items;
+          }
+        } catch (e) {
+          console.error('Error parsing existing items:', e);
+          existingItems = [];
+        }
+
+        const updatedItems = [...existingItems, ...orderItems];
         const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
         const { error } = await supabase
