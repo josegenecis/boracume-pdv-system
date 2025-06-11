@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 interface TableAccount {
   id: string;
   table_id: string;
-  table_number: number;
   items: any[];
   total: number;
   status: 'open' | 'pending_payment';
@@ -59,7 +58,25 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
         throw error;
       }
 
-      setAccount(data);
+      if (data) {
+        // Parse items if they come as JSON string
+        let parsedItems = data.items;
+        if (typeof data.items === 'string') {
+          try {
+            parsedItems = JSON.parse(data.items);
+          } catch (e) {
+            console.error('Error parsing items:', e);
+            parsedItems = [];
+          }
+        }
+
+        setAccount({
+          ...data,
+          items: Array.isArray(parsedItems) ? parsedItems : []
+        });
+      } else {
+        setAccount(null);
+      }
     } catch (error) {
       console.error('Erro ao carregar conta da mesa:', error);
     } finally {

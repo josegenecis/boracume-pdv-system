@@ -25,6 +25,7 @@ interface Product {
   category_id?: string;
   description?: string;
   weight_based?: boolean;
+  send_to_kds?: boolean;
 }
 
 interface ProductVariation {
@@ -452,17 +453,25 @@ const PDV = () => {
         throw error;
       }
 
-      // Send to KDS with all additional information
-      await sendToKitchen({
-        user_id: user?.id || '',
-        order_number: orderNumber,
-        customer_name: orderData.customer_name,
-        customer_phone: orderData.customer_phone || '',
-        items: orderItems,
-        total: getFinalTotal(),
-        payment_method: paymentMethod,
-        order_type: orderType
+      // Filter items for KDS that should be sent to kitchen
+      const itemsForKitchen = orderItems.filter(item => {
+        const product = products.find(p => p.id === item.product_id);
+        return product?.send_to_kds === true;
       });
+
+      // Send to KDS with all additional information
+      if (itemsForKitchen.length > 0) {
+        await sendToKitchen({
+          user_id: user?.id || '',
+          order_number: orderNumber,
+          customer_name: orderData.customer_name,
+          customer_phone: orderData.customer_phone || '',
+          items: itemsForKitchen,
+          total: getFinalTotal(),
+          payment_method: paymentMethod,
+          order_type: orderType
+        });
+      }
 
       if (orderType === 'dine_in' && selectedTable) {
         try {

@@ -278,11 +278,14 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
         if (itemsForKitchen.length > 0) {
           await sendToKitchen({
+            user_id: user.id,
             order_number: existingOrder.order_number,
             customer_name: existingOrder.customer_name,
-            customer_phone: existingOrder.customer_phone,
+            customer_phone: existingOrder.customer_phone || '',
             items: itemsForKitchen,
-            total: getTotalValue()
+            total: getTotalValue(),
+            payment_method: existingOrder.payment_method || 'pendente',
+            order_type: 'dine_in'
           });
         }
 
@@ -325,11 +328,14 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
         if (itemsForKitchen.length > 0) {
           await sendToKitchen({
+            user_id: user.id,
             order_number: orderNumber,
             customer_name: customerName,
-            customer_phone: customerPhone,
+            customer_phone: customerPhone || '',
             items: itemsForKitchen,
-            total: getTotalValue()
+            total: getTotalValue(),
+            payment_method: 'pendente',
+            order_type: 'dine_in'
           });
         }
 
