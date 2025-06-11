@@ -63,55 +63,47 @@ const MenuDigital = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log('🔄 MenuDigital mounted with userId:', userId);
     if (userId) {
-      console.log('🔄 Loading menu for user:', userId);
-      loadProfile();
+      loadMenuData();
     } else {
-      console.error('❌ No userId provided');
-      setError('ID do usuário não fornecido');
+      console.error('❌ No userId provided in URL');
+      setError('ID do usuário não fornecido na URL');
       setLoading(false);
     }
   }, [userId]);
 
-  const loadProfile = async () => {
+  const loadMenuData = async () => {
     try {
-      console.log('🔄 Loading profile for userId:', userId);
       setLoading(true);
       setError(null);
-      
-      const { data, error } = await supabase
+      console.log('🔄 Starting menu data load for userId:', userId);
+
+      // Load profile data
+      console.log('🔄 Loading profile...');
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('❌ Error loading profile:', error);
-        if (error.code === 'PGRST116') {
-          setError('Restaurante não encontrado');
-        } else {
-          setError('Erro ao carregar dados do restaurante');
-        }
+      if (profileError) {
+        console.error('❌ Profile error:', profileError);
+        throw new Error('Erro ao carregar dados do restaurante');
+      }
+
+      if (!profileData) {
+        console.error('❌ Profile not found for userId:', userId);
+        setError('Restaurante não encontrado');
         setLoading(false);
         return;
       }
-      
-      console.log('✅ Profile loaded:', data);
-      setProfile(data);
-      
-      // Load products and delivery zones after profile is loaded
-      await Promise.all([loadProducts(), loadDeliveryZones()]);
-    } catch (error) {
-      console.error('❌ Unexpected error loading profile:', error);
-      setError('Erro inesperado ao carregar restaurante');
-      setLoading(false);
-    }
-  };
 
-  const loadProducts = async () => {
-    try {
-      console.log('🔄 Loading products for user:', userId);
-      
+      console.log('✅ Profile loaded:', profileData);
+      setProfile(profileData);
+
+      // Load products in parallel
+      console.log('🔄 Loading products...');
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select(`
@@ -130,46 +122,45 @@ const MenuDigital = () => {
         .eq('show_in_delivery', true);
 
       if (productsError) {
-        console.error('❌ Error loading products:', productsError);
-        throw productsError;
+        console.error('❌ Products error:', productsError);
+        // Don't fail completely if products fail to load
+        console.warn('⚠️ Failed to load products, continuing with empty menu');
+        setProducts([]);
+      } else {
+        const formattedProducts = productsData?.map(product => ({
+          ...product,
+          variations: product.product_variations || []
+        })) || [];
+
+        console.log('✅ Products loaded:', formattedProducts.length);
+        setProducts(formattedProducts);
+        
+        const uniqueCategories = [...new Set(formattedProducts.map(p => p.category))];
+        setCategories(uniqueCategories);
       }
 
-      const formattedProducts = productsData?.map(product => ({
-        ...product,
-        variations: product.product_variations || []
-      })) || [];
-
-      console.log('✅ Products loaded:', formattedProducts.length);
-      setProducts(formattedProducts);
-      
-      const uniqueCategories = [...new Set(formattedProducts.map(p => p.category))];
-      setCategories(uniqueCategories);
-    } catch (error) {
-      console.error('❌ Error loading products:', error);
-      setError('Erro ao carregar cardápio');
-    }
-  };
-
-  const loadDeliveryZones = async () => {
-    try {
-      console.log('🔄 Loading delivery zones for user:', userId);
-      
-      const { data, error } = await supabase
+      // Load delivery zones
+      console.log('🔄 Loading delivery zones...');
+      const { data: zonesData, error: zonesError } = await supabase
         .from('delivery_zones')
         .select('*')
         .eq('user_id', userId)
         .eq('active', true);
 
-      if (error) {
-        console.error('❌ Error loading delivery zones:', error);
-        throw error;
+      if (zonesError) {
+        console.error('❌ Delivery zones error:', zonesError);
+        // Don't fail completely if zones fail to load
+        console.warn('⚠️ Failed to load delivery zones, continuing without them');
+        setDeliveryZones([]);
+      } else {
+        console.log('✅ Delivery zones loaded:', zonesData?.length || 0);
+        setDeliveryZones(zonesData || []);
       }
-      
-      console.log('✅ Delivery zones loaded:', data?.length || 0);
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('❌ Error loading delivery zones:', error);
-    } finally {
+
+      setLoading(false);
+    } catch (error: any) {
+      console.error('❌ Error loading menu data:', error);
+      setError(error.message || 'Erro ao carregar cardápio');
       setLoading(false);
     }
   };
@@ -358,16 +349,37 @@ const MenuDigital = () => {
     );
   }
 
-  if (error || !profile) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {error || 'Restaurante não encontrado'}
+            {error}
           </h1>
-          <p className="text-gray-600">
-            {error ? 'Tente novamente mais tarde.' : 'Verifique o link e tente novamente.'}
+          <p className="text-gray-600 mb-4">
+            Verifique se o link está correto e tente novamente.
           </p>
+          <div className="text-sm text-gray-500">
+            <p>ID do usuário: {userId}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Restaurante não encontrado
+          </h1>
+          <p className="text-gray-600 mb-4">
+            O restaurante que você está procurando não foi encontrado.
+          </p>
+          <div className="text-sm text-gray-500">
+            <p>ID: {userId}</p>
+          </div>
         </div>
       </div>
     );
