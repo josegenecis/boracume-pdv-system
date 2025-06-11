@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,7 @@ interface ProductItem {
   image_url?: string;
   available: boolean;
   weight_based: boolean; // Ensuring this is not optional
-  send_to_kds?: boolean;
+  send_to_kds: boolean; // Making this required to match ProductForm.tsx
   show_in_pdv: boolean;
   show_in_delivery: boolean;
 }
@@ -77,7 +78,8 @@ const Products = () => {
         category: product.category || 'Sem categoria', // Ensure category is always present
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
         show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
-        weight_based: product.weight_based !== undefined ? product.weight_based : false // Ensure weight_based is always present
+        weight_based: product.weight_based !== undefined ? product.weight_based : false, // Ensure weight_based is always present
+        send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false // Ensure send_to_kds is always present
       })) as ProductItem[];
       
       setProducts(transformedProducts);
