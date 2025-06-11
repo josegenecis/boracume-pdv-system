@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Download, 
   Monitor, 
@@ -15,7 +16,8 @@ import {
   Printer,
   Scale,
   Wifi,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 
 interface OSInfo {
@@ -25,10 +27,12 @@ interface OSInfo {
   fileSize: string;
   version: string;
   type: 'installer' | 'portable';
+  available: boolean;
 }
 
 const Downloads = () => {
   const [detectedOS, setDetectedOS] = useState<string>('');
+  const { toast } = useToast();
 
   useEffect(() => {
     const userAgent = navigator.userAgent;
@@ -42,34 +46,38 @@ const Downloads = () => {
     {
       name: 'Windows (Instalador)',
       icon: <Monitor className="w-6 h-6" />,
-      downloadUrl: '/dist-electron/Bora Cume Hub Desktop Setup 1.0.0.exe',
+      downloadUrl: 'https://github.com/seu-usuario/bora-cume-hub-desktop/releases/download/v1.0.0/BoracumeHub-Setup-1.0.0.exe',
       fileSize: '85 MB',
       version: '1.0.0',
-      type: 'installer'
+      type: 'installer',
+      available: false
     },
     {
       name: 'Windows (Portátil)',
       icon: <Monitor className="w-6 h-6" />,
-      downloadUrl: '/dist-electron/Bora Cume Hub Desktop 1.0.0.exe',
+      downloadUrl: 'https://github.com/seu-usuario/bora-cume-hub-desktop/releases/download/v1.0.0/BoracumeHub-Portable-1.0.0.exe',
       fileSize: '82 MB',
       version: '1.0.0',
-      type: 'portable'
+      type: 'portable',
+      available: false
     },
     {
       name: 'macOS',
       icon: <Monitor className="w-6 h-6" />,
-      downloadUrl: '/dist-electron/Bora Cume Hub Desktop-1.0.0.dmg',
+      downloadUrl: 'https://github.com/seu-usuario/bora-cume-hub-desktop/releases/download/v1.0.0/BoracumeHub-1.0.0.dmg',
       fileSize: '90 MB',
       version: '1.0.0',
-      type: 'installer'
+      type: 'installer',
+      available: false
     },
     {
       name: 'Linux',
       icon: <Monitor className="w-6 h-6" />,
-      downloadUrl: '/dist-electron/Bora Cume Hub Desktop-1.0.0.AppImage',
+      downloadUrl: 'https://github.com/seu-usuario/bora-cume-hub-desktop/releases/download/v1.0.0/BoracumeHub-1.0.0.AppImage',
       fileSize: '88 MB',
       version: '1.0.0',
-      type: 'portable'
+      type: 'portable',
+      available: false
     }
   ];
 
@@ -103,14 +111,25 @@ const Downloads = () => {
     return releases.find(release => release.name === detectedOS) || releases[0];
   };
 
-  const handleDownload = (url: string, fileName: string) => {
-    // Simular download - em produção isso seria um link real para o arquivo
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = (release: OSInfo) => {
+    if (!release.available) {
+      toast({
+        title: "Download temporariamente indisponível",
+        description: "O aplicativo desktop está em desenvolvimento. Você será notificado quando estiver disponível.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Para downloads reais, seria assim:
+    window.open(release.downloadUrl, '_blank');
+  };
+
+  const handleBuildRequest = () => {
+    toast({
+      title: "Solicitação enviada",
+      description: "Sua solicitação foi registrada. Você receberá um email quando o download estiver disponível.",
+    });
   };
 
   return (
@@ -123,6 +142,15 @@ const Downloads = () => {
           </p>
         </div>
       </div>
+
+      {/* Aviso sobre disponibilidade */}
+      <Alert className="border-blue-200 bg-blue-50">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+          <strong>App Desktop em Desenvolvimento:</strong> O aplicativo desktop está sendo finalizado. 
+          As funcionalidades de impressão térmica e balança digital estarão disponíveis em breve.
+        </AlertDescription>
+      </Alert>
 
       {/* Alerta sobre Windows SmartScreen */}
       {detectedOS === 'Windows' && (
@@ -152,7 +180,7 @@ const Downloads = () => {
           <div className="flex items-center gap-2">
             <Download className="w-5 h-5 text-primary" />
             <CardTitle>Download Recomendado</CardTitle>
-            <Badge variant="default">Mais Popular</Badge>
+            <Badge variant="outline">Em Desenvolvimento</Badge>
           </div>
           <CardDescription>
             Versão otimizada para {detectedOS || 'seu sistema'}
@@ -170,16 +198,22 @@ const Downloads = () => {
                 </p>
               </div>
             </div>
-            <Button 
-              size="lg"
-              onClick={() => handleDownload(
-                getRecommendedRelease().downloadUrl,
-                `BoracumeHub-${getRecommendedRelease().version}-${getRecommendedRelease().name}.exe`
-              )}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Baixar Agora
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={handleBuildRequest}
+              >
+                Notificar quando disponível
+              </Button>
+              <Button 
+                size="lg"
+                onClick={() => handleDownload(getRecommendedRelease())}
+                disabled={!getRecommendedRelease().available}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {getRecommendedRelease().available ? 'Baixar Agora' : 'Em Breve'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -207,6 +241,51 @@ const Downloads = () => {
         </CardContent>
       </Card>
 
+      {/* Como Construir o App */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Para Desenvolvedores</CardTitle>
+          <CardDescription>
+            Como construir o aplicativo desktop localmente
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <h4 className="font-medium mb-2">Pré-requisitos:</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                <li>Node.js 18+ instalado</li>
+                <li>Git instalado</li>
+                <li>Visual Studio Build Tools (Windows)</li>
+                <li>Python 3.x</li>
+              </ul>
+            </div>
+            
+            <div className="p-4 bg-muted rounded-lg">
+              <h4 className="font-medium mb-2">Comandos:</h4>
+              <div className="space-y-2 text-sm font-mono">
+                <div className="bg-background p-2 rounded border">
+                  git clone https://github.com/seu-usuario/bora-cume-hub
+                </div>
+                <div className="bg-background p-2 rounded border">
+                  npm install
+                </div>
+                <div className="bg-background p-2 rounded border">
+                  npm run build
+                </div>
+                <div className="bg-background p-2 rounded border">
+                  node build-desktop.js
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-sm text-muted-foreground">
+              O executável será gerado na pasta <code className="bg-muted px-1 rounded">dist-electron/</code>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Todas as Versões */}
       <Card>
         <CardHeader>
@@ -227,22 +306,24 @@ const Downloads = () => {
                       <p className="text-sm text-muted-foreground">
                         Versão {release.version} • {release.fileSize}
                         {release.type === 'portable' && ' • Portátil'}
+                        {!release.available && ' • Em desenvolvimento'}
                       </p>
                     </div>
                     {(release.name.includes(detectedOS) || 
                       (detectedOS === 'Windows' && release.name === 'Windows (Portátil)')) && (
                       <Badge variant="secondary">Recomendado</Badge>
                     )}
+                    {!release.available && (
+                      <Badge variant="outline">Em Breve</Badge>
+                    )}
                   </div>
                   <Button 
                     variant="outline"
-                    onClick={() => handleDownload(
-                      release.downloadUrl,
-                      `BoracumeHub-${release.version}-${release.name}`
-                    )}
+                    onClick={() => handleDownload(release)}
+                    disabled={!release.available}
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    Baixar
+                    {release.available ? 'Baixar' : 'Em Breve'}
                   </Button>
                 </div>
                 {index < releases.length - 1 && <Separator />}
