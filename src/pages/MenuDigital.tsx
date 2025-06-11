@@ -84,31 +84,39 @@ const MenuDigital: React.FC = () => {
     if (!userId) return;
 
     try {
+      console.log('🔄 Carregando dados do menu para usuário:', userId);
+
       // Fetch profile
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('restaurant_name, phone, address, description, logo_url')
         .eq('id', userId)
         .single();
 
-      if (profileData) {
+      if (profileError) {
+        console.error('❌ Erro ao carregar perfil:', profileError);
+      } else if (profileData) {
+        console.log('✅ Perfil carregado:', profileData);
         setProfile(profileData);
       }
 
       // Fetch categories
-      const { data: categoriesData } = await supabase
+      const { data: categoriesData, error: categoriesError } = await supabase
         .from('product_categories')
         .select('id, name')
         .eq('user_id', userId)
         .eq('active', true)
         .order('display_order');
 
-      if (categoriesData) {
+      if (categoriesError) {
+        console.error('❌ Erro ao carregar categorias:', categoriesError);
+      } else if (categoriesData) {
+        console.log('✅ Categorias carregadas:', categoriesData.length);
         setCategories(categoriesData);
       }
 
       // Fetch products
-      const { data: productsData } = await supabase
+      const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
         .eq('user_id', userId)
@@ -116,22 +124,32 @@ const MenuDigital: React.FC = () => {
         .eq('available', true)
         .order('name');
 
-      if (productsData) {
+      if (productsError) {
+        console.error('❌ Erro ao carregar produtos:', productsError);
+      } else if (productsData) {
+        console.log('✅ Produtos carregados:', productsData.length);
         setProducts(productsData);
       }
     } catch (error) {
-      console.error('Erro ao carregar menu:', error);
+      console.error('❌ Erro geral ao carregar menu:', error);
     }
   };
 
   const fetchProductVariations = async (productId: string) => {
     try {
+      console.log('🔄 Buscando variações para produto:', productId);
+      
       const { data, error } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao carregar variações:', error);
+        return [];
+      }
+      
+      console.log('✅ Variações encontradas:', data?.length || 0);
       
       const transformedData = (data || []).map(item => {
         let parsedOptions = [];
@@ -142,7 +160,7 @@ const MenuDigital: React.FC = () => {
             parsedOptions = item.options;
           }
         } catch (e) {
-          console.error('Error parsing options:', e);
+          console.error('❌ Erro ao parsear opções:', e);
           parsedOptions = [];
         }
 
@@ -150,32 +168,39 @@ const MenuDigital: React.FC = () => {
           id: item.id,
           name: item.name,
           options: Array.isArray(parsedOptions) ? parsedOptions : [],
-          max_selections: item.max_selections,
-          required: item.required
+          max_selections: item.max_selections || 1,
+          required: item.required || false
         };
       });
       
+      console.log('✅ Variações transformadas:', transformedData);
       return transformedData;
     } catch (error) {
-      console.error('Erro ao carregar variações:', error);
+      console.error('❌ Erro ao carregar variações:', error);
       return [];
     }
   };
 
   const handleProductClick = async (product: Product) => {
+    console.log('🔄 Produto clicado:', product.name);
+    
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
+      console.log('✅ Produto tem variações, abrindo modal');
       setSelectedProduct(product);
       setProductVariations(variations);
       setShowVariationModal(true);
     } else {
+      console.log('✅ Produto sem variações, adicionando direto ao carrinho');
       addToCart(product, 1, [], '');
     }
   };
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
+      console.log('🔄 Finalizando pedido:', orderData);
+      
       const orderNumber = `WEB-${Date.now()}`;
       
       const { data: order, error } = await supabase
@@ -188,7 +213,12 @@ const MenuDigital: React.FC = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao criar pedido:', error);
+        throw error;
+      }
+
+      console.log('✅ Pedido criado:', order);
 
       // Send to kitchen
       try {
@@ -202,8 +232,9 @@ const MenuDigital: React.FC = () => {
           payment_method: orderData.payment_method,
           order_type: orderData.order_type
         });
+        console.log('✅ Pedido enviado para cozinha');
       } catch (kitchenError) {
-        console.error('Erro ao enviar para a cozinha:', kitchenError);
+        console.error('❌ Erro ao enviar para a cozinha:', kitchenError);
       }
 
       toast({
@@ -214,7 +245,7 @@ const MenuDigital: React.FC = () => {
       clearCart();
       setShowCheckout(false);
     } catch (error) {
-      console.error('Erro ao enviar pedido:', error);
+      console.error('❌ Erro ao enviar pedido:', error);
       toast({
         title: "Erro",
         description: "Erro ao enviar pedido. Tente novamente.",
@@ -328,6 +359,12 @@ const MenuDigital: React.FC = () => {
             </Card>
           ))}
         </div>
+
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Nenhum produto encontrado.</p>
+          </div>
+        )}
       </div>
 
       {/* Cart Bottom Bar */}

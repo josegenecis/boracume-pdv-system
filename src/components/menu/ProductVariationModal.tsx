@@ -45,22 +45,38 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   onAddToCart
 }) => {
   const [quantity, setQuantity] = useState(1);
-  const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
+  const [selectedVariations, setSelectedVariations] = useState<Record<string, any[]>>({});
   const [notes, setNotes] = useState('');
+
+  console.log('🔄 ProductVariationModal renderizando:', {
+    product: product?.name,
+    variationsCount: variations?.length || 0,
+    variations: variations
+  });
 
   const handleVariationChange = (variationId: string, optionName: string, optionPrice: number, isSelected: boolean) => {
     const variation = variations.find(v => v.id === variationId);
     if (!variation) return;
 
+    console.log('🔄 Alterando variação:', {
+      variationId,
+      optionName,
+      optionPrice,
+      isSelected,
+      maxSelections: variation.max_selections
+    });
+
     setSelectedVariations(prev => {
       const current = prev[variationId] || [];
       
       if (variation.max_selections === 1) {
+        // Radio button behavior
         return {
           ...prev,
           [variationId]: isSelected ? [{ name: optionName, price: optionPrice }] : []
         };
       } else {
+        // Checkbox behavior
         if (isSelected) {
           if (current.length < variation.max_selections) {
             return {
@@ -82,7 +98,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   const calculateTotalPrice = () => {
     let total = product.price * quantity;
     
-    Object.values(selectedVariations).forEach((options: any) => {
+    Object.values(selectedVariations).forEach((options: any[]) => {
       if (Array.isArray(options)) {
         options.forEach(option => {
           total += option.price * quantity;
@@ -109,9 +125,26 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
       options: options || []
     }));
     
+    console.log('✅ Adicionando ao carrinho:', {
+      product: product.name,
+      quantity,
+      variations: formattedVariations,
+      notes
+    });
+    
     onAddToCart(product, quantity, formattedVariations, notes);
     onClose();
+    
+    // Reset form
+    setQuantity(1);
+    setSelectedVariations({});
+    setNotes('');
   };
+
+  if (!variations || variations.length === 0) {
+    console.log('❌ Nenhuma variação encontrada');
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

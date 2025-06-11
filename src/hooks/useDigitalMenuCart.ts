@@ -24,6 +24,13 @@ export const useDigitalMenuCart = () => {
   const { toast } = useToast();
 
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
+    console.log('🔄 Adicionando ao carrinho:', {
+      product: product.name,
+      quantity,
+      selectedVariations,
+      notes
+    });
+
     const selectedOptions = selectedVariations.flatMap(variation => 
       Array.isArray(variation.options) ? variation.options.map((option: any) => option.name) : []
     );
@@ -37,6 +44,14 @@ export const useDigitalMenuCart = () => {
     
     const itemPrice = product.price + variationPrice;
     const subtotal = itemPrice * quantity;
+    
+    console.log('💰 Cálculo de preços:', {
+      basePrice: product.price,
+      variationPrice,
+      itemPrice,
+      quantity,
+      subtotal
+    });
     
     const newItem: CartItem = {
       ...product,
@@ -58,9 +73,11 @@ export const useDigitalMenuCart = () => {
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
         updated[existingIndex].subtotal = (updated[existingIndex].price + updated[existingIndex].variationPrice) * updated[existingIndex].quantity;
+        console.log('✅ Item existente atualizado');
         return updated;
       }
 
+      console.log('✅ Novo item adicionado ao carrinho');
       return [...prev, newItem];
     });
 

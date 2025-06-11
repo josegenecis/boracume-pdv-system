@@ -58,6 +58,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [changeAmount, setChangeAmount] = useState('');
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [selectedZone, setSelectedZone] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
   const selectedZoneData = deliveryZones.find(zone => zone.id === selectedZone);
   const deliveryFee = selectedZoneData?.delivery_fee || 0;
@@ -81,6 +82,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!userId) return;
 
     try {
+      setLoading(true);
+      console.log('🔄 Carregando zonas de entrega para usuário:', userId);
+
       const { data, error } = await supabase
         .from('delivery_zones')
         .select('*')
@@ -88,10 +92,17 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         .eq('active', true)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao carregar zonas de entrega:', error);
+        throw error;
+      }
+
+      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
       setDeliveryZones(data || []);
     } catch (error) {
-      console.error('Erro ao carregar zonas de entrega:', error);
+      console.error('❌ Erro ao carregar zonas de entrega:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -120,6 +131,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       estimated_time: selectedZoneData?.delivery_time || '30-45 min'
     };
 
+    console.log('🔄 Enviando pedido:', orderData);
     onPlaceOrder(orderData);
   };
 
@@ -190,32 +202,38 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <CardContent className="p-4 space-y-4">
               <h3 className="font-semibold">Área de Entrega</h3>
               
-              <div className="space-y-2">
-                <Label htmlFor="delivery-zone">Selecione seu bairro</Label>
-                <Select value={selectedZone} onValueChange={setSelectedZone}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha sua área de entrega" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {deliveryZones.map(zone => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name} - R$ {zone.delivery_fee.toFixed(2)} 
-                        (Mín: R$ {zone.minimum_order.toFixed(2)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedZoneData && (
-                  <div className="text-sm text-muted-foreground">
-                    <p>Tempo estimado: {selectedZoneData.delivery_time}</p>
-                    {total < minimumOrder && (
-                      <p className="text-red-500">
-                        Pedido mínimo para esta área: R$ {minimumOrder.toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              {loading ? (
+                <p className="text-sm text-muted-foreground">Carregando áreas de entrega...</p>
+              ) : deliveryZones.length === 0 ? (
+                <p className="text-sm text-red-500">Nenhuma área de entrega disponível.</p>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="delivery-zone">Selecione seu bairro</Label>
+                  <Select value={selectedZone} onValueChange={setSelectedZone}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha sua área de entrega" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliveryZones.map(zone => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          {zone.name} - R$ {zone.delivery_fee.toFixed(2)} 
+                          (Mín: R$ {zone.minimum_order.toFixed(2)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedZoneData && (
+                    <div className="text-sm text-muted-foreground">
+                      <p>Tempo estimado: {selectedZoneData.delivery_time}</p>
+                      {total < minimumOrder && (
+                        <p className="text-red-500">
+                          Pedido mínimo para esta área: R$ {minimumOrder.toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
