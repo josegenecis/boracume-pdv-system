@@ -119,10 +119,10 @@ export function AppSidebar() {
   const location = useLocation();
 
   return (
-    <Sidebar variant="inset">
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-4 py-2">
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <LayoutDashboard className="size-4" />
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
@@ -156,7 +156,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <div className="px-4 py-2 text-xs text-sidebar-foreground/70">
+        <div className="px-4 py-2 text-xs text-muted-foreground">
           v1.0.0 - Sistema completo
         </div>
       </SidebarFooter>
