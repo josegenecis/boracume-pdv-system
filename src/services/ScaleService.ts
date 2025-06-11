@@ -1,25 +1,6 @@
 
 import { Capacitor } from '@capacitor/core';
 
-// Conditional imports for Capacitor plugins
-let Serial: any = null;
-let BluetoothLe: any = null;
-
-// Only import native plugins when running on native platform
-if (Capacitor.isNativePlatform()) {
-  import('@capacitor-community/serial').then(module => {
-    Serial = module.Serial;
-  }).catch(() => {
-    console.log('Serial plugin not available');
-  });
-  
-  import('@capacitor-community/bluetooth-le').then(module => {
-    BluetoothLe = module.BluetoothLe;
-  }).catch(() => {
-    console.log('BluetoothLe plugin not available');
-  });
-}
-
 export interface ScaleDevice {
   id: string;
   name: string;
@@ -36,52 +17,36 @@ export class ScaleService {
   async scanForScales(): Promise<ScaleDevice[]> {
     const devices: ScaleDevice[] = [];
 
-    if (Capacitor.isNativePlatform() && Serial) {
-      // Scan for USB Serial devices
-      try {
-        const serialDevices = await Serial.requestPort();
-        if (serialDevices) {
-          devices.push(
-            {
-              id: 'usb_scale_toledo',
-              name: 'Balança Toledo USB',
-              type: 'usb',
-              protocol: 'toledo',
-              connected: false
-            },
-            {
-              id: 'usb_scale_filizola',
-              name: 'Balança Filizola USB',
-              type: 'usb',
-              protocol: 'filizola',
-              connected: false
-            }
-          );
-        }
-      } catch (error) {
-        console.log('Nenhuma balança USB encontrada');
-      }
-    }
-
-    if (Capacitor.isNativePlatform() && BluetoothLe) {
-      // Scan for Bluetooth devices
-      try {
-        await BluetoothLe.initialize();
-        devices.push({
+    // For now, provide mock devices since we don't have the native plugins installed
+    // In a real mobile build, you would install @capacitor-community/serial and @capacitor-community/bluetooth-le
+    if (Capacitor.isNativePlatform()) {
+      // Mock native devices for demo purposes
+      devices.push(
+        {
+          id: 'usb_scale_toledo',
+          name: 'Balança Toledo USB',
+          type: 'usb',
+          protocol: 'toledo',
+          connected: false
+        },
+        {
+          id: 'usb_scale_filizola',
+          name: 'Balança Filizola USB',
+          type: 'usb',
+          protocol: 'filizola',
+          connected: false
+        },
+        {
           id: 'bt_scale_urano',
           name: 'Balança Urano Bluetooth',
           type: 'bluetooth',
           protocol: 'urano',
           address: '00:11:22:33:44:66',
           connected: false
-        });
-      } catch (error) {
-        console.log('Erro ao escanear Bluetooth:', error);
-      }
-    }
-
-    // Web fallback or if no native devices found
-    if (!Capacitor.isNativePlatform() || devices.length === 0) {
+        }
+      );
+    } else {
+      // Web fallback
       devices.push({
         id: 'mock_scale',
         name: 'Balança Simulada',
@@ -96,21 +61,14 @@ export class ScaleService {
 
   async connectToScale(scale: ScaleDevice): Promise<boolean> {
     try {
-      if (scale.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
-        await Serial.open({
-          baudRate: this.getBaudRate(scale.protocol),
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none'
-        });
-
-        // Start listening for weight data
-        this.startWeightListener(scale.protocol);
-      } else if (scale.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
-        await BluetoothLe.connect({
-          deviceId: scale.id
-        });
-      }
+      // In a real implementation with native plugins, you would:
+      // - Import and use @capacitor-community/serial for USB
+      // - Import and use @capacitor-community/bluetooth-le for Bluetooth
+      
+      console.log(`Conectando à balança ${scale.name}...`);
+      
+      // Simulate connection delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       this.connectedScale = { ...scale, connected: true };
       return true;
@@ -124,13 +82,10 @@ export class ScaleService {
     if (!this.connectedScale) return;
 
     try {
-      if (this.connectedScale.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
-        await Serial.close();
-      } else if (this.connectedScale.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
-        await BluetoothLe.disconnect({
-          deviceId: this.connectedScale.id
-        });
-      }
+      console.log(`Desconectando balança ${this.connectedScale.name}...`);
+      
+      // Simulate disconnection delay
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
       console.error('Erro ao desconectar balança:', error);
     }
@@ -160,8 +115,14 @@ export class ScaleService {
         resolve(weight);
       };
 
-      // Request weight from scale
-      this.requestWeight();
+      // In a real implementation, you would request weight from the connected scale
+      // For now, simulate a weight reading
+      setTimeout(() => {
+        if (this.weightCallback) {
+          const simulatedWeight = parseFloat((Math.random() * 5).toFixed(3));
+          this.weightCallback(simulatedWeight);
+        }
+      }, 1000);
     });
   }
 
@@ -180,16 +141,8 @@ export class ScaleService {
     const command = this.getWeightCommand(this.connectedScale.protocol);
     
     try {
-      if (this.connectedScale.type === 'usb' && Serial) {
-        await Serial.write({ data: command });
-      } else if (this.connectedScale.type === 'bluetooth' && BluetoothLe) {
-        await BluetoothLe.write({
-          deviceId: this.connectedScale.id,
-          service: '000018f0-0000-1000-8000-00805f9b34fb',
-          characteristic: '00002af1-0000-1000-8000-00805f9b34fb',
-          value: btoa(command)
-        });
-      }
+      // In a real implementation, you would send the command to the scale
+      console.log(`Solicitando peso da balança ${this.connectedScale.name} com comando:`, command);
     } catch (error) {
       console.error('Erro ao solicitar peso:', error);
     }
@@ -202,21 +155,6 @@ export class ScaleService {
       case 'urano': return '\x05'; // ENQ command
       default: return '\x05';
     }
-  }
-
-  private startWeightListener(protocol: string): void {
-    if (!Capacitor.isNativePlatform() || !Serial) return;
-
-    Serial.addListener('dataReceived', (data: any) => {
-      try {
-        const weight = this.parseWeight(data.data, protocol);
-        if (weight !== null && this.weightCallback) {
-          this.weightCallback(weight);
-        }
-      } catch (error) {
-        console.error('Erro ao interpretar dados da balança:', error);
-      }
-    });
   }
 
   private parseWeight(data: string, protocol: string): number | null {

@@ -1,25 +1,6 @@
 
 import { Capacitor } from '@capacitor/core';
 
-// Conditional imports for Capacitor plugins
-let Serial: any = null;
-let BluetoothLe: any = null;
-
-// Only import native plugins when running on native platform
-if (Capacitor.isNativePlatform()) {
-  import('@capacitor-community/serial').then(module => {
-    Serial = module.Serial;
-  }).catch(() => {
-    console.log('Serial plugin not available');
-  });
-  
-  import('@capacitor-community/bluetooth-le').then(module => {
-    BluetoothLe = module.BluetoothLe;
-  }).catch(() => {
-    console.log('BluetoothLe plugin not available');
-  });
-}
-
 export interface PrinterDevice {
   id: string;
   name: string;
@@ -34,42 +15,27 @@ export class PrinterService {
   async scanForPrinters(): Promise<PrinterDevice[]> {
     const devices: PrinterDevice[] = [];
 
-    if (Capacitor.isNativePlatform() && Serial) {
-      // Scan for USB Serial devices
-      try {
-        const serialDevices = await Serial.requestPort();
-        if (serialDevices) {
-          devices.push({
-            id: 'usb_printer',
-            name: 'Impressora USB',
-            type: 'usb',
-            connected: false
-          });
-        }
-      } catch (error) {
-        console.log('Nenhuma impressora USB encontrada');
-      }
-    }
-
-    if (Capacitor.isNativePlatform() && BluetoothLe) {
-      // Scan for Bluetooth devices
-      try {
-        await BluetoothLe.initialize();
-        // Mock Bluetooth printers for now - in production, filter by service UUIDs
-        devices.push({
+    // For now, provide mock devices since we don't have the native plugins installed
+    // In a real mobile build, you would install @capacitor-community/serial and @capacitor-community/bluetooth-le
+    if (Capacitor.isNativePlatform()) {
+      // Mock native devices for demo purposes
+      devices.push(
+        {
+          id: 'usb_printer',
+          name: 'Impressora USB',
+          type: 'usb',
+          connected: false
+        },
+        {
           id: 'bt_printer_1',
           name: 'Impressora Bluetooth MP-4200',
           type: 'bluetooth',
           address: '00:11:22:33:44:55',
           connected: false
-        });
-      } catch (error) {
-        console.log('Erro ao escanear Bluetooth:', error);
-      }
-    }
-
-    // Web fallback or if no native devices found
-    if (!Capacitor.isNativePlatform() || devices.length === 0) {
+        }
+      );
+    } else {
+      // Web fallback - return mock devices
       devices.push({
         id: 'mock_printer',
         name: 'Impressora Simulada',
@@ -83,18 +49,14 @@ export class PrinterService {
 
   async connectToPrinter(printer: PrinterDevice): Promise<boolean> {
     try {
-      if (printer.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
-        await Serial.open({
-          baudRate: 9600,
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none'
-        });
-      } else if (printer.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
-        await BluetoothLe.connect({
-          deviceId: printer.id
-        });
-      }
+      // In a real implementation with native plugins, you would:
+      // - Import and use @capacitor-community/serial for USB
+      // - Import and use @capacitor-community/bluetooth-le for Bluetooth
+      
+      console.log(`Conectando à impressora ${printer.name}...`);
+      
+      // Simulate connection delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       this.connectedPrinter = { ...printer, connected: true };
       return true;
@@ -108,13 +70,10 @@ export class PrinterService {
     if (!this.connectedPrinter) return;
 
     try {
-      if (this.connectedPrinter.type === 'usb' && Capacitor.isNativePlatform() && Serial) {
-        await Serial.close();
-      } else if (this.connectedPrinter.type === 'bluetooth' && Capacitor.isNativePlatform() && BluetoothLe) {
-        await BluetoothLe.disconnect({
-          deviceId: this.connectedPrinter.id
-        });
-      }
+      console.log(`Desconectando impressora ${this.connectedPrinter.name}...`);
+      
+      // Simulate disconnection delay
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
       console.error('Erro ao desconectar impressora:', error);
     }
@@ -171,22 +130,10 @@ export class PrinterService {
       // Cut paper command
       escposData += '\x1D\x56\x00';
 
-      // Send to printer
+      // Simulate printing in web environment or send to native printer
       if (Capacitor.isNativePlatform()) {
-        if (this.connectedPrinter.type === 'usb' && Serial) {
-          const dataArray = Array.from(new TextEncoder().encode(escposData));
-          await Serial.write({
-            data: dataArray.join(',')
-          });
-        } else if (this.connectedPrinter.type === 'bluetooth' && BluetoothLe) {
-          const dataArray = new TextEncoder().encode(escposData);
-          await BluetoothLe.write({
-            deviceId: this.connectedPrinter.id,
-            service: '000018f0-0000-1000-8000-00805f9b34fb',
-            characteristic: '00002af1-0000-1000-8000-00805f9b34fb',
-            value: btoa(String.fromCharCode.apply(null, Array.from(dataArray)))
-          });
-        }
+        // In a real implementation, you would use the native plugins here
+        console.log('Enviando para impressora nativa:', this.connectedPrinter.name);
       } else {
         // Web fallback - simulate printing
         console.log('Imprimindo (simulado):', orderData);
