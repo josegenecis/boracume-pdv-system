@@ -24,7 +24,7 @@ interface TableAccountModalProps {
   tableId: string;
   tableNumber: number;
   onAccountUpdate: () => void;
-  onFinalize?: () => void;
+  onFinalize?: (items: any[], total: number, tableNumber: number) => void;
 }
 
 const TableAccountModal: React.FC<TableAccountModalProps> = ({
@@ -110,13 +110,44 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
     }).format(value);
   };
 
-  const handleFinalizeAccount = () => {
-    onClose();
-    // Trigger finalization in parent component - navigate back to PDV
-    if (onFinalize) {
-      onFinalize();
+  const handleFinalizeAccount = async () => {
+    if (!account) return;
+
+    try {
+      // Close the table account
+      const { error } = await (supabase as any)
+        .from('table_accounts')
+        .update({ status: 'closed' })
+        .eq('id', account.id);
+
+      if (error) throw error;
+
+      // Update table status to available
+      await supabase
+        .from('tables')
+        .update({ status: 'available' })
+        .eq('id', tableId);
+
+      toast({
+        title: "Conta finalizada!",
+        description: "A conta da mesa foi transferida para o PDV.",
+      });
+
+      // Pass the account data to finalize in PDV
+      if (onFinalize) {
+        onFinalize(account.items, account.total, tableNumber);
+      }
+
+      onClose();
+      onAccountUpdate();
+    } catch (error) {
+      console.error('Erro ao finalizar conta:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível finalizar a conta.",
+        variant: "destructive"
+      });
     }
-    onAccountUpdate();
   };
 
   if (loading) {
@@ -206,7 +237,10 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
                 <Button variant="outline" onClick={onClose} className="flex-1">
                   Fechar
                 </Button>
-                <Button onClick={handleFinalizeAccount} className="flex-1">
+                <Button 
+                  onClick={handleFinalizeAccount} 
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
                   Finalizar Conta
                 </Button>
               </div>

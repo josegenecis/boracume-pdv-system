@@ -26,7 +26,7 @@ interface TableAccount {
 }
 
 interface TableAccountManagerProps {
-  onFinalize?: () => void;
+  onFinalize?: (items: any[], total: number, tableNumber: number) => void;
 }
 
 const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize }) => {
@@ -58,7 +58,6 @@ const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize })
 
   const fetchTableAccounts = async () => {
     try {
-      // Use rpc ou query direta para contornar problemas de tipagem
       const { data, error } = await (supabase as any)
         .from('table_accounts')
         .select('*')
@@ -87,7 +86,7 @@ const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize })
   const getStatusBadge = (status: string, total?: number) => {
     switch (status) {
       case 'open_account':
-        return <Badge variant="default">Conta Aberta</Badge>;
+        return <Badge className="bg-blue-500 hover:bg-blue-600">Conta Aberta</Badge>;
       case 'occupied':
         return <Badge variant="secondary">Ocupada</Badge>;
       case 'available':
@@ -171,7 +170,7 @@ const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize })
                             <Button
                               size="sm"
                               onClick={() => handleViewAccount(table)}
-                              className="flex-1"
+                              className="flex-1 bg-green-600 hover:bg-green-700"
                             >
                               <Calculator size={14} className="mr-1" />
                               Finalizar

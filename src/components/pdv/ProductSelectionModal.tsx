@@ -145,16 +145,11 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   const handleProductClick = async (product: Product) => {
     const productVariations = await fetchProductVariations(product.id);
     
-    if (productVariations.length > 0) {
-      setSelectedProduct(product);
-      setVariations(productVariations);
-      setQuantity(1);
-      setSelectedOptions({});
-      setNotes('');
-    } else {
-      onAddToCart(product, 1, [], '');
-      onClose();
-    }
+    setSelectedProduct(product);
+    setVariations(productVariations);
+    setQuantity(1);
+    setSelectedOptions({});
+    setNotes('');
   };
 
   const handleVariationChange = (variationId: string, optionName: string, checked: boolean) => {

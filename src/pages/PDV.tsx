@@ -486,6 +486,29 @@ const PDV = () => {
     }
   };
 
+  const handleTableFinalization = (items: any[], total: number, tableNumber: number) => {
+    // Convert table items to cart format
+    const cartItems: CartItem[] = items.map(item => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: item.price,
+      quantity: item.quantity,
+      options: item.options,
+      notes: item.notes,
+      available: true
+    }));
+
+    setCart(cartItems);
+    setCustomerName(`Mesa ${tableNumber}`);
+    setOrderType('dine_in');
+    setActiveTab('products');
+
+    toast({
+      title: "Conta transferida!",
+      description: `A conta da Mesa ${tableNumber} foi transferida para o PDV.`,
+    });
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -774,18 +797,21 @@ const PDV = () => {
                   )}
                   
                   {orderType === 'dine_in' && (
-                    <Select value={selectedTable} onValueChange={setSelectedTable}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a mesa" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tables.map((table) => (
-                          <SelectItem key={table.id} value={table.id}>
-                            Mesa {table.table_number}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Mesa *</label>
+                      <Select value={selectedTable} onValueChange={setSelectedTable}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma mesa" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tables.map((table) => (
+                            <SelectItem key={table.id} value={table.id}>
+                              Mesa {table.table_number}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -796,7 +822,7 @@ const PDV = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium">Método de Pagamento</label>
+                    <Label htmlFor="paymentMethod">Método de Pagamento</Label>
                     <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione o método" />
@@ -811,8 +837,9 @@ const PDV = () => {
 
                   {paymentMethod === 'dinheiro' && (
                     <div>
-                      <label className="text-sm font-medium">Valor recebido</label>
+                      <Label htmlFor="changeAmount">Valor pago</Label>
                       <Input
+                        id="changeAmount"
                         type="number"
                         step="0.01"
                         value={changeAmount}
@@ -825,7 +852,7 @@ const PDV = () => {
               </Card>
 
               <div className="space-y-2">
-                {selectedTable && (
+                {selectedTable && orderType === 'dine_in' && (
                   <Button
                     onClick={addToTable}
                     disabled={cart.length === 0 || processing}
@@ -852,7 +879,7 @@ const PDV = () => {
         </TabsContent>
 
         <TabsContent value="accounts" className="space-y-6">
-          <TableAccountManager onFinalize={() => setActiveTab('products')} />
+          <TableAccountManager onFinalize={handleTableFinalization} />
         </TabsContent>
       </Tabs>
 
@@ -866,3 +893,5 @@ const PDV = () => {
 };
 
 export default PDV;
+
+</initial_code>
