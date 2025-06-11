@@ -165,9 +165,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        let errorMessage = 'Erro ao entrar. Tente novamente.';
+        
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Credenciais inválidas. Verifique seu email e senha.';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Email não confirmado. Verifique sua caixa de entrada.';
+        } else if (error.message.includes('Too many requests')) {
+          errorMessage = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+        }
+
         toast({
           title: "Erro ao entrar",
-          description: error.message,
+          description: errorMessage,
           variant: "destructive",
         });
         await logSecurityEvent('failed_login', `Failed login for ${email}: ${error.message}`, 'medium');
@@ -186,32 +196,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, restaurantName: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      
+      // Configurar redirect URL corretamente
+      const redirectUrl = `${window.location.origin}/dashboard`;
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             restaurant_name: restaurantName,
           },
-          emailRedirectTo: `${window.location.origin}/dashboard`
+          emailRedirectTo: redirectUrl
         },
       });
 
       if (error) {
+        let errorMessage = 'Erro ao criar conta. Tente novamente.';
+        
+        if (error.message.includes('User already registered')) {
+          errorMessage = 'Este email já está cadastrado. Tente fazer login ou use outro email.';
+        } else if (error.message.includes('Password should be at least')) {
+          errorMessage = 'A senha deve ter pelo menos 6 caracteres.';
+        } else if (error.message.includes('Invalid email')) {
+          errorMessage = 'Email inválido. Verifique o formato do email.';
+        } else if (error.message.includes('signup is disabled')) {
+          errorMessage = 'Cadastro temporariamente desabilitado. Tente novamente mais tarde.';
+        }
+
         toast({
           title: "Erro ao criar conta",
-          description: error.message,
+          description: errorMessage,
           variant: "destructive",
         });
         throw error;
       }
 
-      toast({
-        title: "Conta criada com sucesso!",
-        description: "Bem-vindo ao BoraCumê!",
-      });
+      // Verificar se o usuário foi criado com sucesso
+      if (data?.user) {
+        toast({
+          title: "Conta criada com sucesso!",
+          description: "Bem-vindo ao BoraCumê! Redirecionando...",
+        });
+        
+        await logSecurityEvent('signup', `New user registered: ${email}`, 'low');
+        
+        // Aguardar um pouco para permitir que o trigger seja executado
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
+      } else {
+        throw new Error('Falha ao criar usuário');
+      }
       
-      await logSecurityEvent('login', `New user registered: ${email}`, 'low');
     } catch (error) {
       console.error('Error signing up:', error);
       throw error;
