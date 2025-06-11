@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,8 +68,6 @@ const PDV = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [activeTab, setActiveTab] = useState('products');
   const { toast } = useToast();
@@ -169,60 +166,9 @@ const PDV = () => {
     }
   };
 
-  const fetchProductVariations = async (productId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('product_variations')
-        .select('*')
-        .eq('product_id', productId)
-        .order('name');
-
-      if (error) throw error;
-      
-      const transformedData = (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
-
-        return {
-          id: item.id,
-          name: item.name,
-          required: item.required,
-          max_selections: item.max_selections,
-          options: Array.isArray(parsedOptions) ? parsedOptions : []
-        };
-      });
-      
-      return transformedData;
-    } catch (error) {
-      console.error('Erro ao carregar variações:', error);
-      return [];
-    }
-  };
-
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const handleProductClick = async (product: Product) => {
-    const variations = await fetchProductVariations(product.id);
-    
-    if (variations.length > 0) {
-      setSelectedProduct(product);
-      setProductVariations(variations);
-      setShowProductModal(true);
-    } else {
-      addToCart(product, 1, [], '');
-    }
-  };
 
   const addToCart = (product: Product, quantity: number = 1, options: string[] = [], notes: string = '') => {
     setCart(prev => {
@@ -327,7 +273,6 @@ const PDV = () => {
         notes: item.notes || ''
       }));
 
-      // Check if table already has an open account
       const { data: existingAccount } = await (supabase as any)
         .from('table_accounts')
         .select('*')
@@ -336,7 +281,6 @@ const PDV = () => {
         .single();
 
       if (existingAccount) {
-        // Add to existing account
         const updatedItems = [...existingAccount.items, ...orderItems];
         const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
@@ -350,7 +294,6 @@ const PDV = () => {
 
         if (error) throw error;
       } else {
-        // Create new account
         const total = getTotalValue();
         
         const { error } = await (supabase as any)
@@ -365,7 +308,6 @@ const PDV = () => {
 
         if (error) throw error;
 
-        // Update table status
         await supabase
           .from('tables')
           .update({ status: 'occupied' })
@@ -377,11 +319,9 @@ const PDV = () => {
         description: "Os produtos foram adicionados à conta da mesa.",
       });
 
-      // Clear cart
       setCart([]);
       setSelectedTable('');
       
-      // Refresh tables
       fetchTables();
     } catch (error: any) {
       console.error('Erro ao adicionar à mesa:', error);
@@ -405,7 +345,6 @@ const PDV = () => {
       return;
     }
 
-    // Para pedidos no local, nome não é obrigatório
     if (orderType !== 'dine_in' && !customerName.trim()) {
       toast({
         title: "Nome obrigatório",
@@ -453,7 +392,6 @@ const PDV = () => {
       return;
     }
 
-    // Verificar valor mínimo para entrega
     if (orderType === 'delivery' && selectedDeliveryZone) {
       const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
       if (zone && getTotalValue() < zone.minimum_order) {
@@ -471,7 +409,6 @@ const PDV = () => {
 
       const orderNumber = generateOrderNumber();
       
-      // Preparar itens do pedido
       const orderItems = cart.map(item => ({
         product_id: item.id,
         product_name: item.name,
@@ -510,7 +447,6 @@ const PDV = () => {
         throw error;
       }
 
-      // Atualizar status da mesa se for pedido no local
       if (orderType === 'dine_in' && selectedTable) {
         try {
           await supabase
@@ -529,7 +465,6 @@ const PDV = () => {
         description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
       });
 
-      // Limpar dados
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
@@ -576,7 +511,6 @@ const PDV = () => {
 
         <TabsContent value="products" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-            {/* Produtos */}
             <div className="lg:col-span-2 space-y-4">
               <Card>
                 <CardHeader>
@@ -594,6 +528,14 @@ const PDV = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <Button 
+                    onClick={() => setShowProductModal(true)}
+                    className="w-full mb-4"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Adicionar Produto
+                  </Button>
+                  
                   {filteredProducts.length === 0 ? (
                     <div className="text-center py-8">
                       <p className="text-gray-500">
@@ -624,7 +566,7 @@ const PDV = () => {
                               {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </p>
                             <Button 
-                              onClick={() => handleProductClick(product)}
+                              onClick={() => addToCart(product, 1, [], '')}
                               className="w-full"
                               size="sm"
                             >
@@ -640,9 +582,7 @@ const PDV = () => {
               </Card>
             </div>
 
-            {/* Carrinho e Checkout */}
             <div className="space-y-4">
-              {/* Tipo de Pedido */}
               <Card>
                 <CardHeader>
                   <CardTitle>Tipo de Pedido</CardTitle>
@@ -764,7 +704,6 @@ const PDV = () => {
                 </CardContent>
               </Card>
 
-              {/* Dados do Cliente */}
               <Card>
                 <CardHeader>
                   <CardTitle>Dados do Cliente</CardTitle>
@@ -857,7 +796,6 @@ const PDV = () => {
                 </CardContent>
               </Card>
 
-              {/* Pagamento */}
               <Card>
                 <CardHeader>
                   <CardTitle>Pagamento</CardTitle>
@@ -900,7 +838,6 @@ const PDV = () => {
                 </CardContent>
               </Card>
 
-              {/* Action Buttons */}
               <div className="space-y-2">
                 {orderType === 'dine_in' && (
                   <Button 
@@ -932,16 +869,9 @@ const PDV = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Product Selection Modal */}
       <ProductSelectionModal
-        product={selectedProduct}
-        variations={productVariations}
         isOpen={showProductModal}
-        onClose={() => {
-          setShowProductModal(false);
-          setSelectedProduct(null);
-          setProductVariations([]);
-        }}
+        onClose={() => setShowProductModal(false)}
         onAddToCart={addToCart}
       />
     </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
+import { Card, CardContent } from '@/components/ui/card';
 import { Plus, Minus, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -149,10 +149,8 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
       const current = prev[variationId] || [];
       
       if (variation.max_selections === 1) {
-        // Radio behavior - only one selection
         return { ...prev, [variationId]: checked ? [optionName] : [] };
       } else {
-        // Checkbox behavior - multiple selections
         if (checked) {
           if (current.length < variation.max_selections) {
             return { ...prev, [variationId]: [...current, optionName] };
@@ -212,7 +210,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
     onAddToCart(selectedProduct, quantity, formattedOptions, notes);
     
-    // Reset and close
     setSelectedProduct(null);
     setVariations([]);
     setQuantity(1);
@@ -240,7 +237,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
         {!selectedProduct ? (
           <div className="space-y-6">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
@@ -251,7 +247,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               />
             </div>
 
-            {/* Product Grid */}
             {loading ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">Carregando produtos...</p>
@@ -300,12 +295,10 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Back Button */}
             <Button variant="outline" onClick={handleBackToProducts}>
               ← Voltar aos produtos
             </Button>
 
-            {/* Product Info */}
             <div className="flex gap-4">
               {selectedProduct.image_url && (
                 <img
@@ -324,7 +317,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               </div>
             </div>
 
-            {/* Variations */}
             {variations.map((variation) => (
               <div key={variation.id} className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -396,7 +388,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               </div>
             ))}
 
-            {/* Notes */}
             <div>
               <Label htmlFor="notes">Observações</Label>
               <Textarea
@@ -408,7 +399,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               />
             </div>
 
-            {/* Quantity and Total */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Label>Quantidade:</Label>
@@ -439,7 +429,6 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3">
               <Button variant="outline" onClick={onClose} className="flex-1">
                 Cancelar

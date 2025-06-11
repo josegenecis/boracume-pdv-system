@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -67,8 +66,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -77,7 +74,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchProducts();
-      // Resetar dados quando abrir
       setCartItems([]);
       setCustomerName('');
       setCustomerPhone('');
@@ -228,7 +224,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     try {
       setLoading(true);
 
-      // Verificar se já existe um pedido ativo para esta mesa
       const { data: existingOrders, error: checkError } = await supabase
         .from('orders')
         .select('*')
@@ -250,10 +245,8 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       }));
 
       if (existingOrders && existingOrders.length > 0) {
-        // Adicionar itens ao pedido existente
         const existingOrder = existingOrders[0];
         
-        // Parse existing items properly
         let currentItems = [];
         try {
           if (typeof existingOrder.items === 'string') {
@@ -280,7 +273,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
         if (updateError) throw updateError;
 
-        // Enviar apenas os novos itens para a cozinha
         const itemsForKitchen = orderItems.filter(item => {
           const product = products.find(p => p.id === item.product_id);
           return product?.send_to_kds === true;
@@ -301,7 +293,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           description: `Produtos adicionados ao pedido da Mesa ${table.table_number}.`,
         });
       } else {
-        // Criar novo pedido
         const orderNumber = generateOrderNumber();
         
         const orderData = {
@@ -324,13 +315,11 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
         if (createError) throw createError;
 
-        // Atualizar status da mesa
         await supabase
           .from('tables')
           .update({ status: 'occupied' })
           .eq('id', table.id);
 
-        // Enviar para a cozinha
         const itemsForKitchen = orderItems.filter(item => {
           const product = products.find(p => p.id === item.product_id);
           return product?.send_to_kds === true;
@@ -392,7 +381,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           </DialogHeader>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Lista de Produtos */}
             <div className="space-y-4">
               <div>
                 <Label htmlFor="search">Buscar Produto</Label>
@@ -408,35 +396,16 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
                 </div>
               </div>
 
-              <div className="max-h-80 overflow-y-auto space-y-2">
-                {filteredProducts.map(product => (
-                  <Card key={product.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-3" onClick={() => handleProductClick(product)}>
-                      <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{product.name}</p>
-                          <p className="text-xs text-gray-600">{formatCurrency(product.price)}</p>
-                          {product.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>
-                          )}
-                        </div>
-                        {product.image_url && (
-                          <img
-                            src={product.image_url}
-                            alt={product.name}
-                            className="w-12 h-12 object-cover rounded ml-2"
-                          />
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <Button 
+                onClick={() => setShowProductModal(true)}
+                className="w-full"
+              >
+                <Plus size={16} className="mr-2" />
+                Adicionar Produto
+              </Button>
             </div>
 
-            {/* Carrinho e Dados do Cliente */}
             <div className="space-y-4">
-              {/* Dados do Cliente */}
               <Card>
                 <CardContent className="p-4 space-y-3">
                   <div>
@@ -461,7 +430,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
                 </CardContent>
               </Card>
 
-              {/* Carrinho */}
               <Card>
                 <CardContent className="p-4">
                   <h3 className="font-medium mb-3">Itens Selecionados</h3>
@@ -527,7 +495,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
                 </CardContent>
               </Card>
 
-              {/* Botões de Ação */}
               <div className="flex gap-2">
                 <Button
                   onClick={handleAddToTable}
@@ -545,16 +512,9 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Seleção de Variações */}
       <ProductSelectionModal
-        product={selectedProduct}
-        variations={productVariations}
         isOpen={showProductModal}
-        onClose={() => {
-          setShowProductModal(false);
-          setSelectedProduct(null);
-          setProductVariations([]);
-        }}
+        onClose={() => setShowProductModal(false)}
         onAddToCart={addToCart}
       />
     </>
