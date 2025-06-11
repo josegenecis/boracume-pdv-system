@@ -194,14 +194,28 @@ const MenuDigital = () => {
 
       console.log('✅ Variações raw carregadas:', data?.length || 0, data);
       
-      // Converter os dados do Supabase para o formato correto
-      const formattedVariations: ProductVariation[] = (data || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        options: Array.isArray(item.options) ? item.options : [],
-        max_selections: item.max_selections,
-        required: item.required
-      }));
+      // Converter os dados do Supabase para o formato correto com validação
+      const formattedVariations: ProductVariation[] = (data || []).map(item => {
+        let options: Array<{ name: string; price: number; }> = [];
+        
+        // Validar e converter as opções
+        if (Array.isArray(item.options)) {
+          options = item.options
+            .filter((opt: any) => opt && typeof opt === 'object' && opt.name && typeof opt.price === 'number')
+            .map((opt: any) => ({
+              name: String(opt.name),
+              price: Number(opt.price)
+            }));
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          options,
+          max_selections: item.max_selections,
+          required: item.required
+        };
+      });
       
       console.log('✅ Variações formatadas:', formattedVariations);
       return formattedVariations;

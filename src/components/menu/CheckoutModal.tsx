@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -36,6 +35,7 @@ interface CheckoutModalProps {
   onClose: () => void;
   cart: CartItem[];
   total: number;
+  deliveryZones: DeliveryZone[];
   onPlaceOrder: (orderData: any) => void;
   userId?: string;
 }
@@ -45,6 +45,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   cart,
   total,
+  deliveryZones,
   onPlaceOrder,
   userId
 }) => {
@@ -56,7 +57,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   });
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -71,43 +71,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     { value: 'debit', label: 'Cartão de Débito', icon: CreditCard },
     { value: 'cash', label: 'Dinheiro', icon: Banknote }
   ];
-
-  useEffect(() => {
-    if (isOpen && userId) {
-      fetchDeliveryZones();
-    }
-  }, [isOpen, userId]);
-
-  const fetchDeliveryZones = async () => {
-    if (!userId) {
-      console.error('❌ UserId não fornecido para carregar zonas');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log('🔄 Carregando zonas de entrega para usuário:', userId);
-
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('name');
-
-      if (error) {
-        console.error('❌ Erro ao carregar zonas de entrega:', error);
-        throw error;
-      }
-
-      console.log('✅ Zonas de entrega carregadas:', data?.length || 0, data);
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('❌ Erro ao carregar zonas de entrega:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const generateOrderNumber = () => {
     const now = new Date();
@@ -233,9 +196,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <CardContent className="p-4 space-y-4">
               <h3 className="font-semibold">Área de Entrega</h3>
               
-              {loading ? (
-                <p className="text-sm text-muted-foreground">Carregando áreas de entrega...</p>
-              ) : deliveryZones.length === 0 ? (
+              {deliveryZones.length === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-red-500">Nenhuma área de entrega disponível.</p>
                   <p className="text-xs text-muted-foreground mt-1">
