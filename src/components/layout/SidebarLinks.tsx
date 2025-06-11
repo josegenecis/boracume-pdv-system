@@ -4,62 +4,134 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   ShoppingBag, 
-  FileText, 
-  Settings, 
-  Users, 
+  ClipboardList, 
   MapPin, 
-  CreditCard,
-  BarChart3,
   MessageCircle,
+  Settings, 
+  BarChart3, 
+  CreditCard,
+  Users,
+  Calendar,
+  Gift,
+  Truck,
   ChefHat,
-  Utensils,
-  Crown
+  QrCode,
+  Heart,
+  Menu,
+  Bike,
+  Shield,
+  TrendingUp
 } from 'lucide-react';
 
 const SidebarLinks = () => {
   const location = useLocation();
 
-  const links = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
-    { to: '/pedidos', icon: FileText, label: 'Pedidos' },
-    { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
-    { to: '/mesas', icon: Utensils, label: 'Mesas' },
-    { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
-    { to: '/entregadores', icon: Users, label: 'Entregadores' },
-    { to: '/bairros-entrega', icon: MapPin, label: 'Bairros de Entrega' },
-    { to: '/loyalty', icon: Crown, label: 'Programa de Fidelidade' },
-    { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
-    { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
-    { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
-    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
-    { to: '/subscription', icon: Crown, label: 'Planos' },
+  const menuItems = [
+    {
+      title: 'Dashboard',
+      icon: LayoutDashboard,
+      path: '/dashboard'
+    },
+    {
+      title: 'Produtos',
+      icon: ShoppingBag,
+      path: '/products'
+    },
+    {
+      title: 'Pedidos',
+      icon: ClipboardList,
+      path: '/orders'
+    },
+    {
+      title: 'PDV',
+      icon: CreditCard,
+      path: '/pdv'
+    },
+    {
+      title: 'Cozinha (KDS)',
+      icon: ChefHat,
+      path: '/kitchen'
+    },
+    {
+      title: 'Cardápio Digital',
+      icon: Menu,
+      path: '/menu'
+    },
+    {
+      title: 'Combos & Promoções',
+      icon: Gift,
+      path: '/promocoes'
+    },
+    {
+      title: 'WhatsApp IA',
+      icon: MessageCircle,
+      path: '/whatsapp-enhanced'
+    },
+    {
+      title: 'Entregadores',
+      icon: Bike,
+      path: '/entregadores'
+    },
+    {
+      title: 'Zonas de Entrega',
+      icon: MapPin,
+      path: '/bairros-entrega'
+    },
+    {
+      title: 'Mesas',
+      icon: Calendar,
+      path: '/mesas'
+    },
+    {
+      title: 'Fidelidade',
+      icon: Heart,
+      path: '/loyalty'
+    },
+    {
+      title: 'Relatórios',
+      icon: BarChart3,
+      path: '/relatorios'
+    },
+    {
+      title: 'Financeiro',
+      icon: TrendingUp,
+      path: '/financeiro'
+    },
+    {
+      title: 'Segurança',
+      icon: Shield,
+      path: '/security-dashboard'
+    },
+    {
+      title: 'Configurações',
+      icon: Settings,
+      path: '/configuracoes'
+    },
   ];
 
   return (
-    <nav className="mt-8 px-4">
-      <ul className="space-y-2">
-        {links.map((link) => {
-          const Icon = link.icon;
-          const isActive = location.pathname === link.to;
+    <nav className="p-4">
+      <div className="space-y-1">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
           
           return (
-            <li key={link.to}>
-              <Link
-                to={link.to}
-                className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Icon size={18} className="mr-3" />
-                {link.label}
-              </Link>
-            </li>
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <Icon size={18} className="mr-3" />
+              {item.title}
+            </Link>
           );
         })}
-      </ul>
+      </div>
     </nav>
   );
 };
