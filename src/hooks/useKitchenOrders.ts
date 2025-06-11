@@ -21,6 +21,7 @@ export interface KitchenOrder {
   status: 'pending' | 'preparing' | 'ready' | 'completed';
   created_at: string;
   updated_at: string;
+  timestamp: Date;
 }
 
 export const useKitchenOrders = () => {
@@ -58,7 +59,8 @@ export const useKitchenOrders = () => {
         ...order,
         items: Array.isArray(order.items) ? (order.items as unknown as OrderItem[]) : [],
         priority: order.priority as 'normal' | 'high',
-        status: order.status as 'pending' | 'preparing' | 'ready' | 'completed'
+        status: order.status as 'pending' | 'preparing' | 'ready' | 'completed',
+        timestamp: new Date(order.created_at)
       }));
       
       setOrders(formattedOrders);
