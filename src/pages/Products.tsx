@@ -26,6 +26,8 @@ interface Product {
   available_delivery?: boolean;
   available_pdv?: boolean;
   send_to_kds?: boolean;
+  show_in_pdv?: boolean; // Adicionando propriedades faltantes
+  show_in_delivery?: boolean; // Adicionando propriedades faltantes
 }
 
 interface Category {
@@ -70,10 +72,12 @@ const Products = () => {
       
       if (error) throw error;
       
-      // Transform data to ensure category field is present
+      // Transform data to ensure category field is present and add default values for missing fields
       const transformedProducts = (data || []).map(product => ({
         ...product,
-        category: product.category || 'Sem categoria' // Ensure category is always present
+        category: product.category || 'Sem categoria', // Ensure category is always present
+        show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
+        show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true
       }));
       
       setProducts(transformedProducts);
@@ -297,10 +301,10 @@ const Products = () => {
 
                         {/* Status badges */}
                         <div className="flex flex-wrap gap-1 mb-3">
-                          {product.available_delivery && (
+                          {product.show_in_delivery && (
                             <Badge variant="outline" className="text-xs">Delivery</Badge>
                           )}
-                          {product.available_pdv && (
+                          {product.show_in_pdv && (
                             <Badge variant="outline" className="text-xs">PDV</Badge>
                           )}
                           {product.send_to_kds && (

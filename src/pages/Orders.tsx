@@ -20,7 +20,7 @@ interface Order {
   status: string;
   order_type: string;
   total: number;
-  items: any[];
+  items: any[]; // Garantir que items é definido como array
   variations?: any[];
   created_at: string;
   estimated_delivery_time?: string;
@@ -58,7 +58,24 @@ const Orders = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      setOrders(data || []);
+      // Converter o tipo dos dados para garantir que items é um array
+      const processedOrders: Order[] = (data || []).map(order => ({
+        ...order,
+        // Garantir que items é um array, convertendo se for string JSON
+        items: Array.isArray(order.items) 
+          ? order.items 
+          : (typeof order.items === 'string' 
+              ? JSON.parse(order.items) 
+              : (order.items ? [order.items] : [])),
+        // Garantir que variations é um array, convertendo se for string JSON
+        variations: Array.isArray(order.variations) 
+          ? order.variations 
+          : (typeof order.variations === 'string' 
+              ? JSON.parse(order.variations) 
+              : [])
+      }));
+
+      setOrders(processedOrders);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({
