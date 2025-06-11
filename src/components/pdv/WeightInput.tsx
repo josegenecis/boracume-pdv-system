@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Scale, RotateCcw, Play, Pause } from 'lucide-react';
 import { useScale } from '@/hooks/useScale';
+import DesktopIndicator from '@/components/desktop/DesktopIndicator';
 
 interface WeightInputProps {
   onWeightConfirm: (weight: number) => void;
@@ -39,9 +40,12 @@ const WeightInput: React.FC<WeightInputProps> = ({
             <Scale size={20} />
             Balança
           </div>
-          <Badge variant={isConnected ? "default" : "destructive"}>
-            {isConnected ? "Conectada" : "Desconectada"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <DesktopIndicator />
+            <Badge variant={isConnected ? "default" : "destructive"}>
+              {isConnected ? "Conectada" : "Desconectada"}
+            </Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -105,7 +109,10 @@ const WeightInput: React.FC<WeightInputProps> = ({
 
         {!isConnected && (
           <div className="text-center text-sm text-muted-foreground">
-            Conecte uma balança nas configurações de dispositivos
+            {typeof window !== 'undefined' && window.electronAPI ? 
+              'Conecte uma balança nas configurações de dispositivos' :
+              'Use o app desktop para conectar balanças reais'
+            }
           </div>
         )}
       </CardContent>
