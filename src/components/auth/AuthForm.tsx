@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 const AuthForm: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -36,7 +38,13 @@ const AuthForm: React.FC = () => {
       return;
     }
     
-    await signIn(loginEmail, loginPassword);
+    try {
+      await signIn(loginEmail, loginPassword);
+      // O redirecionamento será feito pelo componente Login
+      console.log('Login successful, will redirect');
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
   
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -60,7 +68,13 @@ const AuthForm: React.FC = () => {
       return;
     }
     
-    await signUp(registerEmail, registerPassword, restaurantName);
+    try {
+      await signUp(registerEmail, registerPassword, restaurantName);
+      // O redirecionamento será feito pelo componente Login
+      console.log('Signup successful, will redirect');
+    } catch (error) {
+      console.error('Signup error:', error);
+    }
   };
   
   const handleGoogleLogin = async () => {
