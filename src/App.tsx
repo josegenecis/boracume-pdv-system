@@ -43,9 +43,9 @@ function AppContent() {
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/kitchen" element={<Kitchen />} />
+          <Route path="/produtos" element={<Products />} />
+          <Route path="/pedidos" element={<Orders />} />
+          <Route path="/cozinha" element={<Kitchen />} />
           <Route path="/pdv" element={<PDV />} />
           <Route path="/mesas" element={<Mesas />} />
           <Route path="/relatorios" element={<Relatorios />} />
