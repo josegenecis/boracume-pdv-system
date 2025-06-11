@@ -146,8 +146,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
-      setSelectedProduct(product);
-      setProductVariations(variations);
       setShowProductModal(true);
     } else {
       addToCart(product, 1, [], '');
