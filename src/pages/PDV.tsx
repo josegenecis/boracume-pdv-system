@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -487,7 +489,6 @@ const PDV = () => {
   };
 
   const handleTableFinalization = (items: any[], total: number, tableNumber: number) => {
-    // Convert table items to cart format
     const cartItems: CartItem[] = items.map(item => ({
       id: item.product_id,
       name: item.product_name,
@@ -893,5 +894,3 @@ const PDV = () => {
 };
 
 export default PDV;
-
-</initial_code>
