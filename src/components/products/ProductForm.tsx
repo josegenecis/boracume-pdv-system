@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,10 +11,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductImageUpload from './ProductImageUpload';
 
-interface Product {
+interface ProductItem {
   id?: string;
   name: string;
-  description: string;
+  description?: string; // Making description optional
   price: number;
   category: string;
   category_id?: string;
@@ -28,13 +27,13 @@ interface Product {
 }
 
 interface ProductFormProps {
-  product?: Product;
-  onSubmit: (product: Product) => void;
+  product?: ProductItem; // Updated to use ProductItem
+  onSave: () => void; // Simplified the callback
   onCancel: () => void;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ product, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState<Product>({
+const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) => {
+  const [formData, setFormData] = useState<ProductItem>({
     name: '',
     description: '',
     price: 0,
@@ -112,7 +111,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSubmit, onCancel }
         description: `Produto ${product?.id ? 'atualizado' : 'criado'} com sucesso!`,
       });
 
-      onSubmit(formData);
+      onSave(); // Call the simplified callback
     } catch (error) {
       console.error('Erro ao salvar produto:', error);
       toast({
