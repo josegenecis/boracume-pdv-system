@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,7 +56,14 @@ const Orders = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Transform the data to ensure items is always an array
+      const transformedData = (data || []).map(order => ({
+        ...order,
+        items: Array.isArray(order.items) ? order.items : []
+      }));
+      
+      setOrders(transformedData);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({
