@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,6 +55,8 @@ interface DeliveryZone {
   name: string;
   delivery_fee: number;
   minimum_order: number;
+  delivery_time?: string;
+  active?: boolean;
 }
 
 const MenuDigital = () => {
@@ -276,6 +277,14 @@ const MenuDigital = () => {
         setCustomerInfo={setCustomerInfo}
         onBack={() => setShowCheckout(false)}
         userId={userId!}
+        onSuccess={() => {
+          setCart([]);
+          setShowCheckout(false);
+          toast({
+            title: "Sucesso!",
+            description: "Pedido realizado com sucesso!",
+          });
+        }}
       />
     );
   }
@@ -459,6 +468,8 @@ const MenuDigital = () => {
 
       {/* Mobile Cart Button */}
       <MobileCartButton 
+        cart={cart}
+        onOpenCart={() => setShowCart(true)}
         cartCount={cart.reduce((total, item) => total + item.quantity, 0)}
         cartTotal={getCartTotal()}
         onClick={() => setShowCart(true)}

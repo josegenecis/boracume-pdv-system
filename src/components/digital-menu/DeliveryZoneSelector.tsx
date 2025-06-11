@@ -13,8 +13,8 @@ interface DeliveryZone {
   name: string;
   delivery_fee: number;
   minimum_order: number;
-  delivery_time: string;
-  active: boolean;
+  delivery_time?: string;
+  active?: boolean;
 }
 
 interface DeliveryZoneSelectorProps {
@@ -135,9 +135,11 @@ const DeliveryZoneSelector: React.FC<DeliveryZoneSelectorProps> = ({
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-medium">{zone.name}</h4>
-                        <p className="text-sm text-gray-600">
-                          Tempo: {zone.delivery_time}
-                        </p>
+                        {zone.delivery_time && (
+                          <p className="text-sm text-gray-600">
+                            Tempo: {zone.delivery_time}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-600">
                           Pedido mínimo: {formatCurrency(zone.minimum_order)}
                         </p>

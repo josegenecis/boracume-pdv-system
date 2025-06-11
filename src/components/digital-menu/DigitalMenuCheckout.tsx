@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +24,8 @@ interface DeliveryZone {
   name: string;
   delivery_fee: number;
   minimum_order: number;
+  delivery_time?: string;
+  active?: boolean;
 }
 
 interface RestaurantProfile {
@@ -42,24 +43,40 @@ interface DigitalMenuCheckoutProps {
   cart: CartItem[];
   restaurant?: RestaurantProfile;
   deliveryZones: DeliveryZone[];
+  selectedZone: string;
+  setSelectedZone: React.Dispatch<React.SetStateAction<string>>;
+  customerInfo: {
+    name: string;
+    phone: string;
+    address: string;
+  };
+  setCustomerInfo: React.Dispatch<React.SetStateAction<{
+    name: string;
+    phone: string;
+    address: string;
+  }>>;
   userId: string;
   onBack: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 const DigitalMenuCheckout: React.FC<DigitalMenuCheckoutProps> = ({
   cart,
   restaurant,
   deliveryZones,
+  selectedZone,
+  setSelectedZone,
+  customerInfo,
+  setCustomerInfo,
   userId,
   onBack,
   onSuccess
 }) => {
   const [customerData, setCustomerData] = useState({
-    name: '',
-    phone: '',
-    address: '',
-    deliveryZoneId: '',
+    name: customerInfo.name,
+    phone: customerInfo.phone,
+    address: customerInfo.address,
+    deliveryZoneId: selectedZone,
     deliveryInstructions: ''
   });
   const [loading, setLoading] = useState(false);
@@ -170,7 +187,9 @@ const DigitalMenuCheckout: React.FC<DigitalMenuCheckoutProps> = ({
         description: `Pedido #${orderNumber} foi enviado. Você receberá confirmação em breve.`,
       });
 
-      onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       console.error('Erro ao criar pedido:', error);
       toast({
