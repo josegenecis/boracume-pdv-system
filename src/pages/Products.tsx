@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,12 +14,13 @@ import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 
-interface Product {
+// Renaming the interface to ProductItem to avoid type conflicts
+interface ProductItem {
   id: string;
   name: string;
-  description?: string;
+  description?: string; // Making description optional to match how it's used
   price: number;
-  category: string; // Added required category field
+  category: string;
   category_id?: string;
   image_url?: string;
   available: boolean;
@@ -26,8 +28,8 @@ interface Product {
   available_delivery?: boolean;
   available_pdv?: boolean;
   send_to_kds?: boolean;
-  show_in_pdv?: boolean; // Adicionando propriedades faltantes
-  show_in_delivery?: boolean; // Adicionando propriedades faltantes
+  show_in_pdv?: boolean;
+  show_in_delivery?: boolean;
 }
 
 interface Category {
@@ -36,13 +38,13 @@ interface Category {
 }
 
 const Products = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductItem[]>([]); // Updated type
   const [categories, setCategories] = useState<Category[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]); // Updated type
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null); // Updated type
   const [showForm, setShowForm] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -155,7 +157,7 @@ const Products = () => {
     }
   };
 
-  const handleEditProduct = (product: Product) => {
+  const handleEditProduct = (product: ProductItem) => { // Updated type
     setEditingProduct(product);
     setShowForm(true);
   };
