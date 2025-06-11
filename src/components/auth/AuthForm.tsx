@@ -10,6 +10,9 @@ import Logo from '@/components/Logo';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useInputValidation } from '@/hooks/useInputValidation';
+import { loginSchema, signupSchema, type LoginData, type SignupData } from '@/schemas/authSchemas';
+import { logSecurityEvent } from '@/utils/securityLogger';
 
 const AuthForm: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();
@@ -17,62 +20,53 @@ const AuthForm: React.FC = () => {
   const navigate = useNavigate();
   
   // Login form state
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [loginData, setLoginData] = useState<LoginData>({
+    email: '',
+    password: ''
+  });
   
   // Register form state
-  const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [restaurantName, setRestaurantName] = useState('');
-  const [name, setName] = useState('');
+  const [signupData, setSignupData] = useState<SignupData>({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    restaurantName: '',
+    name: ''
+  });
+  
+  // Validation hooks
+  const loginValidation = useInputValidation(loginSchema);
+  const signupValidation = useInputValidation(signupSchema);
   
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmail || !loginPassword) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Por favor preencha todos os campos.",
-        variant: "destructive",
-      });
+    
+    if (!loginValidation.validate(loginData)) {
       return;
     }
     
     try {
-      await signIn(loginEmail, loginPassword);
-      // O redirecionamento será feito pelo componente Login
+      await signIn(loginData.email, loginData.password);
+      await logSecurityEvent('login', `Successful login for ${loginData.email}`, 'low');
       console.log('Login successful, will redirect');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      await logSecurityEvent('failed_login', `Failed login attempt for ${loginData.email}: ${error.message}`, 'medium');
     }
   };
   
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!registerEmail || !registerPassword || !confirmPassword || !restaurantName || !name) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Por favor preencha todos os campos.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (registerPassword !== confirmPassword) {
-      toast({
-        title: "Senhas diferentes",
-        description: "As senhas não coincidem.",
-        variant: "destructive",
-      });
+    if (!signupValidation.validate(signupData)) {
       return;
     }
     
     try {
-      await signUp(registerEmail, registerPassword, restaurantName);
-      // O redirecionamento será feito pelo componente Login
+      await signUp(signupData.email, signupData.password, signupData.restaurantName);
+      await logSecurityEvent('login', `New user registration: ${signupData.email}`, 'low');
       console.log('Signup successful, will redirect');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Signup error:', error);
     }
   };
@@ -87,17 +81,19 @@ const AuthForm: React.FC = () => {
       });
       
       if (error) throw error;
+      await logSecurityEvent('login', 'OAuth login with Google', 'low');
     } catch (error: any) {
       toast({
         title: "Erro ao entrar com Google",
         description: error.message,
         variant: "destructive",
       });
+      await logSecurityEvent('failed_login', `Failed OAuth login: ${error.message}`, 'medium');
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!loginEmail) {
+    if (!loginData.email) {
       toast({
         title: "Email necessário",
         description: "Por favor digite seu email para recuperar sua senha.",
@@ -107,7 +103,7 @@ const AuthForm: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
+      const { error } = await supabase.auth.resetPasswordForEmail(loginData.email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       
@@ -117,6 +113,8 @@ const AuthForm: React.FC = () => {
         title: "Email enviado",
         description: "Verifique sua caixa de entrada para redefinir sua senha.",
       });
+      
+      await logSecurityEvent('password_change', `Password reset requested for ${loginData.email}`, 'medium');
     } catch (error: any) {
       toast({
         title: "Erro ao recuperar senha",
@@ -149,10 +147,13 @@ const AuthForm: React.FC = () => {
                   id="email" 
                   type="email" 
                   placeholder="seu@email.com" 
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
+                  value={loginData.email}
+                  onChange={(e) => setLoginData(prev => ({ ...prev, email: e.target.value }))}
                   required 
                 />
+                {loginValidation.errors.email && (
+                  <p className="text-sm text-red-500">{loginValidation.errors.email}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -168,10 +169,13 @@ const AuthForm: React.FC = () => {
                 <Input 
                   id="password" 
                   type="password" 
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
+                  value={loginData.password}
+                  onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
                   required 
                 />
+                {loginValidation.errors.password && (
+                  <p className="text-sm text-red-500">{loginValidation.errors.password}</p>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex flex-col">
@@ -207,10 +211,13 @@ const AuthForm: React.FC = () => {
                   id="restaurant-name" 
                   type="text" 
                   placeholder="Restaurante do João" 
-                  value={restaurantName}
-                  onChange={(e) => setRestaurantName(e.target.value)}
+                  value={signupData.restaurantName}
+                  onChange={(e) => setSignupData(prev => ({ ...prev, restaurantName: e.target.value }))}
                   required 
                 />
+                {signupValidation.errors.restaurantName && (
+                  <p className="text-sm text-red-500">{signupValidation.errors.restaurantName}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Seu Nome</Label>
@@ -218,10 +225,13 @@ const AuthForm: React.FC = () => {
                   id="name" 
                   type="text" 
                   placeholder="João da Silva"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)} 
+                  value={signupData.name}
+                  onChange={(e) => setSignupData(prev => ({ ...prev, name: e.target.value }))} 
                   required 
                 />
+                {signupValidation.errors.name && (
+                  <p className="text-sm text-red-500">{signupValidation.errors.name}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="register-email">Email</Label>
@@ -229,30 +239,39 @@ const AuthForm: React.FC = () => {
                   id="register-email" 
                   type="email" 
                   placeholder="seu@email.com" 
-                  value={registerEmail}
-                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  value={signupData.email}
+                  onChange={(e) => setSignupData(prev => ({ ...prev, email: e.target.value }))}
                   required 
                 />
+                {signupValidation.errors.email && (
+                  <p className="text-sm text-red-500">{signupValidation.errors.email}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="register-password">Senha</Label>
                 <Input 
                   id="register-password" 
                   type="password" 
-                  value={registerPassword}
-                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  value={signupData.password}
+                  onChange={(e) => setSignupData(prev => ({ ...prev, password: e.target.value }))}
                   required 
                 />
+                {signupValidation.errors.password && (
+                  <p className="text-sm text-red-500">{signupValidation.errors.password}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar Senha</Label>
                 <Input 
                   id="confirm-password" 
                   type="password" 
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={signupData.confirmPassword}
+                  onChange={(e) => setSignupData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                   required 
                 />
+                {signupValidation.errors.confirmPassword && (
+                  <p className="text-sm text-red-500">{signupValidation.errors.confirmPassword}</p>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex flex-col">

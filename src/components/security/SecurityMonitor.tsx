@@ -1,11 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, AlertTriangle, CheckCircle, Activity, Eye, Lock } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, Activity, Eye, Lock, Refresh } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { logSecurityEvent } from '@/utils/securityLogger';
 
 interface SecurityLog {
   id: string;
@@ -24,6 +27,8 @@ interface SecurityStatus {
   twoFactorEnabled: boolean;
   lastBackup: string | null;
   securityScore: number;
+  rlsEnabled: boolean;
+  auditLogging: boolean;
 }
 
 const SecurityMonitor: React.FC = () => {
@@ -35,6 +40,8 @@ const SecurityMonitor: React.FC = () => {
     twoFactorEnabled: false,
     lastBackup: null,
     securityScore: 0,
+    rlsEnabled: true,
+    auditLogging: true,
   });
   const [loading, setLoading] = useState(true);
   const { user, subscription } = useAuth();
@@ -43,6 +50,7 @@ const SecurityMonitor: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchSecurityData();
+      logSecurityEvent('sensitive_data_access', 'Accessed security dashboard', 'medium');
     }
   }, [user]);
 
@@ -52,6 +60,20 @@ const SecurityMonitor: React.FC = () => {
     try {
       setLoading(true);
 
+      // Fetch security logs
+      const { data: logs, error: logsError } = await supabase
+        .from('security_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (logsError) {
+        console.error('Error fetching security logs:', logsError);
+      } else {
+        setSecurityLogs(logs || []);
+      }
+
       // Calculate security score and status
       const subscriptionValid = subscription?.status === 'active' || subscription?.status === 'trial';
       const securityScore = calculateSecurityScore({
@@ -59,31 +81,10 @@ const SecurityMonitor: React.FC = () => {
         dataBackupEnabled: true,
         sslEnabled: true,
         twoFactorEnabled: false,
+        rlsEnabled: true,
+        auditLogging: true,
       });
 
-      // Simulate some security logs
-      const mockLogs: SecurityLog[] = [
-        {
-          id: '1',
-          event_type: 'login',
-          description: 'Login realizado com sucesso',
-          ip_address: '192.168.1.1',
-          user_agent: navigator.userAgent,
-          created_at: new Date().toISOString(),
-          severity: 'low',
-        },
-        {
-          id: '2',
-          event_type: 'security_check',
-          description: 'Verificação de segurança automática',
-          ip_address: '192.168.1.1',
-          user_agent: navigator.userAgent,
-          created_at: new Date(Date.now() - 3600000).toISOString(),
-          severity: 'low',
-        }
-      ];
-
-      setSecurityLogs(mockLogs);
       setSecurityStatus({
         subscriptionValid,
         dataBackupEnabled: true,
@@ -91,6 +92,8 @@ const SecurityMonitor: React.FC = () => {
         twoFactorEnabled: false,
         lastBackup: new Date().toISOString(),
         securityScore,
+        rlsEnabled: true,
+        auditLogging: true,
       });
 
     } catch (error: any) {
@@ -107,11 +110,20 @@ const SecurityMonitor: React.FC = () => {
 
   const calculateSecurityScore = (status: Partial<SecurityStatus>) => {
     let score = 0;
-    if (status.subscriptionValid) score += 25;
-    if (status.dataBackupEnabled) score += 25;
-    if (status.sslEnabled) score += 25;
-    if (status.twoFactorEnabled) score += 25;
-    return score;
+    const checks = [
+      status.subscriptionValid,
+      status.dataBackupEnabled,
+      status.sslEnabled,
+      status.rlsEnabled,
+      status.auditLogging,
+      status.twoFactorEnabled
+    ];
+    
+    checks.forEach(check => {
+      if (check) score += Math.floor(100 / checks.length);
+    });
+    
+    return Math.min(score, 100);
   };
 
   const getScoreColor = (score: number) => {
@@ -159,6 +171,18 @@ const SecurityMonitor: React.FC = () => {
       icon: Lock,
     },
     {
+      name: 'RLS Ativo',
+      status: securityStatus.rlsEnabled,
+      description: 'Row Level Security ativo no banco de dados',
+      icon: Shield,
+    },
+    {
+      name: 'Auditoria Ativa',
+      status: securityStatus.auditLogging,
+      description: 'Log de auditoria de segurança ativo',
+      icon: Eye,
+    },
+    {
       name: 'Autenticação 2FA',
       status: securityStatus.twoFactorEnabled,
       description: 'Autenticação de dois fatores (recomendado)',
@@ -185,7 +209,7 @@ const SecurityMonitor: React.FC = () => {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Monitor de Segurança</h2>
         <Button onClick={fetchSecurityData} variant="outline">
-          <Activity className="w-4 h-4 mr-2" />
+          <Refresh className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
       </div>

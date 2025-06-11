@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { logSecurityEvent } from '@/utils/securityLogger';
 
 interface Profile {
   id: string;
@@ -72,6 +73,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('Auth state changed:', event, session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Log security events for auth state changes
+        if (event === 'SIGNED_IN' && session?.user) {
+          logSecurityEvent('login', `User signed in: ${session.user.email}`, 'low');
+        } else if (event === 'SIGNED_OUT') {
+          logSecurityEvent('logout', 'User signed out', 'low');
+        }
         
         if (session?.user) {
           setTimeout(() => {
@@ -151,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -162,10 +170,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: error.message,
           variant: "destructive",
         });
+        await logSecurityEvent('failed_login', `Failed login for ${email}: ${error.message}`, 'medium');
         throw error;
       }
+      
+      // Success is logged by the auth state change listener
     } catch (error) {
       console.error('Error signing in:', error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -181,6 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             restaurant_name: restaurantName,
           },
+          emailRedirectTo: `${window.location.origin}/dashboard`
         },
       });
 
@@ -197,8 +210,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "Conta criada com sucesso!",
         description: "Bem-vindo ao BoraCumê!",
       });
+      
+      await logSecurityEvent('login', `New user registered: ${email}`, 'low');
     } catch (error) {
       console.error('Error signing up:', error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -207,11 +223,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setLoading(true);
+      const currentUser = user?.email;
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
       setProfile(null);
       setSubscription(null);
+      
+      // Log the logout event with the user email before clearing state
+      if (currentUser) {
+        await logSecurityEvent('logout', `User logged out: ${currentUser}`, 'low');
+      }
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {
