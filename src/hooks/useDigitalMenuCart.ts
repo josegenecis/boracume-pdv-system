@@ -31,16 +31,20 @@ export const useDigitalMenuCart = () => {
       notes
     });
 
-    const selectedOptions = selectedVariations.flatMap(variation => 
-      Array.isArray(variation.options) ? variation.options.map((option: any) => option.name) : []
-    );
-    
-    const variationPrice = selectedVariations.reduce((total, variation) => {
+    // Extrair opções selecionadas e calcular preço das variações
+    const selectedOptions: string[] = [];
+    let variationPrice = 0;
+
+    selectedVariations.forEach(variation => {
       if (Array.isArray(variation.options)) {
-        return total + variation.options.reduce((vTotal: number, option: any) => vTotal + (option.price || 0), 0);
+        variation.options.forEach((option: any) => {
+          if (option.name) {
+            selectedOptions.push(option.name);
+            variationPrice += option.price || 0;
+          }
+        });
       }
-      return total;
-    }, 0);
+    });
     
     const itemPrice = product.price + variationPrice;
     const subtotal = itemPrice * quantity;
@@ -63,6 +67,7 @@ export const useDigitalMenuCart = () => {
     };
 
     setCart(prev => {
+      // Verificar se já existe um item idêntico
       const existingIndex = prev.findIndex(item => 
         item.id === product.id &&
         JSON.stringify(item.selectedOptions) === JSON.stringify(selectedOptions) &&
@@ -108,18 +113,27 @@ export const useDigitalMenuCart = () => {
 
   const removeFromCart = (index: number) => {
     setCart(prev => prev.filter((_, i) => i !== index));
+    toast({
+      title: "Item removido",
+      description: "O item foi removido do carrinho.",
+    });
   };
 
   const clearCart = () => {
     setCart([]);
+    console.log('🗑️ Carrinho limpo');
   };
 
   const getCartTotal = () => {
-    return cart.reduce((total, item) => total + item.subtotal, 0);
+    const total = cart.reduce((total, item) => total + item.subtotal, 0);
+    console.log('💰 Total do carrinho:', total);
+    return total;
   };
 
   const getCartItemCount = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
+    const count = cart.reduce((total, item) => total + item.quantity, 0);
+    console.log('📦 Itens no carrinho:', count);
+    return count;
   };
 
   return {

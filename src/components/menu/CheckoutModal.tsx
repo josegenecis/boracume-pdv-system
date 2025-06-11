@@ -79,7 +79,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   }, [isOpen, userId]);
 
   const fetchDeliveryZones = async () => {
-    if (!userId) return;
+    if (!userId) {
+      console.error('❌ UserId não fornecido para carregar zonas');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -97,7 +100,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw error;
       }
 
-      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
+      console.log('✅ Zonas de entrega carregadas:', data?.length || 0, data);
       setDeliveryZones(data || []);
     } catch (error) {
       console.error('❌ Erro ao carregar zonas de entrega:', error);
@@ -106,9 +109,23 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
+  const generateOrderNumber = () => {
+    const now = new Date();
+    const timestamp = now.getTime().toString().slice(-6);
+    return `PED-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${timestamp}`;
+  };
+
   const handlePlaceOrder = () => {
+    if (!isFormValid()) {
+      console.log('❌ Formulário inválido');
+      return;
+    }
+
+    const orderNumber = generateOrderNumber();
+    
     const orderData = {
       user_id: userId,
+      order_number: orderNumber,
       customer_name: customerData.name,
       customer_phone: customerData.phone,
       customer_address: customerData.address,
@@ -128,7 +145,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
       order_type: 'delivery',
       delivery_instructions: customerData.notes,
-      estimated_time: selectedZoneData?.delivery_time || '30-45 min'
+      estimated_time: selectedZoneData?.delivery_time || '30-45 min',
+      status: 'pending'
     };
 
     console.log('🔄 Enviando pedido:', orderData);
@@ -136,7 +154,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const isFormValid = () => {
-    return (
+    const isValid = (
       customerData.name.trim() !== '' &&
       customerData.phone.trim() !== '' &&
       customerData.address.trim() !== '' &&
@@ -145,6 +163,19 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentMethod !== '' &&
       (paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
     );
+    
+    console.log('✅ Validação do formulário:', {
+      name: customerData.name.trim() !== '',
+      phone: customerData.phone.trim() !== '',
+      address: customerData.address.trim() !== '',
+      zone: selectedZone !== '',
+      minimumOrder: total >= minimumOrder,
+      payment: paymentMethod !== '',
+      change: paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery,
+      isValid
+    });
+    
+    return isValid;
   };
 
   return (
@@ -205,7 +236,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {loading ? (
                 <p className="text-sm text-muted-foreground">Carregando áreas de entrega...</p>
               ) : deliveryZones.length === 0 ? (
-                <p className="text-sm text-red-500">Nenhuma área de entrega disponível.</p>
+                <div className="text-center py-4">
+                  <p className="text-sm text-red-500">Nenhuma área de entrega disponível.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Entre em contato conosco para verificar se atendemos sua região.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="delivery-zone">Selecione seu bairro</Label>

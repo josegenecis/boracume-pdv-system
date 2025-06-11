@@ -1,20 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import { Search, Plus, Minus, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ProductVariationModal from '@/components/menu/ProductVariationModal';
 import CheckoutModal from '@/components/menu/CheckoutModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
-import WhatsAppButton from '@/components/chat/WhatsAppButton';
-import { useToast } from '@/hooks/use-toast';
+import { Plus, Clock, MapPin, Phone } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -23,6 +21,8 @@ interface Product {
   description?: string;
   image_url?: string;
   category_id?: string;
+  category?: string;
+  user_id: string;
 }
 
 interface ProductVariation {
@@ -36,34 +36,30 @@ interface ProductVariation {
   required: boolean;
 }
 
-interface Category {
-  id: string;
-  name: string;
-}
-
 interface Profile {
   restaurant_name?: string;
   phone?: string;
   address?: string;
+  opening_hours?: string;
   description?: string;
   logo_url?: string;
 }
 
-const MenuDigital: React.FC = () => {
-  const { userId } = useParams<{ userId: string }>();
+const MenuDigital = () => {
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('u');
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
+
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showVariationModal, setShowVariationModal] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+
   const {
     cart,
     addToCart,
@@ -75,69 +71,83 @@ const MenuDigital: React.FC = () => {
   } = useDigitalMenuCart();
 
   useEffect(() => {
-    if (userId) {
-      fetchMenuData();
+    if (!userId) {
+      toast({
+        title: "Erro",
+        description: "Link inválido. ID do usuário não encontrado.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    fetchRestaurantData();
+    fetchProducts();
   }, [userId]);
 
-  const fetchMenuData = async () => {
-    if (!userId) return;
-
+  const fetchRestaurantData = async () => {
     try {
-      console.log('🔄 Carregando dados do menu para usuário:', userId);
-
-      // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
+      console.log('🔄 Carregando dados do restaurante para userId:', userId);
+      
+      const { data, error } = await supabase
         .from('profiles')
-        .select('restaurant_name, phone, address, description, logo_url')
+        .select('*')
         .eq('id', userId)
         .single();
 
-      if (profileError) {
-        console.error('❌ Erro ao carregar perfil:', profileError);
-      } else if (profileData) {
-        console.log('✅ Perfil carregado:', profileData);
-        setProfile(profileData);
+      if (error) {
+        console.error('❌ Erro ao carregar perfil:', error);
+        throw error;
       }
 
-      // Fetch categories
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('product_categories')
-        .select('id, name')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('display_order');
+      console.log('✅ Perfil carregado:', data);
+      setProfile(data);
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados do restaurante:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os dados do restaurante.",
+        variant: "destructive",
+      });
+    }
+  };
 
-      if (categoriesError) {
-        console.error('❌ Erro ao carregar categorias:', categoriesError);
-      } else if (categoriesData) {
-        console.log('✅ Categorias carregadas:', categoriesData.length);
-        setCategories(categoriesData);
-      }
-
-      // Fetch products
-      const { data: productsData, error: productsError } = await supabase
+  const fetchProducts = async () => {
+    try {
+      console.log('🔄 Carregando produtos para userId:', userId);
+      
+      const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('user_id', userId)
-        .eq('show_in_delivery', true)
         .eq('available', true)
-        .order('name');
+        .eq('show_in_delivery', true);
 
-      if (productsError) {
-        console.error('❌ Erro ao carregar produtos:', productsError);
-      } else if (productsData) {
-        console.log('✅ Produtos carregados:', productsData.length);
-        setProducts(productsData);
+      if (error) {
+        console.error('❌ Erro ao carregar produtos:', error);
+        throw error;
       }
+
+      console.log('✅ Produtos carregados:', data?.length || 0);
+      setProducts(data || []);
+      
+      const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
+      setCategories(uniqueCategories);
+      
     } catch (error) {
-      console.error('❌ Erro geral ao carregar menu:', error);
+      console.error('❌ Erro ao carregar produtos:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o cardápio.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchProductVariations = async (productId: string) => {
     try {
-      console.log('🔄 Buscando variações para produto:', productId);
+      console.log('🔄 Carregando variações para produto:', productId);
       
       const { data, error } = await supabase
         .from('product_variations')
@@ -146,35 +156,11 @@ const MenuDigital: React.FC = () => {
 
       if (error) {
         console.error('❌ Erro ao carregar variações:', error);
-        return [];
+        throw error;
       }
-      
-      console.log('✅ Variações encontradas:', data?.length || 0);
-      
-      const transformedData = (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('❌ Erro ao parsear opções:', e);
-          parsedOptions = [];
-        }
 
-        return {
-          id: item.id,
-          name: item.name,
-          options: Array.isArray(parsedOptions) ? parsedOptions : [],
-          max_selections: item.max_selections || 1,
-          required: item.required || false
-        };
-      });
-      
-      console.log('✅ Variações transformadas:', transformedData);
-      return transformedData;
+      console.log('✅ Variações carregadas:', data?.length || 0, data);
+      return data || [];
     } catch (error) {
       console.error('❌ Erro ao carregar variações:', error);
       return [];
@@ -197,19 +183,27 @@ const MenuDigital: React.FC = () => {
     }
   };
 
+  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string) => {
+    console.log('🔄 Adicionando produto personalizado ao carrinho:', {
+      product: product.name,
+      quantity,
+      variations: selectedVariations,
+      notes
+    });
+    
+    addToCart(product, quantity, selectedVariations, notes);
+    setShowVariationModal(false);
+    setSelectedProduct(null);
+    setProductVariations([]);
+  };
+
   const handlePlaceOrder = async (orderData: any) => {
     try {
       console.log('🔄 Finalizando pedido:', orderData);
-      
-      const orderNumber = `WEB-${Date.now()}`;
-      
-      const { data: order, error } = await supabase
+
+      const { data, error } = await supabase
         .from('orders')
-        .insert([{
-          ...orderData,
-          order_number: orderNumber,
-          status: 'pending'
-        }])
+        .insert([orderData])
         .select()
         .single();
 
@@ -218,248 +212,146 @@ const MenuDigital: React.FC = () => {
         throw error;
       }
 
-      console.log('✅ Pedido criado:', order);
+      console.log('✅ Pedido criado:', data);
 
-      // Send to kitchen
-      try {
-        await sendToKitchen({
-          user_id: orderData.user_id,
-          order_number: orderNumber,
-          customer_name: orderData.customer_name,
-          customer_phone: orderData.customer_phone,
-          items: orderData.items,
-          total: orderData.total,
-          payment_method: orderData.payment_method,
-          order_type: orderData.order_type
-        });
-        console.log('✅ Pedido enviado para cozinha');
-      } catch (kitchenError) {
-        console.error('❌ Erro ao enviar para a cozinha:', kitchenError);
-      }
+      // Enviar para o KDS se aplicável
+      await sendToKitchen(orderData);
 
       toast({
-        title: "Pedido enviado!",
-        description: `Seu pedido #${orderNumber} foi enviado com sucesso. Entraremos em contato em breve.`,
+        title: "Pedido realizado com sucesso!",
+        description: `Seu pedido ${orderData.order_number} foi recebido e está sendo preparado.`,
       });
 
       clearCart();
-      setShowCheckout(false);
+      setShowCheckoutModal(false);
     } catch (error) {
-      console.error('❌ Erro ao enviar pedido:', error);
+      console.error('❌ Erro ao finalizar pedido:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao enviar pedido. Tente novamente.",
-        variant: "destructive"
+        title: "Erro ao finalizar pedido",
+        description: "Tente novamente ou entre em contato conosco.",
+        variant: "destructive",
       });
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || product.category_id === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  const productsByCategory = (category: string) => 
+    products.filter(product => product.category === category);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-background">
+      {/* Header do Restaurante */}
+      <div className="bg-primary text-primary-foreground p-6">
+        <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4">
             {profile?.logo_url && (
               <img 
                 src={profile.logo_url} 
                 alt="Logo"
-                className="w-12 h-12 object-cover rounded-full"
+                className="w-16 h-16 rounded-full object-cover"
               />
             )}
-            <div className="flex-1">
-              <h1 className="text-xl font-bold">
-                {profile?.restaurant_name || 'Cardápio Digital'}
+            <div>
+              <h1 className="text-2xl font-bold">
+                {profile?.restaurant_name || 'Restaurante'}
               </h1>
               {profile?.description && (
-                <p className="text-sm text-muted-foreground">{profile.description}</p>
+                <p className="text-primary-foreground/80">{profile.description}</p>
               )}
             </div>
           </div>
+          
+          <div className="mt-4 flex flex-wrap gap-4 text-sm">
+            {profile?.phone && (
+              <div className="flex items-center gap-1">
+                <Phone className="h-4 w-4" />
+                {profile.phone}
+              </div>
+            )}
+            {profile?.opening_hours && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-4 w-4" />
+                {profile.opening_hours}
+              </div>
+            )}
+            {profile?.address && (
+              <div className="flex items-center gap-1">
+                <MapPin className="h-4 w-4" />
+                {profile.address}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar produtos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          <Button
-            variant={selectedCategory === 'all' ? 'default' : 'outline'}
-            onClick={() => setSelectedCategory('all')}
-            className="shrink-0"
-          >
-            Todos
-          </Button>
-          {categories.map(category => (
-            <Button
-              key={category.id}
-              variant={selectedCategory === category.id ? 'default' : 'outline'}
-              onClick={() => setSelectedCategory(category.id)}
-              className="shrink-0"
-            >
-              {category.name}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Products Grid */}
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredProducts.map(product => (
-            <Card 
-              key={product.id} 
-              className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => handleProductClick(product)}
-            >
-              <CardContent className="p-4">
-                <div className="flex gap-4">
-                  {product.image_url && (
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-20 h-20 object-cover rounded-lg"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-semibold mb-1">{product.name}</h3>
-                    {product.description && (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                        {product.description}
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-lg text-primary">
-                        R$ {product.price.toFixed(2)}
-                      </span>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Adicionar
-                      </Button>
-                    </div>
-                  </div>
+      {/* Cardápio */}
+      <div className="max-w-4xl mx-auto p-4 pb-24">
+        {categories.length > 0 ? (
+          <Tabs defaultValue={categories[0]} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 mb-6">
+              {categories.map(category => (
+                <TabsTrigger key={category} value={category}>
+                  {category}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            
+            {categories.map(category => (
+              <TabsContent key={category} value={category}>
+                <div className="grid gap-4">
+                  {productsByCategory(category).map(product => (
+                    <Card key={product.id} className="overflow-hidden">
+                      <div className="flex">
+                        {product.image_url && (
+                          <img 
+                            src={product.image_url} 
+                            alt={product.name}
+                            className="w-24 h-24 object-cover"
+                          />
+                        )}
+                        <div className="flex-1 p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-lg">{product.name}</h3>
+                              {product.description && (
+                                <p className="text-muted-foreground text-sm mt-1">
+                                  {product.description}
+                                </p>
+                              )}
+                              <p className="text-primary font-bold text-lg mt-2">
+                                R$ {product.price.toFixed(2)}
+                              </p>
+                            </div>
+                            <Button 
+                              onClick={() => handleProductClick(product)}
+                              size="sm"
+                              className="ml-4"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Adicionar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">Nenhum produto encontrado.</p>
+              </TabsContent>
+            ))}
+          </Tabs>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Nenhum produto disponível no momento.</p>
           </div>
         )}
       </div>
-
-      {/* Cart Bottom Bar */}
-      <CartBottomBar
-        itemCount={getCartItemCount()}
-        total={getCartTotal()}
-        onOpenCart={() => setIsDrawerOpen(true)}
-      />
-
-      {/* Cart Drawer */}
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <DrawerContent className="max-h-[80vh]">
-          <DrawerHeader>
-            <DrawerTitle>Carrinho ({getCartItemCount()} itens)</DrawerTitle>
-          </DrawerHeader>
-          <div className="p-4 space-y-4 overflow-y-auto">
-            {cart.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Seu carrinho está vazio
-              </p>
-            ) : (
-              <>
-                {cart.map((item, index) => (
-                  <Card key={index}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{item.name}</h4>
-                          {item.selectedOptions && item.selectedOptions.length > 0 && (
-                            <p className="text-sm text-muted-foreground">
-                              {item.selectedOptions.join(', ')}
-                            </p>
-                          )}
-                          {item.notes && (
-                            <p className="text-sm text-muted-foreground italic">
-                              Obs: {item.notes}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeFromCart(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => updateCartItem(index, item.quantity - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="font-medium w-8 text-center">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => updateCartItem(index, item.quantity + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <span className="font-bold">R$ {item.subtotal.toFixed(2)}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                
-                <div className="border-t pt-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-bold">Total:</span>
-                    <span className="text-lg font-bold">R$ {getCartTotal().toFixed(2)}</span>
-                  </div>
-                  <Button 
-                    onClick={() => {
-                      setIsDrawerOpen(false);
-                      setShowCheckout(true);
-                    }}
-                    className="w-full"
-                    size="lg"
-                  >
-                    Finalizar Pedido
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </DrawerContent>
-      </Drawer>
 
       {/* Modals */}
       {selectedProduct && (
@@ -468,29 +360,29 @@ const MenuDigital: React.FC = () => {
           onClose={() => {
             setShowVariationModal(false);
             setSelectedProduct(null);
+            setProductVariations([]);
           }}
           product={selectedProduct}
           variations={productVariations}
-          onAddToCart={addToCart}
+          onAddToCart={handleAddToCart}
         />
       )}
 
       <CheckoutModal
-        isOpen={showCheckout}
-        onClose={() => setShowCheckout(false)}
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
         cart={cart}
         total={getCartTotal()}
         onPlaceOrder={handlePlaceOrder}
         userId={userId}
       />
 
-      {/* WhatsApp Button */}
-      {profile?.phone && (
-        <WhatsAppButton
-          phoneNumber={profile.phone}
-          message="Olá! Gostaria de fazer um pedido pelo cardápio digital."
-        />
-      )}
+      {/* Carrinho Fixo */}
+      <CartBottomBar
+        itemCount={getCartItemCount()}
+        total={getCartTotal()}
+        onOpenCart={() => setShowCheckoutModal(true)}
+      />
     </div>
   );
 };

@@ -56,7 +56,10 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
 
   const handleVariationChange = (variationId: string, optionName: string, optionPrice: number, isSelected: boolean) => {
     const variation = variations.find(v => v.id === variationId);
-    if (!variation) return;
+    if (!variation) {
+      console.error('❌ Variação não encontrada:', variationId);
+      return;
+    }
 
     console.log('🔄 Alterando variação:', {
       variationId,
@@ -70,19 +73,22 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
       const current = prev[variationId] || [];
       
       if (variation.max_selections === 1) {
-        // Radio button behavior
+        // Radio button behavior - apenas uma seleção
         return {
           ...prev,
           [variationId]: isSelected ? [{ name: optionName, price: optionPrice }] : []
         };
       } else {
-        // Checkbox behavior
+        // Checkbox behavior - múltiplas seleções
         if (isSelected) {
           if (current.length < variation.max_selections) {
             return {
               ...prev,
               [variationId]: [...current, { name: optionName, price: optionPrice }]
             };
+          } else {
+            console.log('⚠️ Limite máximo de seleções atingido');
+            return prev;
           }
         } else {
           return {
@@ -91,7 +97,6 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
           };
         }
       }
-      return prev;
     });
   };
 
@@ -106,19 +111,32 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
       }
     });
     
+    console.log('💰 Cálculo de preço total:', {
+      basePrice: product.price,
+      quantity,
+      variationPrice: total - (product.price * quantity),
+      total
+    });
+    
     return total;
   };
 
   const canAddToCart = () => {
-    return variations.every(variation => {
+    const canAdd = variations.every(variation => {
       if (!variation.required) return true;
       const selected = selectedVariations[variation.id];
       return selected && selected.length > 0;
     });
+    
+    console.log('✅ Pode adicionar ao carrinho:', canAdd);
+    return canAdd;
   };
 
   const handleAddToCart = () => {
-    if (!canAddToCart()) return;
+    if (!canAddToCart()) {
+      console.log('❌ Não pode adicionar - validação falhou');
+      return;
+    }
     
     const formattedVariations = Object.entries(selectedVariations).map(([variationId, options]) => ({
       variationId,
@@ -133,7 +151,6 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
     });
     
     onAddToCart(product, quantity, formattedVariations, notes);
-    onClose();
     
     // Reset form
     setQuantity(1);
@@ -142,7 +159,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   };
 
   if (!variations || variations.length === 0) {
-    console.log('❌ Nenhuma variação encontrada');
+    console.log('❌ Nenhuma variação encontrada, modal não deveria abrir');
     return null;
   }
 
@@ -154,6 +171,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
         </DialogHeader>
         
         <div className="space-y-6">
+          {/* Informações do Produto */}
           <div className="flex items-center gap-4">
             {product.image_url && (
               <img 
@@ -173,6 +191,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
             </div>
           </div>
 
+          {/* Variações */}
           {variations.map(variation => (
             <Card key={variation.id}>
               <CardHeader className="pb-3">
@@ -216,6 +235,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
                   <div className="space-y-2">
                     {variation.options.map(option => {
                       const isSelected = selectedVariations[variation.id]?.some((item: any) => item.name === option.name) || false;
+                      const isDisabled = !isSelected && (selectedVariations[variation.id]?.length || 0) >= variation.max_selections;
                       
                       return (
                         <div key={option.name} className="flex items-center justify-between">
@@ -223,11 +243,17 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
                             <Checkbox
                               id={`${variation.id}-${option.name}`}
                               checked={isSelected}
+                              disabled={isDisabled}
                               onCheckedChange={(checked) => 
                                 handleVariationChange(variation.id, option.name, option.price, checked as boolean)
                               }
                             />
-                            <Label htmlFor={`${variation.id}-${option.name}`}>{option.name}</Label>
+                            <Label 
+                              htmlFor={`${variation.id}-${option.name}`}
+                              className={isDisabled ? "text-muted-foreground" : ""}
+                            >
+                              {option.name}
+                            </Label>
                           </div>
                           {option.price > 0 && (
                             <span className="text-sm text-muted-foreground">
@@ -243,6 +269,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
             </Card>
           ))}
 
+          {/* Observações */}
           <div className="space-y-4">
             <div>
               <Label htmlFor="notes">Observações</Label>
@@ -255,12 +282,14 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
               />
             </div>
 
+            {/* Quantidade e Total */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  disabled={quantity <= 1}
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
@@ -282,6 +311,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
               </div>
             </div>
 
+            {/* Botões de Ação */}
             <div className="flex gap-2">
               <Button variant="outline" onClick={onClose} className="flex-1">
                 Cancelar
