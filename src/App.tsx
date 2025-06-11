@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import RouteGuard from '@/components/auth/RouteGuard';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 // Pages
 import Index from '@/pages/Index';
@@ -32,7 +33,14 @@ import Configuracoes from '@/pages/Configuracoes';
 import Subscription from '@/pages/Subscription';
 import NotFound from '@/pages/NotFound';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+});
 
 function App() {
   return (
@@ -48,7 +56,7 @@ function App() {
                 <Route path="/menu-digital" element={<MenuDigital />} />
                 <Route path="/menu-enhanced" element={<MenuDigitalEnhanced />} />
                 
-                {/* Protected routes */}
+                {/* Protected routes with Dashboard Layout */}
                 <Route path="/dashboard" element={
                   <RouteGuard>
                     <Dashboard />
