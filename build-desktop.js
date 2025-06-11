@@ -22,24 +22,42 @@ async function buildDesktop() {
       throw new Error('Electron directory not found');
     }
     
-    // Use npm for electron dependencies (more reliable than bun for native deps)
+    // Clean install for better compatibility
+    console.log('🧹 Cleaning electron dependencies...');
+    const nodeModulesPath = path.join(electronDir, 'node_modules');
+    if (fs.existsSync(nodeModulesPath)) {
+      await runCommand('rm', ['-rf', 'node_modules'], electronDir);
+    }
+    
+    // Install dependencies
     await runCommand('npm', ['install'], electronDir);
     
-    // Step 3: Build the desktop app
+    // Step 3: Rebuild native dependencies for electron
+    console.log('🔧 Rebuilding native dependencies...');
+    await runCommand('npm', ['run', 'rebuild'], electronDir);
+    
+    // Step 4: Build the desktop app
     console.log('🖥️ Building desktop application...');
     await runCommand('npm', ['run', 'build'], electronDir);
     
     console.log('✅ Desktop application built successfully!');
     console.log('📂 Output directory: dist-electron/');
+    console.log('💡 Tip: Use the portable version if you encounter installation issues');
     
   } catch (error) {
     console.error('❌ Build failed:', error.message);
+    console.log('\n🔍 Troubleshooting tips:');
+    console.log('- Make sure you have Visual Studio Build Tools installed on Windows');
+    console.log('- Try running as administrator');
+    console.log('- Check if Python 3.x is installed and accessible');
     process.exit(1);
   }
 }
 
 function runCommand(command, args, cwd) {
   return new Promise((resolve, reject) => {
+    console.log(`Running: ${command} ${args.join(' ')}`);
+    
     const child = spawn(command, args, {
       cwd,
       stdio: 'inherit',

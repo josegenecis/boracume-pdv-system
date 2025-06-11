@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Printer,
   Scale,
-  Wifi
+  Wifi,
+  AlertTriangle
 } from 'lucide-react';
 
 interface OSInfo {
@@ -23,6 +24,7 @@ interface OSInfo {
   downloadUrl: string;
   fileSize: string;
   version: string;
+  type: 'installer' | 'portable';
 }
 
 const Downloads = () => {
@@ -38,25 +40,36 @@ const Downloads = () => {
 
   const releases: OSInfo[] = [
     {
-      name: 'Windows',
+      name: 'Windows (Instalador)',
       icon: <Monitor className="w-6 h-6" />,
       downloadUrl: '/dist-electron/Bora Cume Hub Desktop Setup 1.0.0.exe',
       fileSize: '85 MB',
-      version: '1.0.0'
+      version: '1.0.0',
+      type: 'installer'
+    },
+    {
+      name: 'Windows (Portátil)',
+      icon: <Monitor className="w-6 h-6" />,
+      downloadUrl: '/dist-electron/Bora Cume Hub Desktop 1.0.0.exe',
+      fileSize: '82 MB',
+      version: '1.0.0',
+      type: 'portable'
     },
     {
       name: 'macOS',
       icon: <Monitor className="w-6 h-6" />,
       downloadUrl: '/dist-electron/Bora Cume Hub Desktop-1.0.0.dmg',
       fileSize: '90 MB',
-      version: '1.0.0'
+      version: '1.0.0',
+      type: 'installer'
     },
     {
       name: 'Linux',
       icon: <Monitor className="w-6 h-6" />,
       downloadUrl: '/dist-electron/Bora Cume Hub Desktop-1.0.0.AppImage',
       fileSize: '88 MB',
-      version: '1.0.0'
+      version: '1.0.0',
+      type: 'portable'
     }
   ];
 
@@ -84,6 +97,9 @@ const Downloads = () => {
   ];
 
   const getRecommendedRelease = () => {
+    if (detectedOS === 'Windows') {
+      return releases.find(release => release.name === 'Windows (Portátil)') || releases[1];
+    }
     return releases.find(release => release.name === detectedOS) || releases[0];
   };
 
@@ -108,6 +124,18 @@ const Downloads = () => {
         </div>
       </div>
 
+      {/* Alerta sobre Windows SmartScreen */}
+      {detectedOS === 'Windows' && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
+            <strong>Importante para usuários Windows:</strong> O Windows pode exibir um aviso de segurança. 
+            Clique em "Mais informações" e depois "Executar mesmo assim" para prosseguir. 
+            Recomendamos a versão portátil para evitar problemas de instalação.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Alerta de detecção do SO */}
       {detectedOS !== 'Unknown' && (
         <Alert>
@@ -128,6 +156,7 @@ const Downloads = () => {
           </div>
           <CardDescription>
             Versão otimizada para {detectedOS || 'seu sistema'}
+            {getRecommendedRelease().type === 'portable' && ' (Não requer instalação)'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -197,9 +226,11 @@ const Downloads = () => {
                       <h3 className="font-medium">{release.name}</h3>
                       <p className="text-sm text-muted-foreground">
                         Versão {release.version} • {release.fileSize}
+                        {release.type === 'portable' && ' • Portátil'}
                       </p>
                     </div>
-                    {release.name === detectedOS && (
+                    {(release.name.includes(detectedOS) || 
+                      (detectedOS === 'Windows' && release.name === 'Windows (Portátil)')) && (
                       <Badge variant="secondary">Recomendado</Badge>
                     )}
                   </div>
@@ -233,12 +264,26 @@ const Downloads = () => {
                 <Monitor className="w-4 h-4" />
                 Windows
               </h4>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground ml-6">
-                <li>Baixe o arquivo .exe</li>
-                <li>Execute o instalador como administrador</li>
-                <li>Siga as instruções do assistente de instalação</li>
-                <li>Execute o aplicativo e faça login com suas credenciais</li>
-              </ol>
+              <div className="ml-6 space-y-3">
+                <div>
+                  <h5 className="font-medium text-sm">Versão Portátil (Recomendada):</h5>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
+                    <li>Baixe o arquivo portátil (.exe)</li>
+                    <li>Se aparecer aviso do Windows, clique em "Mais informações" → "Executar mesmo assim"</li>
+                    <li>Execute o arquivo diretamente (não precisa instalar)</li>
+                    <li>Faça login com suas credenciais</li>
+                  </ol>
+                </div>
+                <div>
+                  <h5 className="font-medium text-sm">Versão Instalador:</h5>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
+                    <li>Baixe o arquivo de instalação (.exe)</li>
+                    <li>Execute como administrador</li>
+                    <li>Siga as instruções do assistente</li>
+                    <li>Execute o aplicativo e faça login</li>
+                  </ol>
+                </div>
+              </div>
             </div>
 
             <div>
