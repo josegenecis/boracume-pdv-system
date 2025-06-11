@@ -1,259 +1,92 @@
-
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Separator } from '@/components/ui/separator';
-import { Plus, Minus, Trash2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Minus, Trash2, Calculator, DollarSign, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from './ProductSelectionModal';
 
-interface Product {
+interface CartItem {
   id: string;
-  name: string;
+  product_id: string;
+  product_name: string;
   price: number;
-  image_url?: string;
-  available: boolean;
-  category: string;
-  description?: string;
-  weight_based?: boolean;
-  send_to_kds?: boolean;
-}
-
-interface CartItem extends Product {
   quantity: number;
+  subtotal: number;
   options?: string[];
   notes?: string;
-}
-
-interface DeliveryZone {
-  id: string;
-  name: string;
-  delivery_fee: number;
-  minimum_order: number;
 }
 
 interface Table {
   id: string;
   table_number: number;
-  capacity: number;
   status: string;
-  location?: string;
+  capacity: number;
 }
 
-interface CustomerData {
-  name: string;
-  phone: string;
-  address: string;
-  deliveryZoneId: string;
-  tableId: string;
-}
-
-interface ProductVariation {
-  id: string;
-  name: string;
-  required: boolean;
-  max_selections: number;
-  options: Array<{name: string; price: number}>;
-}
-
-const PDVForm = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('dinheiro');
-  const [changeAmount, setChangeAmount] = useState<number | null>(null);
-  const [orderType, setOrderType] = useState<'dine_in' | 'delivery' | 'takeaway'>('dine_in');
-  const [customerData, setCustomerData] = useState<CustomerData>({
-    name: '',
-    phone: '',
-    address: '',
-    deliveryZoneId: '',
-    tableId: ''
-  });
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+const PDVForm: React.FC = () => {
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [changeAmount, setChangeAmount] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [tables, setTables] = useState<Table[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const { toast } = useToast();
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+
   const { user } = useAuth();
+  const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
-  useEffect(() => {
-    fetchProducts();
-    fetchDeliveryZones();
-    fetchTables();
-  }, []);
-
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('available', true)
-        .eq('available_pdv', true)
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar produtos:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar produtos.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const fetchDeliveryZones = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('active', true)
-        .order('name');
-
-      if (error) throw error;
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar zonas de entrega:', error);
-    }
-  };
-
-  const fetchTables = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('status', 'available')
-        .order('table_number');
-
-      if (error) throw error;
-      setTables(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar mesas:', error);
-    }
-  };
-
-  const fetchProductVariations = async (productId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('product_variations')
-        .select('*')
-        .eq('product_id', productId)
-        .order('name');
-
-      if (error) throw error;
-      
-      // Transform the data to match our interface
-      const transformedData = (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
-
-        return {
-          id: item.id,
-          name: item.name,
-          required: item.required,
-          max_selections: item.max_selections,
-          options: Array.isArray(parsedOptions) ? parsedOptions : []
-        };
-      });
-      
-      return transformedData;
-    } catch (error) {
-      console.error('Erro ao carregar variações:', error);
-      return [];
-    }
-  };
-
-  const handleProductClick = async (product: Product) => {
-    const variations = await fetchProductVariations(product.id);
+  const addToCart = (product: any) => {
+    const existingItem = cart.find(item => item.product_id === product.id);
     
-    if (variations.length > 0) {
-      setSelectedProduct(product);
-      setProductVariations(variations);
-      setShowProductModal(true);
+    if (existingItem) {
+      updateQuantity(existingItem.id, existingItem.quantity + 1);
     } else {
-      // Adicionar diretamente se não há variações
-      addToCart(product, 1, [], '');
+      const newItem: CartItem = {
+        id: Date.now().toString(),
+        product_id: product.id,
+        product_name: product.name,
+        price: product.price,
+        quantity: 1,
+        subtotal: product.price,
+        options: product.selectedOptions || [],
+        notes: product.notes || ''
+      };
+      setCart([...cart, newItem]);
     }
   };
 
-  const addToCart = (product: Product, quantity: number = 1, options: string[] = [], notes: string = '') => {
-    setCartItems(prev => {
-      const existing = prev.find(item => 
-        item.id === product.id && 
-        JSON.stringify(item.options) === JSON.stringify(options) &&
-        item.notes === notes
-      );
-      
-      if (existing) {
-        return prev.map(item =>
-          item === existing
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-      
-      return [...prev, { 
-        ...product, 
-        quantity, 
-        options: options.length > 0 ? options : undefined,
-        notes: notes || undefined
-      }];
-    });
-  };
-
-  const removeFromCart = (index: number) => {
-    setCartItems(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateQuantity = (index: number, newQuantity: number) => {
+  const updateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
-      removeFromCart(index);
+      removeFromCart(itemId);
       return;
     }
-    setCartItems(prev =>
-      prev.map((item, i) =>
-        i === index ? { ...item, quantity: newQuantity } : item
-      )
-    );
+
+    setCart(cart.map(item => 
+      item.id === itemId 
+        ? { ...item, quantity: newQuantity, subtotal: item.price * newQuantity }
+        : item
+    ));
+  };
+
+  const removeFromCart = (itemId: string) => {
+    setCart(cart.filter(item => item.id !== itemId));
   };
 
   const getTotalValue = () => {
-    return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
-  };
-
-  const getDeliveryFee = () => {
-    const selectedZone = deliveryZones.find(zone => zone.id === customerData.deliveryZoneId);
-    return selectedZone ? selectedZone.delivery_fee : 0;
-  };
-
-  const getFinalTotal = () => {
-    return getTotalValue() + (orderType === 'delivery' ? getDeliveryFee() : 0);
+    return cart.reduce((total, item) => total + item.subtotal, 0);
   };
 
   const formatCurrency = (value: number) => {
@@ -264,470 +97,372 @@ const PDVForm = () => {
   };
 
   const generateOrderNumber = () => {
-    const now = new Date();
-    const formattedDate = format(now, 'yyMMdd', { locale: ptBR });
-    const randomNumber = Math.floor(Math.random() * 1000);
-    return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
+    return `PDV${Date.now()}`;
   };
 
-  const resetForm = () => {
-    setCartItems([]);
-    setSearchTerm('');
-    setPaymentMethod('dinheiro');
-    setChangeAmount(null);
-    setCustomerData({
-      name: '',
-      phone: '',
-      address: '',
-      deliveryZoneId: '',
-      tableId: ''
-    });
-  };
-
-  const calculateChange = (amountPaid: number) => {
-    const total = getFinalTotal();
-    const change = amountPaid - total;
-    setChangeAmount(change > 0 ? change : null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (cartItems.length === 0) {
+  const addToTable = async () => {
+    if (!selectedTable || cart.length === 0) {
       toast({
-        title: "Carrinho vazio",
-        description: "Adicione produtos antes de finalizar o pedido.",
-        variant: "destructive",
+        title: "Erro",
+        description: "Selecione uma mesa e adicione produtos ao carrinho.",
+        variant: "destructive"
       });
       return;
     }
 
-    // Validação dos dados do cliente apenas para delivery
-    if (orderType === 'delivery') {
-      if (!customerData.name || !customerData.phone || !customerData.address) {
-        toast({
-          title: "Dados obrigatórios",
-          description: "Para delivery, preencha nome, telefone e endereço.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    // Validação da mesa para pedidos no local
-    if (orderType === 'dine_in' && !customerData.tableId) {
-      toast({
-        title: "Mesa obrigatória",
-        description: "Selecione uma mesa para o pedido.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-
+    setIsLoading(true);
     try {
-      const orderNumber = generateOrderNumber();
-      
-      const orderItems = cartItems.map(item => ({
-        product_id: item.id,
-        product_name: item.name,
+      const orderItems = cart.map(item => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
         price: item.price,
         quantity: item.quantity,
-        subtotal: item.price * item.quantity,
+        subtotal: item.subtotal,
         options: item.options || [],
         notes: item.notes || ''
       }));
 
-      const orderData = {
-        user_id: user?.id,
-        order_number: orderNumber,
-        customer_name: orderType === 'dine_in' ? (customerData.name || 'Cliente Local') : customerData.name,
-        customer_phone: orderType === 'dine_in' ? null : customerData.phone,
-        customer_address: orderType === 'dine_in' ? null : customerData.address,
-        delivery_zone_id: orderType === 'delivery' ? customerData.deliveryZoneId : null,
-        table_id: orderType === 'dine_in' ? customerData.tableId : null,
-        items: orderItems,
-        total: getFinalTotal(),
-        delivery_fee: orderType === 'delivery' ? getDeliveryFee() : 0,
-        payment_method: paymentMethod,
-        change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
-        status: 'pending',
-        order_type: orderType,
-        estimated_time: orderType === 'delivery' ? '30-45 min' : '15-20 min'
-      };
-
-      // Salvar pedido
-      const { data: order, error } = await supabase
-        .from('orders')
-        .insert([orderData])
-        .select()
+      const { data: existingAccount } = await (supabase as any)
+        .from('table_accounts')
+        .select('*')
+        .eq('table_id', selectedTable)
+        .eq('status', 'open')
         .single();
 
-      if (error) throw error;
+      if (existingAccount) {
+        const updatedItems = [...existingAccount.items, ...orderItems];
+        const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
 
-      // Atualizar status da mesa se for pedido no local
-      if (orderType === 'dine_in' && customerData.tableId) {
-        await supabase
-          .from('tables')
-          .update({ status: 'occupied' })
-          .eq('id', customerData.tableId);
-      }
+        const { error } = await (supabase as any)
+          .from('table_accounts')
+          .update({
+            items: updatedItems,
+            total: newTotal
+          })
+          .eq('id', existingAccount.id);
 
-      // Enviar para a cozinha apenas produtos que devem ir para o KDS
-      const itemsForKitchen = orderItems.filter(item => {
-        const product = products.find(p => p.id === item.product_id);
-        return product?.send_to_kds;
-      });
+        if (error) throw error;
+      } else {
+        const total = getTotalValue();
+        
+        const { error } = await (supabase as any)
+          .from('table_accounts')
+          .insert({
+            user_id: user?.id,
+            table_id: selectedTable,
+            items: orderItems,
+            total: total,
+            status: 'open'
+          });
 
-      if (itemsForKitchen.length > 0) {
-        await sendToKitchen({
-          ...orderData,
-          order_number: orderNumber,
-          items: itemsForKitchen
-        });
+        if (error) throw error;
       }
 
       toast({
-        title: "Pedido criado com sucesso!",
-        description: `Pedido #${orderNumber} foi registrado${itemsForKitchen.length > 0 ? ' e enviado para a cozinha' : ''}.`,
+        title: "Sucesso!",
+        description: "Produtos adicionados à mesa com sucesso.",
       });
 
-      resetForm();
-      // Recarregar mesas para atualizar status
-      fetchTables();
-    } catch (error: any) {
-      console.error('Erro ao criar pedido:', error);
+      setCart([]);
+      setSelectedTable('');
+    } catch (error) {
+      console.error('Erro ao adicionar à mesa:', error);
       toast({
-        title: "Erro ao criar pedido",
-        description: error.message || "Não foi possível processar o pedido.",
+        title: "Erro",
+        description: "Não foi possível adicionar os produtos à mesa.",
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    product.available !== false
-  );
+  const finalizeSale = async () => {
+    if (cart.length === 0 || !paymentMethod) {
+      toast({
+        title: "Erro",
+        description: "Adicione produtos ao carrinho e selecione o método de pagamento.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const orderData = {
+        user_id: user?.id,
+        order_number: generateOrderNumber(),
+        customer_name: customerName || 'Cliente Balcão',
+        customer_phone: customerPhone || null,
+        items: cart,
+        total: getTotalValue(),
+        payment_method: paymentMethod,
+        change_amount: changeAmount ? parseFloat(changeAmount) : null,
+        status: 'completed',
+        order_type: 'local',
+        table_id: selectedTable || null
+      };
+
+      const { error } = await supabase
+        .from('orders')
+        .insert([orderData]);
+
+      if (error) throw error;
+
+      await sendToKitchen(orderData);
+
+      toast({
+        title: "Venda finalizada!",
+        description: `Pedido ${orderData.order_number} foi processado com sucesso.`,
+      });
+
+      // Reset form
+      setCart([]);
+      setCustomerName('');
+      setCustomerPhone('');
+      setPaymentMethod('');
+      setChangeAmount('');
+      setOrderNotes('');
+      setSelectedTable('');
+    } catch (error) {
+      console.error('Erro ao finalizar venda:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível finalizar a venda.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tables')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('table_number');
+
+      if (error) throw error;
+      setTables(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar mesas:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchTables();
+  }, [user]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Product List */}
+      {/* Produtos e Carrinho */}
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>Produtos</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign size={20} />
+              Produtos
+            </CardTitle>
+            <CardDescription>
+              Adicione produtos ao carrinho
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Input
-              type="text"
-              placeholder="Buscar produto..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <Button 
+              onClick={() => setIsProductModalOpen(true)}
+              className="w-full"
+            >
+              <Plus size={16} className="mr-2" />
+              Adicionar Produto
+            </Button>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4">
-          {filteredProducts.map(product => (
-            <Card key={product.id} className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex flex-col items-center justify-center">
-                {product.image_url && (
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="w-24 h-24 object-cover rounded-md mb-2"
-                  />
-                )}
-                <div className="text-center">
-                  <p className="font-medium text-sm">{product.name}</p>
-                  <p className="text-gray-500 text-xs">{formatCurrency(product.price)}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 w-full"
-                  onClick={() => handleProductClick(product)}
-                >
-                  Adicionar
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Order Summary and Form */}
-      <div className="space-y-6">
+        {/* Carrinho */}
         <Card>
           <CardHeader>
-            <CardTitle>Resumo do Pedido</CardTitle>
+            <CardTitle>Carrinho ({cart.length} itens)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {cartItems.length === 0 ? (
-              <p className="text-center text-gray-500 py-4">
-                Nenhum item no carrinho.
+            {cart.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">
+                Nenhum produto no carrinho
               </p>
             ) : (
-              <div className="space-y-3">
-                {cartItems.map((item, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => updateQuantity(index, item.quantity - 1)}
-                        >
-                          <Minus size={16} />
-                        </Button>
-                        <span className="w-6 text-center">{item.quantity}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => updateQuantity(index, item.quantity + 1)}
-                        >
-                          <Plus size={16} />
-                        </Button>
-                        <span className="ml-2 font-medium">{item.name}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <span>{formatCurrency(item.price * item.quantity)}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeFromCart(index)}
-                          className="ml-2"
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
+              <>
+                {cart.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded">
+                    <div className="flex-1">
+                      <p className="font-medium">{item.product_name}</p>
+                      <p className="text-sm text-gray-600">
+                        {formatCurrency(item.price)} cada
+                      </p>
                     </div>
-                    
-                    {item.options && item.options.length > 0 && (
-                      <div className="ml-8 text-sm text-gray-600">
-                        {item.options.map((option, optIndex) => (
-                          <div key={optIndex}>• {option}</div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {item.notes && (
-                      <div className="ml-8 text-sm text-gray-600 italic">
-                        Obs: {item.notes}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >
+                        <Minus size={12} />
+                      </Button>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus size={12} />
+                      </Button>
+                      <span className="w-20 text-right">{formatCurrency(item.subtotal)}</span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 
                 <Separator />
-                <div className="flex justify-between font-bold">
-                  <span>Subtotal:</span>
+                
+                <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Total:</span>
                   <span>{formatCurrency(getTotalValue())}</span>
                 </div>
-                {orderType === 'delivery' && (
-                  <div className="flex justify-between">
-                    <span>Taxa de entrega:</span>
-                    <span>{formatCurrency(getDeliveryFee())}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total:</span>
-                  <span>{formatCurrency(getFinalTotal())}</span>
-                </div>
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Order Type */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Tipo de Pedido</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                defaultValue={orderType}
-                onValueChange={value => setOrderType(value as 'dine_in' | 'delivery' | 'takeaway')}
-                className="flex flex-col space-y-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dine_in" id="dine_in" />
-                  <Label htmlFor="dine_in">Comer no Local</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="delivery" id="delivery" />
-                  <Label htmlFor="delivery">Delivery</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="takeaway" id="takeaway" />
-                  <Label htmlFor="takeaway">Retirar no Local</Label>
-                </div>
-              </RadioGroup>
-            </CardContent>
-          </Card>
-
-          {/* Customer Data */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Dados do Cliente</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nome</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={customerData.name}
-                  onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
-                  required={orderType === 'delivery'}
-                  placeholder={orderType === 'dine_in' ? 'Nome (opcional)' : 'Nome do cliente *'}
-                />
-              </div>
-              {orderType !== 'dine_in' && (
-                <>
-                  <div>
-                    <Label htmlFor="phone">Telefone</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={customerData.phone}
-                      onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
-                      required={orderType === 'delivery'}
-                    />
-                  </div>
-                  {orderType === 'delivery' && (
-                    <>
-                      <div>
-                        <Label htmlFor="address">Endereço</Label>
-                        <Input
-                          id="address"
-                          type="text"
-                          value={customerData.address}
-                          onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="deliveryZone">Zona de Entrega</Label>
-                        <Select
-                          value={customerData.deliveryZoneId}
-                          onValueChange={(value) => setCustomerData({ ...customerData, deliveryZoneId: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a zona" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {deliveryZones.map(zone => (
-                              <SelectItem key={zone.id} value={zone.id}>
-                                {zone.name} ({formatCurrency(zone.delivery_fee)})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Table Selection - Only for Dine-In */}
-          {orderType === 'dine_in' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Mesa</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={customerData.tableId}
-                  onValueChange={(value) => setCustomerData({ ...customerData, tableId: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a mesa *" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tables.map(table => (
-                      <SelectItem key={table.id} value={table.id}>
-                        Mesa {table.table_number}
-                        {table.location && ` - ${table.location}`}
-                        {table.capacity && ` (${table.capacity} pessoas)`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Payment Options */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Pagamento</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <RadioGroup
-                defaultValue={paymentMethod}
-                onValueChange={setPaymentMethod}
-                className="flex flex-col space-y-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="dinheiro" id="dinheiro" />
-                  <Label htmlFor="dinheiro">Dinheiro</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="cartao" id="cartao" />
-                  <Label htmlFor="cartao">Cartão</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="pix" id="pix" />
-                  <Label htmlFor="pix">PIX</Label>
-                </div>
-              </RadioGroup>
-
-              {paymentMethod === 'dinheiro' && (
-                <div>
-                  <Label htmlFor="amountPaid">Valor Recebido</Label>
-                  <Input
-                    id="amountPaid"
-                    type="number"
-                    step="0.01"
-                    placeholder="Valor pago pelo cliente"
-                    onChange={(e) => calculateChange(parseFloat(e.target.value) || 0)}
-                  />
-                  {changeAmount !== null && (
-                    <div className="mt-2">
-                      Troco: {formatCurrency(changeAmount)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Button type="submit" size="lg" disabled={loading} className="w-full">
-            {loading ? 'Processando...' : 'Finalizar Pedido'}
-          </Button>
-        </form>
       </div>
 
-      {/* Product Selection Modal */}
+      {/* Informações do Cliente e Finalização */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users size={20} />
+              Informações do Cliente
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="customerName">Nome do Cliente</Label>
+              <Input
+                id="customerName"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Nome do cliente (opcional)"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="customerPhone">Telefone</Label>
+              <Input
+                id="customerPhone"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="(11) 99999-9999 (opcional)"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="table">Mesa (opcional)</Label>
+              <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma mesa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((table) => (
+                    <SelectItem key={table.id} value={table.id}>
+                      Mesa {table.table_number} ({table.capacity} lugares)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pagamento</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="paymentMethod">Método de Pagamento</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentMethod === 'dinheiro' && (
+              <div>
+                <Label htmlFor="changeAmount">Valor pago</Label>
+                <Input
+                  id="changeAmount"
+                  type="number"
+                  step="0.01"
+                  value={changeAmount}
+                  onChange={(e) => setChangeAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="orderNotes">Observações</Label>
+              <Textarea
+                id="orderNotes"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="Observações do pedido (opcional)"
+                rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-2">
+          {selectedTable && (
+            <Button
+              onClick={addToTable}
+              disabled={cart.length === 0 || isLoading}
+              className="w-full bg-blue-900 hover:bg-blue-800"
+              size="lg"
+            >
+              <Users size={16} className="mr-2" />
+              Adicionar à Mesa
+            </Button>
+          )}
+          
+          <Button
+            onClick={finalizeSale}
+            disabled={cart.length === 0 || !paymentMethod || isLoading}
+            className="w-full bg-green-600 hover:bg-green-700"
+            size="lg"
+          >
+            <Calculator size={16} className="mr-2" />
+            Finalizar Venda
+          </Button>
+        </div>
+      </div>
+
       <ProductSelectionModal
-        product={selectedProduct}
-        variations={productVariations}
-        isOpen={showProductModal}
-        onClose={() => {
-          setShowProductModal(false);
-          setSelectedProduct(null);
-          setProductVariations([]);
-        }}
-        onAddToCart={addToCart}
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSelectProduct={addToCart}
       />
     </div>
   );

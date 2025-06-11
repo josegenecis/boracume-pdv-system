@@ -1,44 +1,41 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Clock, Phone, MapPin } from 'lucide-react';
-import OrderStatusBadge, { OrderStatusType } from './OrderStatusBadge';
-import PaymentIcon from '../payment/PaymentIcons';
+import { Eye, Phone, MapPin, Clock, User, Package } from 'lucide-react';
+import OrderStatusBadge from './OrderStatusBadge';
+import type { OrderStatusType } from './OrderStatusBadge';
 
 interface OrderItem {
-  id: string;
-  name: string;
+  product_name: string;
   quantity: number;
   price: number;
+  subtotal: number;
   options?: string[];
   notes?: string;
-  variations?: Array<{
-    name: string;
-    options: string[];
-  }>;
 }
 
 interface Order {
   id: string;
   order_number: string;
-  customer_name: string;
+  customer_name?: string;
   customer_phone?: string;
   customer_address?: string;
   items: OrderItem[];
   total: number;
   status: OrderStatusType;
   payment_method: string;
+  order_type: string;
   created_at: string;
-  estimated_time?: number;
+  estimated_time?: string;
 }
 
 interface OrderCardProps {
   order: Order;
-  onStatusChange: (orderId: string, newStatus: OrderStatusType) => void;
-  onViewDetails?: (orderId: string) => void;
+  onStatusChange?: (orderId: string, newStatus: OrderStatusType) => void;
+  onViewDetails?: (order: Order) => void;
 }
 
 const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDetails }) => {
@@ -50,217 +47,140 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
   };
 
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(dateString).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
-  const getTimeElapsed = (dateString: string) => {
-    const now = new Date();
-    const orderTime = new Date(dateString);
-    const diffInMinutes = Math.floor((now.getTime() - orderTime.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return 'Agora';
-    if (diffInMinutes === 1) return '1 minuto';
-    return `${diffInMinutes} minutos`;
-  };
-
-  const getNextStatus = (currentStatus: OrderStatusType): OrderStatusType | null => {
-    switch (currentStatus) {
-      case 'new':
-        return 'confirmed';
-      case 'confirmed':
-        return 'preparing';
-      case 'preparing':
-        return 'ready';
-      case 'ready':
-        return 'in_delivery';
-      case 'in_delivery':
-        return 'delivered';
-      default:
-        return null;
+  const getOrderTypeColor = (type: string) => {
+    switch (type) {
+      case 'delivery': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'pickup': return 'bg-green-100 text-green-800 border-green-300';
+      case 'local': return 'bg-purple-100 text-purple-800 border-purple-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
 
-  const getNextStatusLabel = (currentStatus: OrderStatusType): string => {
-    const nextStatus = getNextStatus(currentStatus);
-    switch (nextStatus) {
-      case 'confirmed':
-        return 'Confirmar';
-      case 'preparing':
-        return 'Iniciar Preparo';
-      case 'ready':
-        return 'Marcar como Pronto';
-      case 'in_delivery':
-        return 'Enviar para Entrega';
-      case 'delivered':
-        return 'Marcar como Entregue';
-      default:
-        return 'Atualizar';
+  const getOrderTypeLabel = (type: string) => {
+    switch (type) {
+      case 'delivery': return 'Delivery';
+      case 'pickup': return 'Retirada';
+      case 'local': return 'Local';
+      default: return type;
     }
   };
-
-  const getCardBorderColor = (status: OrderStatusType): string => {
-    switch (status) {
-      case 'new':
-        return 'border-l-4 border-l-red-500';
-      case 'confirmed':
-        return 'border-l-4 border-l-blue-500';
-      case 'preparing':
-        return 'border-l-4 border-l-yellow-500';
-      case 'ready':
-        return 'border-l-4 border-l-green-500';
-      case 'in_delivery':
-        return 'border-l-4 border-l-purple-500';
-      case 'delivered':
-        return 'border-l-4 border-l-emerald-500';
-      case 'cancelled':
-        return 'border-l-4 border-l-red-600';
-      default:
-        return 'border-l-4 border-l-gray-400';
-    }
-  };
-
-  const handleStatusUpdate = () => {
-    const nextStatus = getNextStatus(order.status);
-    if (nextStatus) {
-      onStatusChange(order.id, nextStatus);
-    }
-  };
-
-  const canCancel = !['delivered', 'cancelled'].includes(order.status);
-  const canAdvance = getNextStatus(order.status) !== null;
 
   return (
-    <Card className={`w-full max-w-sm ${getCardBorderColor(order.status)} ${order.status === 'new' ? 'shadow-lg' : ''}`}>
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-base flex items-center gap-2">
-              #{order.order_number}
-              <OrderStatusBadge status={order.status} />
-              {order.status === 'new' && (
-                <Badge className="bg-red-100 text-red-800 animate-bounce text-xs">NOVO!</Badge>
-              )}
-            </CardTitle>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
-              <span className="truncate max-w-24">{order.customer_name}</span>
-              <div className="flex items-center gap-1">
-                <Clock size={10} />
-                <span>{formatTime(order.created_at)}</span>
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="font-bold text-base text-primary">
-              {formatCurrency(order.total)}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {getTimeElapsed(order.created_at)}
-            </div>
+    <Card className="w-full max-w-xs hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <CardTitle className="text-lg font-bold text-primary">
+            #{order.order_number}
+          </CardTitle>
+          <div className="flex flex-col gap-1">
+            <OrderStatusBadge status={order.status} />
+            <Badge className={`text-xs ${getOrderTypeColor(order.order_type)}`} variant="outline">
+              {getOrderTypeLabel(order.order_type)}
+            </Badge>
           </div>
         </div>
-      </CardHeader>
-      
-      <CardContent className="py-2">
-        <div className="space-y-1">
-          {order.customer_phone && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Phone size={10} />
-              <span className="truncate">{order.customer_phone}</span>
-            </div>
-          )}
-          {order.customer_address && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin size={10} />
-              <span className="truncate">{order.customer_address}</span>
-            </div>
-          )}
-        </div>
         
-        <Separator className="my-2" />
-        
-        <div className="space-y-1 max-h-24 overflow-y-auto">
-          {order.items.slice(0, 3).map((item, index) => (
-            <div key={index} className="text-xs">
-              <div className="flex justify-between">
-                <span className="truncate">{item.quantity}x {item.name}</span>
-                <span className="text-muted-foreground">{formatCurrency(item.price * item.quantity)}</span>
-              </div>
-              {item.variations && item.variations.length > 0 && (
-                <div className="ml-2 text-xs text-gray-500">
-                  {item.variations.map((variation, vIndex) => (
-                    <div key={vIndex}>
-                      • {variation.name}: {variation.options.join(', ')}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {item.options && item.options.length > 0 && (
-                <div className="ml-2 text-xs text-gray-500">
-                  • {item.options.join(', ')}
-                </div>
-              )}
-            </div>
-          ))}
-          {order.items.length > 3 && (
-            <div className="text-xs text-muted-foreground">
-              +{order.items.length - 3} itens...
-            </div>
-          )}
-        </div>
-      </CardContent>
-      
-      <CardContent className="pt-0 pb-2">
-        <div className="flex items-center gap-1 text-xs">
-          <PaymentIcon method={order.payment_method} size={12} />
-          <span className="capitalize">{order.payment_method}</span>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock size={14} />
+          <span>{formatTime(order.created_at)}</span>
           {order.estimated_time && (
             <>
-              <span className="mx-1">•</span>
+              <span>•</span>
               <span>{order.estimated_time}</span>
             </>
           )}
         </div>
-      </CardContent>
-      
-      <CardContent className="pt-0">
-        <div className="grid grid-cols-1 gap-2">
-          {canAdvance && (
-            <Button 
-              onClick={handleStatusUpdate}
-              size="sm"
-              className="w-full text-xs"
-            >
-              {getNextStatusLabel(order.status)}
-            </Button>
-          )}
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        {/* Informações do Cliente */}
+        {order.customer_name && (
+          <div className="flex items-center gap-2 text-sm">
+            <User size={14} className="text-muted-foreground" />
+            <span className="font-medium">{order.customer_name}</span>
+          </div>
+        )}
+        
+        {order.customer_phone && (
+          <div className="flex items-center gap-2 text-sm">
+            <Phone size={14} className="text-muted-foreground" />
+            <span>{order.customer_phone}</span>
+          </div>
+        )}
+        
+        {order.customer_address && (
+          <div className="flex items-start gap-2 text-sm">
+            <MapPin size={14} className="text-muted-foreground mt-0.5" />
+            <span className="text-xs leading-tight">{order.customer_address}</span>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Itens */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Package size={14} />
+            <span>Itens ({order.items.length})</span>
+          </div>
           
-          <div className="grid grid-cols-2 gap-2">
-            {onViewDetails && (
-              <Button 
-                variant="outline" 
-                onClick={() => onViewDetails(order.id)}
-                size="sm"
-                className="text-xs"
-              >
-                Detalhes
-              </Button>
-            )}
+          <div className="space-y-1">
+            {order.items.slice(0, 3).map((item, index) => (
+              <div key={index} className="text-xs bg-gray-50 p-2 rounded">
+                <div className="flex justify-between items-start">
+                  <span className="font-medium">{item.quantity}x {item.product_name}</span>
+                  <span className="text-muted-foreground">{formatCurrency(item.subtotal)}</span>
+                </div>
+                {item.options && item.options.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {item.options.join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
             
-            {canCancel && (
-              <Button 
-                variant="destructive" 
-                onClick={() => onStatusChange(order.id, 'cancelled')}
-                size="sm"
-                className="text-xs"
-              >
-                Cancelar
-              </Button>
+            {order.items.length > 3 && (
+              <div className="text-xs text-muted-foreground text-center py-1">
+                +{order.items.length - 3} item(s) adicional(s)
+              </div>
             )}
           </div>
+        </div>
+
+        <Separator />
+
+        {/* Total e Pagamento */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-medium">Total:</span>
+            <span className="text-lg font-bold text-primary">{formatCurrency(order.total)}</span>
+          </div>
+          
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">Pagamento:</span>
+            <Badge variant="outline" className="text-xs">
+              {order.payment_method.toUpperCase()}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Ações */}
+        <div className="pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onViewDetails?.(order)}
+            className="w-full"
+          >
+            <Eye size={14} className="mr-2" />
+            Ver Detalhes
+          </Button>
         </div>
       </CardContent>
     </Card>
