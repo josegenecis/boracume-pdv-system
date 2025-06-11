@@ -35,22 +35,28 @@ export const useDigitalMenuCart = () => {
     const selectedOptions: string[] = [];
     let variationPrice = 0;
 
-    selectedVariations.forEach(variation => {
-      if (Array.isArray(variation.options)) {
-        variation.options.forEach((option: any) => {
-          if (option.name) {
-            selectedOptions.push(option.name);
-            variationPrice += option.price || 0;
-          }
-        });
-      }
-    });
+    if (Array.isArray(selectedVariations)) {
+      selectedVariations.forEach(variation => {
+        if (variation && Array.isArray(variation.options)) {
+          variation.options.forEach((option: any) => {
+            if (option && option.name) {
+              selectedOptions.push(String(option.name));
+              const price = Number(option.price);
+              if (!isNaN(price)) {
+                variationPrice += price;
+              }
+            }
+          });
+        }
+      });
+    }
     
-    const itemPrice = product.price + variationPrice;
+    const basePrice = Number(product.price) || 0;
+    const itemPrice = basePrice + variationPrice;
     const subtotal = itemPrice * quantity;
     
     console.log('💰 Cálculo de preços:', {
-      basePrice: product.price,
+      basePrice,
       variationPrice,
       itemPrice,
       quantity,
@@ -61,7 +67,7 @@ export const useDigitalMenuCart = () => {
       ...product,
       quantity,
       selectedOptions,
-      notes,
+      notes: notes.trim(),
       subtotal,
       variationPrice
     };
@@ -70,8 +76,8 @@ export const useDigitalMenuCart = () => {
       // Verificar se já existe um item idêntico
       const existingIndex = prev.findIndex(item => 
         item.id === product.id &&
-        JSON.stringify(item.selectedOptions) === JSON.stringify(selectedOptions) &&
-        item.notes === notes
+        JSON.stringify(item.selectedOptions?.sort()) === JSON.stringify(selectedOptions.sort()) &&
+        item.notes === notes.trim()
       );
 
       if (existingIndex >= 0) {
@@ -101,12 +107,15 @@ export const useDigitalMenuCart = () => {
     setCart(prev => {
       const updated = [...prev];
       const item = updated[index];
-      const basePrice = item.price + item.variationPrice;
-      updated[index] = {
-        ...item,
-        quantity,
-        subtotal: basePrice * quantity
-      };
+      if (item) {
+        const basePrice = Number(item.price) || 0;
+        const variationPrice = Number(item.variationPrice) || 0;
+        updated[index] = {
+          ...item,
+          quantity,
+          subtotal: (basePrice + variationPrice) * quantity
+        };
+      }
       return updated;
     });
   };
@@ -125,13 +134,16 @@ export const useDigitalMenuCart = () => {
   };
 
   const getCartTotal = () => {
-    const total = cart.reduce((total, item) => total + item.subtotal, 0);
+    const total = cart.reduce((sum, item) => {
+      const subtotal = Number(item.subtotal) || 0;
+      return sum + subtotal;
+    }, 0);
     console.log('💰 Total do carrinho:', total);
     return total;
   };
 
   const getCartItemCount = () => {
-    const count = cart.reduce((total, item) => total + item.quantity, 0);
+    const count = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     console.log('📦 Itens no carrinho:', count);
     return count;
   };

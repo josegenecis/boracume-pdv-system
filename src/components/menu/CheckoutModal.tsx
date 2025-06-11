@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +11,6 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, Banknote, Smartphone, MapPin, Phone, User } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 interface CartItem {
   id: string;
@@ -78,42 +78,49 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return `PED-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${timestamp}`;
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!isFormValid()) {
       console.log('❌ Formulário inválido');
       return;
     }
 
-    const orderNumber = generateOrderNumber();
-    
-    const orderData = {
-      user_id: userId,
-      order_number: orderNumber,
-      customer_name: customerData.name,
-      customer_phone: customerData.phone,
-      customer_address: customerData.address,
-      delivery_zone_id: selectedZone,
-      items: cart.map(item => ({
-        product_id: item.id,
-        product_name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        subtotal: item.subtotal,
-        options: item.selectedOptions || [],
-        notes: item.notes || ''
-      })),
-      total: totalWithDelivery,
-      delivery_fee: deliveryFee,
-      payment_method: paymentMethod,
-      change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
-      order_type: 'delivery',
-      delivery_instructions: customerData.notes,
-      estimated_time: selectedZoneData?.delivery_time || '30-45 min',
-      status: 'pending'
-    };
+    setLoading(true);
+    try {
+      const orderNumber = generateOrderNumber();
+      
+      const orderData = {
+        user_id: userId,
+        order_number: orderNumber,
+        customer_name: customerData.name,
+        customer_phone: customerData.phone,
+        customer_address: customerData.address,
+        delivery_zone_id: selectedZone,
+        items: cart.map(item => ({
+          product_id: item.id,
+          product_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+          options: item.selectedOptions || [],
+          notes: item.notes || ''
+        })),
+        total: totalWithDelivery,
+        delivery_fee: deliveryFee,
+        payment_method: paymentMethod,
+        change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
+        order_type: 'delivery',
+        delivery_instructions: customerData.notes,
+        estimated_time: selectedZoneData?.delivery_time || '30-45 min',
+        status: 'pending'
+      };
 
-    console.log('🔄 Enviando pedido:', orderData);
-    onPlaceOrder(orderData);
+      console.log('🔄 Enviando pedido:', orderData);
+      await onPlaceOrder(orderData);
+    } catch (error) {
+      console.error('❌ Erro ao processar pedido:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isFormValid = () => {
@@ -126,17 +133,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentMethod !== '' &&
       (paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
     );
-    
-    console.log('✅ Validação do formulário:', {
-      name: customerData.name.trim() !== '',
-      phone: customerData.phone.trim() !== '',
-      address: customerData.address.trim() !== '',
-      zone: selectedZone !== '',
-      minimumOrder: total >= minimumOrder,
-      payment: paymentMethod !== '',
-      change: paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery,
-      isValid
-    });
     
     return isValid;
   };
@@ -338,15 +334,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </Card>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1" disabled={loading}>
               Voltar
             </Button>
             <Button 
               onClick={handlePlaceOrder} 
-              disabled={!isFormValid()}
+              disabled={!isFormValid() || loading}
               className="flex-1"
             >
-              Finalizar Pedido
+              {loading ? 'Processando...' : 'Finalizar Pedido'}
             </Button>
           </div>
         </div>

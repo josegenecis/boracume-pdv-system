@@ -7,7 +7,7 @@ import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ProductVariationModal from '@/components/menu/ProductVariationModal';
 import CheckoutModal from '@/components/menu/CheckoutModal';
@@ -90,10 +90,23 @@ const MenuDigital = () => {
       return;
     }
 
-    fetchRestaurantData();
-    fetchProducts();
-    fetchDeliveryZones();
+    fetchAllData();
   }, [userId]);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchRestaurantData(),
+        fetchProducts(),
+        fetchDeliveryZones()
+      ]);
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchRestaurantData = async () => {
     try {
@@ -131,7 +144,8 @@ const MenuDigital = () => {
         .select('*')
         .eq('user_id', userId)
         .eq('available', true)
-        .eq('show_in_delivery', true);
+        .eq('show_in_delivery', true)
+        .order('name');
 
       if (error) {
         console.error('❌ Erro ao carregar produtos:', error);
@@ -151,8 +165,6 @@ const MenuDigital = () => {
         description: "Não foi possível carregar o cardápio.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -164,7 +176,8 @@ const MenuDigital = () => {
         .from('delivery_zones')
         .select('*')
         .eq('user_id', userId)
-        .eq('active', true);
+        .eq('active', true)
+        .order('name');
 
       if (error) {
         console.error('❌ Erro ao carregar zonas de entrega:', error);
@@ -194,28 +207,59 @@ const MenuDigital = () => {
 
       console.log('✅ Variações raw carregadas:', data?.length || 0, data);
       
-      // Converter os dados do Supabase para o formato correto com validação
-      const formattedVariations: ProductVariation[] = (data || []).map(item => {
-        let options: Array<{ name: string; price: number; }> = [];
-        
-        // Validar e converter as opções
-        if (Array.isArray(item.options)) {
-          options = item.options
-            .filter((opt: any) => opt && typeof opt === 'object' && opt.name && typeof opt.price === 'number')
-            .map((opt: any) => ({
-              name: String(opt.name),
-              price: Number(opt.price)
-            }));
-        }
+      // Converter os dados do Supabase para o formato correto com validação robusta
+      const formattedVariations: ProductVariation[] = (data || [])
+        .map(item => {
+          try {
+            let options: Array<{ name: string; price: number; }> = [];
+            
+            // Validação robusta das opções
+            if (item.options) {
+              if (Array.isArray(item.options)) {
+                options = item.options
+                  .filter((opt: any) => {
+                    return opt && 
+                           typeof opt === 'object' && 
+                           opt.name && 
+                           typeof opt.name === 'string' &&
+                           opt.price !== undefined && 
+                           !isNaN(Number(opt.price));
+                  })
+                  .map((opt: any) => ({
+                    name: String(opt.name).trim(),
+                    price: Number(opt.price)
+                  }));
+              } else if (typeof item.options === 'string') {
+                // Tentar fazer parse se for string JSON
+                try {
+                  const parsed = JSON.parse(item.options);
+                  if (Array.isArray(parsed)) {
+                    options = parsed
+                      .filter((opt: any) => opt && opt.name && opt.price !== undefined)
+                      .map((opt: any) => ({
+                        name: String(opt.name).trim(),
+                        price: Number(opt.price)
+                      }));
+                  }
+                } catch (parseError) {
+                  console.warn('❌ Erro ao fazer parse das opções:', parseError);
+                }
+              }
+            }
 
-        return {
-          id: item.id,
-          name: item.name,
-          options,
-          max_selections: item.max_selections,
-          required: item.required
-        };
-      });
+            return {
+              id: item.id,
+              name: item.name || '',
+              options,
+              max_selections: Math.max(1, Number(item.max_selections) || 1),
+              required: Boolean(item.required)
+            };
+          } catch (itemError) {
+            console.error('❌ Erro ao processar variação:', itemError, item);
+            return null;
+          }
+        })
+        .filter((variation): variation is ProductVariation => variation !== null);
       
       console.log('✅ Variações formatadas:', formattedVariations);
       return formattedVariations;
@@ -273,7 +317,11 @@ const MenuDigital = () => {
       console.log('✅ Pedido criado:', data);
 
       // Enviar para o KDS se aplicável
-      await sendToKitchen(orderData);
+      try {
+        await sendToKitchen(orderData);
+      } catch (kdsError) {
+        console.warn('⚠️ Erro ao enviar para KDS (não crítico):', kdsError);
+      }
 
       toast({
         title: "Pedido realizado com sucesso!",
@@ -296,6 +344,17 @@ const MenuDigital = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!userId || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
+          <p className="text-muted-foreground">Verifique se o link está correto.</p>
+        </div>
       </div>
     );
   }
@@ -365,7 +424,7 @@ const MenuDigital = () => {
               <TabsContent key={category} value={category}>
                 <div className="grid gap-4">
                   {productsByCategory(category).map(product => (
-                    <Card key={product.id} className="overflow-hidden">
+                    <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                       <div className="flex">
                         {product.image_url && (
                           <img 
