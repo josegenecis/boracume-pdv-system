@@ -326,15 +326,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </div>
 
           {/* Seção de Variações Globais */}
-          {globalVariations.length > 0 && (
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="text-lg">Variações Globais</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Selecione as variações globais que se aplicam a este produto
-                </p>
-              </CardHeader>
-              <CardContent>
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-lg">Variações Globais</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Selecione as variações globais que se aplicam a este produto
+              </p>
+            </CardHeader>
+            <CardContent>
+              {globalVariations.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground mb-3">Nenhuma variação global encontrada</p>
+                  <p className="text-sm text-muted-foreground">
+                    Para usar variações globais, crie-as primeiro na aba "Variações Globais" da página de Produtos.
+                  </p>
+                </div>
+              ) : (
                 <div className="space-y-3">
                   {globalVariations.map((variation: any) => (
                     <div key={variation.id} className="flex items-start space-x-3">
@@ -374,9 +381,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           <div className="flex gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onCancel}>

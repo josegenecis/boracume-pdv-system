@@ -322,15 +322,19 @@ const MenuDigital = () => {
 
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
+        console.log('❌ user_id ausente:', orderData.user_id);
         throw new Error('ID do usuário é obrigatório');
       }
       if (!orderData.customer_name?.trim()) {
+        console.log('❌ customer_name ausente:', orderData.customer_name);
         throw new Error('Nome do cliente é obrigatório');
       }
       if (!orderData.customer_phone?.trim()) {
+        console.log('❌ customer_phone ausente:', orderData.customer_phone);
         throw new Error('Telefone do cliente é obrigatório');
       }
       if (!orderData.items || orderData.items.length === 0) {
+        console.log('❌ items ausentes:', orderData.items);
         throw new Error('Pedido deve ter pelo menos um item');
       }
 
@@ -338,43 +342,51 @@ const MenuDigital = () => {
 
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
-      const { data: existingCustomer, error: customerCheckError } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('user_id', orderData.user_id)
-        .eq('phone', orderData.customer_phone)
-        .maybeSingle();
+      try {
+        const { data: existingCustomer, error: customerCheckError } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('user_id', orderData.user_id)
+          .eq('phone', orderData.customer_phone)
+          .maybeSingle();
 
-      if (customerCheckError) {
-        console.error('❌ Erro ao verificar cliente existente:', customerCheckError);
+        if (customerCheckError) {
+          console.error('❌ Erro ao verificar cliente existente:', customerCheckError);
+        } else if (existingCustomer) {
+          console.log('✅ Cliente existente encontrado:', existingCustomer.id);
+          customerId = existingCustomer.id;
+        }
+      } catch (customerError) {
+        console.error('❌ Erro na verificação de cliente:', customerError);
       }
 
-      if (existingCustomer) {
-        console.log('✅ Cliente existente encontrado:', existingCustomer.id);
-        customerId = existingCustomer.id;
-      } else {
+      if (!customerId) {
         console.log('🔄 Criando novo cliente...');
         
-        // Criar novo cliente
-        const customerData = {
-          user_id: orderData.user_id,
-          name: orderData.customer_name,
-          phone: orderData.customer_phone,
-          address: orderData.customer_address
-        };
+        try {
+          // Criar novo cliente
+          const customerData = {
+            user_id: orderData.user_id,
+            name: orderData.customer_name,
+            phone: orderData.customer_phone,
+            address: orderData.customer_address
+          };
 
-        const { data: newCustomer, error: customerError } = await supabase
-          .from('customers')
-          .insert([customerData])
-          .select('id')
-          .single();
+          const { data: newCustomer, error: customerError } = await supabase
+            .from('customers')
+            .insert([customerData])
+            .select('id')
+            .single();
 
-        if (customerError) {
-          console.error('❌ Erro ao criar cliente:', customerError);
-          // Continuar sem cliente se falhar - não é crítico
-        } else {
-          console.log('✅ Cliente criado:', newCustomer.id);
-          customerId = newCustomer.id;
+          if (customerError) {
+            console.error('❌ Erro ao criar cliente:', customerError);
+            // Continuar sem cliente se falhar - não é crítico
+          } else {
+            console.log('✅ Cliente criado:', newCustomer.id);
+            customerId = newCustomer.id;
+          }
+        } catch (customerError) {
+          console.error('❌ Erro na criação de cliente:', customerError);
         }
       }
 
@@ -383,7 +395,8 @@ const MenuDigital = () => {
         orderData.customer_id = customerId;
       }
 
-      console.log('🔄 Inserindo pedido...');
+      console.log('🔄 Inserindo pedido no banco...');
+      console.log('📦 Dados finais do pedido:', JSON.stringify(orderData, null, 2));
 
       const { data, error } = await supabase
         .from('orders')
@@ -414,8 +427,8 @@ const MenuDigital = () => {
 
       console.log('✅ Pedido criado com sucesso:', data);
 
-      // Não enviar para KDS automaticamente - aguardar aceitação em Orders
-      console.log('✅ Pedido criado, aguardando aceitação para envio ao KDS');
+      // IMPORTANTE: Não enviar para KDS automaticamente - aguardar aceitação em Orders
+      console.log('✅ Pedido criado. NÃO enviando automaticamente para KDS - aguardando aceitação manual');
 
       toast({
         title: "Pedido realizado com sucesso!",
@@ -425,7 +438,8 @@ const MenuDigital = () => {
       clearCart();
       setShowCheckoutModal(false);
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido:', error);
+      console.error('❌ Erro completo ao finalizar pedido:', error);
+      console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'N/A');
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {
