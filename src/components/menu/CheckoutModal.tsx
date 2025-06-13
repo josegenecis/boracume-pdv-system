@@ -183,7 +183,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         status: 'pending',
         customer_latitude: location.latitude,
         customer_longitude: location.longitude,
-        customer_location_accuracy: location.accuracy,
+        customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
         google_maps_link: location.latitude && location.longitude ? 
           generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
