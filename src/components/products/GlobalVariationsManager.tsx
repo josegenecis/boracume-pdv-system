@@ -6,10 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Copy, Settings, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Tag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -29,17 +27,10 @@ interface GlobalVariation {
   created_at: string;
 }
 
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-}
-
-const ProductVariations = () => {
+const GlobalVariationsManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [globalVariations, setGlobalVariations] = useState<GlobalVariation[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingVariation, setEditingVariation] = useState<GlobalVariation | null>(null);
@@ -54,7 +45,6 @@ const ProductVariations = () => {
   useEffect(() => {
     if (user) {
       fetchGlobalVariations();
-      fetchProducts();
     }
   }, [user]);
 
@@ -85,22 +75,6 @@ const ProductVariations = () => {
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, category')
-        .eq('user_id', user?.id)
-        .eq('available', true)
-        .order('name');
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar produtos:', error);
     }
   };
 
@@ -153,7 +127,7 @@ const ProductVariations = () => {
         description: newVariation.description,
         max_selections: newVariation.max_selections,
         required: newVariation.required,
-        options: newVariation.options as any, // Type assertion for JSON compatibility
+        options: newVariation.options as any,
         product_id: null, // Global variation
         price: 0
       };
@@ -223,7 +197,7 @@ const ProductVariations = () => {
         description: variation.description,
         max_selections: variation.max_selections,
         required: variation.required,
-        options: variation.options as any, // Type assertion for JSON compatibility
+        options: variation.options as any,
         product_id: null,
         price: 0
       };
@@ -286,8 +260,8 @@ const ProductVariations = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Variações de Produtos</h1>
-          <p className="text-gray-500">Gerencie variações que podem ser aplicadas a qualquer produto</p>
+          <h2 className="text-2xl font-bold tracking-tight">Variações Globais</h2>
+          <p className="text-muted-foreground">Gerencie variações que podem ser aplicadas a qualquer produto</p>
         </div>
         
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
@@ -406,11 +380,11 @@ const ProductVariations = () => {
         {globalVariations.length === 0 ? (
           <Card>
             <CardContent className="text-center py-8">
-              <Tag className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <Tag className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">
                 Nenhuma variação criada
               </h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Crie variações globais que podem ser aplicadas a qualquer produto
               </p>
               <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -432,7 +406,7 @@ const ProductVariations = () => {
                       )}
                     </CardTitle>
                     {variation.description && (
-                      <p className="text-sm text-gray-600 mt-1">{variation.description}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -462,14 +436,14 @@ const ProductVariations = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     Máximo de seleções: {variation.max_selections}
                   </p>
                   <div>
                     <p className="text-sm font-medium mb-2">Opções:</p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       {variation.options.map((option, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
                           <span className="text-sm">{option.name}</span>
                           {option.price > 0 && (
                             <span className="text-sm text-green-600 font-medium">
@@ -490,4 +464,4 @@ const ProductVariations = () => {
   );
 };
 
-export default ProductVariations;
+export default GlobalVariationsManager;

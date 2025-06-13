@@ -27,7 +27,6 @@ import Financeiro from '@/pages/Financeiro';
 import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
-import ProductVariations from '@/pages/ProductVariations';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -62,7 +61,6 @@ function AppContent() {
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
-          <Route path="/product-variations" element={<ProductVariations />} />
         </Route>
       </Route>
       

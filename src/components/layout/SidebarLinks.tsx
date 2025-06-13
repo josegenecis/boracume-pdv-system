@@ -23,7 +23,6 @@ const SidebarLinks = () => {
   const links = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
-    { to: '/product-variations', icon: Settings, label: 'Variações' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
