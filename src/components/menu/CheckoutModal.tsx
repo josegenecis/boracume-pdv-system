@@ -132,6 +132,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handlePlaceOrder = async () => {
     console.log('🔄 Validando formulário...');
+    console.log('📋 Dados atuais:', {
+      customerData,
+      selectedZone,
+      total,
+      minimumOrder,
+      paymentMethod,
+      changeAmount,
+      totalWithDelivery,
+      deliveryZones: deliveryZones.length
+    });
     
     if (!isFormValid()) {
       console.log('❌ Formulário inválido');
