@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CreditCard, Banknote, Smartphone, MapPin, Phone, User } from 'lucide-react';
+import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation } from 'lucide-react';
 
 interface CartItem {
   id: string;
@@ -55,6 +55,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     address: '',
     notes: ''
   });
+  const [location, setLocation] = useState({
+    latitude: null as number | null,
+    longitude: null as number | null,
+    accuracy: null as number | null,
+    isLoading: false,
+    error: null as string | null
+  });
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
   const [selectedZone, setSelectedZone] = useState<string>('');
@@ -76,6 +83,51 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     const now = new Date();
     const timestamp = now.getTime().toString().slice(-6);
     return `PED-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${timestamp}`;
+  };
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocation(prev => ({ ...prev, error: 'Geolocalização não é suportada neste dispositivo' }));
+      return;
+    }
+
+    setLocation(prev => ({ ...prev, isLoading: true, error: null }));
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          isLoading: false,
+          error: null
+        });
+      },
+      (error) => {
+        let errorMessage = 'Erro ao obter localização';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Permissão de localização negada';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Localização não disponível';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Tempo limite para obter localização';
+            break;
+        }
+        setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  };
+
+  const generateGoogleMapsLink = (lat: number, lng: number) => {
+    return `https://maps.google.com/maps?q=${lat},${lng}`;
   };
 
   const handlePlaceOrder = async () => {
@@ -140,7 +192,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         order_type: 'delivery',
         delivery_instructions: customerData.notes.trim() || null,
         estimated_time: selectedZoneData?.delivery_time || '30-45 min',
-        status: 'pending'
+        status: 'pending',
+        customer_latitude: location.latitude,
+        customer_longitude: location.longitude,
+        customer_location_accuracy: location.accuracy,
+        google_maps_link: location.latitude && location.longitude ? 
+          generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
 
       console.log('🔄 Enviando pedido:', JSON.stringify(orderData, null, 2));
@@ -308,12 +365,44 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Textarea
                     id="address"
-                    placeholder="Rua, número, bairro, complemento..."
+                   placeholder="Rua, número, bairro, complemento..."
                     value={customerData.address}
                     onChange={(e) => setCustomerData(prev => ({ ...prev, address: e.target.value }))}
                     className="pl-10 min-h-[80px]"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Localização Exata (GPS)</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={requestLocation}
+                    disabled={location.isLoading}
+                    className="flex items-center gap-2"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    {location.isLoading ? 'Obtendo localização...' : 'Usar minha localização'}
+                  </Button>
+                </div>
+                
+                {location.latitude && location.longitude && (
+                  <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                    ✅ Localização capturada com precisão de {Math.round(location.accuracy || 0)}m
+                  </div>
+                )}
+                
+                {location.error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+                    ❌ {location.error}
+                  </div>
+                )}
+                
+                <p className="text-xs text-muted-foreground">
+                  A localização GPS ajuda o entregador a encontrar você com mais facilidade
+                </p>
               </div>
 
               <div className="space-y-2">
