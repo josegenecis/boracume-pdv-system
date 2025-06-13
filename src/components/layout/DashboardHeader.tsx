@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Search, Settings, User, LogOut, Crown, Shield } from 'lucide-react';
+import { Search, Settings, User, LogOut, Crown, Shield } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -103,12 +104,7 @@ const DashboardHeader: React.FC = () => {
           </Button>
 
           {/* Notifications */}
-          <Button variant="ghost" size="sm" className="relative">
-            <Bell className="w-5 h-5" />
-            <Badge className="absolute -top-2 -right-2 w-5 h-5 flex items-center justify-center p-0 text-xs">
-              3
-            </Badge>
-          </Button>
+          <NotificationBell />
 
           {/* User Menu */}
           <DropdownMenu>

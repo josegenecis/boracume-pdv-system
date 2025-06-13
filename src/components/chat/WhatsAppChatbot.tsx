@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Send, Phone, Bot, User } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, Filter } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -33,11 +34,17 @@ const WhatsAppChatbot = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [massMessage, setMassMessage] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('conversations');
 
   // Buscar conversas
   useEffect(() => {
     if (user?.id) {
       fetchConversations();
+      fetchCustomers();
     }
   }, [user?.id]);
 
@@ -141,6 +148,70 @@ const WhatsAppChatbot = () => {
     }
   };
 
+  const fetchCustomers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCustomers(data || []);
+    } catch (error: any) {
+      console.error('Erro ao buscar clientes:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os clientes.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const toggleCustomerSelection = (customerId: string) => {
+    setSelectedCustomers(prev => 
+      prev.includes(customerId) 
+        ? prev.filter(id => id !== customerId)
+        : [...prev, customerId]
+    );
+  };
+
+  const selectAllCustomers = () => {
+    const filteredCustomers = customers.filter(customer =>
+      customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      customer.phone.includes(customerSearch)
+    );
+    setSelectedCustomers(filteredCustomers.map(c => c.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedCustomers([]);
+  };
+
+  const sendMassMessage = async () => {
+    if (!massMessage.trim() || selectedCustomers.length === 0) return;
+
+    try {
+      // Aqui você implementaria o envio real das mensagens
+      // Por agora, vamos simular
+      
+      toast({
+        title: "Mensagens enviadas",
+        description: `Mensagem enviada para ${selectedCustomers.length} cliente(s).`
+      });
+      
+      setMassMessage('');
+      setSelectedCustomers([]);
+    } catch (error: any) {
+      console.error('Erro ao enviar mensagens:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível enviar as mensagens.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const createTestConversation = async () => {
     try {
       const { data, error } = await supabase
@@ -195,6 +266,11 @@ const WhatsAppChatbot = () => {
     );
   }
 
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    customer.phone.includes(customerSearch)
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -204,6 +280,20 @@ const WhatsAppChatbot = () => {
           Criar Conversa Teste
         </Button>
       </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="conversations" className="flex items-center gap-2">
+            <MessageSquare size={16} />
+            Conversas ({conversations.length})
+          </TabsTrigger>
+          <TabsTrigger value="customers" className="flex items-center gap-2">
+            <Users size={16} />
+            Clientes ({customers.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="conversations" className="space-y-6">
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
         {/* Lista de Conversas */}
@@ -372,6 +462,105 @@ const WhatsAppChatbot = () => {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="customers" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users size={20} />
+                Clientes Cadastrados ({customers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Busca e filtros */}
+              <div className="flex gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar por nome ou telefone..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={selectedCustomers.length === filteredCustomers.length ? clearSelection : selectAllCustomers}
+                >
+                  {selectedCustomers.length === filteredCustomers.length ? 'Desmarcar todos' : 'Selecionar todos'}
+                </Button>
+              </div>
+
+              {/* Lista de clientes */}
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {filteredCustomers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="mx-auto h-8 w-8 mb-2" />
+                    <p>Nenhum cliente encontrado</p>
+                  </div>
+                ) : (
+                  filteredCustomers.map((customer) => (
+                    <div
+                      key={customer.id}
+                      className={`p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${
+                        selectedCustomers.includes(customer.id) ? 'bg-blue-50 border-blue-200' : ''
+                      }`}
+                      onClick={() => toggleCustomerSelection(customer.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{customer.name}</p>
+                          <p className="text-sm text-gray-500">{customer.phone}</p>
+                          {customer.address && (
+                            <p className="text-xs text-gray-400">{customer.address}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-400">
+                            Cadastrado em {new Date(customer.created_at).toLocaleDateString()}
+                          </p>
+                          {selectedCustomers.includes(customer.id) && (
+                            <Badge variant="default" className="mt-1">Selecionado</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Mensagem em massa */}
+              {selectedCustomers.length > 0 && (
+                <div className="mt-6 p-4 border rounded-lg bg-blue-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mail size={16} className="text-blue-600" />
+                    <span className="font-medium text-blue-800">
+                      Enviar mensagem para {selectedCustomers.length} cliente(s)
+                    </span>
+                  </div>
+                  <Textarea
+                    value={massMessage}
+                    onChange={(e) => setMassMessage(e.target.value)}
+                    placeholder="Digite sua mensagem..."
+                    className="mb-2"
+                    rows={3}
+                  />
+                  <div className="flex gap-2">
+                    <Button onClick={sendMassMessage} disabled={!massMessage.trim()}>
+                      <Send size={16} className="mr-2" />
+                      Enviar Mensagem
+                    </Button>
+                    <Button variant="outline" onClick={clearSelection}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

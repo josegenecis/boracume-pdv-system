@@ -305,7 +305,8 @@ const Orders = () => {
                           )}
 
                           <div className="text-sm text-gray-600">
-                            {order.items.length} item(s) • {formatCurrency(order.total)}
+                            {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                            <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                             {order.estimated_time && ` • ${order.estimated_time}`}
                           </div>
                         </div>
@@ -376,7 +377,8 @@ const Orders = () => {
                           )}
 
                           <div className="text-sm text-gray-600">
-                            {order.items.length} item(s) • {formatCurrency(order.total)}
+                            {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                            <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                             {order.estimated_time && ` • ${order.estimated_time}`}
                           </div>
                         </div>
