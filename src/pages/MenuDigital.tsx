@@ -197,19 +197,52 @@ const MenuDigital = () => {
     try {
       console.log('🔄 Carregando variações para produto:', productId);
       
-      const { data, error } = await supabase
+      // Buscar variações específicas do produto
+      const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (error) {
-        console.error('❌ Erro ao carregar variações:', error);
-        return [];
+      if (productError) {
+        console.error('❌ Erro ao carregar variações do produto:', productError);
       }
 
-      console.log('✅ Variações raw carregadas:', data?.length || 0, data);
+      // Buscar variações globais associadas ao produto
+      const { data: globalVariationLinks, error: globalError } = await supabase
+        .from('product_global_variation_links')
+        .select('global_variation_id')
+        .eq('product_id', productId);
+
+      if (globalError) {
+        console.error('❌ Erro ao carregar variações globais:', globalError);
+      }
+
+      // Buscar as variações globais pelos IDs
+      let globalVariations: any[] = [];
+      if (globalVariationLinks && globalVariationLinks.length > 0) {
+        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        
+        const { data: globalVars, error: globalVarError } = await supabase
+          .from('global_variations')
+          .select('*')
+          .in('id', globalVariationIds);
+
+        if (globalVarError) {
+          console.error('❌ Erro ao buscar variações globais:', globalVarError);
+        } else {
+          globalVariations = globalVars || [];
+        }
+      }
+
+      // Combinar todas as variações
+      const allVariations = [
+        ...(productVariations || []),
+        ...globalVariations
+      ];
+
+      console.log('✅ Variações raw carregadas:', allVariations.length, allVariations);
       
-      const formattedVariations: ProductVariation[] = (data || [])
+      const formattedVariations: ProductVariation[] = allVariations
         .map(item => {
           try {
             let options: Array<{ name: string; price: number; }> = [];
@@ -381,15 +414,8 @@ const MenuDigital = () => {
 
       console.log('✅ Pedido criado com sucesso:', data);
 
-      // Tentar enviar para KDS
-      try {
-        console.log('🔄 Enviando para KDS...');
-        await sendToKitchen(orderData);
-        console.log('✅ Enviado para KDS com sucesso');
-      } catch (kdsError) {
-        console.warn('⚠️ Erro ao enviar para KDS (não crítico):', kdsError);
-        // Não falhar o pedido se o KDS falhar
-      }
+      // Não enviar para KDS automaticamente - aguardar aceitação em Orders
+      console.log('✅ Pedido criado, aguardando aceitação para envio ao KDS');
 
       toast({
         title: "Pedido realizado com sucesso!",

@@ -9,6 +9,8 @@ import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin } from 'lucide-
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
+import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 
 interface Order {
   id: string;
@@ -24,6 +26,7 @@ interface Order {
   items: any[];
   created_at: string;
   estimated_time?: string;
+  user_id?: string;
 }
 
 const Orders = () => {
@@ -35,6 +38,10 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
+  const { sendToKitchen } = useKitchenIntegration();
+  
+  // Ativar notificações de pedidos
+  useOrderNotifications();
 
   useEffect(() => {
     if (user) {
@@ -107,13 +114,44 @@ const Orders = () => {
 
       if (error) throw error;
 
+      // Buscar o pedido para enviar para KDS quando aceito
+      const order = orders.find(o => o.id === orderId);
+      
+      // Se status mudou para 'preparing', enviar para KDS
+      if (newStatus === 'preparing' && order) {
+        try {
+          console.log('🔄 Enviando pedido aceito para KDS:', order.order_number);
+          
+          const orderData = {
+            user_id: order.user_id || user?.id || '',
+            order_number: order.order_number,
+            customer_name: order.customer_name,
+            customer_phone: order.customer_phone,
+            items: order.items,
+            total: order.total,
+            payment_method: order.payment_method,
+            order_type: order.order_type
+          };
+          
+          await sendToKitchen(orderData);
+          console.log('✅ Pedido enviado para KDS com sucesso');
+        } catch (kdsError) {
+          console.error('❌ Erro ao enviar para KDS:', kdsError);
+          toast({
+            title: "Aviso",
+            description: "Pedido aceito, mas houve erro ao enviar para a cozinha. Verifique o sistema KDS.",
+            variant: "destructive"
+          });
+        }
+      }
+
       setOrders(prev => prev.map(order =>
         order.id === orderId ? { ...order, status: newStatus } : order
       ));
 
       toast({
         title: "Status atualizado",
-        description: "O status do pedido foi atualizado com sucesso.",
+        description: `O pedido foi ${newStatus === 'preparing' ? 'aceito e enviado para a cozinha' : 'atualizado'} com sucesso.`,
       });
     } catch (error) {
       console.error('Erro ao atualizar status:', error);

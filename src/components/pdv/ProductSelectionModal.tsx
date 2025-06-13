@@ -74,15 +74,49 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
   const fetchProductVariations = async (productId: string) => {
     try {
-      const { data, error } = await supabase
+      // Buscar variações específicas do produto
+      const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (error) throw error;
+      if (productError) throw productError;
+
+      // Buscar variações globais associadas ao produto
+      const { data: globalVariationLinks, error: globalError } = await supabase
+        .from('product_global_variation_links')
+        .select('global_variation_id')
+        .eq('product_id', productId);
+
+      if (globalError) {
+        console.error('Erro ao carregar variações globais:', globalError);
+      }
+
+      // Buscar as variações globais pelos IDs
+      let globalVariations: any[] = [];
+      if (globalVariationLinks && globalVariationLinks.length > 0) {
+        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        
+        const { data: globalVars, error: globalVarError } = await supabase
+          .from('global_variations')
+          .select('*')
+          .in('id', globalVariationIds);
+
+        if (globalVarError) {
+          console.error('Erro ao buscar variações globais:', globalVarError);
+        } else {
+          globalVariations = globalVars || [];
+        }
+      }
+
+      // Combinar todas as variações
+      const allVariations = [
+        ...(productVariations || []),
+        ...globalVariations
+      ];
       
       // Convert Json type to proper ProductVariation[]
-      const transformedData = (data || []).map(item => {
+      const transformedData = allVariations.map(item => {
         let parsedOptions = [];
         try {
           if (typeof item.options === 'string') {
