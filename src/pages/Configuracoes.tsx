@@ -35,7 +35,7 @@ const Configuracoes: React.FC = () => {
       <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
       
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="mb-4 grid grid-cols-4 lg:grid-cols-8">
+        <TabsList className="mb-4 flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="menu">Cardápio</TabsTrigger>
           <TabsTrigger value="devices">Dispositivos</TabsTrigger>

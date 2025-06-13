@@ -99,4 +99,13 @@
   .dashboard-stat-label {
     @apply text-sm text-boracume-gray;
   }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

@@ -110,6 +110,7 @@ const PDV = () => {
         .select('*')
         .eq('user_id', user?.id)
         .eq('available', true)
+        .eq('show_in_pdv', true)
         .order('name');
 
       if (error) throw error;
@@ -173,6 +174,54 @@ const PDV = () => {
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const fetchProductVariations = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_variations')
+        .select('*')
+        .eq('product_id', productId);
+
+      if (error) throw error;
+      
+      return (data || []).map(item => {
+        let parsedOptions = [];
+        try {
+          if (typeof item.options === 'string') {
+            parsedOptions = JSON.parse(item.options);
+          } else if (Array.isArray(item.options)) {
+            parsedOptions = item.options;
+          }
+        } catch (e) {
+          console.error('Error parsing options:', e);
+          parsedOptions = [];
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          options: Array.isArray(parsedOptions) ? parsedOptions : [],
+          max_selections: item.max_selections,
+          required: item.required
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao carregar variações:', error);
+      return [];
+    }
+  };
+
+  const handleProductClick = async (product: Product) => {
+    const variations = await fetchProductVariations(product.id);
+    
+    if (variations.length > 0) {
+      // Se tem variações, abrir modal de seleção com o produto específico
+      setShowProductModal(true);
+    } else {
+      // Se não tem variações, adicionar direto ao carrinho
+      addToCart(product, 1);
+    }
+  };
 
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
     setCart(prev => {
@@ -624,7 +673,7 @@ const PDV = () => {
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                       {filteredProducts.map((product) => (
-                        <Card key={product.id} className="cursor-pointer hover:shadow-lg transition-shadow">
+                        <Card key={product.id} className="hover:shadow-lg transition-shadow">
                           <div className="aspect-square relative overflow-hidden rounded-t-lg">
                             {product.image_url ? (
                               <img 
@@ -645,7 +694,10 @@ const PDV = () => {
                               {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </p>
                             <Button 
-                              onClick={() => setShowProductModal(true)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleProductClick(product);
+                              }}
                               className="w-full"
                               size="sm"
                             >
