@@ -317,28 +317,19 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      console.log('🔄 Finalizando pedido na MenuDigital:', JSON.stringify(orderData, null, 2));
-      console.log('🔄 Usando userId:', userId);
-
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
-        console.log('❌ user_id ausente:', orderData.user_id);
         throw new Error('ID do usuário é obrigatório');
       }
       if (!orderData.customer_name?.trim()) {
-        console.log('❌ customer_name ausente:', orderData.customer_name);
         throw new Error('Nome do cliente é obrigatório');
       }
       if (!orderData.customer_phone?.trim()) {
-        console.log('❌ customer_phone ausente:', orderData.customer_phone);
         throw new Error('Telefone do cliente é obrigatório');
       }
       if (!orderData.items || orderData.items.length === 0) {
-        console.log('❌ items ausentes:', orderData.items);
         throw new Error('Pedido deve ter pelo menos um item');
       }
-
-      console.log('✅ Validação inicial passou, criando/verificando cliente...');
 
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
@@ -351,18 +342,15 @@ const MenuDigital = () => {
           .maybeSingle();
 
         if (customerCheckError) {
-          console.error('❌ Erro ao verificar cliente existente:', customerCheckError);
+          console.error('Erro ao verificar cliente existente:', customerCheckError);
         } else if (existingCustomer) {
-          console.log('✅ Cliente existente encontrado:', existingCustomer.id);
           customerId = existingCustomer.id;
         }
       } catch (customerError) {
-        console.error('❌ Erro na verificação de cliente:', customerError);
+        console.error('Erro na verificação de cliente:', customerError);
       }
 
       if (!customerId) {
-        console.log('🔄 Criando novo cliente...');
-        
         try {
           // Criar novo cliente
           const customerData = {
@@ -379,14 +367,13 @@ const MenuDigital = () => {
             .single();
 
           if (customerError) {
-            console.error('❌ Erro ao criar cliente:', customerError);
+            console.error('Erro ao criar cliente:', customerError);
             // Continuar sem cliente se falhar - não é crítico
           } else {
-            console.log('✅ Cliente criado:', newCustomer.id);
             customerId = newCustomer.id;
           }
         } catch (customerError) {
-          console.error('❌ Erro na criação de cliente:', customerError);
+          console.error('Erro na criação de cliente:', customerError);
         }
       }
 
@@ -395,9 +382,6 @@ const MenuDigital = () => {
         orderData.customer_id = customerId;
       }
 
-      console.log('🔄 Inserindo pedido no banco...');
-      console.log('📦 Dados finais do pedido:', JSON.stringify(orderData, null, 2));
-
       const { data, error } = await supabase
         .from('orders')
         .insert([orderData])
@@ -405,13 +389,7 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido no banco:', error);
-        console.error('❌ Detalhes do erro:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
+        console.error('Erro ao criar pedido no banco:', error);
         
         // Tratar erros específicos do banco
         if (error.code === '23505') {
@@ -425,11 +403,6 @@ const MenuDigital = () => {
         }
       }
 
-      console.log('✅ Pedido criado com sucesso:', data);
-
-      // IMPORTANTE: Não enviar para KDS automaticamente - aguardar aceitação em Orders
-      console.log('✅ Pedido criado. NÃO enviando automaticamente para KDS - aguardando aceitação manual');
-
       toast({
         title: "Pedido realizado com sucesso!",
         description: `Seu pedido ${orderData.order_number} foi recebido e está sendo preparado.`,
@@ -438,8 +411,7 @@ const MenuDigital = () => {
       clearCart();
       setShowCheckoutModal(false);
     } catch (error) {
-      console.error('❌ Erro completo ao finalizar pedido:', error);
-      console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'N/A');
+      console.error('Erro completo ao finalizar pedido:', error);
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {

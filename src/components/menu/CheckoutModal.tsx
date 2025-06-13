@@ -131,21 +131,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePlaceOrder = async () => {
-    console.log('🔄 Validando formulário...');
-    console.log('📋 Dados atuais:', {
-      customerData,
-      selectedZone,
-      total,
-      minimumOrder,
-      paymentMethod,
-      changeAmount,
-      totalWithDelivery,
-      deliveryZones: deliveryZones.length
-    });
-    
     if (!isFormValid()) {
-      console.log('❌ Formulário inválido');
-      
       // Verificar cada campo individualmente para dar feedback específico
       const errors: string[] = [];
       if (!customerData.name.trim()) errors.push('Nome é obrigatório');
@@ -158,13 +144,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         errors.push('Valor para troco deve ser maior que o total');
       }
       
-      console.log('❌ Erros encontrados:', errors);
       alert('Por favor, corrija os seguintes campos:\n' + errors.join('\n'));
       return;
     }
 
     if (!userId) {
-      console.log('❌ userId não encontrado');
       alert('Erro interno: ID do usuário não encontrado');
       return;
     }
@@ -172,12 +156,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setLoading(true);
     try {
       const orderNumber = generateOrderNumber();
-      
-      console.log('🔄 Preparando dados do pedido...');
-      console.log('📝 Dados do cliente:', customerData);
-      console.log('📦 Itens do carrinho:', cart);
-      console.log('💳 Método de pagamento:', paymentMethod);
-      console.log('🚚 Zona selecionada:', selectedZoneData);
       
       const orderData = {
         user_id: userId,
@@ -210,11 +188,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
 
-      console.log('🔄 Enviando pedido:', JSON.stringify(orderData, null, 2));
       await onPlaceOrder(orderData);
     } catch (error) {
-      console.error('❌ Erro ao processar pedido:', error);
-      
       let errorMessage = 'Erro desconhecido ao processar pedido';
       if (error instanceof Error) {
         errorMessage = error.message;
@@ -222,7 +197,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         errorMessage = error;
       }
       
-      console.log('❌ Mensagem de erro para usuário:', errorMessage);
       alert(`Erro ao finalizar pedido: ${errorMessage}\n\nTente novamente ou entre em contato conosco.`);
     } finally {
       setLoading(false);

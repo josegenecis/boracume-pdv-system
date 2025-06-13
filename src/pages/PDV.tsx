@@ -175,36 +175,87 @@ const PDV = () => {
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const fetchProductVariations = async (productId: string) => {
+  const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
-      const { data, error } = await supabase
+      // Buscar variações específicas do produto
+      const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (error) throw error;
-      
-      return (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
+      if (productError) {
+        console.error('Erro ao carregar variações do produto:', productError);
+      }
 
-        return {
-          id: item.id,
-          name: item.name,
-          options: Array.isArray(parsedOptions) ? parsedOptions : [],
-          max_selections: item.max_selections,
-          required: item.required
-        };
-      });
+      // Buscar variações globais associadas ao produto
+      const { data: globalVariationLinks, error: globalError } = await supabase
+        .from('product_global_variation_links')
+        .select('global_variation_id')
+        .eq('product_id', productId);
+
+      if (globalError) {
+        console.error('Erro ao carregar variações globais:', globalError);
+      }
+
+      // Buscar as variações globais pelos IDs
+      let globalVariations: any[] = [];
+      if (globalVariationLinks && globalVariationLinks.length > 0) {
+        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        
+        const { data: globalVars, error: globalVarError } = await supabase
+          .from('global_variations')
+          .select('*')
+          .in('id', globalVariationIds);
+
+        if (globalVarError) {
+          console.error('Erro ao buscar variações globais:', globalVarError);
+        } else {
+          globalVariations = globalVars || [];
+        }
+      }
+
+      // Combinar todas as variações
+      const allVariations = [
+        ...(productVariations || []),
+        ...globalVariations
+      ];
+      
+      const formattedVariations: ProductVariation[] = allVariations
+        .map(item => {
+          try {
+            let options: Array<{ name: string; price: number; }> = [];
+            
+            if (item.options && Array.isArray(item.options)) {
+              options = item.options
+                .filter((opt: any) => {
+                  return opt && 
+                         typeof opt === 'object' && 
+                         opt.name && 
+                         typeof opt.name === 'string' &&
+                         opt.price !== undefined && 
+                         !isNaN(Number(opt.price));
+                })
+                .map((opt: any) => ({
+                  name: String(opt.name).trim(),
+                  price: Number(opt.price)
+                }));
+            }
+
+            return {
+              id: item.id,
+              name: item.name || '',
+              options,
+              max_selections: Math.max(1, Number(item.max_selections) || 1),
+              required: Boolean(item.required)
+            };
+          } catch (itemError) {
+            console.error('Erro ao processar variação:', itemError, item);
+            return null;
+          }
+        })
+        .filter((variation): variation is ProductVariation => variation !== null);
+      
+      return formattedVariations;
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
       return [];
