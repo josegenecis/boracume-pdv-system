@@ -87,12 +87,23 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
               )}
               {(item as any).variations && (item as any).variations.length > 0 && (
                 <ul className="ml-4 mt-1 text-xs text-muted-foreground">
-                  {(item as any).variations.map((variation: any, index: number) => (
-                    <li key={index} className="font-medium text-blue-600">
-                      {variation.name}: {variation.selectedOptions?.join(', ') || 'N/A'}
-                      {variation.price > 0 && ` (+${(variation.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`}
-                    </li>
-                  ))}
+                  {(item as any).variations.map((variation: any, index: number) => {
+                    // Handle both string and object formats for selectedOptions
+                    const optionsText = variation.selectedOptions
+                      ? Array.isArray(variation.selectedOptions)
+                        ? variation.selectedOptions.map((opt: any) => 
+                            typeof opt === 'string' ? opt : opt.name || opt.option || String(opt)
+                          ).join(', ')
+                        : String(variation.selectedOptions)
+                      : 'N/A';
+                    
+                    return (
+                      <li key={index} className="font-medium text-blue-600">
+                        {variation.name}: {optionsText}
+                        {variation.price > 0 && ` (+${(variation.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {item.notes && (
