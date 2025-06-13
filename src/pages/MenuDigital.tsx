@@ -284,7 +284,23 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      console.log('🔄 Finalizando pedido:', orderData);
+      console.log('🔄 Finalizando pedido na MenuDigital:', JSON.stringify(orderData, null, 2));
+
+      // Validar dados obrigatórios antes de enviar
+      if (!orderData.user_id) {
+        throw new Error('ID do usuário é obrigatório');
+      }
+      if (!orderData.customer_name?.trim()) {
+        throw new Error('Nome do cliente é obrigatório');
+      }
+      if (!orderData.customer_phone?.trim()) {
+        throw new Error('Telefone do cliente é obrigatório');
+      }
+      if (!orderData.items || orderData.items.length === 0) {
+        throw new Error('Pedido deve ter pelo menos um item');
+      }
+
+      console.log('✅ Validação inicial passou, inserindo pedido...');
 
       const { data, error } = await supabase
         .from('orders')
@@ -293,16 +309,36 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido:', error);
-        throw error;
+        console.error('❌ Erro ao criar pedido no banco:', error);
+        console.error('❌ Detalhes do erro:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        // Tratar erros específicos do banco
+        if (error.code === '23505') {
+          throw new Error('Número do pedido já existe. Tente novamente.');
+        } else if (error.code === '23503') {
+          throw new Error('Dados de referência inválidos. Verifique área de entrega.');
+        } else if (error.code === '23502') {
+          throw new Error('Campos obrigatórios não preenchidos.');
+        } else {
+          throw new Error(`Erro no banco de dados: ${error.message}`);
+        }
       }
 
-      console.log('✅ Pedido criado:', data);
+      console.log('✅ Pedido criado com sucesso:', data);
 
+      // Tentar enviar para KDS
       try {
+        console.log('🔄 Enviando para KDS...');
         await sendToKitchen(orderData);
+        console.log('✅ Enviado para KDS com sucesso');
       } catch (kdsError) {
         console.warn('⚠️ Erro ao enviar para KDS (não crítico):', kdsError);
+        // Não falhar o pedido se o KDS falhar
       }
 
       toast({
@@ -314,11 +350,20 @@ const MenuDigital = () => {
       setShowCheckoutModal(false);
     } catch (error) {
       console.error('❌ Erro ao finalizar pedido:', error);
+      
+      let userMessage = "Tente novamente ou entre em contato conosco.";
+      if (error instanceof Error) {
+        userMessage = error.message;
+      }
+      
       toast({
         title: "Erro ao finalizar pedido",
-        description: "Tente novamente ou entre em contato conosco.",
+        description: userMessage,
         variant: "destructive",
       });
+      
+      // Re-throw para que o CheckoutModal saiba que houve erro
+      throw error;
     }
   };
 

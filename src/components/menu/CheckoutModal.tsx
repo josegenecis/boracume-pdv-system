@@ -79,8 +79,31 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePlaceOrder = async () => {
+    console.log('🔄 Validando formulário...');
+    
     if (!isFormValid()) {
       console.log('❌ Formulário inválido');
+      
+      // Verificar cada campo individualmente para dar feedback específico
+      const errors: string[] = [];
+      if (!customerData.name.trim()) errors.push('Nome é obrigatório');
+      if (!customerData.phone.trim()) errors.push('Telefone é obrigatório');
+      if (!customerData.address.trim()) errors.push('Endereço é obrigatório');
+      if (!selectedZone) errors.push('Selecione uma área de entrega');
+      if (total < minimumOrder) errors.push(`Pedido mínimo: R$ ${minimumOrder.toFixed(2)}`);
+      if (!paymentMethod) errors.push('Selecione forma de pagamento');
+      if (paymentMethod === 'cash' && changeAmount && parseFloat(changeAmount) < totalWithDelivery) {
+        errors.push('Valor para troco deve ser maior que o total');
+      }
+      
+      console.log('❌ Erros encontrados:', errors);
+      alert('Por favor, corrija os seguintes campos:\n' + errors.join('\n'));
+      return;
+    }
+
+    if (!userId) {
+      console.log('❌ userId não encontrado');
+      alert('Erro interno: ID do usuário não encontrado');
       return;
     }
 
@@ -88,13 +111,19 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     try {
       const orderNumber = generateOrderNumber();
       
+      console.log('🔄 Preparando dados do pedido...');
+      console.log('📝 Dados do cliente:', customerData);
+      console.log('📦 Itens do carrinho:', cart);
+      console.log('💳 Método de pagamento:', paymentMethod);
+      console.log('🚚 Zona selecionada:', selectedZoneData);
+      
       const orderData = {
         user_id: userId,
         order_number: orderNumber,
-        customer_name: customerData.name,
-        customer_phone: customerData.phone,
-        customer_address: customerData.address,
-        delivery_zone_id: selectedZone,
+        customer_name: customerData.name.trim(),
+        customer_phone: customerData.phone.trim(),
+        customer_address: customerData.address.trim(),
+        delivery_zone_id: selectedZone || null,
         items: cart.map(item => ({
           product_id: item.id,
           product_name: item.name,
@@ -109,15 +138,25 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
         order_type: 'delivery',
-        delivery_instructions: customerData.notes,
+        delivery_instructions: customerData.notes.trim() || null,
         estimated_time: selectedZoneData?.delivery_time || '30-45 min',
         status: 'pending'
       };
 
-      console.log('🔄 Enviando pedido:', orderData);
+      console.log('🔄 Enviando pedido:', JSON.stringify(orderData, null, 2));
       await onPlaceOrder(orderData);
     } catch (error) {
       console.error('❌ Erro ao processar pedido:', error);
+      
+      let errorMessage = 'Erro desconhecido ao processar pedido';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      console.log('❌ Mensagem de erro para usuário:', errorMessage);
+      alert(`Erro ao finalizar pedido: ${errorMessage}\n\nTente novamente ou entre em contato conosco.`);
     } finally {
       setLoading(false);
     }
