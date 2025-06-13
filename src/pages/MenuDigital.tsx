@@ -330,12 +330,23 @@ const MenuDigital = () => {
     );
   }
 
-  if (!userId || !profile) {
+  if (!userId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Link inválido</h1>
+          <p className="text-muted-foreground">Verifique se o link está correto.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
-          <p className="text-muted-foreground">Verifique se o link está correto.</p>
+          <p className="text-muted-foreground">Este restaurante pode não existir ou estar temporariamente indisponível.</p>
         </div>
       </div>
     );
