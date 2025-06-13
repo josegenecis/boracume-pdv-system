@@ -876,6 +876,9 @@ export type Database = {
           created_at: string
           customer_address: string | null
           customer_id: string | null
+          customer_latitude: number | null
+          customer_location_accuracy: number | null
+          customer_longitude: number | null
           customer_name: string | null
           customer_phone: string | null
           delivery_fee: number | null
@@ -883,6 +886,7 @@ export type Database = {
           delivery_zone_id: string | null
           estimated_delivery_time: string | null
           estimated_time: string | null
+          google_maps_link: string | null
           id: string
           items: Json
           order_number: string | null
@@ -900,6 +904,9 @@ export type Database = {
           created_at?: string
           customer_address?: string | null
           customer_id?: string | null
+          customer_latitude?: number | null
+          customer_location_accuracy?: number | null
+          customer_longitude?: number | null
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
@@ -907,6 +914,7 @@ export type Database = {
           delivery_zone_id?: string | null
           estimated_delivery_time?: string | null
           estimated_time?: string | null
+          google_maps_link?: string | null
           id?: string
           items: Json
           order_number?: string | null
@@ -924,6 +932,9 @@ export type Database = {
           created_at?: string
           customer_address?: string | null
           customer_id?: string | null
+          customer_latitude?: number | null
+          customer_location_accuracy?: number | null
+          customer_longitude?: number | null
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
@@ -931,6 +942,7 @@ export type Database = {
           delivery_zone_id?: string | null
           estimated_delivery_time?: string | null
           estimated_time?: string | null
+          google_maps_link?: string | null
           id?: string
           items?: Json
           order_number?: string | null

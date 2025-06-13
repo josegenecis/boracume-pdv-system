@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin } from 'lucide-react';
+import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,10 @@ interface Order {
   customer_name: string;
   customer_phone?: string;
   customer_address?: string;
+  customer_latitude?: number;
+  customer_longitude?: number;
+  customer_location_accuracy?: number;
+  google_maps_link?: string;
   order_type: string;
   status: string;
   total: number;
@@ -83,6 +87,19 @@ const Orders = () => {
     }
   };
 
+  
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "Copiado!",
+        description: "Localização copiada para a área de transferência",
+      });
+    } catch (err) {
+      console.error('Erro ao copiar:', err);
+    }
+  };
+
   const filterOrders = () => {
     let filtered = orders;
 
@@ -135,6 +152,11 @@ const Orders = () => {
           
           await sendToKitchen(orderData);
           console.log('✅ Pedido enviado para KDS com sucesso');
+          
+          toast({
+            title: "Pedido aceito!",
+            description: "Pedido enviado para a cozinha com sucesso",
+          });
         } catch (kdsError) {
           console.error('❌ Erro ao enviar para KDS:', kdsError);
           toast({
@@ -143,16 +165,17 @@ const Orders = () => {
             variant: "destructive"
           });
         }
+      } else {
+        toast({
+          title: "Status atualizado",
+          description: `Status do pedido atualizado com sucesso.`,
+        });
       }
 
       setOrders(prev => prev.map(order =>
         order.id === orderId ? { ...order, status: newStatus } : order
       ));
 
-      toast({
-        title: "Status atualizado",
-        description: `O pedido foi ${newStatus === 'preparing' ? 'aceito e enviado para a cozinha' : 'atualizado'} com sucesso.`,
-      });
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
       toast({
@@ -336,9 +359,41 @@ const Orders = () => {
                           </div>
 
                           {order.customer_address && (
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
-                              <MapPin size={14} />
-                              {order.customer_address}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <MapPin className="h-4 w-4" />
+                                <span>{order.customer_address}</span>
+                              </div>
+                              
+                              {order.google_maps_link && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(order.google_maps_link, '_blank')}
+                                    className="h-7 text-xs"
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Abrir no Maps
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => copyToClipboard(order.google_maps_link || '')}
+                                    className="h-7 text-xs"
+                                  >
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    Copiar Link
+                                  </Button>
+                                </div>
+                              )}
+                              
+                              {order.customer_latitude && order.customer_longitude && (
+                                <div className="text-xs text-muted-foreground">
+                                  GPS: {order.customer_latitude.toFixed(6)}, {order.customer_longitude.toFixed(6)}
+                                  {order.customer_location_accuracy && ` (±${Math.round(order.customer_location_accuracy)}m)`}
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -408,9 +463,41 @@ const Orders = () => {
                           </div>
 
                           {order.customer_address && (
-                            <div className="flex items-center gap-1 text-sm text-gray-600">
-                              <MapPin size={14} />
-                              {order.customer_address}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <MapPin className="h-4 w-4" />
+                                <span>{order.customer_address}</span>
+                              </div>
+                              
+                              {order.google_maps_link && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(order.google_maps_link, '_blank')}
+                                    className="h-7 text-xs"
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Abrir no Maps
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => copyToClipboard(order.google_maps_link || '')}
+                                    className="h-7 text-xs"
+                                  >
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    Copiar Link
+                                  </Button>
+                                </div>
+                              )}
+                              
+                              {order.customer_latitude && order.customer_longitude && (
+                                <div className="text-xs text-muted-foreground">
+                                  GPS: {order.customer_latitude.toFixed(6)}, {order.customer_longitude.toFixed(6)}
+                                  {order.customer_location_accuracy && ` (±${Math.round(order.customer_location_accuracy)}m)`}
+                                </div>
+                              )}
                             </div>
                           )}
 
