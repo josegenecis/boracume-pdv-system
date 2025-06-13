@@ -55,13 +55,36 @@ export const useKitchenOrders = () => {
       console.log('✅ Kitchen orders fetched:', data?.length || 0);
       
       // Convert the data to match our KitchenOrder interface
-      const formattedOrders: KitchenOrder[] = (data || []).map(order => ({
-        ...order,
-        items: Array.isArray(order.items) ? (order.items as unknown as OrderItem[]) : [],
-        priority: order.priority as 'normal' | 'high',
-        status: order.status as 'pending' | 'preparing' | 'ready' | 'completed',
-        timestamp: new Date(order.created_at)
-      }));
+      const formattedOrders: KitchenOrder[] = (data || []).map(order => {
+        // Process items to ensure all data is properly formatted
+        const processedItems = Array.isArray(order.items) ? order.items.map((item: any) => ({
+          id: item.id || String(Math.random()),
+          name: item.name || '',
+          quantity: item.quantity || 1,
+          options: Array.isArray(item.options) ? item.options.map((opt: any) => 
+            typeof opt === 'string' ? opt : (opt.name || opt.option || String(opt))
+          ) : [],
+          notes: item.notes || '',
+          // Handle variations properly
+          variations: Array.isArray(item.variations) ? item.variations.map((variation: any) => ({
+            name: variation.name || '',
+            selectedOptions: Array.isArray(variation.selectedOptions) 
+              ? variation.selectedOptions.map((opt: any) => 
+                  typeof opt === 'string' ? opt : (opt.name || opt.option || String(opt))
+                )
+              : [],
+            price: Number(variation.price) || 0
+          })) : []
+        })) : [];
+
+        return {
+          ...order,
+          items: processedItems,
+          priority: order.priority as 'normal' | 'high',
+          status: order.status as 'pending' | 'preparing' | 'ready' | 'completed',
+          timestamp: new Date(order.created_at)
+        };
+      });
       
       setOrders(formattedOrders);
       setError(null);

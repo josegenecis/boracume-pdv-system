@@ -88,19 +88,29 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
               {(item as any).variations && (item as any).variations.length > 0 && (
                 <ul className="ml-4 mt-1 text-xs text-muted-foreground">
                   {(item as any).variations.map((variation: any, index: number) => {
-                    // Handle both string and object formats for selectedOptions
-                    const optionsText = variation.selectedOptions
-                      ? Array.isArray(variation.selectedOptions)
-                        ? variation.selectedOptions.map((opt: any) => 
-                            typeof opt === 'string' ? opt : opt.name || opt.option || String(opt)
-                          ).join(', ')
-                        : String(variation.selectedOptions)
-                      : 'N/A';
+                    console.log('Rendering variation:', variation); // Debug log
+                    
+                    // Ensure we only render strings
+                    const variationName = typeof variation.name === 'string' ? variation.name : String(variation.name || '');
+                    
+                    let optionsText = 'N/A';
+                    if (variation.selectedOptions) {
+                      if (Array.isArray(variation.selectedOptions)) {
+                        optionsText = variation.selectedOptions
+                          .map((opt: any) => typeof opt === 'string' ? opt : String(opt.name || opt.option || opt))
+                          .filter(Boolean)
+                          .join(', ') || 'N/A';
+                      } else {
+                        optionsText = String(variation.selectedOptions);
+                      }
+                    }
+                    
+                    const price = Number(variation.price) || 0;
+                    const priceText = price > 0 ? ` (+${price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '';
                     
                     return (
                       <li key={index} className="font-medium text-blue-600">
-                        {variation.name}: {optionsText}
-                        {variation.price > 0 && ` (+${(variation.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`}
+                        {variationName}: {optionsText}{priceText}
                       </li>
                     );
                   })}
