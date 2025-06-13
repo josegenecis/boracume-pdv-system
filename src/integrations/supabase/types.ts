@@ -123,6 +123,36 @@ export type Database = {
         }
         Relationships: []
       }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       delivery_personnel: {
         Row: {
           created_at: string
@@ -809,6 +839,7 @@ export type Database = {
           change_amount: number | null
           created_at: string
           customer_address: string | null
+          customer_id: string | null
           customer_name: string | null
           customer_phone: string | null
           delivery_fee: number | null
@@ -832,6 +863,7 @@ export type Database = {
           change_amount?: number | null
           created_at?: string
           customer_address?: string | null
+          customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
@@ -855,6 +887,7 @@ export type Database = {
           change_amount?: number | null
           created_at?: string
           customer_address?: string | null
+          customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           delivery_fee?: number | null
@@ -875,6 +908,13 @@ export type Database = {
           variations?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_delivery_zone_id_fkey"
             columns: ["delivery_zone_id"]

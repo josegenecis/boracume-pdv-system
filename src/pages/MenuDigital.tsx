@@ -285,6 +285,7 @@ const MenuDigital = () => {
   const handlePlaceOrder = async (orderData: any) => {
     try {
       console.log('🔄 Finalizando pedido na MenuDigital:', JSON.stringify(orderData, null, 2));
+      console.log('🔄 Usando userId:', userId);
 
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
@@ -300,7 +301,56 @@ const MenuDigital = () => {
         throw new Error('Pedido deve ter pelo menos um item');
       }
 
-      console.log('✅ Validação inicial passou, inserindo pedido...');
+      console.log('✅ Validação inicial passou, criando/verificando cliente...');
+
+      // Primeiro, verificar se o cliente já existe
+      let customerId = null;
+      const { data: existingCustomer, error: customerCheckError } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('user_id', orderData.user_id)
+        .eq('phone', orderData.customer_phone)
+        .maybeSingle();
+
+      if (customerCheckError) {
+        console.error('❌ Erro ao verificar cliente existente:', customerCheckError);
+      }
+
+      if (existingCustomer) {
+        console.log('✅ Cliente existente encontrado:', existingCustomer.id);
+        customerId = existingCustomer.id;
+      } else {
+        console.log('🔄 Criando novo cliente...');
+        
+        // Criar novo cliente
+        const customerData = {
+          user_id: orderData.user_id,
+          name: orderData.customer_name,
+          phone: orderData.customer_phone,
+          address: orderData.customer_address
+        };
+
+        const { data: newCustomer, error: customerError } = await supabase
+          .from('customers')
+          .insert([customerData])
+          .select('id')
+          .single();
+
+        if (customerError) {
+          console.error('❌ Erro ao criar cliente:', customerError);
+          // Continuar sem cliente se falhar - não é crítico
+        } else {
+          console.log('✅ Cliente criado:', newCustomer.id);
+          customerId = newCustomer.id;
+        }
+      }
+
+      // Adicionar customer_id ao pedido se cliente foi criado/encontrado
+      if (customerId) {
+        orderData.customer_id = customerId;
+      }
+
+      console.log('🔄 Inserindo pedido...');
 
       const { data, error } = await supabase
         .from('orders')
