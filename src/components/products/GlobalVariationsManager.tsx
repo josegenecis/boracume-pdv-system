@@ -52,10 +52,9 @@ const GlobalVariationsManager = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('product_variations')
+        .from('global_variations')
         .select('*')
         .eq('user_id', user?.id)
-        .is('product_id', null) // Variações globais não têm product_id
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -127,21 +126,19 @@ const GlobalVariationsManager = () => {
         description: newVariation.description,
         max_selections: newVariation.max_selections,
         required: newVariation.required,
-        options: newVariation.options as any,
-        product_id: null, // Global variation
-        price: 0
+        options: newVariation.options as any
       };
 
       if (editingVariation) {
         const { error } = await supabase
-          .from('product_variations')
+          .from('global_variations')
           .update(variationData)
           .eq('id', editingVariation.id);
 
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('product_variations')
+          .from('global_variations')
           .insert(variationData);
 
         if (error) throw error;
@@ -167,7 +164,7 @@ const GlobalVariationsManager = () => {
   const deleteVariation = async (variationId: string) => {
     try {
       const { error } = await supabase
-        .from('product_variations')
+        .from('global_variations')
         .delete()
         .eq('id', variationId);
 
@@ -197,13 +194,11 @@ const GlobalVariationsManager = () => {
         description: variation.description,
         max_selections: variation.max_selections,
         required: variation.required,
-        options: variation.options as any,
-        product_id: null,
-        price: 0
+        options: variation.options as any
       };
 
       const { error } = await supabase
-        .from('product_variations')
+        .from('global_variations')
         .insert(variationData);
 
       if (error) throw error;

@@ -345,6 +345,42 @@ export type Database = {
         }
         Relationships: []
       }
+      global_variations: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          max_selections: number
+          name: string
+          options: Json
+          required: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_selections?: number
+          name: string
+          options?: Json
+          required?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          max_selections?: number
+          name?: string
+          options?: Json
+          required?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       kitchen_orders: {
         Row: {
           created_at: string

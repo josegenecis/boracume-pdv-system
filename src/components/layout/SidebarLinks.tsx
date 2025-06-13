@@ -14,7 +14,8 @@ import {
   ChefHat,
   Utensils,
   Crown,
-  Download
+  Download,
+  Tag
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -23,6 +24,7 @@ const SidebarLinks = () => {
   const links = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
+    { to: '/variacoes-globais', icon: Tag, label: 'Variações Globais' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
