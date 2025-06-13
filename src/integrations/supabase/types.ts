@@ -1003,6 +1003,7 @@ export type Database = {
       product_variations: {
         Row: {
           created_at: string
+          description: string | null
           id: string
           max_selections: number | null
           name: string
@@ -1015,6 +1016,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          description?: string | null
           id?: string
           max_selections?: number | null
           name: string
@@ -1027,6 +1029,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          description?: string | null
           id?: string
           max_selections?: number | null
           name?: string
