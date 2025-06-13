@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,13 +51,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     ...product
   });
   const [categories, setCategories] = useState([]);
+  const [globalVariations, setGlobalVariations] = useState([]);
+  const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
   useEffect(() => {
     loadCategories();
-  }, []);
+    loadGlobalVariations();
+    if (product?.id) {
+      loadProductVariations(product.id);
+    }
+  }, [product?.id]);
 
   const loadCategories = async () => {
     try {
@@ -69,6 +77,35 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setCategories(data || []);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
+    }
+  };
+
+  const loadGlobalVariations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('global_variations')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('name');
+
+      if (error) throw error;
+      setGlobalVariations(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar variações globais:', error);
+    }
+  };
+
+  const loadProductVariations = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_global_variation_links')
+        .select('global_variation_id')
+        .eq('product_id', productId);
+
+      if (error) throw error;
+      setSelectedVariations(data?.map(link => link.global_variation_id) || []);
+    } catch (error) {
+      console.error('Erro ao carregar variações do produto:', error);
     }
   };
 
@@ -93,6 +130,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         updated_at: new Date().toISOString()
       };
 
+      let productId = product?.id;
+
       if (product?.id) {
         const { error } = await supabase
           .from('products')
@@ -101,12 +140,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('products')
-          .insert([productData]);
+          .insert([productData])
+          .select('id')
+          .single();
 
         if (error) throw error;
+        productId = data.id;
       }
+
+      // Salvar variações globais selecionadas
+      await saveProductVariations(productId!);
 
       toast({
         title: "Sucesso",
@@ -124,6 +169,40 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveProductVariations = async (productId: string) => {
+    try {
+      // Remover vínculos existentes
+      await supabase
+        .from('product_global_variation_links')
+        .delete()
+        .eq('product_id', productId);
+
+      // Adicionar novos vínculos
+      if (selectedVariations.length > 0) {
+        const links = selectedVariations.map(variationId => ({
+          product_id: productId,
+          global_variation_id: variationId
+        }));
+
+        const { error } = await supabase
+          .from('product_global_variation_links')
+          .insert(links);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Erro ao salvar variações do produto:', error);
+    }
+  };
+
+  const handleVariationToggle = (variationId: string, checked: boolean) => {
+    setSelectedVariations(prev => 
+      checked 
+        ? [...prev, variationId]
+        : prev.filter(id => id !== variationId)
+    );
   };
 
   return (
@@ -245,6 +324,59 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
             </div>
           </div>
+
+          {/* Seção de Variações Globais */}
+          {globalVariations.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-lg">Variações Globais</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Selecione as variações globais que se aplicam a este produto
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {globalVariations.map((variation: any) => (
+                    <div key={variation.id} className="flex items-start space-x-3">
+                      <Checkbox
+                        id={`variation-${variation.id}`}
+                        checked={selectedVariations.includes(variation.id)}
+                        onCheckedChange={(checked) => 
+                          handleVariationToggle(variation.id, checked as boolean)
+                        }
+                      />
+                      <div className="flex-1">
+                        <Label 
+                          htmlFor={`variation-${variation.id}`}
+                          className="font-medium cursor-pointer"
+                        >
+                          {variation.name}
+                        </Label>
+                        {variation.description && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {variation.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            Máx: {variation.max_selections}
+                          </Badge>
+                          {variation.required && (
+                            <Badge variant="secondary" className="text-xs">
+                              Obrigatório
+                            </Badge>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {variation.options?.length || 0} opções
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onCancel}>

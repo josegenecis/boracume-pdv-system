@@ -1000,6 +1000,27 @@ export type Database = {
         }
         Relationships: []
       }
+      product_global_variation_links: {
+        Row: {
+          created_at: string
+          global_variation_id: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          created_at?: string
+          global_variation_id: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          created_at?: string
+          global_variation_id?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
       product_variation_links: {
         Row: {
           created_at: string | null
