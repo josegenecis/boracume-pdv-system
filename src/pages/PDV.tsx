@@ -317,13 +317,30 @@ const PDV = () => {
     
     try {
       return selectedVariations.flatMap(variation => {
+        // Handle new format from ProductVariationModal: {variationId, options}
+        if (variation && variation.options && Array.isArray(variation.options)) {
+          return variation.options.map((option: any) => {
+            if (typeof option === 'object' && option.name) {
+              return option.name;
+            }
+            return String(option);
+          });
+        }
+        
+        // Handle legacy format or direct string values
+        if (typeof variation === 'string') {
+          return [variation];
+        }
+        
+        // Handle legacy format with nested options
         if (variation && variation.options && Array.isArray(variation.options)) {
           return variation.options.map((option: any) => option.name || String(option));
         }
+        
         return [];
       });
     } catch (error) {
-      console.error('Error formatting variations:', error);
+      console.error('Error formatting variations:', error, selectedVariations);
       return [];
     }
   };
