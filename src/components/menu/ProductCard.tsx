@@ -44,7 +44,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
               </p>
             </div>
             <Button 
-              onClick={() => onProductClick(product)}
+              onClick={() => {
+                console.log('🔘 CLICK NO BOTÃO DO PRODUTO:', product.name);
+                onProductClick(product);
+              }}
               size="sm"
               className="ml-4"
             >

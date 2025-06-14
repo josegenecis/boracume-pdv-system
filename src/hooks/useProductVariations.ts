@@ -156,6 +156,12 @@ export const useProductVariations = () => {
 
   const handleProductClick = async (product: Product) => {
     console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+    console.log('🎯 ESTADO ATUAL DOS HOOKS:', {
+      selectedProduct: selectedProduct?.name || 'nenhum',
+      productVariations: productVariations.length,
+      showVariationModal,
+      hookStatus: 'iniciando busca de variações'
+    });
     
     try {
       console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');

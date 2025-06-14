@@ -24,11 +24,13 @@ export const useDigitalMenuCart = () => {
   const { toast } = useToast();
 
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
-    console.log('🔄 Adicionando ao carrinho:', {
+    console.log('🔄 CARDÁPIO DIGITAL - INICIANDO ADIÇÃO AO CARRINHO:', {
       product: product.name,
+      productId: product.id,
       quantity,
       selectedVariations,
-      notes
+      notes,
+      currentCartSize: cart.length
     });
 
     // Extrair opções selecionadas e calcular preço das variações
@@ -73,6 +75,11 @@ export const useDigitalMenuCart = () => {
     };
 
     setCart(prev => {
+      console.log('🔄 CARRINHO - Estado atual antes da adição:', {
+        itemsAtuais: prev.length,
+        itens: prev.map(item => ({ name: item.name, qty: item.quantity }))
+      });
+
       // Verificar se já existe um item idêntico
       const existingIndex = prev.findIndex(item => 
         item.id === product.id &&
@@ -84,12 +91,22 @@ export const useDigitalMenuCart = () => {
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
         updated[existingIndex].subtotal = (updated[existingIndex].price + updated[existingIndex].variationPrice) * updated[existingIndex].quantity;
-        console.log('✅ Item existente atualizado');
+        console.log('✅ CARRINHO - Item existente atualizado:', {
+          produto: updated[existingIndex].name,
+          novaQuantidade: updated[existingIndex].quantity,
+          novoSubtotal: updated[existingIndex].subtotal
+        });
         return updated;
       }
 
-      console.log('✅ Novo item adicionado ao carrinho');
-      return [...prev, newItem];
+      const newCart = [...prev, newItem];
+      console.log('✅ CARRINHO - Novo item adicionado:', {
+        produto: newItem.name,
+        quantidade: newItem.quantity,
+        subtotal: newItem.subtotal,
+        novoTamanhoCarrinho: newCart.length
+      });
+      return newCart;
     });
 
     toast({

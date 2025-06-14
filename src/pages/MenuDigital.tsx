@@ -21,6 +21,13 @@ const MenuDigital = () => {
   // Usar parâmetro da URL ou query parameter
   const userId = paramUserId || queryUserId;
   
+  console.log('🚀 CARDÁPIO DIGITAL - INICIADO:', {
+    paramUserId,
+    queryUserId,
+    finalUserId: userId,
+    currentUrl: window.location.href
+  });
+  
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -35,6 +42,17 @@ const MenuDigital = () => {
     handleAddToCart,
     closeVariationModal
   } = useProductVariations();
+  
+  console.log('📊 CARDÁPIO DIGITAL - DADOS CARREGADOS:', {
+    userId,
+    productCount: products.length,
+    categoryCount: categories.length,
+    loading,
+    hasProfile: !!profile,
+    deliveryZoneCount: deliveryZones?.length || 0,
+    showVariationModal,
+    selectedProduct: selectedProduct?.name || 'nenhum'
+  });
 
   const {
     cart,
@@ -42,6 +60,12 @@ const MenuDigital = () => {
     getCartTotal,
     getCartItemCount
   } = useDigitalMenuCart();
+  
+  console.log('🛒 CARDÁPIO DIGITAL - CARRINHO:', {
+    cartItemCount: getCartItemCount(),
+    cartTotal: getCartTotal(),
+    cartItems: cart.map(item => ({ name: item.name, qty: item.quantity }))
+  });
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
