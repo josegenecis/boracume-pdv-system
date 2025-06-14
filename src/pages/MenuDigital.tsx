@@ -254,45 +254,55 @@ const MenuDigital = () => {
       const formattedVariations: ProductVariation[] = allVariations
         .map(item => {
           try {
+            console.log('🔄 Processando variação:', item.name, item);
+            
             let options: Array<{ name: string; price: number; }> = [];
             
             if (item.options && Array.isArray(item.options)) {
               options = item.options
                 .filter((opt: any) => {
-                  // Validação mais flexível para aceitar variações globais
-                  return opt && 
-                         typeof opt === 'object' && 
-                         opt.name && 
-                         String(opt.name).trim().length > 0;
+                  // Validação simples - apenas verificar se tem nome
+                  const hasName = opt && opt.name && String(opt.name).trim().length > 0;
+                  if (!hasName) {
+                    console.log('⚠️ Opção sem nome válido:', opt);
+                  }
+                  return hasName;
                 })
                 .map((opt: any) => ({
                   name: String(opt.name).trim(),
-                  price: opt.price !== undefined ? Number(opt.price) || 0 : 0
+                  // Aceitar qualquer valor de preço, incluindo 0
+                  price: typeof opt.price === 'number' ? opt.price : (opt.price ? Number(opt.price) : 0)
                 }));
             }
 
             // Só incluir variações que tenham pelo menos uma opção válida
             if (options.length === 0) {
-              console.log('⚠️ Variação sem opções válidas ignorada:', item.name);
+              console.log('⚠️ Variação sem opções válidas ignorada:', item.name, item.options);
               return null;
             }
 
             const formatted = {
               id: item.id,
-              name: item.name || '',
+              name: String(item.name || '').trim(),
               options,
               max_selections: Math.max(1, Number(item.max_selections) || 1),
               required: Boolean(item.required)
             };
 
-            console.log('✅ Variação formatada:', formatted);
+            console.log('✅ Variação formatada com sucesso:', formatted.name, 'com', formatted.options.length, 'opções');
             return formatted;
           } catch (itemError) {
             console.error('❌ Erro ao processar variação:', itemError, item);
             return null;
           }
         })
-        .filter((variation): variation is ProductVariation => variation !== null && variation.options.length > 0);
+        .filter((variation): variation is ProductVariation => {
+          const isValid = variation !== null && variation.options.length > 0 && variation.name.trim().length > 0;
+          if (!isValid && variation) {
+            console.log('❌ Variação filtrada por validação final:', variation);
+          }
+          return isValid;
+        });
       
       console.log('✅ RESULTADO FINAL - Variações formatadas:', formattedVariations.length, formattedVariations);
       return formattedVariations;
