@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
+import { QuantitySelector } from './variation/QuantitySelector';
+import { VariationGroup } from './variation/VariationGroup';
 
 interface Product {
   id: string;
@@ -136,88 +136,19 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           )}
 
           {/* Quantidade */}
-          <div className="flex items-center gap-4">
-            <Label>Quantidade:</Label>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              >
-                -
-              </Button>
-              <span className="w-8 text-center">{quantity}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setQuantity(quantity + 1)}
-              >
-                +
-              </Button>
-            </div>
-          </div>
+          <QuantitySelector 
+            quantity={quantity}
+            onQuantityChange={setQuantity}
+          />
 
           {/* Variações */}
           {variations.map((variation) => (
-            <div key={variation.id} className="border rounded p-3">
-              <Label className="font-medium">
-                {variation.name} {variation.required && <span className="text-red-500">*</span>}
-              </Label>
-              
-              <div className="mt-2 space-y-2">
-                {variation.max_selections === 1 ? (
-                  <RadioGroup
-                    value={selectedVariations[variation.id]?.[0] || ''}
-                    onValueChange={(value) => 
-                      handleVariationChange(variation.id, value, true)
-                    }
-                  >
-                    {variation.options.map((option: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem 
-                            value={option.name} 
-                            id={`${variation.id}-${index}`} 
-                          />
-                          <Label htmlFor={`${variation.id}-${index}`}>
-                            {option.name}
-                          </Label>
-                        </div>
-                        {option.price > 0 && (
-                          <span className="text-sm text-green-600">
-                            +R$ {option.price.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </RadioGroup>
-                ) : (
-                  <div className="space-y-2">
-                    {variation.options.map((option: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`${variation.id}-${index}`}
-                            checked={selectedVariations[variation.id]?.includes(option.name) || false}
-                            onCheckedChange={(checked) => 
-                              handleVariationChange(variation.id, option.name, checked as boolean)
-                            }
-                          />
-                          <Label htmlFor={`${variation.id}-${index}`}>
-                            {option.name}
-                          </Label>
-                        </div>
-                        {option.price > 0 && (
-                          <span className="text-sm text-green-600">
-                            +R$ {option.price.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            <VariationGroup
+              key={variation.id}
+              variation={variation}
+              selectedVariations={selectedVariations}
+              onVariationChange={handleVariationChange}
+            />
           ))}
 
           {/* Observações */}
