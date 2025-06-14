@@ -195,7 +195,7 @@ const MenuDigital = () => {
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
-      console.log('🔄 Carregando variações para produto:', productId);
+      console.log('🔄 CARDÁPIO DIGITAL - Carregando variações para produto:', productId);
       
       // Buscar variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
@@ -207,6 +207,8 @@ const MenuDigital = () => {
         console.error('❌ Erro ao carregar variações do produto:', productError);
       }
 
+      console.log('🔍 Variações específicas do produto:', productVariations?.length || 0, productVariations);
+
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
@@ -214,13 +216,17 @@ const MenuDigital = () => {
         .eq('product_id', productId);
 
       if (globalError) {
-        console.error('❌ Erro ao carregar variações globais:', globalError);
+        console.error('❌ Erro ao carregar links de variações globais:', globalError);
       }
+
+      console.log('🔍 Links de variações globais:', globalVariationLinks?.length || 0, globalVariationLinks);
 
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        
+        console.log('🔍 IDs das variações globais:', globalVariationIds);
         
         const { data: globalVars, error: globalVarError } = await supabase
           .from('global_variations')
@@ -231,6 +237,7 @@ const MenuDigital = () => {
           console.error('❌ Erro ao buscar variações globais:', globalVarError);
         } else {
           globalVariations = globalVars || [];
+          console.log('🔍 Variações globais encontradas:', globalVariations.length, globalVariations);
         }
       }
 
@@ -240,7 +247,7 @@ const MenuDigital = () => {
         ...globalVariations
       ];
 
-      console.log('✅ Variações raw carregadas:', allVariations.length, allVariations);
+      console.log('✅ TOTAL de variações combinadas:', allVariations.length, allVariations);
       
       const formattedVariations: ProductVariation[] = allVariations
         .map(item => {
@@ -263,13 +270,16 @@ const MenuDigital = () => {
                 }));
             }
 
-            return {
+            const formatted = {
               id: item.id,
               name: item.name || '',
               options,
               max_selections: Math.max(1, Number(item.max_selections) || 1),
               required: Boolean(item.required)
             };
+
+            console.log('✅ Variação formatada:', formatted);
+            return formatted;
           } catch (itemError) {
             console.error('❌ Erro ao processar variação:', itemError, item);
             return null;
@@ -277,10 +287,10 @@ const MenuDigital = () => {
         })
         .filter((variation): variation is ProductVariation => variation !== null);
       
-      console.log('✅ Variações formatadas:', formattedVariations);
+      console.log('✅ RESULTADO FINAL - Variações formatadas:', formattedVariations.length, formattedVariations);
       return formattedVariations;
     } catch (error) {
-      console.error('❌ Erro ao carregar variações:', error);
+      console.error('❌ Erro geral ao carregar variações:', error);
       return [];
     }
   };

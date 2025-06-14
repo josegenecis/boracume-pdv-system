@@ -146,16 +146,19 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   };
 
   const handleProductSelect = async (product: Product) => {
+    console.log('🔄 ProductSelectionModal - Produto selecionado:', product.name);
     setSelectedProduct(product);
     
     // Check if product has variations
     const variations = await fetchProductVariations(product.id);
+    console.log('🔍 ProductSelectionModal - Variações encontradas:', variations.length);
     
     if (variations.length > 0) {
       setProductVariations(variations);
       setShowVariations(true);
     } else {
       // Add directly to cart without variations
+      console.log('✅ ProductSelectionModal - Adicionando produto sem variações ao carrinho');
       onAddToCart(product, 1);
       onClose();
     }

@@ -72,6 +72,7 @@ const PDV = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState('products');
   const { toast } = useToast();
   const { user } = useAuth();
@@ -263,13 +264,16 @@ const PDV = () => {
   };
 
   const handleProductClick = async (product: Product) => {
+    console.log('🔄 PDV - Produto clicado:', product.name);
+    
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
-      // Se tem variações, abrir modal de seleção com o produto específico
+      console.log('🔄 PDV - Produto tem variações, abrindo modal de personalização');
+      setSelectedProduct(product);
       setShowProductModal(true);
     } else {
-      // Se não tem variações, adicionar direto ao carrinho
+      console.log('✅ PDV - Produto sem variações, adicionando direto ao carrinho');
       addToCart(product, 1);
     }
   };
