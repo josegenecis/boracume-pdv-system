@@ -256,25 +256,31 @@ const MenuDigital = () => {
         dados: allVariations
       });
       
-      // Processar e formatar as variações
+      // Processar e formatar as variações - VALIDAÇÃO SIMPLIFICADA
       const formattedVariations: ProductVariation[] = [];
       
       for (const item of allVariations) {
         console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name, item);
         
         try {
-          // Verificar se tem opções válidas
+          // Verificar se tem dados básicos válidos
+          if (!item || !item.id || !item.name) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem dados básicos:', item);
+            continue;
+          }
+
+          // Verificar se tem opções válidas - ACEITAR PREÇO ZERO
           if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
             continue;
           }
 
-          // Processar opções
+          // Processar opções - SIMPLIFICADO: apenas verificar se tem nome
           const validOptions = item.options
             .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
             .map((opt: any) => ({
               name: String(opt.name).trim(),
-              price: Number(opt.price) || 0
+              price: Number(opt.price) >= 0 ? Number(opt.price) : 0 // Aceitar preço zero
             }));
 
           if (validOptions.length === 0) {
@@ -291,13 +297,17 @@ const MenuDigital = () => {
           };
 
           formattedVariations.push(formatted);
-          console.log('✅ CARDÁPIO DIGITAL - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções');
+          console.log('✅ CARDÁPIO DIGITAL - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções válidas');
         } catch (itemError) {
           console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError, item);
         }
       }
       
-      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', formattedVariations.length, 'variações processadas:', formattedVariations);
+      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', {
+        total: formattedVariations.length,
+        variações: formattedVariations.map(v => ({ name: v.name, opções: v.options.length }))
+      });
+      
       return formattedVariations;
     } catch (error) {
       console.error('❌ Erro geral ao carregar variações:', error);
@@ -306,25 +316,45 @@ const MenuDigital = () => {
   };
 
   const handleProductClick = async (product: Product) => {
-    console.log('🔄 CARDÁPIO DIGITAL - Produto clicado:', product.name, 'ID:', product.id);
+    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
     
     try {
+      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
       const variations = await fetchProductVariations(product.id);
-      console.log('🔄 CARDÁPIO DIGITAL - Variações retornadas:', variations.length, variations);
       
-      if (variations.length > 0) {
-        console.log('✅ CARDÁPIO DIGITAL - Produto tem variações, abrindo modal');
+      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
+        total: variations.length,
+        variações: variations.map(v => v.name)
+      });
+      
+      if (variations && variations.length > 0) {
+        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
         setSelectedProduct(product);
         setProductVariations(variations);
         setShowVariationModal(true);
+        
+        // Confirmar que os estados foram definidos
+        console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
+          selectedProduct: product.name,
+          variationsCount: variations.length,
+          modalShouldOpen: true
+        });
       } else {
-        console.log('✅ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
+        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
         addToCart(product, 1, [], '');
+        toast({
+          title: "Produto adicionado!",
+          description: `${product.name} foi adicionado ao carrinho.`,
+        });
       }
     } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
-      // Se der erro, adicionar sem variações
+      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
+      // Em caso de erro, adicionar sem variações
       addToCart(product, 1, [], '');
+      toast({
+        title: "Produto adicionado!",
+        description: `${product.name} foi adicionado ao carrinho.`,
+      });
     }
   };
 
