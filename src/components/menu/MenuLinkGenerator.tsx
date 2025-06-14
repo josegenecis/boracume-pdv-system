@@ -13,7 +13,7 @@ const MenuLinkGenerator = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const menuUrl = `${window.location.origin}/menu/${user?.id}`;
+  const menuUrl = `${window.location.protocol}//${window.location.hostname}:8080/menu/${user?.id}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(menuUrl)}`;
 
   const copyToClipboard = async () => {
