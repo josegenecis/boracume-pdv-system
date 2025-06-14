@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
+import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 
 interface Order {
   id: string;
@@ -41,6 +42,8 @@ const Orders = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
@@ -149,6 +152,20 @@ const Orders = () => {
     } catch (err) {
       console.error('Erro ao copiar:', err);
     }
+  };
+
+  const copyLocation = async (order: Order) => {
+    if (order.customer_latitude && order.customer_longitude) {
+      const coordinates = `${order.customer_latitude},${order.customer_longitude}`;
+      await copyToClipboard(coordinates);
+    } else if (order.customer_address) {
+      await copyToClipboard(order.customer_address);
+    }
+  };
+
+  const openOrderDetails = (order: Order) => {
+    setSelectedOrder(order);
+    setIsDetailsModalOpen(true);
   };
 
   const filterOrders = () => {
@@ -379,8 +396,8 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {pendingOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-yellow-500">
-                    <CardContent className="p-4">
+                  <Card key={order.id} className="border-l-4 border-l-yellow-500 cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold">#{order.order_number}</h3>
@@ -411,19 +428,35 @@ const Orders = () => {
                               <span>{order.customer_address}</span>
                             </div>
                             
-                            {order.google_maps_link && (
-                              <div className="flex flex-col gap-2">
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyLocation(order);
+                                }}
+                                className="h-7 text-xs flex-1"
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copiar
+                              </Button>
+                              
+                              {order.google_maps_link && (
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(order.google_maps_link, '_blank')}
-                                  className="h-7 text-xs w-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(order.google_maps_link, '_blank');
+                                  }}
+                                  className="h-7 text-xs flex-1"
                                 >
                                   <ExternalLink className="h-3 w-3 mr-1" />
-                                  Abrir no Maps
+                                  Maps
                                 </Button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -435,7 +468,10 @@ const Orders = () => {
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            onClick={() => updateOrderStatus(order.id, 'preparing')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'preparing');
+                            }}
                             className="flex-1"
                           >
                             Aceitar
@@ -443,7 +479,10 @@ const Orders = () => {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'cancelled');
+                            }}
                             className="flex-1"
                           >
                             Cancelar
@@ -471,8 +510,8 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {activeOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-blue-500">
-                    <CardContent className="p-4">
+                  <Card key={order.id} className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold">#{order.order_number}</h3>
@@ -513,7 +552,10 @@ const Orders = () => {
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            onClick={() => updateOrderStatus(order.id, 'ready')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'ready');
+                            }}
                             className="flex-1"
                           >
                             Marcar Pronto
@@ -521,7 +563,10 @@ const Orders = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => updateOrderStatus(order.id, 'completed')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'completed');
+                            }}
                             className="flex-1"
                           >
                             Finalizar
@@ -549,8 +594,8 @@ const Orders = () => {
             ) : (
               <div className="space-y-4">
                 {completedOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-green-500">
-                    <CardContent className="p-4">
+                  <Card key={order.id} className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold">#{order.order_number}</h3>
@@ -586,6 +631,17 @@ const Orders = () => {
             )}
           </div>
         </div>
+
+        {/* Modal de Detalhes */}
+        <OrderDetailsModal
+          order={selectedOrder}
+          isOpen={isDetailsModalOpen}
+          onClose={() => {
+            setIsDetailsModalOpen(false);
+            setSelectedOrder(null);
+          }}
+          onStatusChange={updateOrderStatus}
+        />
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { Search, Settings, User, LogOut, Crown, Shield } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -20,6 +21,7 @@ const DashboardHeader: React.FC = () => {
   const { user, subscription, signOut, profile } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const { pendingCount } = useGlobalNotifications();
 
   const handleSignOut = async () => {
     await signOut();
@@ -104,7 +106,14 @@ const DashboardHeader: React.FC = () => {
           </Button>
 
           {/* Notifications */}
-          <NotificationBell />
+          <div className="relative">
+            <NotificationBell />
+            {pendingCount > 0 && (
+              <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </Badge>
+            )}
+          </div>
 
           {/* User Menu */}
           <DropdownMenu>

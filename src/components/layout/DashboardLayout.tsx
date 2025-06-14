@@ -2,6 +2,7 @@
 import React from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
+import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
           </div>
         </main>
       </div>
+      <GlobalNotificationSystem />
     </div>
   );
 };
