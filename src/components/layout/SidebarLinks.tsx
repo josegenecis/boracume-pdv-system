@@ -15,7 +15,8 @@ import {
   Utensils,
   Crown,
   Download,
-  Tag
+  Tag,
+  QrCode
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -25,6 +26,7 @@ const SidebarLinks = () => {
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
     { to: '/variacoes-globais', icon: Tag, label: 'Variações Globais' },
+    { to: '/cardapio', icon: QrCode, label: 'Cardápio Digital' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },

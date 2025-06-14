@@ -28,6 +28,7 @@ import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
 import GlobalVariations from '@/pages/GlobalVariations';
+import Menu from '@/pages/Menu';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ function AppContent() {
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/variacoes-globais" element={<GlobalVariations />} />
+          <Route path="/cardapio" element={<Menu />} />
         </Route>
       </Route>
       
