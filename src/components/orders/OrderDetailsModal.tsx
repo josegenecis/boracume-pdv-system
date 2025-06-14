@@ -23,13 +23,9 @@ interface OrderItem {
   product_name: string;
   quantity: number;
   price: number;
-  subtotal: number;
+  total: number;
   options?: string[];
-  variations?: Array<{
-    name: string;
-    selectedOptions: string[];
-    price: number;
-  }>;
+  variations?: string[];
   notes?: string;
 }
 
@@ -248,26 +244,15 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       <div className="font-medium">
                         {item.quantity}x {item.product_name}
                       </div>
-                      <div className="font-semibold">
-                        {formatCurrency(item.subtotal)}
-                      </div>
+                       <div className="font-semibold">
+                         {formatCurrency(item.total)}
+                       </div>
                     </div>
                     
                     {item.variations && item.variations.length > 0 && (
-                      <div className="ml-4 space-y-1">
-                        {item.variations.map((variation, vIndex) => (
-                          <div key={vIndex} className="text-sm text-blue-600">
-                            <span className="font-medium">{variation.name}:</span>
-                            <span className="ml-1">
-                              {variation.selectedOptions.join(', ')}
-                              {variation.price > 0 && (
-                                <span className="ml-1">
-                                  (+{formatCurrency(variation.price)})
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        ))}
+                      <div className="ml-4 mt-1 text-sm text-blue-600">
+                        <span className="font-medium">Variações:</span>
+                        <span className="ml-1">{item.variations.join(', ')}</span>
                       </div>
                     )}
                     
