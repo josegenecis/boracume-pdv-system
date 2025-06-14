@@ -2,14 +2,13 @@
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
-import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
+import { useSimpleCart } from '@/hooks/useSimpleCart';
+import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
-import { useProductVariations } from '@/hooks/useProductVariations';
 import { MenuHeader } from '@/components/menu/MenuHeader';
 import { MenuContent } from '@/components/menu/MenuContent';
-import ProductVariationModal from '@/components/menu/ProductVariationModal';
-import CheckoutModal from '@/components/menu/CheckoutModal';
+import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
+import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -29,43 +28,48 @@ const MenuDigital = () => {
   });
   
   const { toast } = useToast();
-  const { sendToKitchen } = useKitchenIntegration();
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showCartModal, setShowCartModal] = useState(false);
+  const [showVariationModal, setShowVariationModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
   // Custom hooks
   const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
-  const {
-    selectedProduct,
-    productVariations,
-    showVariationModal,
-    handleProductClick,
-    handleAddToCart,
-    closeVariationModal
-  } = useProductVariations();
-  
-  console.log('📊 CARDÁPIO DIGITAL - DADOS CARREGADOS:', {
-    userId,
-    productCount: products.length,
-    categoryCount: categories.length,
-    loading,
-    hasProfile: !!profile,
-    deliveryZoneCount: deliveryZones?.length || 0,
-    showVariationModal,
-    selectedProduct: selectedProduct?.name || 'nenhum'
-  });
-
+  const { fetchVariations } = useSimpleVariations();
   const {
     cart,
+    addToCart,
+    updateQuantity,
+    removeFromCart,
     clearCart,
     getCartTotal,
     getCartItemCount
-  } = useDigitalMenuCart();
+  } = useSimpleCart();
   
-  console.log('🛒 CARDÁPIO DIGITAL - CARRINHO:', {
-    cartItemCount: getCartItemCount(),
-    cartTotal: getCartTotal(),
-    cartItems: cart.map(item => ({ name: item.name, qty: item.quantity }))
-  });
+  const handleProductClick = async (product: any) => {
+    console.log('🔄 Click no produto:', product.name);
+    
+    try {
+      const variations = await fetchVariations(product.id);
+      
+      if (variations && variations.length > 0) {
+        console.log('✅ Produto tem variações, abrindo modal');
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+      } else {
+        console.log('➡️ Produto sem variações, adicionando direto');
+        addToCart(product, 1, [], '', 0);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar variações:', error);
+      addToCart(product, 1, [], '', 0);
+    }
+  };
+
+  const handleAddToCartFromModal = (product: any, quantity: number, variations: string[], notes: string, variationPrice: number) => {
+    addToCart(product, quantity, variations, notes, variationPrice);
+    setShowVariationModal(false);
+    setSelectedProduct(null);
+  };
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
@@ -161,7 +165,7 @@ const MenuDigital = () => {
       });
 
       clearCart();
-      setShowCheckoutModal(false);
+      setShowCartModal(false);
     } catch (error) {
       console.error('Erro completo ao finalizar pedido:', error);
       
@@ -235,21 +239,25 @@ const MenuDigital = () => {
       </div>
 
       {/* Modals */}
-      <ProductVariationModal
-        isOpen={showVariationModal && !!selectedProduct}
-        onClose={closeVariationModal}
-        product={selectedProduct || { id: '', name: '', price: 0 }}
-        variations={productVariations}
-        onAddToCart={handleAddToCart}
+      <SimpleVariationModal
+        isOpen={showVariationModal}
+        onClose={() => {
+          setShowVariationModal(false);
+          setSelectedProduct(null);
+        }}
+        product={selectedProduct}
+        onAddToCart={handleAddToCartFromModal}
       />
 
-      <CheckoutModal
-        isOpen={showCheckoutModal}
-        onClose={() => setShowCheckoutModal(false)}
+      <SimpleCartModal
+        isOpen={showCartModal}
+        onClose={() => setShowCartModal(false)}
         cart={cart}
         total={getCartTotal()}
-        deliveryZones={deliveryZones}
+        onUpdateQuantity={updateQuantity}
+        onRemoveItem={removeFromCart}
         onPlaceOrder={handlePlaceOrder}
+        deliveryZones={deliveryZones}
         userId={userId}
       />
 
@@ -257,7 +265,7 @@ const MenuDigital = () => {
       <CartBottomBar
         itemCount={getCartItemCount()}
         total={getCartTotal()}
-        onOpenCart={() => setShowCheckoutModal(true)}
+        onOpenCart={() => setShowCartModal(true)}
       />
     </div>
   );
