@@ -26,7 +26,7 @@ export const useSimpleVariations = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchVariations = async (productId: string): Promise<ProductVariation[]> => {
-    console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
+    console.log('🔄 HOOK - Iniciando busca de variações para produto:', productId);
     setIsLoading(true);
     
     try {
@@ -129,9 +129,9 @@ export const useSimpleVariations = () => {
         }
       }
       
-      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', {
+      console.log('🎯 HOOK - RESULTADO FINAL:', {
         total: formatted.length,
-        variações: formatted.map(v => ({ name: v.name, opções: v.options.length }))
+        variações: formatted.map(v => ({ name: v.name, opções: v.options.length, required: v.required }))
       });
 
       return formatted;

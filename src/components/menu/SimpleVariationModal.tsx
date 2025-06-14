@@ -36,16 +36,31 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   useEffect(() => {
     if (product && isOpen) {
+      console.log('🔄 MODAL - Iniciando carregamento de variações para:', product.name);
       loadVariations();
     }
   }, [product, isOpen]);
 
   const loadVariations = async () => {
-    if (!product) return;
+    if (!product) {
+      console.log('⚠️ MODAL - Produto não encontrado');
+      return;
+    }
     
-    const productVariations = await fetchVariations(product.id);
-    setVariations(productVariations);
-    setSelectedVariations({});
+    console.log('🔍 MODAL - Buscando variações para produto:', product.id, product.name);
+    
+    try {
+      const productVariations = await fetchVariations(product.id);
+      console.log('✅ MODAL - Variações carregadas:', productVariations.length, productVariations);
+      
+      setVariations(productVariations);
+      setSelectedVariations({});
+      
+      console.log('📊 MODAL - Estado atualizado - Total de variações:', productVariations.length);
+    } catch (error) {
+      console.error('❌ MODAL - Erro ao carregar variações:', error);
+      setVariations([]);
+    }
   };
 
   const handleVariationChange = (variationId: string, optionName: string, isSelected: boolean) => {
@@ -142,14 +157,24 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           />
 
           {/* Variações */}
-          {variations.map((variation) => (
-            <VariationGroup
-              key={variation.id}
-              variation={variation}
-              selectedVariations={selectedVariations}
-              onVariationChange={handleVariationChange}
-            />
-          ))}
+          {(() => {
+            console.log('🎨 MODAL - Renderizando variações:', variations.length);
+            return null;
+          })()}
+          {variations.length > 0 ? (
+            variations.map((variation) => (
+              <VariationGroup
+                key={variation.id}
+                variation={variation}
+                selectedVariations={selectedVariations}
+                onVariationChange={handleVariationChange}
+              />
+            ))
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Nenhuma variação disponível para este produto.
+            </div>
+          )}
 
           {/* Observações */}
           <div>
