@@ -1035,19 +1035,21 @@ const PDV = () => {
         </TabsContent>
       </Tabs>
 
-      <ProductVariationModal
-        isOpen={showVariationModal}
-        product={selectedProduct!}
-        variations={productVariations}
-        onAddToCart={(product, quantity, variations, notes) => {
-          addToCart({...product, available: true}, quantity, variations, notes);
-        }}
-        onClose={() => {
-          setShowVariationModal(false);
-          setSelectedProduct(null);
-          setProductVariations([]);
-        }}
-      />
+      {selectedProduct && (
+        <ProductVariationModal
+          isOpen={showVariationModal}
+          product={selectedProduct}
+          variations={productVariations}
+          onAddToCart={(product, quantity, variations, notes) => {
+            addToCart({...product, available: true}, quantity, variations, notes);
+          }}
+          onClose={() => {
+            setShowVariationModal(false);
+            setSelectedProduct(null);
+            setProductVariations([]);
+          }}
+        />
+      )}
     </div>
   );
 };
