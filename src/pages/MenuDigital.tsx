@@ -47,11 +47,6 @@ const MenuDigital = () => {
   
   const handleProductClick = async (product: any) => {
     console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
-    console.log('🎯 ESTADO ATUAL DOS HOOKS:', {
-      selectedProduct: selectedProduct?.name || 'nenhum',
-      showVariationModal,
-      hookStatus: 'iniciando busca de variações'
-    });
     
     try {
       console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
@@ -62,25 +57,23 @@ const MenuDigital = () => {
         variações: variations.map(v => v.name)
       });
       
-      if (variations && variations.length > 0) {
-        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
-        
-        setSelectedProduct(product);
-        setShowVariationModal(true);
-        
-        console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
-          selectedProduct: product.name,
-          variationsCount: variations.length,
-          modalShouldOpen: true
-        });
-      } else {
-        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
-        addToCart(product, 1, [], '', 0);
-      }
+      // SEMPRE abrir modal de variações, mesmo se não houver variações
+      // Isso permite que o usuário ajuste quantidade e adicione observações
+      console.log('✅ CARDÁPIO DIGITAL - Abrindo modal de variações/detalhes...');
+      
+      setSelectedProduct(product);
+      setShowVariationModal(true);
+      
+      console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
+        selectedProduct: product.name,
+        variationsCount: variations.length,
+        modalAberto: true
+      });
     } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
-      // Em caso de erro, adicionar sem variações
-      addToCart(product, 1, [], '', 0);
+      console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
+      // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
+      setSelectedProduct(product);
+      setShowVariationModal(true);
     }
   };
 

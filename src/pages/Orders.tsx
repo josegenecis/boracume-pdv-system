@@ -51,6 +51,56 @@ const Orders = () => {
   useEffect(() => {
     if (user) {
       fetchOrders();
+      
+      // Setup real-time subscription for new orders
+      const channel = supabase
+        .channel('orders-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'orders',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔔 Novo pedido em tempo real:', payload);
+            
+            // Add new order to the list
+            const newOrder = {
+              ...payload.new,
+              items: Array.isArray(payload.new.items) ? payload.new.items : []
+            } as Order;
+            
+            setOrders(prev => [newOrder, ...prev]);
+            
+            // Play notification sound (handled by useOrderNotifications)
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'orders',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔄 Pedido atualizado em tempo real:', payload);
+            
+            // Update order in the list
+            setOrders(prev => prev.map(order => 
+              order.id === payload.new.id 
+                ? { ...payload.new, items: Array.isArray(payload.new.items) ? payload.new.items : [] } as Order
+                : order
+            ));
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user]);
 
@@ -313,108 +363,80 @@ const Orders = () => {
           </CardContent>
         </Card>
 
-        {/* Orders Tabs */}
-        <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="pending" className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-              Pendentes ({pendingOrders.length})
-            </TabsTrigger>
-            <TabsTrigger value="active" className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Ativos ({activeOrders.length})
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              Finalizados ({completedOrders.length})
-            </TabsTrigger>
-          </TabsList>
+        {/* Orders Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Novos (Pendentes) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+              <h2 className="text-lg font-semibold text-yellow-800">Novos ({pendingOrders.length})</h2>
+            </div>
 
-          <TabsContent value="pending" className="space-y-4">
             {pendingOrders.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">Nenhum pedido pendente</p>
               </div>
             ) : (
-              <div className="grid gap-4">
+              <div className="space-y-4">
                 {pendingOrders.map((order) => (
                   <Card key={order.id} className="border-l-4 border-l-yellow-500">
                     <CardContent className="p-4">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                            {getStatusBadge(order.status)}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                          {getStatusBadge(order.status)}
+                          <div className="flex items-center gap-1">
+                            {getOrderTypeIcon(order.order_type)}
+                            <span className="text-sm text-gray-600">
+                              {getOrderTypeLabel(order.order_type)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-sm text-gray-600">
+                          <div className="font-medium">{order.customer_name}</div>
+                          {order.customer_phone && (
                             <div className="flex items-center gap-1">
-                              {getOrderTypeIcon(order.order_type)}
-                              <span className="text-sm text-gray-600">
-                                {getOrderTypeLabel(order.order_type)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="font-medium">{order.customer_name}</span>
-                            {order.customer_phone && (
-                              <div className="flex items-center gap-1">
-                                <Phone size={14} />
-                                {order.customer_phone}
-                              </div>
-                            )}
-                            <span>{formatDate(order.created_at)}</span>
-                          </div>
-
-                          {order.customer_address && (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <MapPin className="h-4 w-4" />
-                                <span>{order.customer_address}</span>
-                              </div>
-                              
-                              {order.google_maps_link && (
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(order.google_maps_link, '_blank')}
-                                    className="h-7 text-xs"
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Abrir no Maps
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => copyToClipboard(order.google_maps_link || '')}
-                                    className="h-7 text-xs"
-                                  >
-                                    <Copy className="h-3 w-3 mr-1" />
-                                    Copiar Link
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {order.customer_latitude && order.customer_longitude && (
-                                <div className="text-xs text-muted-foreground">
-                                  GPS: {order.customer_latitude.toFixed(6)}, {order.customer_longitude.toFixed(6)}
-                                  {order.customer_location_accuracy && ` (±${Math.round(order.customer_location_accuracy)}m)`}
-                                </div>
-                              )}
+                              <Phone size={14} />
+                              {order.customer_phone}
                             </div>
                           )}
+                          <div>{formatDate(order.created_at)}</div>
+                        </div>
 
-                          <div className="text-sm text-gray-600">
-                            {order.items.length} item(s) • {formatCurrency(order.total)} • 
-                            <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
-                            {order.estimated_time && ` • ${order.estimated_time}`}
+                        {order.customer_address && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <MapPin className="h-4 w-4" />
+                              <span>{order.customer_address}</span>
+                            </div>
+                            
+                            {order.google_maps_link && (
+                              <div className="flex flex-col gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(order.google_maps_link, '_blank')}
+                                  className="h-7 text-xs w-full"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Abrir no Maps
+                                </Button>
+                              </div>
+                            )}
                           </div>
+                        )}
+
+                        <div className="text-sm text-gray-600">
+                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            variant="outline"
                             onClick={() => updateOrderStatus(order.id, 'preparing')}
+                            className="flex-1"
                           >
                             Aceitar
                           </Button>
@@ -422,6 +444,7 @@ const Orders = () => {
                             size="sm"
                             variant="destructive"
                             onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                            className="flex-1"
                           >
                             Cancelar
                           </Button>
@@ -432,160 +455,76 @@ const Orders = () => {
                 ))}
               </div>
             )}
-          </TabsContent>
+          </div>
 
-          <TabsContent value="active" className="space-y-4">
+          {/* Ativos */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <h2 className="text-lg font-semibold text-blue-800">Ativos ({activeOrders.length})</h2>
+            </div>
+
             {activeOrders.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">Nenhum pedido ativo</p>
               </div>
             ) : (
-              <div className="grid gap-4">
+              <div className="space-y-4">
                 {activeOrders.map((order) => (
                   <Card key={order.id} className="border-l-4 border-l-blue-500">
                     <CardContent className="p-4">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                            {getStatusBadge(order.status)}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                          {getStatusBadge(order.status)}
+                          <div className="flex items-center gap-1">
+                            {getOrderTypeIcon(order.order_type)}
+                            <span className="text-sm text-gray-600">
+                              {getOrderTypeLabel(order.order_type)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-sm text-gray-600">
+                          <div className="font-medium">{order.customer_name}</div>
+                          {order.customer_phone && (
                             <div className="flex items-center gap-1">
-                              {getOrderTypeIcon(order.order_type)}
-                              <span className="text-sm text-gray-600">
-                                {getOrderTypeLabel(order.order_type)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="font-medium">{order.customer_name}</span>
-                            {order.customer_phone && (
-                              <div className="flex items-center gap-1">
-                                <Phone size={14} />
-                                {order.customer_phone}
-                              </div>
-                            )}
-                            <span>{formatDate(order.created_at)}</span>
-                          </div>
-
-                          {order.customer_address && (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <MapPin className="h-4 w-4" />
-                                <span>{order.customer_address}</span>
-                              </div>
-                              
-                              {order.google_maps_link && (
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(order.google_maps_link, '_blank')}
-                                    className="h-7 text-xs"
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Abrir no Maps
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => copyToClipboard(order.google_maps_link || '')}
-                                    className="h-7 text-xs"
-                                  >
-                                    <Copy className="h-3 w-3 mr-1" />
-                                    Copiar Link
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {order.customer_latitude && order.customer_longitude && (
-                                <div className="text-xs text-muted-foreground">
-                                  GPS: {order.customer_latitude.toFixed(6)}, {order.customer_longitude.toFixed(6)}
-                                  {order.customer_location_accuracy && ` (±${Math.round(order.customer_location_accuracy)}m)`}
-                                </div>
-                              )}
+                              <Phone size={14} />
+                              {order.customer_phone}
                             </div>
                           )}
+                          <div>{formatDate(order.created_at)}</div>
+                        </div>
 
-                          <div className="text-sm text-gray-600">
-                            {order.items.length} item(s) • {formatCurrency(order.total)} • 
-                            <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
-                            {order.estimated_time && ` • ${order.estimated_time}`}
+                        {order.customer_address && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <MapPin className="h-4 w-4" />
+                              <span>{order.customer_address}</span>
+                            </div>
                           </div>
+                        )}
+
+                        <div className="text-sm text-gray-600">
+                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
                         <div className="flex gap-2">
-                          {order.status === 'preparing' && (
-                            <Button
-                              size="sm"
-                              onClick={() => updateOrderStatus(order.id, 'ready')}
-                            >
-                              Marcar Pronto
-                            </Button>
-                          )}
-                          {order.status === 'ready' && (
-                            <Button
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700"
-                              onClick={() => updateOrderStatus(order.id, order.order_type === 'delivery' ? 'delivered' : 'completed')}
-                            >
-                              <Check size={16} className="mr-1" />
-                              {order.order_type === 'delivery' ? 'Entregue' : 'Finalizar'}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="completed" className="space-y-4">
-            {completedOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Nenhum pedido finalizado</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {completedOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-green-500">
-                    <CardContent className="p-4">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold">#{order.order_number}</h3>
-                            {getStatusBadge(order.status)}
-                            <div className="flex items-center gap-1">
-                              {getOrderTypeIcon(order.order_type)}
-                              <span className="text-sm text-gray-600">
-                                {getOrderTypeLabel(order.order_type)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="font-medium">{order.customer_name}</span>
-                            {order.customer_phone && (
-                              <div className="flex items-center gap-1">
-                                <Phone size={14} />
-                                {order.customer_phone}
-                              </div>
-                            )}
-                            <span>{formatDate(order.created_at)}</span>
-                          </div>
-
-                          <div className="text-sm text-gray-600">
-                            {order.items.length} item(s) • {formatCurrency(order.total)}
-                            • {order.payment_method.toUpperCase()}
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <Eye size={16} className="mr-1" />
-                            Ver Detalhes
+                          <Button
+                            size="sm"
+                            onClick={() => updateOrderStatus(order.id, 'ready')}
+                            className="flex-1"
+                          >
+                            Marcar Pronto
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateOrderStatus(order.id, 'completed')}
+                            className="flex-1"
+                          >
+                            Finalizar
                           </Button>
                         </div>
                       </div>
@@ -594,8 +533,59 @@ const Orders = () => {
                 ))}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+
+          {/* Finalizados */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <h2 className="text-lg font-semibold text-green-800">Finalizados ({completedOrders.length})</h2>
+            </div>
+
+            {completedOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido finalizado</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {completedOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-green-500">
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                          {getStatusBadge(order.status)}
+                          <div className="flex items-center gap-1">
+                            {getOrderTypeIcon(order.order_type)}
+                            <span className="text-sm text-gray-600">
+                              {getOrderTypeLabel(order.order_type)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-sm text-gray-600">
+                          <div className="font-medium">{order.customer_name}</div>
+                          {order.customer_phone && (
+                            <div className="flex items-center gap-1">
+                              <Phone size={14} />
+                              {order.customer_phone}
+                            </div>
+                          )}
+                          <div>{formatDate(order.created_at)}</div>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
