@@ -205,9 +205,10 @@ const MenuDigital = () => {
 
       if (productError) {
         console.error('❌ Erro ao carregar variações do produto:', productError);
+        throw productError;
       }
 
-      console.log('🔍 Variações específicas do produto:', productVariations?.length || 0, productVariations);
+      console.log('✅ Variações específicas encontradas:', productVariations?.length || 0);
 
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
@@ -217,9 +218,10 @@ const MenuDigital = () => {
 
       if (globalError) {
         console.error('❌ Erro ao carregar links de variações globais:', globalError);
+        throw globalError;
       }
 
-      console.log('🔍 Links de variações globais:', globalVariationLinks?.length || 0, globalVariationLinks);
+      console.log('✅ Links de variações globais encontrados:', globalVariationLinks?.length || 0);
 
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
