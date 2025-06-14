@@ -257,17 +257,22 @@ const MenuDigital = () => {
             if (item.options && Array.isArray(item.options)) {
               options = item.options
                 .filter((opt: any) => {
+                  // Validação mais flexível para aceitar variações globais
                   return opt && 
                          typeof opt === 'object' && 
                          opt.name && 
-                         typeof opt.name === 'string' &&
-                         opt.price !== undefined && 
-                         !isNaN(Number(opt.price));
+                         String(opt.name).trim().length > 0;
                 })
                 .map((opt: any) => ({
                   name: String(opt.name).trim(),
-                  price: Number(opt.price)
+                  price: opt.price !== undefined ? Number(opt.price) || 0 : 0
                 }));
+            }
+
+            // Só incluir variações que tenham pelo menos uma opção válida
+            if (options.length === 0) {
+              console.log('⚠️ Variação sem opções válidas ignorada:', item.name);
+              return null;
             }
 
             const formatted = {
@@ -285,7 +290,7 @@ const MenuDigital = () => {
             return null;
           }
         })
-        .filter((variation): variation is ProductVariation => variation !== null);
+        .filter((variation): variation is ProductVariation => variation !== null && variation.options.length > 0);
       
       console.log('✅ RESULTADO FINAL - Variações formatadas:', formattedVariations.length, formattedVariations);
       return formattedVariations;
