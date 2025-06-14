@@ -46,21 +46,40 @@ const MenuDigital = () => {
   } = useSimpleCart();
   
   const handleProductClick = async (product: any) => {
-    console.log('🔄 Click no produto:', product.name);
+    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+    console.log('🎯 ESTADO ATUAL DOS HOOKS:', {
+      selectedProduct: selectedProduct?.name || 'nenhum',
+      showVariationModal,
+      hookStatus: 'iniciando busca de variações'
+    });
     
     try {
+      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
       const variations = await fetchVariations(product.id);
       
+      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
+        total: variations.length,
+        variações: variations.map(v => v.name)
+      });
+      
       if (variations && variations.length > 0) {
-        console.log('✅ Produto tem variações, abrindo modal');
+        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
+        
         setSelectedProduct(product);
         setShowVariationModal(true);
+        
+        console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
+          selectedProduct: product.name,
+          variationsCount: variations.length,
+          modalShouldOpen: true
+        });
       } else {
-        console.log('➡️ Produto sem variações, adicionando direto');
+        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
         addToCart(product, 1, [], '', 0);
       }
     } catch (error) {
-      console.error('Erro ao verificar variações:', error);
+      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
+      // Em caso de erro, adicionar sem variações
       addToCart(product, 1, [], '', 0);
     }
   };
