@@ -24,6 +24,7 @@ interface Order {
   google_maps_link?: string;
   order_type: string;
   status: string;
+  acceptance_status?: string;
   total: number;
   delivery_fee?: number;
   payment_method: string;
@@ -124,9 +125,14 @@ const Orders = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
+      // Atualizar tanto status quanto acceptance_status
+      const updateData = newStatus === 'preparing' 
+        ? { status: newStatus, acceptance_status: 'accepted' }
+        : { status: newStatus };
+
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', orderId);
 
       if (error) throw error;
@@ -242,7 +248,7 @@ const Orders = () => {
     return new Date(dateString).toLocaleString('pt-BR');
   };
 
-  const pendingOrders = filteredOrders.filter(order => order.status === 'pending');
+  const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance');
   const activeOrders = filteredOrders.filter(order => ['preparing', 'ready'].includes(order.status));
   const completedOrders = filteredOrders.filter(order => ['completed', 'delivered'].includes(order.status));
 

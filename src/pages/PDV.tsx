@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
+import ProductVariationSelector from '@/components/pdv/ProductVariationSelector';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 
 interface Product {
@@ -71,8 +71,9 @@ const PDV = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
+  const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [activeTab, setActiveTab] = useState('products');
   const { toast } = useToast();
   const { user } = useAuth();
@@ -269,9 +270,10 @@ const PDV = () => {
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
-      console.log('🔄 PDV - Produto tem variações, abrindo modal de personalização');
+      console.log('🔄 PDV - Produto tem variações, abrindo selector');
       setSelectedProduct(product);
-      setShowProductModal(true);
+      setProductVariations(variations);
+      setShowVariationModal(true);
     } else {
       console.log('✅ PDV - Produto sem variações, adicionando direto ao carrinho');
       addToCart(product, 1);
@@ -571,6 +573,7 @@ const PDV = () => {
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'pending',
+        acceptance_status: 'pending_acceptance',
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min'
@@ -594,19 +597,8 @@ const PDV = () => {
         return product?.send_to_kds === true;
       });
 
-      // Send to KDS with all additional information
-      if (itemsForKitchen.length > 0) {
-        await sendToKitchen({
-          user_id: user?.id || '',
-          order_number: orderNumber,
-          customer_name: orderData.customer_name,
-          customer_phone: orderData.customer_phone || '',
-          items: itemsForKitchen,
-          total: getFinalTotal(),
-          payment_method: paymentMethod,
-          order_type: orderType
-        });
-      }
+      // Não enviar para KDS automaticamente
+      // Apenas após aceitação manual no Orders.tsx
 
       if (orderType === 'dine_in' && selectedTable) {
         try {
@@ -711,13 +703,6 @@ const PDV = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Button 
-                    onClick={() => setShowProductModal(true)}
-                    className="w-full mb-4"
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Adicionar Produto
-                  </Button>
                   
                   {filteredProducts.length === 0 ? (
                     <div className="text-center py-8">
@@ -1050,11 +1035,23 @@ const PDV = () => {
         </TabsContent>
       </Tabs>
 
-      <ProductSelectionModal
-        isOpen={showProductModal}
-        onClose={() => setShowProductModal(false)}
-        onAddToCart={addToCart}
-      />
+      {selectedProduct && showVariationModal && (
+        <ProductVariationSelector
+          product={selectedProduct}
+          variations={productVariations}
+          onAddToCart={(product, quantity, variations, notes) => {
+            addToCart({...product, available: true}, quantity, variations, notes);
+            setShowVariationModal(false);
+            setSelectedProduct(null);
+            setProductVariations([]);
+          }}
+          onClose={() => {
+            setShowVariationModal(false);
+            setSelectedProduct(null);
+            setProductVariations([]);
+          }}
+        />
+      )}
     </div>
   );
 };

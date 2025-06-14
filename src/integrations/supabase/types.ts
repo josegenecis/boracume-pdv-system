@@ -677,6 +677,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "nfce_cupons_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "pending_orders"
+            referencedColumns: ["id"]
+          },
         ]
       }
       nfce_items: {
@@ -872,6 +879,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          acceptance_status: string | null
           change_amount: number | null
           created_at: string
           customer_address: string | null
@@ -900,6 +908,7 @@ export type Database = {
           variations: Json | null
         }
         Insert: {
+          acceptance_status?: string | null
           change_amount?: number | null
           created_at?: string
           customer_address?: string | null
@@ -928,6 +937,7 @@ export type Database = {
           variations?: Json | null
         }
         Update: {
+          acceptance_status?: string | null
           change_amount?: number | null
           created_at?: string
           customer_address?: string | null
@@ -1677,7 +1687,118 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      pending_orders: {
+        Row: {
+          acceptance_status: string | null
+          change_amount: number | null
+          created_at: string | null
+          customer_address: string | null
+          customer_id: string | null
+          customer_latitude: number | null
+          customer_location_accuracy: number | null
+          customer_longitude: number | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_fee: number | null
+          delivery_instructions: string | null
+          delivery_zone_id: string | null
+          estimated_delivery_time: string | null
+          estimated_time: string | null
+          google_maps_link: string | null
+          id: string | null
+          items: Json | null
+          order_number: string | null
+          order_type: string | null
+          payment_method: string | null
+          status: string | null
+          table_id: string | null
+          total: number | null
+          updated_at: string | null
+          user_id: string | null
+          variations: Json | null
+        }
+        Insert: {
+          acceptance_status?: string | null
+          change_amount?: number | null
+          created_at?: string | null
+          customer_address?: string | null
+          customer_id?: string | null
+          customer_latitude?: number | null
+          customer_location_accuracy?: number | null
+          customer_longitude?: number | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_fee?: number | null
+          delivery_instructions?: string | null
+          delivery_zone_id?: string | null
+          estimated_delivery_time?: string | null
+          estimated_time?: string | null
+          google_maps_link?: string | null
+          id?: string | null
+          items?: Json | null
+          order_number?: string | null
+          order_type?: string | null
+          payment_method?: string | null
+          status?: string | null
+          table_id?: string | null
+          total?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          variations?: Json | null
+        }
+        Update: {
+          acceptance_status?: string | null
+          change_amount?: number | null
+          created_at?: string | null
+          customer_address?: string | null
+          customer_id?: string | null
+          customer_latitude?: number | null
+          customer_location_accuracy?: number | null
+          customer_longitude?: number | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_fee?: number | null
+          delivery_instructions?: string | null
+          delivery_zone_id?: string | null
+          estimated_delivery_time?: string | null
+          estimated_time?: string | null
+          google_maps_link?: string | null
+          id?: string | null
+          items?: Json | null
+          order_number?: string | null
+          order_type?: string | null
+          payment_method?: string | null
+          status?: string | null
+          table_id?: string | null
+          total?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          variations?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_delivery_zone_id_fkey"
+            columns: ["delivery_zone_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_zones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_dv_mod11: {
