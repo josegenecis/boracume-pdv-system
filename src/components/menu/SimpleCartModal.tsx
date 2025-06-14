@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Trash2, Plus, Minus } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 
 interface CartItem {
@@ -50,15 +51,86 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [customerAddress, setCustomerAddress] = React.useState('');
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
   const [paymentMethod, setPaymentMethod] = React.useState('');
+  const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+  const [location, setLocation] = React.useState({
+    latitude: null as number | null,
+    longitude: null as number | null,
+    accuracy: null as number | null,
+    isLoading: false,
+    error: null as string | null
+  });
 
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
   const deliveryFee = selectedZone?.delivery_fee || 0;
   const finalTotal = total + deliveryFee;
 
+  const paymentOptions = [
+    { value: 'pix', label: 'PIX', icon: Smartphone },
+    { value: 'cartao_credito', label: 'Cartão de Crédito', icon: CreditCard },
+    { value: 'cartao_debito', label: 'Cartão de Débito', icon: CreditCard },
+    { value: 'dinheiro', label: 'Dinheiro', icon: Banknote }
+  ];
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocation(prev => ({ ...prev, error: 'Geolocalização não é suportada neste dispositivo' }));
+      return;
+    }
+
+    setLocation(prev => ({ ...prev, isLoading: true, error: null }));
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          isLoading: false,
+          error: null
+        });
+      },
+      (error) => {
+        let errorMessage = 'Erro ao obter localização';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Permissão de localização negada';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Localização não disponível';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Tempo limite para obter localização';
+            break;
+        }
+        setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  };
+
+  const generateGoogleMapsLink = (lat: number, lng: number) => {
+    return `https://maps.google.com/maps?q=${lat},${lng}`;
+  };
+
+  const isFormValid = () => {
+    return (
+      customerName.trim() !== '' &&
+      customerPhone.trim() !== '' &&
+      customerAddress.trim() !== '' &&
+      deliveryZoneId !== '' &&
+      paymentMethod !== '' &&
+      (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
+    );
+  };
+
   const handlePlaceOrder = async () => {
-    if (!customerName || !customerPhone || !deliveryZoneId || !paymentMethod) {
+    if (!isFormValid()) {
       return;
     }
 
@@ -72,7 +144,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_address: customerAddress,
         delivery_zone_id: deliveryZoneId,
         payment_method: paymentMethod,
+        change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
         delivery_instructions: notes,
+        customer_latitude: location.latitude,
+        customer_longitude: location.longitude,
+        customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
+        google_maps_link: location.latitude && location.longitude ? 
+          generateGoogleMapsLink(location.latitude, location.longitude) : null,
         items: cart.map(item => ({
           product_id: item.product.id,
           product_name: item.product.name,
@@ -181,33 +259,77 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             
             <div>
               <Label htmlFor="name">Nome completo *</Label>
-              <Input
-                id="name"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Seu nome completo"
-              />
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  className="pl-10"
+                />
+              </div>
             </div>
 
             <div>
               <Label htmlFor="phone">WhatsApp *</Label>
-              <Input
-                id="phone"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="(11) 99999-9999"
-              />
+              <div className="relative">
+                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className="pl-10"
+                />
+              </div>
             </div>
 
             <div>
               <Label htmlFor="address">Endereço completo *</Label>
-              <Textarea
-                id="address"
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                placeholder="Rua, número, complemento, bairro"
-                rows={2}
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Textarea
+                  id="address"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  placeholder="Rua, número, complemento, bairro"
+                  rows={2}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Localização Exata (GPS)</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={requestLocation}
+                  disabled={location.isLoading}
+                  className="flex items-center gap-2"
+                >
+                  <Navigation className="h-4 w-4" />
+                  {location.isLoading ? 'Obtendo localização...' : 'Usar minha localização'}
+                </Button>
+              </div>
+              
+              {location.latitude && location.longitude && (
+                <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                  ✅ Localização capturada com precisão de {Math.round(location.accuracy || 0)}m
+                </div>
+              )}
+              
+              {location.error && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+                  ❌ {location.error}
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">
+                A localização GPS ajuda o entregador a encontrar você com mais facilidade
+              </p>
             </div>
 
             <div>
@@ -228,17 +350,39 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
             <div>
               <Label htmlFor="payment">Forma de pagamento *</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                  <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                </SelectContent>
-              </Select>
+              <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+                {paymentOptions.map((option) => {
+                  const IconComponent = option.icon;
+                  return (
+                    <div key={option.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={option.value} id={option.value} />
+                      <Label htmlFor={option.value} className="flex items-center gap-2 cursor-pointer">
+                        <IconComponent className="h-4 w-4" />
+                        {option.label}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+
+              {paymentMethod === 'dinheiro' && (
+                <div className="space-y-2 mt-3">
+                  <Label htmlFor="change">Troco para quanto? (opcional)</Label>
+                  <Input
+                    id="change"
+                    type="number"
+                    step="0.01"
+                    placeholder={`Mínimo: R$ ${finalTotal.toFixed(2)}`}
+                    value={changeAmount}
+                    onChange={(e) => setChangeAmount(e.target.value)}
+                  />
+                  {changeAmount && parseFloat(changeAmount) < finalTotal && (
+                    <p className="text-sm text-red-500">
+                      O valor deve ser maior ou igual ao total do pedido
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -276,7 +420,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder}
-              disabled={!customerName || !customerPhone || !deliveryZoneId || !paymentMethod || isLoading}
+              disabled={!isFormValid() || isLoading}
               className="flex-1"
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
