@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import ProductVariationSelector from '@/components/pdv/ProductVariationSelector';
+import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 
 interface Product {
@@ -270,7 +270,7 @@ const PDV = () => {
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
-      console.log('🔄 PDV - Produto tem variações, abrindo selector');
+      console.log('🔄 PDV - Produto tem variações, abrindo modal');
       setSelectedProduct(product);
       setProductVariations(variations);
       setShowVariationModal(true);
@@ -1035,23 +1035,19 @@ const PDV = () => {
         </TabsContent>
       </Tabs>
 
-      {selectedProduct && showVariationModal && (
-        <ProductVariationSelector
-          product={selectedProduct}
-          variations={productVariations}
-          onAddToCart={(product, quantity, variations, notes) => {
-            addToCart({...product, available: true}, quantity, variations, notes);
-            setShowVariationModal(false);
-            setSelectedProduct(null);
-            setProductVariations([]);
-          }}
-          onClose={() => {
-            setShowVariationModal(false);
-            setSelectedProduct(null);
-            setProductVariations([]);
-          }}
-        />
-      )}
+      <ProductVariationModal
+        isOpen={showVariationModal}
+        product={selectedProduct!}
+        variations={productVariations}
+        onAddToCart={(product, quantity, variations, notes) => {
+          addToCart({...product, available: true}, quantity, variations, notes);
+        }}
+        onClose={() => {
+          setShowVariationModal(false);
+          setSelectedProduct(null);
+          setProductVariations([]);
+        }}
+      />
     </div>
   );
 };
