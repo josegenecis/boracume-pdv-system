@@ -194,20 +194,20 @@ const MenuDigital = () => {
   };
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
+    console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
+    
     try {
-      console.log('🔄 CARDÁPIO DIGITAL - Carregando variações para produto:', productId);
-      
       // Buscar variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (productError) {
-        console.error('❌ Erro ao carregar variações específicas:', productError);
-      }
-
-      console.log('✅ Variações específicas encontradas:', productVariations?.length || 0, productVariations);
+      console.log('📋 CARDÁPIO DIGITAL - Query variações específicas resultado:', {
+        data: productVariations,
+        error: productError,
+        count: productVariations?.length || 0
+      });
 
       // Buscar IDs das variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalLinksError } = await supabase
@@ -215,27 +215,31 @@ const MenuDigital = () => {
         .select('global_variation_id')
         .eq('product_id', productId);
 
-      if (globalLinksError) {
-        console.error('❌ Erro ao carregar links de variações globais:', globalLinksError);
-      }
-
-      console.log('✅ Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
+      console.log('📋 CARDÁPIO DIGITAL - Query links globais resultado:', {
+        data: globalVariationLinks,
+        error: globalLinksError,
+        count: globalVariationLinks?.length || 0
+      });
 
       // Buscar dados das variações globais se existirem links
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        console.log('🔍 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalVariationIds);
         
         const { data: globalVars, error: globalVarsError } = await supabase
           .from('global_variations')
           .select('*')
           .in('id', globalVariationIds);
 
-        if (globalVarsError) {
-          console.error('❌ Erro ao buscar variações globais:', globalVarsError);
-        } else {
-          globalVariations = globalVars || [];
-          console.log('✅ Variações globais encontradas:', globalVariations.length, globalVariations);
+        console.log('📋 CARDÁPIO DIGITAL - Query variações globais resultado:', {
+          data: globalVars,
+          error: globalVarsError,
+          count: globalVars?.length || 0
+        });
+
+        if (!globalVarsError && globalVars) {
+          globalVariations = globalVars;
         }
       }
 
@@ -245,62 +249,55 @@ const MenuDigital = () => {
         ...globalVariations
       ];
 
-      console.log('✅ TOTAL de variações combinadas:', allVariations.length, allVariations);
+      console.log('🔄 CARDÁPIO DIGITAL - Combinando variações:', {
+        especificas: productVariations?.length || 0,
+        globais: globalVariations.length,
+        total: allVariations.length,
+        dados: allVariations
+      });
       
-      const formattedVariations: ProductVariation[] = allVariations
-        .map(item => {
-          try {
-            console.log('🔄 Processando variação:', item.name, item);
-            
-            let options: Array<{ name: string; price: number; }> = [];
-            
-            if (item.options && Array.isArray(item.options)) {
-              options = item.options
-                .filter((opt: any) => {
-                  // Validação simples - apenas verificar se tem nome
-                  const hasName = opt && opt.name && String(opt.name).trim().length > 0;
-                  if (!hasName) {
-                    console.log('⚠️ Opção sem nome válido:', opt);
-                  }
-                  return hasName;
-                })
-                .map((opt: any) => ({
-                  name: String(opt.name).trim(),
-                  // Aceitar qualquer valor de preço, incluindo 0
-                  price: typeof opt.price === 'number' ? opt.price : (opt.price ? Number(opt.price) : 0)
-                }));
-            }
-
-            // Só incluir variações que tenham pelo menos uma opção válida
-            if (options.length === 0) {
-              console.log('⚠️ Variação sem opções válidas ignorada:', item.name, item.options);
-              return null;
-            }
-
-            const formatted = {
-              id: item.id,
-              name: String(item.name || '').trim(),
-              options,
-              max_selections: Math.max(1, Number(item.max_selections) || 1),
-              required: Boolean(item.required)
-            };
-
-            console.log('✅ Variação formatada com sucesso:', formatted.name, 'com', formatted.options.length, 'opções');
-            return formatted;
-          } catch (itemError) {
-            console.error('❌ Erro ao processar variação:', itemError, item);
-            return null;
-          }
-        })
-        .filter((variation): variation is ProductVariation => {
-          const isValid = variation !== null && variation.options.length > 0 && variation.name.trim().length > 0;
-          if (!isValid && variation) {
-            console.log('❌ Variação filtrada por validação final:', variation);
-          }
-          return isValid;
-        });
+      // Processar e formatar as variações
+      const formattedVariations: ProductVariation[] = [];
       
-      console.log('✅ RESULTADO FINAL - Variações formatadas:', formattedVariations.length, formattedVariations);
+      for (const item of allVariations) {
+        console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name, item);
+        
+        try {
+          // Verificar se tem opções válidas
+          if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
+            continue;
+          }
+
+          // Processar opções
+          const validOptions = item.options
+            .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
+            .map((opt: any) => ({
+              name: String(opt.name).trim(),
+              price: Number(opt.price) || 0
+            }));
+
+          if (validOptions.length === 0) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
+            continue;
+          }
+
+          const formatted: ProductVariation = {
+            id: item.id,
+            name: String(item.name || '').trim(),
+            options: validOptions,
+            max_selections: Math.max(1, Number(item.max_selections) || 1),
+            required: Boolean(item.required)
+          };
+
+          formattedVariations.push(formatted);
+          console.log('✅ CARDÁPIO DIGITAL - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções');
+        } catch (itemError) {
+          console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError, item);
+        }
+      }
+      
+      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', formattedVariations.length, 'variações processadas:', formattedVariations);
       return formattedVariations;
     } catch (error) {
       console.error('❌ Erro geral ao carregar variações:', error);
@@ -309,17 +306,24 @@ const MenuDigital = () => {
   };
 
   const handleProductClick = async (product: Product) => {
-    console.log('🔄 Produto clicado:', product.name);
+    console.log('🔄 CARDÁPIO DIGITAL - Produto clicado:', product.name, 'ID:', product.id);
     
-    const variations = await fetchProductVariations(product.id);
-    
-    if (variations.length > 0) {
-      console.log('✅ Produto tem variações, abrindo modal');
-      setSelectedProduct(product);
-      setProductVariations(variations);
-      setShowVariationModal(true);
-    } else {
-      console.log('✅ Produto sem variações, adicionando direto ao carrinho');
+    try {
+      const variations = await fetchProductVariations(product.id);
+      console.log('🔄 CARDÁPIO DIGITAL - Variações retornadas:', variations.length, variations);
+      
+      if (variations.length > 0) {
+        console.log('✅ CARDÁPIO DIGITAL - Produto tem variações, abrindo modal');
+        setSelectedProduct(product);
+        setProductVariations(variations);
+        setShowVariationModal(true);
+      } else {
+        console.log('✅ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
+        addToCart(product, 1, [], '');
+      }
+    } catch (error) {
+      console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
+      // Se der erro, adicionar sem variações
       addToCart(product, 1, [], '');
     }
   };
