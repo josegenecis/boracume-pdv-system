@@ -204,42 +204,38 @@ const MenuDigital = () => {
         .eq('product_id', productId);
 
       if (productError) {
-        console.error('❌ Erro ao carregar variações do produto:', productError);
-        throw productError;
+        console.error('❌ Erro ao carregar variações específicas:', productError);
       }
 
-      console.log('✅ Variações específicas encontradas:', productVariations?.length || 0);
+      console.log('✅ Variações específicas encontradas:', productVariations?.length || 0, productVariations);
 
-      // Buscar variações globais associadas ao produto
-      const { data: globalVariationLinks, error: globalError } = await supabase
+      // Buscar IDs das variações globais associadas ao produto
+      const { data: globalVariationLinks, error: globalLinksError } = await supabase
         .from('product_global_variation_links')
         .select('global_variation_id')
         .eq('product_id', productId);
 
-      if (globalError) {
-        console.error('❌ Erro ao carregar links de variações globais:', globalError);
-        throw globalError;
+      if (globalLinksError) {
+        console.error('❌ Erro ao carregar links de variações globais:', globalLinksError);
       }
 
-      console.log('✅ Links de variações globais encontrados:', globalVariationLinks?.length || 0);
+      console.log('✅ Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
 
-      // Buscar as variações globais pelos IDs
+      // Buscar dados das variações globais se existirem links
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
         
-        console.log('🔍 IDs das variações globais:', globalVariationIds);
-        
-        const { data: globalVars, error: globalVarError } = await supabase
+        const { data: globalVars, error: globalVarsError } = await supabase
           .from('global_variations')
           .select('*')
           .in('id', globalVariationIds);
 
-        if (globalVarError) {
-          console.error('❌ Erro ao buscar variações globais:', globalVarError);
+        if (globalVarsError) {
+          console.error('❌ Erro ao buscar variações globais:', globalVarsError);
         } else {
           globalVariations = globalVars || [];
-          console.log('🔍 Variações globais encontradas:', globalVariations.length, globalVariations);
+          console.log('✅ Variações globais encontradas:', globalVariations.length, globalVariations);
         }
       }
 
