@@ -1,58 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useMenuData } from '@/hooks/useMenuData';
+import { useProductVariations } from '@/hooks/useProductVariations';
+import { MenuHeader } from '@/components/menu/MenuHeader';
+import { MenuContent } from '@/components/menu/MenuContent';
 import ProductVariationModal from '@/components/menu/ProductVariationModal';
 import CheckoutModal from '@/components/menu/CheckoutModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
-import { Plus, Clock, MapPin, Phone } from 'lucide-react';
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  image_url?: string;
-  category_id?: string;
-  category?: string;
-  user_id: string;
-}
-
-interface ProductVariation {
-  id: string;
-  name: string;
-  options: Array<{
-    name: string;
-    price: number;
-  }>;
-  max_selections: number;
-  required: boolean;
-}
-
-interface Profile {
-  restaurant_name?: string;
-  phone?: string;
-  address?: string;
-  opening_hours?: string;
-  description?: string;
-  logo_url?: string;
-}
-
-interface DeliveryZone {
-  id: string;
-  name: string;
-  delivery_fee: number;
-  minimum_order: number;
-  delivery_time: string;
-  active: boolean;
-}
+import { supabase } from '@/integrations/supabase/client';
 
 const MenuDigital = () => {
   const { userId: paramUserId } = useParams();
@@ -64,331 +23,25 @@ const MenuDigital = () => {
   
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
-
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
-  const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+
+  // Custom hooks
+  const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
+  const {
+    selectedProduct,
+    productVariations,
+    showVariationModal,
+    handleProductClick,
+    handleAddToCart,
+    closeVariationModal
+  } = useProductVariations();
 
   const {
     cart,
-    addToCart,
-    updateCartItem,
-    removeFromCart,
     clearCart,
     getCartTotal,
     getCartItemCount
   } = useDigitalMenuCart();
-
-  useEffect(() => {
-    if (!userId) {
-      toast({
-        title: "Erro",
-        description: "Link inválido. ID do usuário não encontrado.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    fetchAllData();
-  }, [userId]);
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        fetchRestaurantData(),
-        fetchProducts(),
-        fetchDeliveryZones()
-      ]);
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar o cardápio. Verifique se o link está correto.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRestaurantData = async () => {
-    try {
-      console.log('🔄 Carregando dados do restaurante para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('❌ Erro ao carregar perfil:', error);
-        throw error;
-      }
-
-      console.log('✅ Perfil carregado:', data);
-      setProfile(data);
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do restaurante:', error);
-      throw error;
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      console.log('🔄 Carregando produtos para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('available', true)
-        .eq('show_in_delivery', true)
-        .order('name');
-
-      if (error) {
-        console.error('❌ Erro ao carregar produtos:', error);
-        throw error;
-      }
-
-      console.log('✅ Produtos carregados:', data?.length || 0);
-      setProducts(data || []);
-      
-      const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
-      setCategories(uniqueCategories);
-      
-    } catch (error) {
-      console.error('❌ Erro ao carregar produtos:', error);
-      throw error;
-    }
-  };
-
-  const fetchDeliveryZones = async () => {
-    try {
-      console.log('🔄 Carregando zonas de entrega para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('name');
-
-      if (error) {
-        console.error('❌ Erro ao carregar zonas de entrega:', error);
-        throw error;
-      }
-
-      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('❌ Erro ao carregar zonas de entrega:', error);
-    }
-  };
-
-  const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
-    console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
-    
-    try {
-      // Buscar variações específicas do produto
-      const { data: productVariations, error: productError } = await supabase
-        .from('product_variations')
-        .select('*')
-        .eq('product_id', productId);
-
-      console.log('📋 CARDÁPIO DIGITAL - Query variações específicas resultado:', {
-        data: productVariations,
-        error: productError,
-        count: productVariations?.length || 0
-      });
-
-      // Buscar IDs das variações globais associadas ao produto
-      const { data: globalVariationLinks, error: globalLinksError } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
-
-      console.log('📋 CARDÁPIO DIGITAL - Query links globais resultado:', {
-        data: globalVariationLinks,
-        error: globalLinksError,
-        count: globalVariationLinks?.length || 0
-      });
-
-      // Buscar dados das variações globais se existirem links
-      let globalVariations: any[] = [];
-      if (globalVariationLinks && globalVariationLinks.length > 0) {
-        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
-        console.log('🔍 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalVariationIds);
-        
-        const { data: globalVars, error: globalVarsError } = await supabase
-          .from('global_variations')
-          .select('*')
-          .in('id', globalVariationIds);
-
-        console.log('📋 CARDÁPIO DIGITAL - Query variações globais resultado:', {
-          data: globalVars,
-          error: globalVarsError,
-          count: globalVars?.length || 0
-        });
-
-        if (!globalVarsError && globalVars) {
-          globalVariations = globalVars;
-        }
-      }
-
-      // Combinar todas as variações
-      const allVariations = [
-        ...(productVariations || []),
-        ...globalVariations
-      ];
-
-      console.log('🔄 CARDÁPIO DIGITAL - Combinando variações:', {
-        especificas: productVariations?.length || 0,
-        globais: globalVariations.length,
-        total: allVariations.length,
-        dados: allVariations
-      });
-      
-      // Processar e formatar as variações - VALIDAÇÃO SIMPLIFICADA
-      const formattedVariations: ProductVariation[] = [];
-      
-      for (const item of allVariations) {
-        console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name, item);
-        
-        try {
-          // Verificar se tem dados básicos válidos
-          if (!item || !item.id || !item.name) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem dados básicos:', item);
-            continue;
-          }
-
-          // Verificar se tem opções válidas - ACEITAR PREÇO ZERO
-          if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
-            continue;
-          }
-
-          // Processar opções - SIMPLIFICADO: apenas verificar se tem nome
-          const validOptions = item.options
-            .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
-            .map((opt: any) => ({
-              name: String(opt.name).trim(),
-              price: Number(opt.price) >= 0 ? Number(opt.price) : 0 // Aceitar preço zero
-            }));
-
-          if (validOptions.length === 0) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
-            continue;
-          }
-
-          const formatted: ProductVariation = {
-            id: item.id,
-            name: String(item.name || '').trim(),
-            options: validOptions,
-            max_selections: Math.max(1, Number(item.max_selections) || 1),
-            required: Boolean(item.required)
-          };
-
-          formattedVariations.push(formatted);
-          console.log('✅ CARDÁPIO DIGITAL - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções válidas');
-        } catch (itemError) {
-          console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError, item);
-        }
-      }
-      
-      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', {
-        total: formattedVariations.length,
-        variações: formattedVariations.map(v => ({ name: v.name, opções: v.options.length }))
-      });
-      
-      return formattedVariations;
-    } catch (error) {
-      console.error('❌ Erro geral ao carregar variações:', error);
-      return [];
-    }
-  };
-
-  const handleProductClick = async (product: Product) => {
-    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
-    
-    // Forçar console log para garantir que está sendo chamado
-    alert(`DEBUG: Clicou no produto ${product.name}`);
-    
-    try {
-      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
-      const variations = await fetchProductVariations(product.id);
-      
-      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
-        total: variations.length,
-        variações: variations.map(v => v.name)
-      });
-      
-      // Forçar log das variações
-      alert(`DEBUG: Encontradas ${variations.length} variações`);
-      
-      if (variations && variations.length > 0) {
-        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
-        alert(`DEBUG: Abrindo modal com ${variations.length} variações`);
-        
-        setSelectedProduct(product);
-        setProductVariations(variations);
-        setShowVariationModal(true);
-        
-        // Confirmar que os estados foram definidos
-        console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
-          selectedProduct: product.name,
-          variationsCount: variations.length,
-          modalShouldOpen: true
-        });
-        
-        // Verificar estado após definir
-        setTimeout(() => {
-          console.log('🔍 CARDÁPIO DIGITAL - Verificando estados após 100ms:', {
-            showVariationModal,
-            selectedProduct: selectedProduct?.name,
-            variationsCount: productVariations.length
-          });
-        }, 100);
-      } else {
-        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
-        addToCart(product, 1, [], '');
-        toast({
-          title: "Produto adicionado!",
-          description: `${product.name} foi adicionado ao carrinho.`,
-        });
-      }
-    } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
-      alert(`DEBUG: Erro ao buscar variações: ${error}`);
-      // Em caso de erro, adicionar sem variações
-      addToCart(product, 1, [], '');
-      toast({
-        title: "Produto adicionado!",
-        description: `${product.name} foi adicionado ao carrinho.`,
-      });
-    }
-  };
-
-  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string) => {
-    console.log('🔄 Adicionando produto personalizado ao carrinho:', {
-      product: product.name,
-      quantity,
-      variations: selectedVariations,
-      notes
-    });
-    
-    addToCart(product, quantity, selectedVariations, notes);
-    setShowVariationModal(false);
-    setSelectedProduct(null);
-    setProductVariations([]);
-  };
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
@@ -545,126 +198,22 @@ const MenuDigital = () => {
     );
   }
 
-  const productsByCategory = (category: string) => 
-    products.filter(product => product.category === category);
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Header do Restaurante */}
-      <div className="bg-primary text-primary-foreground p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-4">
-            {profile?.logo_url && (
-              <img 
-                src={profile.logo_url} 
-                alt="Logo"
-                className="w-16 h-16 rounded-full object-cover"
-              />
-            )}
-            <div>
-              <h1 className="text-2xl font-bold">
-                {profile?.restaurant_name || 'Restaurante'}
-              </h1>
-              {profile?.description && (
-                <p className="text-primary-foreground/80">{profile.description}</p>
-              )}
-            </div>
-          </div>
-          
-          <div className="mt-4 flex flex-wrap gap-4 text-sm">
-            {profile?.phone && (
-              <div className="flex items-center gap-1">
-                <Phone className="h-4 w-4" />
-                {profile.phone}
-              </div>
-            )}
-            {profile?.opening_hours && (
-              <div className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {profile.opening_hours}
-              </div>
-            )}
-            {profile?.address && (
-              <div className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
-                {profile.address}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Cardápio */}
+      <MenuHeader profile={profile} />
+      
       <div className="max-w-4xl mx-auto p-4 pb-24">
-        {categories.length > 0 ? (
-          <Tabs defaultValue={categories[0]} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 mb-6">
-              {categories.map(category => (
-                <TabsTrigger key={category} value={category}>
-                  {category}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            
-            {categories.map(category => (
-              <TabsContent key={category} value={category}>
-                <div className="grid gap-4">
-                  {productsByCategory(category).map(product => (
-                    <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                      <div className="flex">
-                        {product.image_url && (
-                          <img 
-                            src={product.image_url} 
-                            alt={product.name}
-                            className="w-24 h-24 object-cover"
-                          />
-                        )}
-                        <div className="flex-1 p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg">{product.name}</h3>
-                              {product.description && (
-                                <p className="text-muted-foreground text-sm mt-1">
-                                  {product.description}
-                                </p>
-                              )}
-                              <p className="text-primary font-bold text-lg mt-2">
-                                R$ {product.price.toFixed(2)}
-                              </p>
-                            </div>
-                            <Button 
-                              onClick={() => handleProductClick(product)}
-                              size="sm"
-                              className="ml-4"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Adicionar
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Nenhum produto disponível no momento.</p>
-          </div>
-        )}
+        <MenuContent 
+          products={products}
+          categories={categories}
+          onProductClick={handleProductClick}
+        />
       </div>
 
       {/* Modals */}
       <ProductVariationModal
         isOpen={showVariationModal && !!selectedProduct}
-        onClose={() => {
-          console.log('🔒 CARDÁPIO DIGITAL - Fechando modal de variações');
-          setShowVariationModal(false);
-          setSelectedProduct(null);
-          setProductVariations([]);
-        }}
+        onClose={closeVariationModal}
         product={selectedProduct || { id: '', name: '', price: 0 }}
         variations={productVariations}
         onAddToCart={handleAddToCart}
