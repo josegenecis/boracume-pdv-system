@@ -157,9 +157,6 @@ export const useProductVariations = () => {
   const handleProductClick = async (product: Product) => {
     console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
     
-    // Forçar console log para garantir que está sendo chamado
-    alert(`DEBUG: Clicou no produto ${product.name}`);
-    
     try {
       console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
       const variations = await fetchProductVariations(product.id);
@@ -169,32 +166,18 @@ export const useProductVariations = () => {
         variações: variations.map(v => v.name)
       });
       
-      // Forçar log das variações
-      alert(`DEBUG: Encontradas ${variations.length} variações`);
-      
       if (variations && variations.length > 0) {
         console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
-        alert(`DEBUG: Abrindo modal com ${variations.length} variações`);
         
         setSelectedProduct(product);
         setProductVariations(variations);
         setShowVariationModal(true);
         
-        // Confirmar que os estados foram definidos
         console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
           selectedProduct: product.name,
           variationsCount: variations.length,
           modalShouldOpen: true
         });
-        
-        // Verificar estado após definir
-        setTimeout(() => {
-          console.log('🔍 CARDÁPIO DIGITAL - Verificando estados após 100ms:', {
-            showVariationModal,
-            selectedProduct: selectedProduct?.name,
-            variationsCount: productVariations.length
-          });
-        }, 100);
       } else {
         console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
         addToCart(product, 1, [], '');
@@ -205,7 +188,6 @@ export const useProductVariations = () => {
       }
     } catch (error) {
       console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
-      alert(`DEBUG: Erro ao buscar variações: ${error}`);
       // Em caso de erro, adicionar sem variações
       addToCart(product, 1, [], '');
       toast({
