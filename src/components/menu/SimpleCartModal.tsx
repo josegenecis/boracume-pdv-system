@@ -81,37 +81,64 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     setLocation(prev => ({ ...prev, isLoading: true, error: null }));
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          isLoading: false,
-          error: null
-        });
-      },
-      (error) => {
-        let errorMessage = 'Erro ao obter localização';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Permissão de localização negada';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Localização não disponível';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Tempo limite para obter localização';
-            break;
+    // Request permission first for mobile devices
+    const requestPermission = async () => {
+      if ('permissions' in navigator) {
+        try {
+          const permission = await navigator.permissions.query({ name: 'geolocation' });
+          console.log('📍 Permissão de geolocalização:', permission.state);
+          
+          if (permission.state === 'denied') {
+            setLocation(prev => ({ 
+              ...prev, 
+              isLoading: false, 
+              error: "Permissão de localização negada. Ative nas configurações do navegador." 
+            }));
+            return;
+          }
+        } catch (permError) {
+          console.log('⚠️ Não foi possível verificar permissões:', permError);
         }
-        setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000
       }
-    );
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('✅ Localização obtida:', position.coords);
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            isLoading: false,
+            error: null
+          });
+        },
+        (error) => {
+          console.error('❌ Erro de geolocalização:', error);
+          let errorMessage = "Erro desconhecido ao obter localização";
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = "Permissão de localização negada. Verifique as configurações do seu navegador/celular.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = "Informações de localização não disponíveis. Tente novamente.";
+              break;
+            case error.TIMEOUT:
+              errorMessage = "Tempo esgotado ao obter localização. Tente novamente.";
+              break;
+          }
+          
+          setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000, // Increased timeout for mobile
+          maximumAge: 300000 // 5 minutes cache
+        }
+      );
+    };
+
+    requestPermission();
   };
 
   const generateGoogleMapsLink = (lat: number, lng: number) => {
