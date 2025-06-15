@@ -78,11 +78,15 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
         .from('user-sounds')
         .getPublicUrl(fileName);
 
+      // Atualizar estado local
       onSoundUploaded(soundType, data.publicUrl);
 
+      // Salvar automaticamente no banco de dados
+      await saveCustomSoundToDatabase(soundType, data.publicUrl);
+
       toast({
-        title: "Som enviado!",
-        description: `Som personalizado para ${soundTypes.find(s => s.key === soundType)?.label} foi salvo.`,
+        title: "Som personalizado ativo!",
+        description: `Som personalizado para ${soundTypes.find(s => s.key === soundType)?.label} foi salvo e está ativo.`,
       });
     } catch (error) {
       console.error('Erro no upload:', error);
@@ -93,6 +97,42 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
       });
     } finally {
       setUploading(null);
+    }
+  };
+
+  const saveCustomSoundToDatabase = async (soundType: string, url: string) => {
+    if (!user) return;
+
+    try {
+      const urlKey = `custom_${soundType}_url`;
+      
+      // Verificar se já existe configuração
+      const { data: existingData } = await supabase
+        .from('notification_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      const updateData = {
+        [urlKey]: url,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingData) {
+        await supabase
+          .from('notification_settings')
+          .update(updateData)
+          .eq('user_id', user.id);
+      } else {
+        await supabase
+          .from('notification_settings')
+          .insert({
+            user_id: user.id,
+            ...updateData
+          });
+      }
+    } catch (error) {
+      console.error('Erro ao salvar no banco:', error);
     }
   };
 
@@ -107,7 +147,11 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
 
       if (error) console.warn('Erro ao remover arquivo:', error);
 
+      // Atualizar estado local
       onSoundUploaded(soundType, null);
+
+      // Salvar automaticamente no banco de dados
+      await saveCustomSoundToDatabase(soundType, null);
 
       toast({
         title: "Som removido",

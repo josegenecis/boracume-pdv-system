@@ -193,16 +193,18 @@ const NotificationSettings = () => {
 
   const handleSoundUploaded = (soundType: string, url: string | null) => {
     const urlKey = `custom_${soundType}_url` as keyof typeof customSoundUrls;
-    setCustomSoundUrls(prev => ({
-      ...prev,
-      [urlKey]: url
-    }));
-
-    // Atualizar sistema de som
-    soundNotifications.setCustomSoundUrls({
+    const newCustomUrls = {
       ...customSoundUrls,
       [urlKey]: url
-    });
+    };
+    
+    setCustomSoundUrls(newCustomUrls);
+
+    // Atualizar sistema de som imediatamente
+    soundNotifications.setCustomSoundUrls(newCustomUrls);
+    
+    // Recarregar configurações para garantir sincronização
+    loadSettings();
   };
 
   return (
@@ -369,10 +371,18 @@ const NotificationSettings = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="bell">Sino</SelectItem>
-                      <SelectItem value="chime">Carrilhão</SelectItem>
-                      <SelectItem value="ding">Ding</SelectItem>
-                      <SelectItem value="notification">Notificação</SelectItem>
+                      <SelectItem value="bell">
+                        Sino {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
+                      </SelectItem>
+                      <SelectItem value="chime">
+                        Carrilhão {customSoundUrls.custom_chime_url ? '(personalizado)' : ''}
+                      </SelectItem>
+                      <SelectItem value="ding">
+                        Ding {customSoundUrls.custom_ding_url ? '(personalizado)' : ''}
+                      </SelectItem>
+                      <SelectItem value="notification">
+                        Notificação {customSoundUrls.custom_notification_url ? '(personalizado)' : ''}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={playTestSound}>
