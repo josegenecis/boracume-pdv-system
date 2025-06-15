@@ -235,6 +235,12 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={() => {
+                        toast({
+                          title: "Funcionalidade em desenvolvimento",
+                          description: "A edição de variações será implementada em breve.",
+                        });
+                      }}
                     >
                       <Edit size={14} />
                     </Button>

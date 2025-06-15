@@ -95,20 +95,34 @@ export const useSimpleVariations = () => {
             continue;
           }
 
-          // Verificar opções com logs detalhados
+          // Verificar e corrigir opções com logs detalhados
           console.log('🔍 CARDÁPIO DIGITAL - Verificando opções para:', item.name, 'Opções:', item.options);
+          
+          let processedOptions = [];
           
           if (!item.options) {
             console.log('⚠️ CARDÁPIO DIGITAL - Propriedade options não existe para:', item.name);
             continue;
           }
 
-          if (!Array.isArray(item.options)) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Options não é array para:', item.name, 'Tipo:', typeof item.options);
+          // Tratar diferentes formatos de options
+          if (typeof item.options === 'string') {
+            console.log('🔄 CARDÁPIO DIGITAL - Options é string, tentando converter:', item.options);
+            try {
+              processedOptions = JSON.parse(item.options);
+              console.log('✅ CARDÁPIO DIGITAL - Conversão de string bem sucedida:', processedOptions);
+            } catch (parseError) {
+              console.log('❌ CARDÁPIO DIGITAL - Erro ao converter string:', parseError);
+              continue;
+            }
+          } else if (Array.isArray(item.options)) {
+            processedOptions = item.options;
+          } else {
+            console.log('⚠️ CARDÁPIO DIGITAL - Options em formato desconhecido:', typeof item.options, item.options);
             continue;
           }
 
-          if (item.options.length === 0) {
+          if (processedOptions.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Array de options vazio para:', item.name);
             continue;
           }
@@ -116,8 +130,8 @@ export const useSimpleVariations = () => {
           // Processar opções com validação mais tolerante
           const validOptions = [];
           
-          for (let i = 0; i < item.options.length; i++) {
-            const opt = item.options[i] as any;
+          for (let i = 0; i < processedOptions.length; i++) {
+            const opt = processedOptions[i] as any;
             console.log(`🔍 CARDÁPIO DIGITAL - Processando opção ${i + 1}:`, opt);
             
             if (!opt) {
@@ -146,7 +160,7 @@ export const useSimpleVariations = () => {
 
           if (validOptions.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
-            console.log('🔍 CARDÁPIO DIGITAL - Opções originais eram:', item.options);
+            console.log('🔍 CARDÁPIO DIGITAL - Opções originais eram:', processedOptions);
             continue;
           }
 
