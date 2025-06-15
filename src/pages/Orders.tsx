@@ -192,10 +192,14 @@ const Orders = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
+      console.log('🔄 Atualizando status do pedido:', { orderId, newStatus });
+      
       // Atualizar tanto status quanto acceptance_status
       const updateData = newStatus === 'preparing' 
         ? { status: newStatus, acceptance_status: 'accepted' }
         : { status: newStatus };
+        
+      console.log('📝 Dados para update:', updateData);
 
       const { error } = await supabase
         .from('orders')
@@ -203,6 +207,8 @@ const Orders = () => {
         .eq('id', orderId);
 
       if (error) throw error;
+
+      console.log('✅ Status atualizado no banco de dados');
 
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);
@@ -245,8 +251,11 @@ const Orders = () => {
         });
       }
 
+      // Atualizar estado local com todos os campos atualizados
       setOrders(prev => prev.map(order =>
-        order.id === orderId ? { ...order, status: newStatus } : order
+        order.id === orderId 
+          ? { ...order, ...updateData }
+          : order
       ));
 
     } catch (error) {

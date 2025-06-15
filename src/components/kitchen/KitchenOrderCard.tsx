@@ -11,6 +11,11 @@ interface OrderItem {
   quantity: number;
   notes?: string;
   options?: string[];
+  variations?: {
+    name: string;
+    selectedOptions: string[];
+    price: number;
+  }[];
 }
 
 interface KitchenOrder {
@@ -85,26 +90,14 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                   ))}
                 </ul>
               )}
-              {(item as any).variations && (item as any).variations.length > 0 && (
+              {item.variations && item.variations.length > 0 && (
                 <ul className="ml-4 mt-1 text-xs text-muted-foreground">
-                  {(item as any).variations.map((variation: any, index: number) => {
+                  {item.variations.map((variation, index) => {
                     console.log('Rendering variation:', variation); // Debug log
                     
-                    // Ensure we only render strings
-                    const variationName = typeof variation.name === 'string' ? variation.name : String(variation.name || '');
-                    
-                    let optionsText = 'N/A';
-                    if (variation.selectedOptions) {
-                      if (Array.isArray(variation.selectedOptions)) {
-                        optionsText = variation.selectedOptions
-                          .map((opt: any) => typeof opt === 'string' ? opt : String(opt.name || opt.option || opt))
-                          .filter(Boolean)
-                          .join(', ') || 'N/A';
-                      } else {
-                        optionsText = String(variation.selectedOptions);
-                      }
-                    }
-                    
+                    const variationName = variation.name || 'Personalização';
+                    const selectedOptions = variation.selectedOptions || [];
+                    const optionsText = selectedOptions.length > 0 ? selectedOptions.join(', ') : 'N/A';
                     const price = Number(variation.price) || 0;
                     const priceText = price > 0 ? ` (+${price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '';
                     

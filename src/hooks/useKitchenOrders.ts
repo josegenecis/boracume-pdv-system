@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +8,11 @@ export interface OrderItem {
   quantity: number;
   options?: string[];
   notes?: string;
+  variations?: {
+    name: string;
+    selectedOptions: string[];
+    price: number;
+  }[];
 }
 
 export interface KitchenOrder {
@@ -57,25 +61,72 @@ export const useKitchenOrders = () => {
       // Convert the data to match our KitchenOrder interface
       const formattedOrders: KitchenOrder[] = (data || []).map(order => {
         // Process items to ensure all data is properly formatted
-        const processedItems = Array.isArray(order.items) ? order.items.map((item: any) => ({
-          id: item.id || String(Math.random()),
-          name: item.name || '',
-          quantity: item.quantity || 1,
-          options: Array.isArray(item.options) ? item.options.map((opt: any) => 
-            typeof opt === 'string' ? opt : (opt.name || opt.option || String(opt))
-          ) : [],
-          notes: item.notes || '',
-          // Handle variations properly
-          variations: Array.isArray(item.variations) ? item.variations.map((variation: any) => ({
-            name: variation.name || '',
-            selectedOptions: Array.isArray(variation.selectedOptions) 
-              ? variation.selectedOptions.map((opt: any) => 
-                  typeof opt === 'string' ? opt : (opt.name || opt.option || String(opt))
-                )
-              : [],
-            price: Number(variation.price) || 0
-          })) : []
-        })) : [];
+        const processedItems = Array.isArray(order.items) ? order.items.map((item: any) => {
+          console.log('🔍 KITCHEN - Processando item:', item);
+          
+          // Detectar formato do item (do useKitchenIntegration vs direto do pedido)
+          const isKitchenFormat = item.hasOwnProperty('id') && item.hasOwnProperty('name');
+          const isOrderFormat = item.hasOwnProperty('product_id') && item.hasOwnProperty('product_name');
+          
+          let processedItem: any = {
+            id: item.id || item.product_id || String(Math.random()),
+            name: item.name || item.product_name || 'Produto',
+            quantity: Number(item.quantity) || 1,
+            notes: item.notes || '',
+          };
+          
+          // Processar opções e variações
+          if (isKitchenFormat) {
+            // Formato do useKitchenIntegration (mais simples)
+            processedItem.options = Array.isArray(item.options) ? item.options : [];
+            processedItem.variations = [];
+          } else if (isOrderFormat) {
+            // Formato direto do pedido (com variations)
+            processedItem.options = [];
+            
+            // Processar variations se existirem
+            if (Array.isArray(item.variations)) {
+              processedItem.variations = item.variations.map((variation: any) => {
+                console.log('🔍 KITCHEN - Processando variation:', variation);
+                
+                if (typeof variation === 'string') {
+                  // Variation como string simples
+                  return {
+                    name: 'Personalização',
+                    selectedOptions: [variation],
+                    price: 0
+                  };
+                } else if (typeof variation === 'object' && variation !== null) {
+                  // Variation como objeto
+                  return {
+                    name: variation.name || 'Personalização',
+                    selectedOptions: Array.isArray(variation.selectedOptions) 
+                      ? variation.selectedOptions.map((opt: any) => 
+                          typeof opt === 'string' ? opt : String(opt.name || opt.option || opt)
+                        )
+                      : (variation.selectedOptions ? [String(variation.selectedOptions)] : []),
+                    price: Number(variation.price) || 0
+                  };
+                } else {
+                  return {
+                    name: 'Personalização',
+                    selectedOptions: [String(variation)],
+                    price: 0
+                  };
+                }
+              });
+            } else {
+              processedItem.variations = [];
+            }
+          } else {
+            // Formato desconhecido - tentar extrair o que for possível
+            processedItem.options = [];
+            processedItem.variations = [];
+          }
+          
+          console.log('✅ KITCHEN - Item processado:', processedItem);
+          return processedItem;
+        }) : [];
 
         return {
           ...order,
