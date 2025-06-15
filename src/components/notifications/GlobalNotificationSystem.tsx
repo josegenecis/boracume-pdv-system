@@ -130,12 +130,16 @@ const GlobalNotificationSystem: React.FC = () => {
 
     return () => {
       supabase.removeChannel(channel);
+      // Parar todos os sons quando o componente for desmontado
+      soundNotifications.stopAllSounds();
     };
   }, [user, isOnOrdersPage, soundEnabled, toast]);
 
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
     if (isOnOrdersPage) {
+      // Parar sons quando navegar para página de pedidos
+      soundNotifications.stopAllSounds();
       setIsVisible(false);
     } else if (pendingOrders.length > 0) {
       setIsVisible(true);
@@ -143,6 +147,9 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [isOnOrdersPage, pendingOrders.length]);
 
   const handleGoToOrders = () => {
+    // Parar todos os sons que estão tocando
+    soundNotifications.stopAllSounds();
+    
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
@@ -155,6 +162,9 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleDismiss = () => {
+    // Parar todos os sons que estão tocando
+    soundNotifications.stopAllSounds();
+    
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {

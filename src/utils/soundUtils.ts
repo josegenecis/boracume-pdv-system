@@ -4,6 +4,7 @@ export class SoundNotifications {
   private volume: number = 0.8;
   private audioFiles: Map<string, HTMLAudioElement> = new Map();
   private customSoundUrls: Map<string, string> = new Map();
+  private currentlyPlaying: Set<HTMLAudioElement> = new Set();
 
   constructor() {
     this.preloadSounds();
@@ -55,6 +56,11 @@ export class SoundNotifications {
           console.log(`✅ Som ${sound.name} carregado com sucesso ${customUrl ? '(personalizado)' : '(padrão)'}`);
         });
         
+        // Adicionar evento para quando o som terminar de tocar
+        audio.addEventListener('ended', () => {
+          this.currentlyPlaying.delete(audio);
+        });
+        
         audio.addEventListener('error', (e) => {
           console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
           console.warn('URL que falhou:', audioPath);
@@ -103,6 +109,10 @@ export class SoundNotifications {
         audio.volume = this.volume;
         
         console.log(`🔊 SOUND UTILS - Reproduzindo som ${soundType} com volume ${this.volume}`);
+        
+        // Adicionar à lista de áudios tocando
+        this.currentlyPlaying.add(audio);
+        
         await audio.play();
         console.log(`✅ SOUND UTILS - Som ${soundType} reproduzido com sucesso`);
       } else {
@@ -155,6 +165,34 @@ export class SoundNotifications {
     this.audioFiles.forEach(audio => {
       audio.volume = this.volume;
     });
+  }
+
+  stopSound(soundType: string) {
+    console.log(`🔇 SOUND UTILS - Parando som: ${soundType}`);
+    
+    const audio = this.audioFiles.get(soundType);
+    if (audio && this.currentlyPlaying.has(audio)) {
+      audio.pause();
+      audio.currentTime = 0;
+      this.currentlyPlaying.delete(audio);
+      console.log(`✅ SOUND UTILS - Som ${soundType} parado`);
+    }
+  }
+
+  stopAllSounds() {
+    console.log(`🔇 SOUND UTILS - Parando todos os sons (${this.currentlyPlaying.size} ativos)`);
+    
+    this.currentlyPlaying.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    
+    this.currentlyPlaying.clear();
+    console.log('✅ SOUND UTILS - Todos os sons parados');
+  }
+
+  getCurrentlyPlayingCount(): number {
+    return this.currentlyPlaying.size;
   }
 
   isAudioSupported(): boolean {
