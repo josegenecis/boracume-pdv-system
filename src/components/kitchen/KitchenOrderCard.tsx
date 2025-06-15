@@ -61,7 +61,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
       <CardHeader className="pb-2">
         <div className="flex justify-between items-center">
           <div>
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
               Pedido #{order.order_number}
               {order.priority === 'high' && (
                 <Badge className="bg-red-500">URGENTE</Badge>
@@ -79,12 +79,12 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <Separator className="my-2" />
         <ul className="space-y-2">
           {order.items.map((item) => (
-            <li key={item.id} className="text-sm">
+            <li key={item.id} className="text-base">
               <div className="flex justify-between">
-                <div className="font-medium">{item.quantity}x {item.name}</div>
+                <div className="font-semibold">{item.quantity}x {item.name}</div>
               </div>
               {item.options && item.options.length > 0 && (
-                <ul className="ml-4 mt-1 text-xs text-muted-foreground">
+                <ul className="ml-4 mt-1 text-sm text-muted-foreground">
                   {item.options.map((option, index) => {
                     // Garantir que option seja sempre uma string e não seja null
                     const optionText = option && typeof option === 'object' 
@@ -97,7 +97,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 </ul>
               )}
               {item.variations && item.variations.length > 0 && (
-                <ul className="ml-4 mt-1 text-xs text-muted-foreground">
+                <ul className="ml-4 mt-1 text-sm">
                   {item.variations.map((variation, index) => {
                     // Processar variações e mostrar apenas os adicionais
                     let optionsText = '';
