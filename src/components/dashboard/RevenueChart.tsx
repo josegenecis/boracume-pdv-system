@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp } from 'lucide-react';
 
 interface RevenueData {
@@ -23,7 +22,6 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
   };
 
   const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
-  const maxRevenue = Math.max(...data.map(d => d.revenue));
 
   // Configuração do gráfico com cores modernas
   const chartConfig = {
@@ -33,17 +31,8 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
     },
   };
 
-  // Função para gerar gradiente baseado no valor
-  const getBarFill = (value: number, index: number) => {
-    const ratio = maxRevenue > 0 ? value / maxRevenue : 0;
-    
-    if (ratio > 0.8) return `url(#gradient-high-${index})`;
-    if (ratio > 0.5) return `url(#gradient-medium-${index})`;
-    return `url(#gradient-low-${index})`;
-  };
-
   return (
-    <Card className="col-span-4 overflow-hidden border-0 shadow-lg bg-gradient-to-br from-background to-muted/20">
+    <Card className="col-span-4 overflow-hidden border-0 shadow-lg bg-gradient-to-br from-background via-background to-muted/10">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div>
@@ -59,28 +48,24 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
       </CardHeader>
       <CardContent className="p-6">
         <ChartContainer config={chartConfig} className="h-[350px] w-full">
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <AreaChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <defs>
-              {data.map((_, index) => (
-                <React.Fragment key={index}>
-                  <linearGradient id={`gradient-high-${index}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.7} />
-                  </linearGradient>
-                  <linearGradient id={`gradient-medium-${index}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.8} />
-                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.6} />
-                  </linearGradient>
-                  <linearGradient id={`gradient-low-${index}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f97316" stopOpacity={0.7} />
-                    <stop offset="100%" stopColor="#ea580c" stopOpacity={0.5} />
-                  </linearGradient>
-                </React.Fragment>
-              ))}
+              <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                <stop offset="30%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                <stop offset="70%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+              </linearGradient>
+              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="hsl(var(--primary))" floodOpacity="0.4"/>
+              </filter>
+              <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="hsl(var(--primary))" floodOpacity="0.15"/>
+              </filter>
             </defs>
             <CartesianGrid 
-              strokeDasharray="3 3" 
-              className="stroke-muted/30" 
+              strokeDasharray="1 4" 
+              className="stroke-muted/15" 
               horizontal={true}
               vertical={false}
             />
@@ -89,52 +74,55 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
               className="text-sm font-medium fill-muted-foreground"
               tickLine={false}
               axisLine={false}
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, dy: 10 }}
             />
             <YAxis
               className="text-sm font-medium fill-muted-foreground"
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 11 }}
-              tickFormatter={(value) => value > 0 ? `R$ ${(value / 1000).toFixed(0)}k` : 'R$ 0'}
+              tickFormatter={(value) => value > 0 ? `${(value / 1000).toFixed(0)}k` : '0'}
             />
             <ChartTooltip 
               content={
                 <ChartTooltipContent 
-                  className="w-40 bg-background/95 backdrop-blur-sm border border-border/50 shadow-xl"
+                  className="min-w-40 bg-background/95 backdrop-blur-md border border-border/50 shadow-xl rounded-xl"
                   formatter={(value) => [formatCurrency(Number(value)), 'Receita']}
                 />
               } 
             />
-            <Bar 
-              dataKey="revenue" 
-              radius={[8, 8, 0, 0]}
-              className="transition-all duration-300 hover:opacity-80"
-            >
-              {data.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={getBarFill(entry.revenue, index)}
-                  className="drop-shadow-sm transition-all duration-300 hover:drop-shadow-md"
-                />
-              ))}
-            </Bar>
-          </BarChart>
+            <Area
+              type="monotone"
+              dataKey="revenue"
+              stroke="hsl(var(--primary))"
+              strokeWidth={3}
+              fill="url(#areaGradient)"
+              className="transition-all duration-500"
+              filter="url(#shadow)"
+              dot={{
+                fill: "hsl(var(--primary))", 
+                stroke: "hsl(var(--background))",
+                strokeWidth: 3,
+                r: 5,
+                filter: "url(#glow)"
+              }}
+              activeDot={{
+                r: 8,
+                stroke: "hsl(var(--primary))",
+                strokeWidth: 3,
+                fill: "hsl(var(--background))",
+                filter: "url(#glow)",
+                className: "animate-pulse"
+              }}
+            />
+          </AreaChart>
         </ChartContainer>
         
-        {/* Legenda moderna */}
-        <div className="flex justify-center mt-6 space-x-6">
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-700"></div>
-            <span className="text-xs font-medium text-muted-foreground">Alto desempenho</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-700"></div>
-            <span className="text-xs font-medium text-muted-foreground">Desempenho médio</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-r from-orange-500 to-orange-700"></div>
-            <span className="text-xs font-medium text-muted-foreground">Baixo desempenho</span>
+        {/* Indicador de performance */}
+        <div className="flex justify-center mt-6">
+          <div className="flex items-center space-x-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+            <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+            <span className="text-sm font-medium text-primary">Performance de vendas semanal</span>
           </div>
         </div>
       </CardContent>
