@@ -175,6 +175,12 @@ const NotificationSettings = () => {
         if (error) throw error;
       }
       
+      // Forçar atualização do sistema de som após salvar
+      console.log('💾 NotificationSettings - Forçando atualização do sistema de som após salvar');
+      soundNotifications.setCustomSoundUrls(customSoundUrls);
+      soundNotifications.setEnabled(notifications.soundEnabled);
+      soundNotifications.setVolume(parseFloat(notifications.volume) / 100);
+      
       toast({
         title: "Configurações salvas!",
         description: "As configurações de notificação foram atualizadas com sucesso.",
@@ -192,6 +198,8 @@ const NotificationSettings = () => {
   };
 
   const handleSoundUploaded = (soundType: string, url: string | null) => {
+    console.log(`🎵 NotificationSettings - Som ${soundType} uploaded:`, url);
+    
     const urlKey = `custom_${soundType}_url` as keyof typeof customSoundUrls;
     const newCustomUrls = {
       ...customSoundUrls,
@@ -201,10 +209,10 @@ const NotificationSettings = () => {
     setCustomSoundUrls(newCustomUrls);
 
     // Atualizar sistema de som imediatamente
+    console.log('🔄 NotificationSettings - Atualizando sistema de som com nova URL');
     soundNotifications.setCustomSoundUrls(newCustomUrls);
     
-    // Recarregar configurações para garantir sincronização
-    loadSettings();
+    console.log('✅ NotificationSettings - Sistema de som atualizado com sucesso');
   };
 
   return (

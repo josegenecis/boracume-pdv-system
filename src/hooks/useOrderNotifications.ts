@@ -16,6 +16,8 @@ export const useOrderNotifications = () => {
 
     // Carregar configurações de notificação do usuário
     const loadSettings = async () => {
+      console.log('🔄 useOrderNotifications - Carregando configurações...');
+      
       const { data } = await supabase
         .from('notification_settings')
         .select('*')
@@ -23,17 +25,30 @@ export const useOrderNotifications = () => {
         .single();
 
       if (data) {
+        console.log('📋 useOrderNotifications - Configurações carregadas:', data);
+        
         setEnabled(data.sound_enabled);
         setVolume(parseFloat(data.volume) / 100);
         setSoundType(data.order_sound);
+
+        // Configurar URLs personalizadas no sistema de som
+        const customUrls = {
+          custom_bell_url: data.custom_bell_url,
+          custom_chime_url: data.custom_chime_url,
+          custom_ding_url: data.custom_ding_url,
+          custom_notification_url: data.custom_notification_url,
+        };
+        
+        console.log('🎵 useOrderNotifications - Configurando sons personalizados:', customUrls);
+        soundNotifications.setCustomSoundUrls(customUrls);
+        
+        // Configurar volume e status
+        soundNotifications.setEnabled(data.sound_enabled);
+        soundNotifications.setVolume(parseFloat(data.volume) / 100);
       }
     };
 
     loadSettings();
-
-    // Configurar sistema de som
-    soundNotifications.setEnabled(enabled);
-    soundNotifications.setVolume(volume);
 
     // Escutar novos pedidos em tempo real
     const channel = supabase
@@ -48,14 +63,19 @@ export const useOrderNotifications = () => {
         },
         async (payload) => {
           console.log('🔔 Novo pedido recebido:', payload);
+          console.log('🔊 useOrderNotifications - Estado atual:', { enabled, soundType, volume });
           
           if (enabled) {
-            // Reproduzir som de notificação via Web Audio API
+            // Reproduzir som de notificação
             try {
+              console.log(`🎵 useOrderNotifications - Reproduzindo som: ${soundType}`);
               await soundNotifications.playSound(soundType);
+              console.log('✅ useOrderNotifications - Som reproduzido com sucesso');
             } catch (error) {
-              console.error('Erro ao reproduzir som:', error);
+              console.error('❌ useOrderNotifications - Erro ao reproduzir som:', error);
             }
+          } else {
+            console.log('🔇 useOrderNotifications - Som desabilitado');
           }
 
           // Mostrar toast
@@ -74,9 +94,10 @@ export const useOrderNotifications = () => {
 
   // Atualizar configurações quando mudarem
   useEffect(() => {
+    console.log('🔄 useOrderNotifications - Atualizando configurações:', { enabled, volume, soundType });
     soundNotifications.setEnabled(enabled);
     soundNotifications.setVolume(volume);
-  }, [enabled, volume]);
+  }, [enabled, volume, soundType]);
 
   const playTestSound = async () => {
     try {

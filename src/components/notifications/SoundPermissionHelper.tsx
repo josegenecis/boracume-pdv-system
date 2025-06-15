@@ -8,13 +8,16 @@ const SoundPermissionHelper: React.FC = () => {
   const [needsPermission, setNeedsPermission] = useState(false);
 
   useEffect(() => {
-    // Verificar se HTML5 Audio está disponível
+    // Verificar se o usuário já habilitou o som anteriormente
+    const soundAlreadyEnabled = localStorage.getItem('sound_enabled') === 'true';
+    
     if (!soundNotifications.isAudioSupported()) {
       setNeedsPermission(true);
-    } else {
-      // Para HTML5 Audio, geralmente precisamos de interação do usuário
-      // Mostrar o helper na primeira vez
+    } else if (!soundAlreadyEnabled) {
+      // Só mostrar o helper se o usuário nunca habilitou o som
       setNeedsPermission(true);
+    } else {
+      setNeedsPermission(false);
     }
   }, []);
 
@@ -22,10 +25,14 @@ const SoundPermissionHelper: React.FC = () => {
     try {
       await soundNotifications.enableSound();
       await soundNotifications.playSound('bell');
+      
+      // Salvar no localStorage que o usuário habilitou o som
+      localStorage.setItem('sound_enabled', 'true');
+      
       setNeedsPermission(false);
-      console.log('Áudio habilitado com sucesso');
+      console.log('✅ Áudio habilitado com sucesso e salvo no localStorage');
     } catch (error) {
-      console.error('Erro ao habilitar áudio:', error);
+      console.error('❌ Erro ao habilitar áudio:', error);
     }
   };
 
