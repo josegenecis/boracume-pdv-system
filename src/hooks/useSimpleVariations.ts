@@ -50,9 +50,8 @@ export const useSimpleVariations = () => {
       // Usar apenas variações específicas (sem variações globais)
       const allVariations = productVariations || [];
       
-      console.log('🔄 CARDÁPIO DIGITAL - Combinando variações:', {
+      console.log('🔄 CARDÁPIO DIGITAL - Processando variações específicas:', {
         especificas: productVariations?.length || 0,
-        globais: globalVariations.length,
         total: allVariations.length,
         dados: allVariations
       });
@@ -97,7 +96,7 @@ export const useSimpleVariations = () => {
           const validOptions = [];
           
           for (let i = 0; i < item.options.length; i++) {
-            const opt = item.options[i];
+            const opt = item.options[i] as any; // Type assertion para evitar erros de tipo
             console.log(`🔍 CARDÁPIO DIGITAL - Processando opção ${i + 1}:`, opt);
             
             if (!opt) {
