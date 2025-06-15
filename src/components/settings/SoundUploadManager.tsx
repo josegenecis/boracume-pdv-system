@@ -100,7 +100,7 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
     }
   };
 
-  const saveCustomSoundToDatabase = async (soundType: string, url: string) => {
+  const saveCustomSoundToDatabase = async (soundType: string, url: string | null) => {
     if (!user) return;
 
     try {
@@ -119,20 +119,38 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
       };
 
       if (existingData) {
-        await supabase
+        const { error } = await supabase
           .from('notification_settings')
           .update(updateData)
           .eq('user_id', user.id);
+        
+        if (error) throw error;
       } else {
-        await supabase
+        // Criar com valores padrão para evitar problemas de campos obrigatórios
+        const { error } = await supabase
           .from('notification_settings')
           .insert({
             user_id: user.id,
+            new_orders: true,
+            order_updates: true,
+            low_stock: true,
+            daily_reports: false,
+            email_notifications: true,
+            sms_notifications: false,
+            push_notifications: true,
+            sound_enabled: true,
+            order_sound: 'bell',
+            volume: '80',
             ...updateData
           });
+        
+        if (error) throw error;
       }
+      
+      console.log(`✅ Som ${soundType} salvo no banco:`, url ? 'URL personalizada' : 'removido');
     } catch (error) {
       console.error('Erro ao salvar no banco:', error);
+      throw error; // Re-throw para que o caller possa lidar com o erro
     }
   };
 

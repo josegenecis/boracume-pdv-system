@@ -38,7 +38,7 @@ export const useGlobalNotifications = () => {
 
       if (data) {
         setSoundEnabled(data.sound_enabled);
-        setVolume(parseFloat(data.volume) / 100);
+        setVolume(parseFloat(data.volume || '80') / 100);
         setSoundType(data.order_sound);
         
         // Configurar sons personalizados

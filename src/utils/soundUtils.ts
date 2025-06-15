@@ -50,6 +50,7 @@ export class SoundNotifications {
         
         audio.addEventListener('error', (e) => {
           console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
+          console.warn('URL que falhou:', audioPath);
           // Em caso de erro com som personalizado, tentar carregar som padrão
           if (customUrl) {
             console.log(`Tentando carregar som padrão para ${sound.name}`);
@@ -57,6 +58,10 @@ export class SoundNotifications {
             fallbackAudio.preload = 'auto';
             fallbackAudio.volume = this.volume;
             this.audioFiles.set(sound.name, fallbackAudio);
+            
+            fallbackAudio.addEventListener('error', (fallbackError) => {
+              console.error(`❌ Erro também no som padrão para ${sound.name}:`, fallbackError);
+            });
           }
         });
       } catch (error) {
@@ -128,8 +133,10 @@ export class SoundNotifications {
     this.isEnabled = enabled;
   }
 
-  setVolume(volume: number) {
-    this.volume = Math.max(0, Math.min(1, volume));
+  setVolume(volume: number | string) {
+    // Converter string para número se necessário
+    const numVolume = typeof volume === 'string' ? parseFloat(volume) / 100 : volume;
+    this.volume = Math.max(0, Math.min(1, numVolume));
     
     // Atualizar volume de todos os áudios carregados
     this.audioFiles.forEach(audio => {
