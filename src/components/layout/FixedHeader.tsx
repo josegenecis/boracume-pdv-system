@@ -20,19 +20,18 @@ const FixedHeader = () => {
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <span className="text-xl text-boracume-orange font-extrabold">BoraCumê</span>
+            <span className="text-xl font-extrabold text-boracume-orange">Bora</span>
+            <span className="text-xl font-extrabold text-boracume-green">Cumê</span>
           </div>
         </div>
         <div className="flex items-center space-x-3">
           <Button variant="ghost" size="sm">
             <Bell size={18} />
           </Button>
-
           <div className="flex items-center space-x-2 text-sm">
             <User size={16} />
             <span className="hidden md:inline">{user?.email}</span>
           </div>
-
           <Button variant="ghost" size="sm" onClick={handleSignOut}>
             <LogOut size={18} />
           </Button>
