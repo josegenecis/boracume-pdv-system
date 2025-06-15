@@ -6,6 +6,8 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import RouteGuard from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
+import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
@@ -81,6 +83,8 @@ function App() {
         <AuthProvider>
           <SubscriptionProvider>
             <AppContent />
+            <GlobalNotificationSystem />
+            <SoundPermissionHelper />
             <Toaster />
           </SubscriptionProvider>
         </AuthProvider>

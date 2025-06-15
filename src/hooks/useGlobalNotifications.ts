@@ -24,9 +24,33 @@ export const useGlobalNotifications = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Configurar áudio
-    audioRef.current = new Audio();
-    audioRef.current.volume = volume;
+    // Configurar áudio com tratamento de erro
+    const initializeAudio = () => {
+      try {
+        audioRef.current = new Audio();
+        audioRef.current.volume = volume;
+        audioRef.current.preload = 'auto';
+        
+        // Pré-carregar som padrão
+        const defaultSound = `/sounds/${soundType}.mp3`;
+        audioRef.current.src = defaultSound;
+        
+        // Adicionar listeners para debugging
+        audioRef.current.addEventListener('error', (e) => {
+          console.error('Erro ao carregar som:', e);
+          console.log('Tentando som:', defaultSound);
+        });
+        
+        audioRef.current.addEventListener('canplay', () => {
+          console.log('Som carregado com sucesso:', defaultSound);
+        });
+        
+      } catch (error) {
+        console.error('Erro ao inicializar áudio:', error);
+      }
+    };
+
+    initializeAudio();
 
     // Carregar configurações de notificação
     const loadSettings = async () => {
@@ -77,10 +101,30 @@ export const useGlobalNotifications = () => {
           
           // Reproduzir som de notificação
           if (soundEnabled && audioRef.current) {
-            const soundUrl = `/sounds/${soundType}.mp3`;
-            audioRef.current.src = soundUrl;
-            audioRef.current.volume = volume;
-            audioRef.current.play().catch(console.error);
+            try {
+              const soundUrl = `/sounds/${soundType}.mp3`;
+              audioRef.current.src = soundUrl;
+              audioRef.current.volume = volume;
+              
+              // Tentar reproduzir com fallback
+              const playPromise = audioRef.current.play();
+              
+              if (playPromise !== undefined) {
+                playPromise
+                  .then(() => {
+                    console.log('Som reproduzido com sucesso');
+                  })
+                  .catch((error) => {
+                    console.warn('Erro ao reproduzir som (autoplay bloqueado?):', error);
+                    // Fallback: mostrar toast indicando que o som foi bloqueado
+                    if (error.name === 'NotAllowedError') {
+                      console.log('Autoplay bloqueado - usuário precisa interagir primeiro');
+                    }
+                  });
+              }
+            } catch (error) {
+              console.error('Erro ao tentar reproduzir som:', error);
+            }
           }
           
           // Vibração (se suportado)
@@ -128,10 +172,30 @@ export const useGlobalNotifications = () => {
 
   const playTestSound = () => {
     if (audioRef.current) {
-      const soundUrl = `/sounds/${soundType}.mp3`;
-      audioRef.current.src = soundUrl;
-      audioRef.current.volume = volume;
-      audioRef.current.play().catch(console.error);
+      try {
+        const soundUrl = `/sounds/${soundType}.mp3`;
+        audioRef.current.src = soundUrl;
+        audioRef.current.volume = volume;
+        
+        // Para teste, força permissão de reprodução
+        const playPromise = audioRef.current.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('Teste de som executado com sucesso');
+            })
+            .catch((error) => {
+              console.error('Erro no teste de som:', error);
+              // Se não conseguir reproduzir, tentar habilitar áudio via interação
+              if (error.name === 'NotAllowedError') {
+                console.log('Clique em qualquer lugar da página para habilitar som');
+              }
+            });
+        }
+      } catch (error) {
+        console.error('Erro ao tentar testar som:', error);
+      }
     }
   };
 
