@@ -57,6 +57,13 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       setSelectedVariations({});
       
       console.log('📊 MODAL - Estado atualizado - Total de variações:', productVariations.length);
+      console.log('📋 MODAL - Variações detalhadas:', productVariations.map(v => ({
+        id: v.id,
+        name: v.name,
+        required: v.required,
+        optionsCount: v.options.length,
+        options: v.options
+      })));
     } catch (error) {
       console.error('❌ MODAL - Erro ao carregar variações:', error);
       setVariations([]);
@@ -159,19 +166,26 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           {/* Variações */}
           {(() => {
             console.log('🎨 MODAL - Renderizando variações:', variations.length);
+            console.log('🎨 MODAL - Lista de variações:', variations);
             return null;
           })()}
           {variations.length > 0 ? (
-            variations.map((variation) => (
-              <VariationGroup
-                key={variation.id}
-                variation={variation}
-                selectedVariations={selectedVariations}
-                onVariationChange={handleVariationChange}
-              />
-            ))
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Personalize seu pedido</h3>
+              {variations.map((variation) => {
+                console.log('🎨 MODAL - Renderizando variação:', variation.name, variation);
+                return (
+                  <VariationGroup
+                    key={variation.id}
+                    variation={variation}
+                    selectedVariations={selectedVariations}
+                    onVariationChange={handleVariationChange}
+                  />
+                );
+              })}
+            </div>
           ) : (
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
               Nenhuma variação disponível para este produto.
             </div>
           )}

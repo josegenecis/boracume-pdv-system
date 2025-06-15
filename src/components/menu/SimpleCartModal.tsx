@@ -146,7 +146,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const isFormValid = () => {
-    return (
+    const valid = (
       customerName.trim() !== '' &&
       customerPhone.trim() !== '' &&
       customerAddress.trim() !== '' &&
@@ -154,6 +154,19 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       paymentMethod !== '' &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
     );
+    
+    console.log('💳 VALIDAÇÃO FORMULÁRIO:', {
+      customerName: customerName.trim() !== '',
+      customerPhone: customerPhone.trim() !== '',
+      customerAddress: customerAddress.trim() !== '',
+      deliveryZoneId: deliveryZoneId !== '',
+      paymentMethod: paymentMethod !== '',
+      paymentValue: paymentMethod,
+      changeValid: paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal,
+      finalValid: valid
+    });
+    
+    return valid;
   };
 
   const handlePlaceOrder = async () => {
@@ -380,7 +393,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
             <div>
               <Label htmlFor="payment">Forma de pagamento *</Label>
-              <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+              <p className="text-xs text-muted-foreground mb-2">Método atual selecionado: "{paymentMethod}"</p>
+              <RadioGroup 
+                value={paymentMethod} 
+                onValueChange={(value) => {
+                  console.log('💳 MUDANÇA PAGAMENTO:', { de: paymentMethod, para: value });
+                  setPaymentMethod(value);
+                }}
+              >
                 {paymentOptions.map((option) => {
                   const IconComponent = option.icon;
                   return (
