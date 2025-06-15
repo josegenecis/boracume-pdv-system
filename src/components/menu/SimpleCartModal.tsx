@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 
 interface CartItem {
   product: {
@@ -49,6 +50,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [customerName, setCustomerName] = React.useState('');
   const [customerPhone, setCustomerPhone] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
+  const [isExistingCustomer, setIsExistingCustomer] = React.useState(false);
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
   const [paymentMethod, setPaymentMethod] = React.useState('');
   const [changeAmount, setChangeAmount] = React.useState('');
@@ -65,6 +67,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
   const deliveryFee = selectedZone?.delivery_fee || 0;
   const finalTotal = total + deliveryFee;
+
+  const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
 
   const paymentOptions = [
     { value: 'pix', label: 'PIX', icon: Smartphone },
@@ -321,11 +325,39 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <Input
                   id="phone"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={async (e) => {
+                    const phone = e.target.value;
+                    setCustomerPhone(phone);
+                    
+                    // Auto-lookup customer if phone has enough digits
+                    if (phone.replace(/\D/g, '').length >= 10) {
+                      const customer = await lookupCustomer(phone);
+                      if (customer) {
+                        setCustomerName(customer.name);
+                        setCustomerAddress(customer.address);
+                        setIsExistingCustomer(true);
+                      } else {
+                        setIsExistingCustomer(false);
+                      }
+                    } else {
+                      setIsExistingCustomer(false);
+                    }
+                  }}
                   placeholder="(11) 99999-9999"
                   className="pl-10"
                 />
+                {isLookingUp && (
+                  <div className="absolute right-3 top-3">
+                    <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                  </div>
+                )}
               </div>
+              {isExistingCustomer && (
+                <div className="flex items-center gap-2 text-sm text-green-600 mt-2">
+                  <CheckCircle className="h-4 w-4" />
+                  Cliente encontrado! Dados preenchidos automaticamente.
+                </div>
+              )}
             </div>
 
             <div>
@@ -400,17 +432,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   console.log('💳 MUDANÇA PAGAMENTO:', { de: paymentMethod, para: value });
                   setPaymentMethod(value);
                 }}
+                className="space-y-3"
               >
                 {paymentOptions.map((option) => {
                   const IconComponent = option.icon;
                   return (
-                    <div key={option.value} className="flex items-center space-x-2">
+                    <Label
+                      key={option.value}
+                      htmlFor={option.value}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
                       <RadioGroupItem value={option.value} id={option.value} />
-                      <Label htmlFor={option.value} className="flex items-center gap-2 cursor-pointer">
-                        <IconComponent className="h-4 w-4" />
-                        {option.label}
-                      </Label>
-                    </div>
+                      <IconComponent className="h-5 w-5" />
+                      <span className="flex-1">{option.label}</span>
+                    </Label>
                   );
                 })}
               </RadioGroup>

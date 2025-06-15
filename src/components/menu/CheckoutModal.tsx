@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation } from 'lucide-react';
+import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation, CheckCircle } from 'lucide-react';
+import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 
 interface CartItem {
   id: string;
@@ -55,6 +56,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     address: '',
     notes: ''
   });
+  const [isExistingCustomer, setIsExistingCustomer] = useState(false);
   const [location, setLocation] = useState({
     latitude: null as number | null,
     longitude: null as number | null,
@@ -72,11 +74,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const minimumOrder = selectedZoneData?.minimum_order || 0;
   const totalWithDelivery = total + deliveryFee;
 
+  const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId || '');
+
   const paymentOptions = [
     { value: 'pix', label: 'PIX', icon: Smartphone },
-    { value: 'credit', label: 'Cartão de Crédito', icon: CreditCard },
-    { value: 'debit', label: 'Cartão de Débito', icon: CreditCard },
-    { value: 'cash', label: 'Dinheiro', icon: Banknote }
+    { value: 'cartao_credito', label: 'Cartão de Crédito', icon: CreditCard },
+    { value: 'cartao_debito', label: 'Cartão de Débito', icon: CreditCard },
+    { value: 'dinheiro', label: 'Dinheiro', icon: Banknote }
   ];
 
   const generateOrderNumber = () => {
@@ -140,7 +144,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (!selectedZone) errors.push('Selecione uma área de entrega');
       if (total < minimumOrder) errors.push(`Pedido mínimo: R$ ${minimumOrder.toFixed(2)}`);
       if (!paymentMethod) errors.push('Selecione forma de pagamento');
-      if (paymentMethod === 'cash' && changeAmount && parseFloat(changeAmount) < totalWithDelivery) {
+      if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < totalWithDelivery) {
         errors.push('Valor para troco deve ser maior que o total');
       }
       
@@ -176,7 +180,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         total: totalWithDelivery,
         delivery_fee: deliveryFee,
         payment_method: paymentMethod,
-        change_amount: paymentMethod === 'cash' ? parseFloat(changeAmount) || null : null,
+        change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
         order_type: 'delivery',
         delivery_instructions: customerData.notes.trim() || null,
         estimated_time: selectedZoneData?.delivery_time || '30-45 min',
@@ -212,7 +216,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       selectedZone !== '' &&
       total >= minimumOrder &&
       paymentMethod !== '' &&
-      (paymentMethod !== 'cash' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
+      (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
     );
     
     return isValid;
@@ -338,10 +342,41 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     id="phone"
                     placeholder="(00) 00000-0000"
                     value={customerData.phone}
-                    onChange={(e) => setCustomerData(prev => ({ ...prev, phone: e.target.value }))}
+                    onChange={async (e) => {
+                      const phone = e.target.value;
+                      setCustomerData(prev => ({ ...prev, phone }));
+                      
+                      // Auto-lookup customer if phone has enough digits
+                      if (phone.replace(/\D/g, '').length >= 10) {
+                        const customer = await lookupCustomer(phone);
+                        if (customer) {
+                          setCustomerData(prev => ({
+                            ...prev,
+                            name: customer.name,
+                            address: customer.address
+                          }));
+                          setIsExistingCustomer(true);
+                        } else {
+                          setIsExistingCustomer(false);
+                        }
+                      } else {
+                        setIsExistingCustomer(false);
+                      }
+                    }}
                     className="pl-10"
                   />
+                  {isLookingUp && (
+                    <div className="absolute right-3 top-3">
+                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                    </div>
+                  )}
                 </div>
+                {isExistingCustomer && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    Cliente encontrado! Dados preenchidos automaticamente.
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -407,25 +442,27 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <CardContent className="p-4 space-y-4">
               <h3 className="font-semibold">Forma de Pagamento</h3>
               
-              <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
+              <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
                 {paymentOptions.map((option) => {
                   const IconComponent = option.icon;
                   return (
-                    <div key={option.value} className="flex items-center space-x-2">
+                    <Label
+                      key={option.value}
+                      htmlFor={option.value}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
+                    >
                       <RadioGroupItem value={option.value} id={option.value} />
-                      <Label htmlFor={option.value} className="flex items-center gap-2 cursor-pointer">
-                        <IconComponent className="h-4 w-4" />
-                        {option.label}
-                        {option.value === 'pix' && (
-                          <Badge variant="secondary" className="text-xs">Instantâneo</Badge>
-                        )}
-                      </Label>
-                    </div>
+                      <IconComponent className="h-5 w-5" />
+                      <span className="flex-1">{option.label}</span>
+                      {option.value === 'pix' && (
+                        <Badge variant="secondary" className="text-xs">Instantâneo</Badge>
+                      )}
+                    </Label>
                   );
                 })}
               </RadioGroup>
 
-              {paymentMethod === 'cash' && (
+              {paymentMethod === 'dinheiro' && (
                 <div className="space-y-2">
                   <Label htmlFor="change">Troco para quanto? (opcional)</Label>
                   <Input
