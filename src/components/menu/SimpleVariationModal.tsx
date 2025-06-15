@@ -165,15 +165,39 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
           {/* Variações */}
           {(() => {
-            console.log('🎨 MODAL - Renderizando variações:', variations.length);
-            console.log('🎨 MODAL - Lista de variações:', variations);
+            console.log('🎨 MODAL - RENDERIZAÇÃO DE VARIAÇÕES');
+            console.log('🎨 MODAL - Total de variações:', variations.length);
+            console.log('🎨 MODAL - Lista completa de variações:', variations);
+            console.log('🎨 MODAL - Produto atual:', product?.name, product?.id);
+            
+            if (variations.length === 0) {
+              console.log('⚠️ MODAL - NENHUMA VARIAÇÃO ENCONTRADA!');
+              console.log('⚠️ MODAL - Possíveis causas:');
+              console.log('  - Produto não tem variações cadastradas');
+              console.log('  - Erro no carregamento das variações');
+              console.log('  - Problema na consulta do banco de dados');
+            } else {
+              console.log('✅ MODAL - Variações encontradas, renderizando cada uma:');
+              variations.forEach((variation, index) => {
+                console.log(`  ${index + 1}. ${variation.name} (${variation.options.length} opções)`);
+              });
+            }
+            
             return null;
           })()}
+          
           {variations.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Personalize seu pedido</h3>
-              {variations.map((variation) => {
-                console.log('🎨 MODAL - Renderizando variação:', variation.name, variation);
+              {variations.map((variation, index) => {
+                console.log(`🎨 MODAL - Renderizando variação ${index + 1}:`, variation.name, {
+                  id: variation.id,
+                  required: variation.required,
+                  maxSelections: variation.max_selections,
+                  optionsCount: variation.options.length,
+                  options: variation.options
+                });
+                
                 return (
                   <VariationGroup
                     key={variation.id}
@@ -186,7 +210,11 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </div>
           ) : (
             <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
-              Nenhuma variação disponível para este produto.
+              ⚠️ Nenhuma variação disponível para este produto.
+              <br />
+              <span className="text-xs">
+                Você ainda pode ajustar a quantidade e adicionar observações.
+              </span>
             </div>
           )}
 

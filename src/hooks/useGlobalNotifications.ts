@@ -26,28 +26,55 @@ export const useGlobalNotifications = () => {
 
     // Carregar configurações de notificação primeiro
     const loadSettings = async () => {
-      const { data } = await supabase
+      console.log('🔊 NOTIFICAÇÕES - Carregando configurações para usuário:', user.id);
+      
+      const { data, error } = await supabase
         .from('notification_settings')
         .select('*')
         .eq('user_id', user.id)
         .single();
 
+      if (error) {
+        console.warn('⚠️ NOTIFICAÇÕES - Erro ao carregar configurações:', error);
+        return;
+      }
+
       if (data) {
+        console.log('📋 NOTIFICAÇÕES - Configurações carregadas:', {
+          sound_enabled: data.sound_enabled,
+          volume: data.volume,
+          order_sound: data.order_sound,
+          custom_urls: {
+            bell: data.custom_bell_url,
+            chime: data.custom_chime_url,
+            ding: data.custom_ding_url,
+            notification: data.custom_notification_url
+          }
+        });
+
+        // Atualizar estados locais
         setSoundEnabled(data.sound_enabled);
         setVolume(parseFloat(data.volume || '80') / 100);
         setSoundType(data.order_sound);
         
         // Configurar sons personalizados PRIMEIRO
-        soundNotifications.setCustomSoundUrls({
+        const customUrls = {
           custom_bell_url: data.custom_bell_url,
           custom_chime_url: data.custom_chime_url,
           custom_ding_url: data.custom_ding_url,
           custom_notification_url: data.custom_notification_url,
-        });
+        };
+        
+        console.log('🔧 NOTIFICAÇÕES - Configurando URLs personalizadas:', customUrls);
+        soundNotifications.setCustomSoundUrls(customUrls);
         
         // Depois configurar sistema de som com as configurações carregadas
         soundNotifications.setEnabled(data.sound_enabled);
         soundNotifications.setVolume(parseFloat(data.volume || '80') / 100);
+        
+        console.log('✅ NOTIFICAÇÕES - Sistema de som configurado com sucesso');
+      } else {
+        console.log('⚠️ NOTIFICAÇÕES - Nenhuma configuração encontrada, usando padrões');
       }
     };
 
@@ -77,20 +104,35 @@ export const useGlobalNotifications = () => {
           filter: `user_id=eq.${user.id}`
         },
         async (payload) => {
-          console.log('🔔 useGlobalNotifications - Novo pedido:', payload);
+          console.log('🔔 useGlobalNotifications - Novo pedido recebido:', payload);
           
           const newOrder = payload.new as GlobalNotificationOrder;
           setLatestOrder(newOrder);
           setPendingCount(prev => prev + 1);
           
-          // Reproduzir som de notificação usando Web Audio API
+          // Reproduzir som de notificação
+          console.log('🔊 NOTIFICAÇÕES - Tentando reproduzir som:', {
+            soundEnabled,
+            soundType,
+            volume
+          });
+          
           if (soundEnabled) {
             try {
               await soundNotifications.playSound(soundType);
-              console.log('✅ Som reproduzido com sucesso via Web Audio API');
+              console.log('✅ NOTIFICAÇÕES - Som reproduzido com sucesso:', soundType);
             } catch (error) {
-              console.error('❌ Erro ao reproduzir som:', error);
+              console.error('❌ NOTIFICAÇÕES - Erro ao reproduzir som:', error);
+              // Tentar reproduzir som padrão como fallback
+              try {
+                await soundNotifications.playSound('bell');
+                console.log('✅ NOTIFICAÇÕES - Som padrão reproduzido como fallback');
+              } catch (fallbackError) {
+                console.error('❌ NOTIFICAÇÕES - Erro também no som padrão:', fallbackError);
+              }
             }
+          } else {
+            console.log('🔇 NOTIFICAÇÕES - Som desabilitado');
           }
           
           // Vibração (se suportado)
@@ -143,11 +185,12 @@ export const useGlobalNotifications = () => {
   }, [soundEnabled, volume]);
 
   const playTestSound = async () => {
+    console.log('🔊 TESTE - Reproduzindo som de teste:', soundType);
     try {
       await soundNotifications.playSound(soundType);
-      console.log('Teste de som executado com sucesso via Web Audio API');
+      console.log('✅ TESTE - Som reproduzido com sucesso:', soundType);
     } catch (error) {
-      console.error('Erro no teste de som:', error);
+      console.error('❌ TESTE - Erro ao reproduzir som:', error);
     }
   };
 

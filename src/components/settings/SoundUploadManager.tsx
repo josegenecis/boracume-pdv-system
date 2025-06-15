@@ -36,6 +36,21 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
     { key: 'notification', label: 'Notificação', urlKey: 'custom_notification_url' as const },
   ];
 
+  // Função para extrair nome do arquivo da URL
+  const getFileNameFromUrl = (url: string | undefined) => {
+    if (!url) return null;
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      const fileName = pathParts[pathParts.length - 1];
+      // Remover timestamp e ID do usuário se presente
+      const cleanFileName = fileName.replace(/^[^/]*\//, '').split('.')[0];
+      return cleanFileName || 'Arquivo personalizado';
+    } catch {
+      return 'Arquivo personalizado';
+    }
+  };
+
   const handleFileUpload = async (soundType: string, file: File) => {
     if (!user) return;
 
@@ -212,7 +227,10 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
                 <div className="flex flex-col">
                   <Label className="font-medium">{soundType.label}</Label>
                   <span className="text-sm text-muted-foreground">
-                    {hasCustomSound ? 'Som personalizado' : 'Som padrão'}
+                    {hasCustomSound 
+                      ? `Som personalizado: ${getFileNameFromUrl(customUrls[soundType.urlKey]) || 'Arquivo personalizado'}`
+                      : 'Som padrão'
+                    }
                   </span>
                 </div>
               </div>

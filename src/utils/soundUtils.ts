@@ -10,14 +10,21 @@ export class SoundNotifications {
   }
 
   setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
+    console.log('🔧 SOUND UTILS - Configurando URLs personalizadas:', customUrls);
     this.customSoundUrls.clear();
+    
     Object.entries(customUrls).forEach(([key, url]) => {
       if (url) {
         // Converter custom_bell_url para bell, etc.
         const soundType = key.replace('custom_', '').replace('_url', '');
         this.customSoundUrls.set(soundType, url);
+        console.log(`✅ SOUND UTILS - URL personalizada configurada: ${soundType} -> ${url}`);
       }
     });
+    
+    console.log('🔧 SOUND UTILS - URLs personalizadas ativas:', 
+      Array.from(this.customSoundUrls.entries()));
+    
     // Recarregar sons com as novas URLs
     this.preloadSounds();
   }
@@ -78,9 +85,14 @@ export class SoundNotifications {
 
   async playSound(soundType: string = 'bell') {
     if (!this.isEnabled) {
-      console.log('Som desabilitado');
+      console.log('🔇 SOUND UTILS - Som desabilitado');
       return;
     }
+
+    console.log(`🔊 SOUND UTILS - Tentando reproduzir som: ${soundType}`);
+    console.log(`🔊 SOUND UTILS - Volume configurado: ${this.volume}`);
+    console.log(`🔊 SOUND UTILS - Sons disponíveis:`, Array.from(this.audioFiles.keys()));
+    console.log(`🔊 SOUND UTILS - URLs personalizadas:`, Array.from(this.customSoundUrls.entries()));
 
     try {
       const audio = this.audioFiles.get(soundType);
@@ -90,14 +102,15 @@ export class SoundNotifications {
         audio.currentTime = 0;
         audio.volume = this.volume;
         
+        console.log(`🔊 SOUND UTILS - Reproduzindo som ${soundType} com volume ${this.volume}`);
         await audio.play();
-        console.log(`✅ Som ${soundType} reproduzido com sucesso`);
+        console.log(`✅ SOUND UTILS - Som ${soundType} reproduzido com sucesso`);
       } else {
-        console.warn(`⚠️ Som ${soundType} não encontrado, usando fallback`);
+        console.warn(`⚠️ SOUND UTILS - Som ${soundType} não encontrado, usando fallback`);
         this.createFallbackSound();
       }
     } catch (error) {
-      console.error('Erro ao reproduzir som:', error);
+      console.error('❌ SOUND UTILS - Erro ao reproduzir som:', error);
       // Fallback para Web Audio API em caso de erro
       this.createFallbackSound();
     }
