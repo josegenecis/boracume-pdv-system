@@ -197,6 +197,8 @@ const Orders = () => {
       // Atualizar tanto status quanto acceptance_status
       const updateData = newStatus === 'preparing' 
         ? { status: newStatus, acceptance_status: 'accepted' }
+        : newStatus === 'cancelled'
+        ? { status: newStatus, acceptance_status: 'rejected' }
         : { status: newStatus };
         
       console.log('📝 Dados para update:', updateData);
@@ -209,6 +211,13 @@ const Orders = () => {
       if (error) throw error;
 
       console.log('✅ Status atualizado no banco de dados');
+      
+      // Garantir que o estado local seja atualizado imediatamente
+      setOrders(prev => prev.map(order =>
+        order.id === orderId 
+          ? { ...order, ...updateData }
+          : order
+      ));
 
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);

@@ -99,43 +99,37 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
               {item.variations && item.variations.length > 0 && (
                 <ul className="ml-4 mt-1 text-xs text-muted-foreground">
                   {item.variations.map((variation, index) => {
-                    console.log('Rendering variation:', variation); // Debug log
-                    
-                    // Garantir que sempre temos strings para renderizar
-                    let variationName = 'Personalização';
-                    let optionsText = 'N/A';
+                    // Processar variações e mostrar apenas os adicionais
+                    let optionsText = '';
                     let priceText = '';
                     
                     try {
-                      // Se variation é um objeto válido com as propriedades esperadas
-                      if (variation && typeof variation === 'object' && variation.name !== undefined) {
-                        variationName = String(variation.name || 'Personalização');
-                        
+                      if (variation && typeof variation === 'object' && variation.selectedOptions) {
                         if (Array.isArray(variation.selectedOptions)) {
                           optionsText = variation.selectedOptions
                             .map(opt => String(opt))
                             .filter(Boolean)
-                            .join(', ') || 'N/A';
-                        } else if (variation.selectedOptions) {
+                            .join(', ');
+                        } else {
                           optionsText = String(variation.selectedOptions);
                         }
                         
                         const price = Number(variation.price) || 0;
                         priceText = price > 0 ? ` (+${price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '';
                       } else {
-                        // Se variation é uma string ou formato inesperado
                         optionsText = String(variation);
                       }
                     } catch (error) {
                       console.warn('Erro ao processar variation:', error, variation);
-                      optionsText = 'Erro ao exibir variação';
+                      optionsText = 'Variação';
                     }
                     
-                    return (
+                    // Mostrar apenas os adicionais sem o prefixo "Personalização:"
+                    return optionsText ? (
                       <li key={index} className="font-medium text-blue-600">
-                        {variationName}: {optionsText}{priceText}
+                        • {optionsText}{priceText}
                       </li>
-                    );
+                    ) : null;
                   })}
                 </ul>
               )}

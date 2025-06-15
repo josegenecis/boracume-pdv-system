@@ -117,12 +117,25 @@ const GlobalNotificationSystem: React.FC = () => {
           
           // Se o pedido foi aceito ou cancelado, remover da lista e adicionar aos dispensados
           if (updatedOrder.acceptance_status !== 'pending_acceptance') {
+            // Parar todos os sons imediatamente
+            soundNotifications.stopAllSounds();
+            
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
             setDismissedOrders(prev => {
               const newDismissed = new Set([...prev, updatedOrder.id]);
               localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
               return newDismissed;
             });
+            
+            // Forçar ocultação da notificação se não houver mais pedidos pendentes
+            setTimeout(() => {
+              setPendingOrders(current => {
+                if (current.length === 0) {
+                  setIsVisible(false);
+                }
+                return current;
+              });
+            }, 100);
           }
         }
       )
