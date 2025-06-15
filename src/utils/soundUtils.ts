@@ -1,131 +1,97 @@
-// Utility functions for sound notifications using Web Audio API
+// Utility functions for sound notifications using HTML5 Audio
 export class SoundNotifications {
-  private audioContext: AudioContext | null = null;
   private isEnabled: boolean = true;
   private volume: number = 0.8;
+  private audioFiles: Map<string, HTMLAudioElement> = new Map();
 
   constructor() {
-    this.initializeAudioContext();
+    this.preloadSounds();
   }
 
-  private initializeAudioContext() {
-    try {
-      // @ts-ignore - Safari compatibility
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      this.audioContext = new AudioContextClass();
-    } catch (error) {
-      console.warn('Web Audio API not supported:', error);
-    }
-  }
+  private preloadSounds() {
+    const sounds = [
+      { name: 'bell', path: '/sounds/bell.mp3' },
+      { name: 'chime', path: '/sounds/chime.mp3' },
+      { name: 'notification', path: '/sounds/notification.mp3' },
+      { name: 'ding', path: '/sounds/ding.mp3' }
+    ];
 
-  async enableSound() {
-    if (!this.audioContext) {
-      this.initializeAudioContext();
-    }
-
-    if (this.audioContext && this.audioContext.state === 'suspended') {
+    sounds.forEach(sound => {
       try {
-        await this.audioContext.resume();
-        console.log('Audio context resumed successfully');
+        const audio = new Audio(sound.path);
+        audio.preload = 'auto';
+        audio.volume = this.volume;
+        this.audioFiles.set(sound.name, audio);
+        
+        audio.addEventListener('canplaythrough', () => {
+          console.log(`✅ Som ${sound.name} carregado com sucesso`);
+        });
+        
+        audio.addEventListener('error', (e) => {
+          console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
+        });
       } catch (error) {
-        console.error('Failed to resume audio context:', error);
+        console.warn(`⚠️ Erro ao criar audio para ${sound.name}:`, error);
       }
-    }
-  }
-
-  private createBellSound() {
-    if (!this.audioContext) return;
-
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-
-    // Bell-like sound with multiple frequencies
-    oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(600, this.audioContext.currentTime + 0.1);
-    
-    gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(this.volume * 0.3, this.audioContext.currentTime + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.5);
-
-    oscillator.start(this.audioContext.currentTime);
-    oscillator.stop(this.audioContext.currentTime + 0.5);
-  }
-
-  private createChimeSound() {
-    if (!this.audioContext) return;
-
-    const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
-    
-    frequencies.forEach((freq, index) => {
-      const oscillator = this.audioContext!.createOscillator();
-      const gainNode = this.audioContext!.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext!.destination);
-
-      oscillator.frequency.setValueAtTime(freq, this.audioContext!.currentTime);
-      oscillator.type = 'sine';
-      
-      const startTime = this.audioContext!.currentTime + (index * 0.1);
-      gainNode.gain.setValueAtTime(0, startTime);
-      gainNode.gain.linearRampToValueAtTime(this.volume * 0.2, startTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
-
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 0.3);
     });
   }
 
-  private createNotificationSound() {
-    if (!this.audioContext) return;
-
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-
-    oscillator.frequency.setValueAtTime(1000, this.audioContext.currentTime);
-    oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime + 0.1);
-    oscillator.type = 'square';
-    
-    gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(this.volume * 0.2, this.audioContext.currentTime + 0.01);
-    gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 0.2);
-
-    oscillator.start(this.audioContext.currentTime);
-    oscillator.stop(this.audioContext.currentTime + 0.2);
+  async enableSound() {
+    // Para HTML5 Audio, não precisa de contexto especial
+    // Apenas verificar se o áudio está funcionando
+    return Promise.resolve();
   }
 
   async playSound(soundType: string = 'bell') {
-    if (!this.isEnabled || !this.audioContext) {
-      console.log('Sound disabled or audio context not available');
+    if (!this.isEnabled) {
+      console.log('Som desabilitado');
       return;
     }
 
     try {
-      await this.enableSound();
+      const audio = this.audioFiles.get(soundType);
       
-      switch (soundType) {
-        case 'bell':
-          this.createBellSound();
-          break;
-        case 'chime':
-          this.createChimeSound();
-          break;
-        case 'notification':
-          this.createNotificationSound();
-          break;
-        default:
-          this.createBellSound();
+      if (audio) {
+        // Reset o áudio se já estiver tocando
+        audio.currentTime = 0;
+        audio.volume = this.volume;
+        
+        await audio.play();
+        console.log(`✅ Som ${soundType} reproduzido com sucesso`);
+      } else {
+        console.warn(`⚠️ Som ${soundType} não encontrado, usando fallback`);
+        this.createFallbackSound();
       }
-      
-      console.log(`✅ Som ${soundType} reproduzido com sucesso`);
     } catch (error) {
       console.error('Erro ao reproduzir som:', error);
+      // Fallback para Web Audio API em caso de erro
+      this.createFallbackSound();
+    }
+  }
+
+  private createFallbackSound() {
+    try {
+      // Fallback usando Web Audio API para sons sintéticos simples
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(this.volume * 0.3, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+      
+      console.log('✅ Som fallback reproduzido');
+    } catch (error) {
+      console.error('Erro no fallback de som:', error);
     }
   }
 
@@ -135,10 +101,15 @@ export class SoundNotifications {
 
   setVolume(volume: number) {
     this.volume = Math.max(0, Math.min(1, volume));
+    
+    // Atualizar volume de todos os áudios carregados
+    this.audioFiles.forEach(audio => {
+      audio.volume = this.volume;
+    });
   }
 
   isAudioSupported(): boolean {
-    return !!this.audioContext;
+    return typeof Audio !== 'undefined';
   }
 }
 

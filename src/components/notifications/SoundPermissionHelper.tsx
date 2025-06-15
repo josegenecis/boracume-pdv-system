@@ -8,22 +8,13 @@ const SoundPermissionHelper: React.FC = () => {
   const [needsPermission, setNeedsPermission] = useState(false);
 
   useEffect(() => {
-    // Verificar se Web Audio API está disponível
+    // Verificar se HTML5 Audio está disponível
     if (!soundNotifications.isAudioSupported()) {
       setNeedsPermission(true);
     } else {
-      // Verificar se precisa de interação do usuário
-      const checkPermission = async () => {
-        try {
-          await soundNotifications.playSound('bell');
-          setNeedsPermission(false);
-        } catch (error) {
-          console.log('Necessita interação do usuário para áudio');
-          setNeedsPermission(true);
-        }
-      };
-      
-      checkPermission();
+      // Para HTML5 Audio, geralmente precisamos de interação do usuário
+      // Mostrar o helper na primeira vez
+      setNeedsPermission(true);
     }
   }, []);
 
