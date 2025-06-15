@@ -27,10 +27,13 @@ export const useSimpleVariations = () => {
 
   const fetchVariations = async (productId: string): Promise<ProductVariation[]> => {
     console.log('🔄 HOOK - Iniciando busca de variações para produto:', productId);
+    console.log('🔍 HOOK - URL atual:', window.location.href);
+    console.log('🔍 HOOK - Produto ID tipo:', typeof productId, 'valor:', productId);
     setIsLoading(true);
     
     try {
       // Buscar apenas variações específicas do produto
+      console.log('📡 HOOK - Executando query no Supabase...');
       const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
@@ -39,11 +42,19 @@ export const useSimpleVariations = () => {
       console.log('📋 CARDÁPIO DIGITAL - Query variações específicas resultado:', {
         data: productVariations,
         error: productError,
-        count: productVariations?.length || 0
+        count: productVariations?.length || 0,
+        productId: productId,
+        timestamp: new Date().toISOString()
       });
 
       if (productError) {
-        console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', productError);
+        console.error('❌ CARDÁPIO DIGITAL - ERRO NA QUERY SUPABASE:', productError);
+        console.error('❌ CARDÁPIO DIGITAL - Detalhes do erro:', {
+          message: productError.message,
+          details: productError.details,
+          hint: productError.hint,
+          code: productError.code
+        });
         return [];
       }
 
@@ -55,6 +66,16 @@ export const useSimpleVariations = () => {
         total: allVariations.length,
         dados: allVariations
       });
+
+      if (allVariations.length === 0) {
+        console.log('⚠️ HOOK - NENHUMA VARIAÇÃO ENCONTRADA!');
+        console.log('⚠️ HOOK - Verificações:');
+        console.log('  ✓ Query executou sem erro');
+        console.log('  ✓ ProductId:', productId);
+        console.log('  ? Produto tem variações cadastradas na tabela product_variations?');
+        console.log('  ? User_id está correto nas variações?');
+        return [];
+      }
       
       const formatted: ProductVariation[] = [];
       

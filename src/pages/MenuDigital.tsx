@@ -24,8 +24,16 @@ const MenuDigital = () => {
     paramUserId,
     queryUserId,
     finalUserId: userId,
-    currentUrl: window.location.href
+    currentUrl: window.location.href,
+    expectedUrl: `${window.location.origin}/menu/{userId}`,
+    isCorrectUrl: window.location.pathname.includes('/menu/')
   });
+
+  if (!window.location.pathname.includes('/menu/')) {
+    console.warn('⚠️ CARDÁPIO DIGITAL - VOCÊ ESTÁ NA URL ERRADA!');
+    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
+    console.warn('⚠️ Não teste na área administrativa!');
+  }
   
   const { toast } = useToast();
   const [showCartModal, setShowCartModal] = useState(false);
