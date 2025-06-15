@@ -5,6 +5,7 @@ interface Customer {
   name: string;
   phone: string;
   address: string;
+  neighborhood: string;
 }
 
 export const useCustomerLookup = (userId: string) => {
@@ -17,6 +18,26 @@ export const useCustomerLookup = (userId: string) => {
 
     setIsLoading(true);
     try {
+      // Primeiro tentar buscar na tabela customers
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .select('name, phone, address, neighborhood')
+        .eq('user_id', userId)
+        .eq('phone', phone)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!customerError && customerData && customerData.length > 0) {
+        const customer = customerData[0];
+        return {
+          name: customer.name || '',
+          phone: customer.phone || '',
+          address: customer.address || '',
+          neighborhood: customer.neighborhood || ''
+        };
+      }
+
+      // Fallback para buscar nos pedidos
       const { data, error } = await supabase
         .from('orders')
         .select('customer_name, customer_phone, customer_address')
@@ -35,7 +56,8 @@ export const useCustomerLookup = (userId: string) => {
         return {
           name: customer.customer_name || '',
           phone: customer.customer_phone || '',
-          address: customer.customer_address || ''
+          address: customer.customer_address || '',
+          neighborhood: ''
         };
       }
 

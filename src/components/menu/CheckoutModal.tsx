@@ -54,6 +54,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     name: '',
     phone: '',
     address: '',
+    neighborhood: '',
     notes: ''
   });
   const [isExistingCustomer, setIsExistingCustomer] = useState(false);
@@ -141,6 +142,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (!customerData.name.trim()) errors.push('Nome é obrigatório');
       if (!customerData.phone.trim()) errors.push('Telefone é obrigatório');
       if (!customerData.address.trim()) errors.push('Endereço é obrigatório');
+      if (!customerData.neighborhood.trim()) errors.push('Bairro é obrigatório');
       if (!selectedZone) errors.push('Selecione uma área de entrega');
       if (total < minimumOrder) errors.push(`Pedido mínimo: R$ ${minimumOrder.toFixed(2)}`);
       if (!paymentMethod) errors.push('Selecione forma de pagamento');
@@ -213,6 +215,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       customerData.name.trim() !== '' &&
       customerData.phone.trim() !== '' &&
       customerData.address.trim() !== '' &&
+      customerData.neighborhood.trim() !== '' &&
       selectedZone !== '' &&
       total >= minimumOrder &&
       paymentMethod !== '' &&
@@ -353,7 +356,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           setCustomerData(prev => ({
                             ...prev,
                             name: customer.name,
-                            address: customer.address
+                            address: customer.address,
+                            neighborhood: customer.neighborhood
                           }));
                           setIsExistingCustomer(true);
                         } else {
@@ -385,10 +389,24 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Textarea
                     id="address"
-                   placeholder="Rua, número, bairro, complemento..."
+                    placeholder="Rua, número, complemento..."
                     value={customerData.address}
                     onChange={(e) => setCustomerData(prev => ({ ...prev, address: e.target.value }))}
                     className="pl-10 min-h-[80px]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="neighborhood">Bairro</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="neighborhood"
+                    placeholder="Bairro"
+                    value={customerData.neighborhood}
+                    onChange={(e) => setCustomerData(prev => ({ ...prev, neighborhood: e.target.value }))}
+                    className="pl-10"
                   />
                 </div>
               </div>

@@ -28,6 +28,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(new Set());
 
   // Verifica se está na página de pedidos para não mostrar notificação
   const isOnOrdersPage = location.pathname === '/orders' || location.pathname === '/kitchen';
@@ -107,9 +108,10 @@ const GlobalNotificationSystem: React.FC = () => {
         (payload) => {
           const updatedOrder = payload.new as PendingOrder;
           
-          // Se o pedido foi aceito ou cancelado, remover da lista
+          // Se o pedido foi aceito ou cancelado, remover da lista e adicionar aos dispensados
           if (updatedOrder.acceptance_status !== 'pending_acceptance') {
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
+            setDismissedOrders(prev => new Set([...prev, updatedOrder.id]));
           }
         }
       )
@@ -130,11 +132,17 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [isOnOrdersPage, pendingOrders.length]);
 
   const handleGoToOrders = () => {
+    // Adicionar todos os pedidos atuais aos dispensados
+    const currentOrderIds = pendingOrders.map(order => order.id);
+    setDismissedOrders(prev => new Set([...prev, ...currentOrderIds]));
     setIsVisible(false);
     navigate('/orders');
   };
 
   const handleDismiss = () => {
+    // Adicionar todos os pedidos atuais aos dispensados
+    const currentOrderIds = pendingOrders.map(order => order.id);
+    setDismissedOrders(prev => new Set([...prev, ...currentOrderIds]));
     setIsVisible(false);
   };
 
@@ -165,7 +173,10 @@ const GlobalNotificationSystem: React.FC = () => {
     });
   };
 
-  if (!isVisible || pendingOrders.length === 0 || isOnOrdersPage) {
+  // Filtrar pedidos que não foram dispensados
+  const visibleOrders = pendingOrders.filter(order => !dismissedOrders.has(order.id));
+
+  if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage) {
     return null;
   }
 
@@ -177,7 +188,7 @@ const GlobalNotificationSystem: React.FC = () => {
             <div className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-orange-600" />
               <span className="font-semibold text-orange-800">
-                {pendingOrders.length} Novo{pendingOrders.length > 1 ? 's' : ''} Pedido{pendingOrders.length > 1 ? 's' : ''}!
+                {visibleOrders.length} Novo{visibleOrders.length > 1 ? 's' : ''} Pedido{visibleOrders.length > 1 ? 's' : ''}!
               </span>
             </div>
             <Button
@@ -191,7 +202,7 @@ const GlobalNotificationSystem: React.FC = () => {
           </div>
 
           <div className="space-y-2 mb-4">
-            {pendingOrders.slice(0, 3).map((order) => (
+            {visibleOrders.slice(0, 3).map((order) => (
               <div key={order.id} className="bg-white p-2 rounded border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {getOrderTypeIcon(order.order_type)}
@@ -209,9 +220,9 @@ const GlobalNotificationSystem: React.FC = () => {
               </div>
             ))}
             
-            {pendingOrders.length > 3 && (
+            {visibleOrders.length > 3 && (
               <div className="text-center text-sm text-muted-foreground">
-                +{pendingOrders.length - 3} pedido{pendingOrders.length - 3 > 1 ? 's' : ''} adicional{pendingOrders.length - 3 > 1 ? 'is' : ''}
+                +{visibleOrders.length - 3} pedido{visibleOrders.length - 3 > 1 ? 's' : ''} adicional{visibleOrders.length - 3 > 1 ? 'is' : ''}
               </div>
             )}
           </div>

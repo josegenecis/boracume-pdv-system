@@ -133,7 +133,8 @@ const MenuDigital = () => {
             user_id: orderData.user_id,
             name: orderData.customer_name,
             phone: orderData.customer_phone,
-            address: orderData.customer_address
+            address: orderData.customer_address,
+            neighborhood: orderData.customer_neighborhood || ''
           };
 
           const { data: newCustomer, error: customerError } = await supabase

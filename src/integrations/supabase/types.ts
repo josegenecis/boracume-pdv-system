@@ -129,6 +129,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          neighborhood: string | null
           phone: string
           updated_at: string
           user_id: string
@@ -138,6 +139,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          neighborhood?: string | null
           phone: string
           updated_at?: string
           user_id: string
@@ -147,6 +149,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          neighborhood?: string | null
           phone?: string
           updated_at?: string
           user_id?: string
