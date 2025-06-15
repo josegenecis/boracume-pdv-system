@@ -103,27 +103,40 @@ export const useGlobalNotifications = () => {
           if (soundEnabled && audioRef.current) {
             try {
               const soundUrl = `/sounds/${soundType}.mp3`;
+              console.log('🔊 Tentando reproduzir som:', soundUrl);
+              
+              // Reset áudio para garantir carregamento
+              audioRef.current.src = '';
+              audioRef.current.load();
               audioRef.current.src = soundUrl;
               audioRef.current.volume = volume;
+              audioRef.current.load();
               
-              // Tentar reproduzir com fallback
+              // Tentar reproduzir com timeout
               const playPromise = audioRef.current.play();
               
               if (playPromise !== undefined) {
                 playPromise
                   .then(() => {
-                    console.log('Som reproduzido com sucesso');
+                    console.log('✅ Som reproduzido com sucesso');
                   })
                   .catch((error) => {
-                    console.warn('Erro ao reproduzir som (autoplay bloqueado?):', error);
-                    // Fallback: mostrar toast indicando que o som foi bloqueado
-                    if (error.name === 'NotAllowedError') {
-                      console.log('Autoplay bloqueado - usuário precisa interagir primeiro');
+                    console.warn('⚠️ Erro ao reproduzir som:', error.name, error.message);
+                    
+                    // Tentar com som de fallback
+                    if (soundType !== 'notification') {
+                      try {
+                        audioRef.current!.src = '/sounds/notification.mp3';
+                        audioRef.current!.play();
+                        console.log('🔄 Usando som de fallback');
+                      } catch (fallbackError) {
+                        console.error('❌ Fallback também falhou:', fallbackError);
+                      }
                     }
                   });
               }
             } catch (error) {
-              console.error('Erro ao tentar reproduzir som:', error);
+              console.error('❌ Erro crítico ao reproduzir som:', error);
             }
           }
           

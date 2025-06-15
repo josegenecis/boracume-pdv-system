@@ -472,7 +472,7 @@ const Orders = () => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'preparing');
                             }}
-                            className="flex-1"
+                            className="flex-1 bg-green-600 hover:bg-green-700"
                           >
                             Aceitar
                           </Button>
@@ -541,6 +541,36 @@ const Orders = () => {
                               <MapPin className="h-4 w-4" />
                               <span>{order.customer_address}</span>
                             </div>
+                            
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyLocation(order);
+                                }}
+                                className="h-7 text-xs flex-1"
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copiar
+                              </Button>
+                              
+                              {order.google_maps_link && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(order.google_maps_link, '_blank');
+                                  }}
+                                  className="h-7 text-xs flex-1"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Maps
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -554,7 +584,7 @@ const Orders = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateOrderStatus(order.id, 'ready');
+                              updateOrderStatus(order.id, 'completed');
                             }}
                             className="flex-1"
                           >
@@ -565,7 +595,7 @@ const Orders = () => {
                             variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateOrderStatus(order.id, 'completed');
+                              updateOrderStatus(order.id, 'delivered');
                             }}
                             className="flex-1"
                           >
@@ -622,6 +652,19 @@ const Orders = () => {
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} • 
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                        </div>
+
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'delivered');
+                            }}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700"
+                          >
+                            Saiu para Entrega
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
