@@ -13,7 +13,6 @@ import ProductForm from '@/components/products/ProductForm';
 import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
-import GlobalVariationsManager from '@/components/products/GlobalVariationsManager';
 
 // Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
@@ -200,7 +199,6 @@ const Products = () => {
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="banners">Banners</TabsTrigger>
-          <TabsTrigger value="variations">Variações Globais</TabsTrigger>
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
@@ -352,10 +350,6 @@ const Products = () => {
         
         <TabsContent value="banners">
           <BannerManager />
-        </TabsContent>
-        
-        <TabsContent value="variations">
-          <GlobalVariationsManager />
         </TabsContent>
       </Tabs>
     </div>

@@ -30,7 +30,7 @@ export const useSimpleVariations = () => {
     setIsLoading(true);
     
     try {
-      // Buscar variações específicas do produto
+      // Buscar apenas variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
@@ -42,39 +42,13 @@ export const useSimpleVariations = () => {
         count: productVariations?.length || 0
       });
 
-      // Buscar variações globais associadas
-      const { data: globalLinks, error: globalLinksError } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
-
-      console.log('📋 CARDÁPIO DIGITAL - Query links globais resultado:', {
-        data: globalLinks,
-        error: globalLinksError,
-        count: globalLinks?.length || 0
-      });
-
-      let globalVariations: any[] = [];
-      if (globalLinks && globalLinks.length > 0) {
-        const globalIds = globalLinks.map(link => link.global_variation_id);
-        console.log('🔍 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalIds);
-        
-        const { data: globals, error: globalVarsError } = await supabase
-          .from('global_variations')
-          .select('*')
-          .in('id', globalIds);
-        
-        console.log('📋 CARDÁPIO DIGITAL - Query variações globais resultado:', {
-          data: globals,
-          error: globalVarsError,
-          count: globals?.length || 0
-        });
-        
-        if (globals) globalVariations = globals;
+      if (productError) {
+        console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', productError);
+        return [];
       }
 
-      // Combinar e formatar variações
-      const allVariations = [...(productVariations || []), ...globalVariations];
+      // Usar apenas variações específicas (sem variações globais)
+      const allVariations = productVariations || [];
       
       console.log('🔄 CARDÁPIO DIGITAL - Combinando variações:', {
         especificas: productVariations?.length || 0,
