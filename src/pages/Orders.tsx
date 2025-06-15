@@ -316,8 +316,8 @@ const Orders = () => {
   };
 
   const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance');
-  const activeOrders = filteredOrders.filter(order => ['preparing', 'ready'].includes(order.status));
-  const completedOrders = filteredOrders.filter(order => ['completed', 'delivered'].includes(order.status));
+  const activeOrders = filteredOrders.filter(order => order.status === 'preparing');
+  const completedOrders = filteredOrders.filter(order => ['ready', 'delivered'].includes(order.status));
 
   if (loading) {
     return (
@@ -584,7 +584,7 @@ const Orders = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateOrderStatus(order.id, 'completed');
+                              updateOrderStatus(order.id, 'ready');
                             }}
                             className="flex-1"
                           >

@@ -132,22 +132,22 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{product.name}</DialogTitle>
+      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto bg-white shadow-2xl border border-gray-100 rounded-xl">
+        <DialogHeader className="border-b border-gray-100 pb-4">
+          <DialogTitle className="text-xl font-bold text-gray-900">{product.name}</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="space-y-6 pt-2">
           {product.image_url && (
             <img 
               src={product.image_url} 
               alt={product.name}
-              className="w-full h-32 object-cover rounded"
+              className="w-full h-32 object-cover rounded-xl shadow-sm"
             />
           )}
           
           {product.description && (
-            <p className="text-sm text-muted-foreground">{product.description}</p>
+            <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg">{product.description}</p>
           )}
 
           {/* Quantidade */}
@@ -178,37 +178,37 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
           {/* Observações */}
           <div>
-            <Label>Observações</Label>
+            <Label className="text-sm font-semibold text-gray-900">Observações</Label>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Alguma observação especial..."
               rows={2}
-              className="mt-1"
+              className="mt-2 bg-gray-50 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 
           {/* Footer com preço e botões */}
-          <div className="border-t pt-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="font-semibold">Total:</span>
-              <span className="text-lg font-bold text-primary">
+          <div className="border-t border-gray-100 pt-6 space-y-4">
+            <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl">
+              <span className="font-bold text-gray-900">Total:</span>
+              <span className="text-xl font-bold text-primary">
                 R$ {getTotalPrice().toFixed(2)}
               </span>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button 
                 variant="outline" 
                 onClick={onClose}
-                className="flex-1"
+                className="flex-1 rounded-xl"
               >
                 Cancelar
               </Button>
               <Button 
                 onClick={handleAddToCart}
                 disabled={!isValidSelection()}
-                className="flex-1"
+                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold"
               >
                 Adicionar
               </Button>

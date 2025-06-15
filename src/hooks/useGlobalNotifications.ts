@@ -31,8 +31,8 @@ export const useGlobalNotifications = () => {
         audioRef.current.volume = volume;
         audioRef.current.preload = 'auto';
         
-        // Pré-carregar som padrão
-        const defaultSound = `/sounds/${soundType}.mp3`;
+        // Pré-carregar som padrão com timestamp para evitar cache
+        const defaultSound = `/sounds/${soundType}.mp3?t=${Date.now()}`;
         audioRef.current.src = defaultSound;
         
         // Adicionar listeners para debugging
@@ -102,12 +102,12 @@ export const useGlobalNotifications = () => {
           // Reproduzir som de notificação
           if (soundEnabled && audioRef.current) {
             try {
-              const soundUrl = `/sounds/${soundType}.mp3`;
+              const soundUrl = `/sounds/${soundType}.mp3?t=${Date.now()}`;
               console.log('🔊 Tentando reproduzir som:', soundUrl);
               
               // Reset áudio para garantir carregamento
-              audioRef.current.src = '';
-              audioRef.current.load();
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
               audioRef.current.src = soundUrl;
               audioRef.current.volume = volume;
               audioRef.current.load();

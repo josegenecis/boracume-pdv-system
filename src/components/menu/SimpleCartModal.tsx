@@ -222,31 +222,31 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Finalizar Pedido</DialogTitle>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-white shadow-2xl border border-gray-100 rounded-xl">
+        <DialogHeader className="border-b border-gray-100 pb-4">
+          <DialogTitle className="text-xl font-bold text-gray-900">Finalizar Pedido</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
+        <div className="space-y-6 pt-2">
           {/* Itens do carrinho */}
-          <div className="space-y-3">
-            <h3 className="font-semibold">Seus itens:</h3>
+          <div className="space-y-4">
+            <h3 className="font-bold text-gray-900">Seus itens:</h3>
             {cart.map((item) => (
-              <Card key={item.uniqueId} className="p-3">
+              <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h4 className="font-medium">{item.product.name}</h4>
+                    <h4 className="font-bold text-gray-900">{item.product.name}</h4>
                     {item.variations.length > 0 && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-gray-600 mt-1">
                         {item.variations.join(', ')}
                       </p>
                     )}
                     {item.notes && (
-                      <p className="text-sm text-muted-foreground italic">
+                      <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">
                         Obs: {item.notes}
                       </p>
                     )}
-                    <p className="text-sm font-medium text-primary">
+                    <p className="text-sm font-bold text-primary mt-2">
                       R$ {item.totalPrice.toFixed(2)}
                     </p>
                   </div>
@@ -256,14 +256,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)}
+                      className="rounded-lg border-gray-200"
                     >
                       <Minus className="h-3 w-3" />
                     </Button>
-                    <span className="w-8 text-center">{item.quantity}</span>
+                    <span className="w-8 text-center font-bold">{item.quantity}</span>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)}
+                      className="rounded-lg border-gray-200"
                     >
                       <Plus className="h-3 w-3" />
                     </Button>
@@ -271,8 +273,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={() => onRemoveItem(item.uniqueId)}
+                      className="rounded-lg border-red-200 hover:bg-red-50"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3 w-3 text-red-600" />
                     </Button>
                   </div>
                 </div>
@@ -282,7 +285,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
           {/* Dados do cliente */}
           <div className="space-y-4">
-            <h3 className="font-semibold">Dados para entrega:</h3>
+            <h3 className="font-bold text-gray-900">Dados para entrega:</h3>
             
             <div>
               <Label htmlFor="name">Nome completo *</Label>
@@ -425,30 +428,32 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           </div>
 
           {/* Resumo */}
-          <div className="border-t pt-4 space-y-2">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>R$ {total.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Taxa de entrega:</span>
-              <span>R$ {deliveryFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-lg">
-              <span>Total:</span>
-              <span>R$ {finalTotal.toFixed(2)}</span>
+          <div className="border-t border-gray-100 pt-6 space-y-3">
+            <div className="bg-gray-50 p-4 rounded-xl space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-700">Subtotal:</span>
+                <span className="font-bold">R$ {total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-700">Taxa de entrega:</span>
+                <span className="font-bold">R$ {deliveryFee.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
+                <span className="text-gray-900">Total:</span>
+                <span className="text-primary">R$ {finalTotal.toFixed(2)}</span>
+              </div>
             </div>
           </div>
 
           {/* Botões */}
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl">
               Voltar
             </Button>
             <Button 
               onClick={handlePlaceOrder}
               disabled={!isFormValid() || isLoading}
-              className="flex-1"
+              className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold"
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
             </Button>
