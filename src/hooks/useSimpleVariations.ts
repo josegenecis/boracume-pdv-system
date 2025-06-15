@@ -86,52 +86,112 @@ export const useSimpleVariations = () => {
       const formatted: ProductVariation[] = [];
       
       for (const item of allVariations) {
-        console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name, item);
+        console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name);
+        console.log('🔍 CARDÁPIO DIGITAL - Dados brutos da variação:', JSON.stringify(item, null, 2));
         
         try {
-          // Verificar se tem dados básicos válidos
-          if (!item || !item.id || !item.name) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem dados básicos:', item);
+          // Verificar se tem dados básicos válidos - mais tolerante
+          if (!item || !item.id) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem ID:', item);
             continue;
           }
 
-          // Verificar se tem opções válidas
-          if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
+          if (!item.name || String(item.name).trim() === '') {
+            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem nome:', item);
             continue;
           }
 
-          // Processar opções
-          const validOptions = item.options
-            .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
-            .map((opt: any) => ({
-              name: String(opt.name).trim(),
-              price: Number(opt.price) >= 0 ? Number(opt.price) : 0
-            }));
+          // Verificar opções com logs detalhados
+          console.log('🔍 CARDÁPIO DIGITAL - Verificando opções para:', item.name, 'Opções:', item.options);
+          
+          if (!item.options) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Propriedade options não existe para:', item.name);
+            continue;
+          }
+
+          if (!Array.isArray(item.options)) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Options não é array para:', item.name, 'Tipo:', typeof item.options);
+            continue;
+          }
+
+          if (item.options.length === 0) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Array de options vazio para:', item.name);
+            continue;
+          }
+
+          // Processar opções com validação mais tolerante
+          const validOptions = [];
+          
+          for (let i = 0; i < item.options.length; i++) {
+            const opt = item.options[i];
+            console.log(`🔍 CARDÁPIO DIGITAL - Processando opção ${i + 1}:`, opt);
+            
+            if (!opt) {
+              console.log(`⚠️ CARDÁPIO DIGITAL - Opção ${i + 1} é null/undefined`);
+              continue;
+            }
+
+            if (!opt.name || String(opt.name).trim() === '') {
+              console.log(`⚠️ CARDÁPIO DIGITAL - Opção ${i + 1} sem nome válido:`, opt);
+              continue;
+            }
+
+            const optionName = String(opt.name).trim();
+            const optionPrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
+            
+            // Garantir que price seja um número válido
+            const finalPrice = isNaN(optionPrice) ? 0 : Math.max(0, optionPrice);
+            
+            validOptions.push({
+              name: optionName,
+              price: finalPrice
+            });
+            
+            console.log(`✅ CARDÁPIO DIGITAL - Opção ${i + 1} processada:`, { name: optionName, price: finalPrice });
+          }
 
           if (validOptions.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
+            console.log('🔍 CARDÁPIO DIGITAL - Opções originais eram:', item.options);
             continue;
           }
 
+          // Processar campos com valores padrão seguros
+          const maxSelections = item.max_selections !== undefined && item.max_selections !== null 
+            ? Math.max(1, Number(item.max_selections) || 1) 
+            : 1;
+
           const processedVariation: ProductVariation = {
-            id: item.id,
-            name: String(item.name || '').trim(),
+            id: String(item.id),
+            name: String(item.name).trim(),
             required: Boolean(item.required),
-            max_selections: Math.max(1, Number(item.max_selections) || 1),
+            max_selections: maxSelections,
             options: validOptions
           };
 
           formatted.push(processedVariation);
-          console.log('✅ CARDÁPIO DIGITAL - Variação processada:', processedVariation.name, 'com', processedVariation.options.length, 'opções válidas');
+          console.log('✅ CARDÁPIO DIGITAL - Variação processada com sucesso:', {
+            name: processedVariation.name,
+            opções: processedVariation.options.length,
+            required: processedVariation.required,
+            maxSelections: processedVariation.max_selections
+          });
+          
         } catch (itemError) {
-          console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError, item);
+          console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError);
+          console.error('❌ CARDÁPIO DIGITAL - Item que causou erro:', item);
+          // Não parar o processamento por causa de uma variação com erro
         }
       }
       
       console.log('🎯 HOOK - RESULTADO FINAL:', {
         total: formatted.length,
-        variações: formatted.map(v => ({ name: v.name, opções: v.options.length, required: v.required }))
+        variações: formatted.map(v => ({ 
+          name: v.name, 
+          opções: v.options.length, 
+          required: v.required,
+          maxSelections: v.max_selections
+        }))
       });
 
       return formatted;
