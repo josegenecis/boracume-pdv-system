@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
+import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 
 interface Order {
   id: string;
@@ -277,6 +278,44 @@ const Orders = () => {
     }
   };
 
+  const handleBulkAction = async (orderIds: string[], action: string) => {
+    try {
+      console.log(`🔄 Executando ação em massa: ${action} para ${orderIds.length} pedidos`);
+      
+      let updatePromises = [];
+      
+      switch (action) {
+        case 'accept_all':
+          // Aceitar todos os pedidos e enviar para KDS
+          updatePromises = orderIds.map(async (orderId) => {
+            await updateOrderStatus(orderId, 'preparing');
+          });
+          break;
+          
+        case 'ready_all':
+          // Marcar todos como prontos
+          updatePromises = orderIds.map(async (orderId) => {
+            await updateOrderStatus(orderId, 'ready');
+          });
+          break;
+          
+        case 'deliver_all':
+          // Finalizar todos
+          updatePromises = orderIds.map(async (orderId) => {
+            await updateOrderStatus(orderId, 'delivered');
+          });
+          break;
+      }
+      
+      await Promise.all(updatePromises);
+      console.log(`✅ Ação em massa ${action} concluída com sucesso`);
+      
+    } catch (error) {
+      console.error('❌ Erro na ação em massa:', error);
+      throw error;
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       pending: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
@@ -402,9 +441,16 @@ const Orders = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Novos (Pendentes) */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <h2 className="text-lg font-semibold text-yellow-800">Novos ({pendingOrders.length})</h2>
+            <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                <h2 className="text-lg font-semibold text-yellow-800">Novos ({pendingOrders.length})</h2>
+              </div>
+              <OrdersBulkActionButton
+                orderIds={pendingOrders.map(o => o.id)}
+                action="accept_all"
+                onBulkAction={handleBulkAction}
+              />
             </div>
 
             {pendingOrders.length === 0 ? (
@@ -516,9 +562,16 @@ const Orders = () => {
 
           {/* Ativos */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <h2 className="text-lg font-semibold text-blue-800">Ativos ({activeOrders.length})</h2>
+            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                <h2 className="text-lg font-semibold text-blue-800">Ativos ({activeOrders.length})</h2>
+              </div>
+              <OrdersBulkActionButton
+                orderIds={activeOrders.map(o => o.id)}
+                action="ready_all"
+                onBulkAction={handleBulkAction}
+              />
             </div>
 
             {activeOrders.length === 0 ? (
@@ -630,9 +683,16 @@ const Orders = () => {
 
           {/* Prontos */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <h2 className="text-lg font-semibold text-green-800">Prontos ({completedOrders.length})</h2>
+            <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <h2 className="text-lg font-semibold text-green-800">Prontos ({completedOrders.length})</h2>
+              </div>
+              <OrdersBulkActionButton
+                orderIds={completedOrders.map(o => o.id)}
+                action="deliver_all"
+                onBulkAction={handleBulkAction}
+              />
             </div>
 
             {completedOrders.length === 0 ? (

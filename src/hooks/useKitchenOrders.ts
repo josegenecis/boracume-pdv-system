@@ -175,6 +175,35 @@ export const useKitchenOrders = () => {
     }
   };
 
+  const updateMultipleOrdersStatus = async (orderIds: string[], newStatus: 'preparing' | 'ready' | 'completed') => {
+    try {
+      console.log(`🔄 Updating ${orderIds.length} orders to status ${newStatus}`);
+      
+      const { error } = await supabase
+        .from('kitchen_orders')
+        .update({ status: newStatus })
+        .in('id', orderIds);
+
+      if (error) {
+        console.error('❌ Error updating multiple orders status:', error);
+        throw error;
+      }
+
+      // Update local state
+      setOrders(prev => prev.map(order => 
+        orderIds.includes(order.id) 
+          ? { ...order, status: newStatus }
+          : order
+      ));
+
+      console.log(`✅ ${orderIds.length} orders status updated successfully`);
+      return { success: true, updatedCount: orderIds.length };
+    } catch (err) {
+      console.error('❌ Failed to update multiple orders status:', err);
+      throw err;
+    }
+  };
+
   const createSampleOrder = async () => {
     if (!user) return;
 
@@ -222,6 +251,7 @@ export const useKitchenOrders = () => {
     loading,
     error,
     updateOrderStatus,
+    updateMultipleOrdersStatus,
     createSampleOrder,
     refetch: fetchOrders
   };
