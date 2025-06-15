@@ -1,28 +1,24 @@
-
 import React from 'react';
 import { Bell, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
 const FixedHeader = () => {
-  const { signOut, user } = useAuth();
+  const {
+    signOut,
+    user
+  } = useAuth();
   const navigate = useNavigate();
-
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
   };
-
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b">
+  return <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b">
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-boracume-orange rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">B</span>
-            </div>
-            <span className="text-xl font-bold text-boracume-orange">BoraCumê</span>
+            
+            <span className="text-xl text-boracume-orange font-extrabold">BoraCumê</span>
           </div>
         </div>
 
@@ -41,8 +37,6 @@ const FixedHeader = () => {
           </Button>
         </div>
       </div>
-    </header>
-  );
+    </header>;
 };
-
 export default FixedHeader;
