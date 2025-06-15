@@ -1,8 +1,8 @@
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { soundNotifications } from '@/utils/soundUtils';
 
 export const useOrderNotifications = () => {
   const { user } = useAuth();
@@ -10,7 +10,6 @@ export const useOrderNotifications = () => {
   const [enabled, setEnabled] = useState(true);
   const [volume, setVolume] = useState(0.8);
   const [soundType, setSoundType] = useState('bell');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -32,9 +31,9 @@ export const useOrderNotifications = () => {
 
     loadSettings();
 
-    // Configurar áudio
-    audioRef.current = new Audio();
-    audioRef.current.volume = volume;
+    // Configurar sistema de som
+    soundNotifications.setEnabled(enabled);
+    soundNotifications.setVolume(volume);
 
     // Escutar novos pedidos em tempo real
     const channel = supabase
@@ -47,14 +46,16 @@ export const useOrderNotifications = () => {
           table: 'orders',
           filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('🔔 Novo pedido recebido:', payload);
           
-          if (enabled && audioRef.current) {
-            // Reproduzir som de notificação
-            const soundUrl = `/sounds/${soundType}.mp3`;
-            audioRef.current.src = soundUrl;
-            audioRef.current.play().catch(console.error);
+          if (enabled) {
+            // Reproduzir som de notificação via Web Audio API
+            try {
+              await soundNotifications.playSound(soundType);
+            } catch (error) {
+              console.error('Erro ao reproduzir som:', error);
+            }
           }
 
           // Mostrar toast
@@ -71,12 +72,17 @@ export const useOrderNotifications = () => {
     };
   }, [user, enabled, volume, soundType, toast]);
 
-  const playTestSound = () => {
-    if (audioRef.current) {
-      const soundUrl = `/sounds/${soundType}.mp3`;
-      audioRef.current.src = soundUrl;
-      audioRef.current.volume = volume;
-      audioRef.current.play().catch(console.error);
+  // Atualizar configurações quando mudarem
+  useEffect(() => {
+    soundNotifications.setEnabled(enabled);
+    soundNotifications.setVolume(volume);
+  }, [enabled, volume]);
+
+  const playTestSound = async () => {
+    try {
+      await soundNotifications.playSound(soundType);
+    } catch (error) {
+      console.error('Erro no teste de som:', error);
     }
   };
 

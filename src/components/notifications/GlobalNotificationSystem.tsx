@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { soundNotifications } from '@/utils/soundUtils';
 
 interface PendingOrder {
   id: string;
@@ -76,11 +77,9 @@ const GlobalNotificationSystem: React.FC = () => {
           if (!isOnOrdersPage) {
             setIsVisible(true);
             
-            // Som de notificação
+            // Som de notificação usando Web Audio API
             if (soundEnabled) {
-              const audio = new Audio('/sounds/bell.mp3');
-              audio.volume = 0.8;
-              audio.play().catch(console.error);
+              soundNotifications.playSound('bell').catch(console.error);
             }
             
             // Vibração (se suportado)

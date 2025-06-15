@@ -2,60 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Volume2 } from 'lucide-react';
+import { soundNotifications } from '@/utils/soundUtils';
 
 const SoundPermissionHelper: React.FC = () => {
   const [needsPermission, setNeedsPermission] = useState(false);
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
   useEffect(() => {
-    // Verificar se o áudio precisa de permissão
-    const checkAudioPermission = () => {
-      try {
-        const audio = new Audio();
-        const playPromise = audio.play();
-        
-        if (playPromise) {
-          playPromise.catch((error) => {
-            if (error.name === 'NotAllowedError') {
-              setNeedsPermission(true);
-            }
-          });
+    // Verificar se Web Audio API está disponível
+    if (!soundNotifications.isAudioSupported()) {
+      setNeedsPermission(true);
+    } else {
+      // Verificar se precisa de interação do usuário
+      const checkPermission = async () => {
+        try {
+          await soundNotifications.playSound('bell');
+          setNeedsPermission(false);
+        } catch (error) {
+          console.log('Necessita interação do usuário para áudio');
+          setNeedsPermission(true);
         }
-      } catch (error) {
-        console.log('Verificação de permissão de áudio falhou');
-      }
-    };
-
-    checkAudioPermission();
+      };
+      
+      checkPermission();
+    }
   }, []);
 
   const enableAudio = async () => {
     try {
-      // Criar contexto de áudio para contornar política de autoplay
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-      
-      setAudioContext(ctx);
+      await soundNotifications.enableSound();
+      await soundNotifications.playSound('bell');
       setNeedsPermission(false);
-      
-      // Testar reprodução de som
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-      oscillator.type = 'sine';
-      gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      
-      oscillator.start(ctx.currentTime);
-      oscillator.stop(ctx.currentTime + 0.3);
-      
       console.log('Áudio habilitado com sucesso');
     } catch (error) {
       console.error('Erro ao habilitar áudio:', error);

@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { soundNotifications } from '@/utils/soundUtils';
 
 export interface GlobalNotificationOrder {
   id: string;
@@ -19,38 +20,13 @@ export const useGlobalNotifications = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [volume, setVolume] = useState(0.8);
   const [soundType, setSoundType] = useState('bell');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!user) return;
 
-    // Configurar áudio com tratamento de erro
-    const initializeAudio = () => {
-      try {
-        audioRef.current = new Audio();
-        audioRef.current.volume = volume;
-        audioRef.current.preload = 'auto';
-        
-        // Pré-carregar som padrão com timestamp para evitar cache
-        const defaultSound = `/sounds/${soundType}.mp3?t=${Date.now()}`;
-        audioRef.current.src = defaultSound;
-        
-        // Adicionar listeners para debugging
-        audioRef.current.addEventListener('error', (e) => {
-          console.error('Erro ao carregar som:', e);
-          console.log('Tentando som:', defaultSound);
-        });
-        
-        audioRef.current.addEventListener('canplay', () => {
-          console.log('Som carregado com sucesso:', defaultSound);
-        });
-        
-      } catch (error) {
-        console.error('Erro ao inicializar áudio:', error);
-      }
-    };
-
-    initializeAudio();
+    // Configurar sistema de som
+    soundNotifications.setEnabled(soundEnabled);
+    soundNotifications.setVolume(volume);
 
     // Carregar configurações de notificação
     const loadSettings = async () => {
@@ -92,51 +68,20 @@ export const useGlobalNotifications = () => {
           table: 'orders',
           filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('🔔 useGlobalNotifications - Novo pedido:', payload);
           
           const newOrder = payload.new as GlobalNotificationOrder;
           setLatestOrder(newOrder);
           setPendingCount(prev => prev + 1);
           
-          // Reproduzir som de notificação
-          if (soundEnabled && audioRef.current) {
+          // Reproduzir som de notificação usando Web Audio API
+          if (soundEnabled) {
             try {
-              const soundUrl = `/sounds/${soundType}.mp3?t=${Date.now()}`;
-              console.log('🔊 Tentando reproduzir som:', soundUrl);
-              
-              // Reset áudio para garantir carregamento
-              audioRef.current.pause();
-              audioRef.current.currentTime = 0;
-              audioRef.current.src = soundUrl;
-              audioRef.current.volume = volume;
-              audioRef.current.load();
-              
-              // Tentar reproduzir com timeout
-              const playPromise = audioRef.current.play();
-              
-              if (playPromise !== undefined) {
-                playPromise
-                  .then(() => {
-                    console.log('✅ Som reproduzido com sucesso');
-                  })
-                  .catch((error) => {
-                    console.warn('⚠️ Erro ao reproduzir som:', error.name, error.message);
-                    
-                    // Tentar com som de fallback
-                    if (soundType !== 'notification') {
-                      try {
-                        audioRef.current!.src = '/sounds/notification.mp3';
-                        audioRef.current!.play();
-                        console.log('🔄 Usando som de fallback');
-                      } catch (fallbackError) {
-                        console.error('❌ Fallback também falhou:', fallbackError);
-                      }
-                    }
-                  });
-              }
+              await soundNotifications.playSound(soundType);
+              console.log('✅ Som reproduzido com sucesso via Web Audio API');
             } catch (error) {
-              console.error('❌ Erro crítico ao reproduzir som:', error);
+              console.error('❌ Erro ao reproduzir som:', error);
             }
           }
           
@@ -183,32 +128,18 @@ export const useGlobalNotifications = () => {
     };
   }, [user, soundEnabled, volume, soundType, pendingCount]);
 
-  const playTestSound = () => {
-    if (audioRef.current) {
-      try {
-        const soundUrl = `/sounds/${soundType}.mp3`;
-        audioRef.current.src = soundUrl;
-        audioRef.current.volume = volume;
-        
-        // Para teste, força permissão de reprodução
-        const playPromise = audioRef.current.play();
-        
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('Teste de som executado com sucesso');
-            })
-            .catch((error) => {
-              console.error('Erro no teste de som:', error);
-              // Se não conseguir reproduzir, tentar habilitar áudio via interação
-              if (error.name === 'NotAllowedError') {
-                console.log('Clique em qualquer lugar da página para habilitar som');
-              }
-            });
-        }
-      } catch (error) {
-        console.error('Erro ao tentar testar som:', error);
-      }
+  // Atualizar configurações do som quando mudarem
+  useEffect(() => {
+    soundNotifications.setEnabled(soundEnabled);
+    soundNotifications.setVolume(volume);
+  }, [soundEnabled, volume]);
+
+  const playTestSound = async () => {
+    try {
+      await soundNotifications.playSound(soundType);
+      console.log('Teste de som executado com sucesso via Web Audio API');
+    } catch (error) {
+      console.error('Erro no teste de som:', error);
     }
   };
 
