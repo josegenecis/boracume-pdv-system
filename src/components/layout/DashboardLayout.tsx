@@ -3,6 +3,7 @@ import React from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
+import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         </main>
       </div>
       <GlobalNotificationSystem />
+      <SoundPermissionHelper />
     </div>
   );
 };
