@@ -28,7 +28,14 @@ const GlobalNotificationSystem: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(new Set());
+  const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('dismissedOrders');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   // Verifica se está na página de pedidos para não mostrar notificação
   const isOnOrdersPage = location.pathname === '/orders' || location.pathname === '/kitchen';
@@ -111,7 +118,11 @@ const GlobalNotificationSystem: React.FC = () => {
           // Se o pedido foi aceito ou cancelado, remover da lista e adicionar aos dispensados
           if (updatedOrder.acceptance_status !== 'pending_acceptance') {
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
-            setDismissedOrders(prev => new Set([...prev, updatedOrder.id]));
+            setDismissedOrders(prev => {
+              const newDismissed = new Set([...prev, updatedOrder.id]);
+              localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
+              return newDismissed;
+            });
           }
         }
       )
@@ -134,7 +145,11 @@ const GlobalNotificationSystem: React.FC = () => {
   const handleGoToOrders = () => {
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
-    setDismissedOrders(prev => new Set([...prev, ...currentOrderIds]));
+    setDismissedOrders(prev => {
+      const newDismissed = new Set([...prev, ...currentOrderIds]);
+      localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
+      return newDismissed;
+    });
     setIsVisible(false);
     navigate('/orders');
   };
@@ -142,7 +157,11 @@ const GlobalNotificationSystem: React.FC = () => {
   const handleDismiss = () => {
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
-    setDismissedOrders(prev => new Set([...prev, ...currentOrderIds]));
+    setDismissedOrders(prev => {
+      const newDismissed = new Set([...prev, ...currentOrderIds]);
+      localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
+      return newDismissed;
+    });
     setIsVisible(false);
   };
 

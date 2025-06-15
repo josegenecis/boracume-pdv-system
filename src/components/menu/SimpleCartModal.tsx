@@ -150,12 +150,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const isFormValid = () => {
+    const validPaymentMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
+    const isPaymentValid = paymentMethod !== '' && validPaymentMethods.includes(paymentMethod);
+    
     const valid = (
       customerName.trim() !== '' &&
       customerPhone.trim() !== '' &&
       customerAddress.trim() !== '' &&
       deliveryZoneId !== '' &&
-      paymentMethod !== '' &&
+      isPaymentValid &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
     );
     
@@ -164,8 +167,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       customerPhone: customerPhone.trim() !== '',
       customerAddress: customerAddress.trim() !== '',
       deliveryZoneId: deliveryZoneId !== '',
-      paymentMethod: paymentMethod !== '',
-      paymentValue: paymentMethod,
+      paymentMethod: paymentMethod,
+      isPaymentValid,
       changeValid: paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal,
       finalValid: valid
     });
@@ -425,27 +428,47 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
             <div>
               <Label htmlFor="payment">Forma de pagamento *</Label>
-              <p className="text-xs text-muted-foreground mb-2">Método atual selecionado: "{paymentMethod}"</p>
               <RadioGroup 
                 value={paymentMethod} 
                 onValueChange={(value) => {
                   console.log('💳 MUDANÇA PAGAMENTO:', { de: paymentMethod, para: value });
                   setPaymentMethod(value);
                 }}
-                className="space-y-3"
+                className="space-y-2"
               >
                 {paymentOptions.map((option) => {
                   const IconComponent = option.icon;
+                  const isSelected = paymentMethod === option.value;
                   return (
-                    <Label
-                      key={option.value}
-                      htmlFor={option.value}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      <RadioGroupItem value={option.value} id={option.value} />
-                      <IconComponent className="h-5 w-5" />
-                      <span className="flex-1">{option.label}</span>
-                    </Label>
+                    <div key={option.value} className="relative">
+                      <RadioGroupItem 
+                        value={option.value} 
+                        id={option.value}
+                        className="sr-only"
+                      />
+                      <Label
+                        htmlFor={option.value}
+                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                          isSelected 
+                            ? 'border-primary bg-primary/5 shadow-sm' 
+                            : 'border-gray-200 hover:border-primary/50 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          isSelected ? 'border-primary bg-primary' : 'border-gray-300'
+                        }`}>
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <IconComponent className={`h-5 w-5 transition-colors ${
+                          isSelected ? 'text-primary' : 'text-gray-600'
+                        }`} />
+                        <span className={`flex-1 font-medium transition-colors ${
+                          isSelected ? 'text-primary' : 'text-gray-900'
+                        }`}>{option.label}</span>
+                      </Label>
+                    </div>
                   );
                 })}
               </RadioGroup>
