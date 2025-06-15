@@ -155,7 +155,7 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <span>Pedido #{order.order_number}</span>
+            <span>Pedido {order.order_number}</span>
             <div className="flex items-center gap-2">
               {getStatusIcon(order.status)}
               <Badge variant="outline">

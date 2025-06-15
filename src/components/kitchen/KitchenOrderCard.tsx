@@ -62,7 +62,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <div className="flex justify-between items-center">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              Pedido #{order.order_number}
+              Pedido {order.order_number}
               {order.priority === 'high' && (
                 <Badge className="bg-red-500">URGENTE</Badge>
               )}

@@ -98,7 +98,7 @@ const GlobalNotificationSystem: React.FC = () => {
             // Toast notification
             toast({
               title: "🔔 Novo Pedido Recebido!",
-              description: `Pedido #${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
+              description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
               duration: 5000,
             });
           }
@@ -249,7 +249,7 @@ const GlobalNotificationSystem: React.FC = () => {
                 <div className="flex items-center gap-2">
                   {getOrderTypeIcon(order.order_type)}
                   <div>
-                    <div className="font-medium text-sm">#{order.order_number}</div>
+                    <div className="font-medium text-sm">Pedido {order.order_number}</div>
                     <div className="text-xs text-muted-foreground">
                       {order.customer_name || 'Cliente'} • {formatTime(order.created_at)}
                     </div>

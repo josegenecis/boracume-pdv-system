@@ -1222,6 +1222,7 @@ export type Database = {
           id: string
           logo_url: string | null
           minimum_order: number | null
+          next_order_number: number | null
           onboarding_completed: boolean | null
           opening_hours: string | null
           phone: string | null
@@ -1238,6 +1239,7 @@ export type Database = {
           id: string
           logo_url?: string | null
           minimum_order?: number | null
+          next_order_number?: number | null
           onboarding_completed?: boolean | null
           opening_hours?: string | null
           phone?: string | null
@@ -1254,6 +1256,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           minimum_order?: number | null
+          next_order_number?: number | null
           onboarding_completed?: boolean | null
           opening_hours?: string | null
           phone?: string | null

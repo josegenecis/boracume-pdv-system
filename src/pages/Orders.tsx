@@ -418,7 +418,7 @@ const Orders = () => {
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                           <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
                           <div className="flex items-center gap-1">
                             {getOrderTypeIcon(order.order_type)}
@@ -532,7 +532,7 @@ const Orders = () => {
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                           <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
                           <div className="flex items-center gap-1">
                             {getOrderTypeIcon(order.order_type)}
@@ -646,7 +646,7 @@ const Orders = () => {
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">#{order.order_number}</h3>
+                          <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
                           <div className="flex items-center gap-1">
                             {getOrderTypeIcon(order.order_type)}
