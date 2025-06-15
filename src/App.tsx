@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -77,6 +77,16 @@ function AppContent() {
   );
 }
 
+const SoundPermissionManager = () => {
+  const location = useLocation();
+  const isDigitalMenu = location.pathname.includes('/menu');
+  
+  // Não mostrar no cardápio digital
+  if (isDigitalMenu) return null;
+  
+  return <SoundPermissionHelper />;
+};
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -85,7 +95,7 @@ function App() {
           <SubscriptionProvider>
             <AppContent />
             <GlobalNotificationSystem />
-            <SoundPermissionHelper />
+            <SoundPermissionManager />
             <Toaster />
           </SubscriptionProvider>
         </AuthProvider>

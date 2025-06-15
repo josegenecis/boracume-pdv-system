@@ -24,11 +24,7 @@ export const useGlobalNotifications = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Configurar sistema de som
-    soundNotifications.setEnabled(soundEnabled);
-    soundNotifications.setVolume(volume);
-
-    // Carregar configurações de notificação
+    // Carregar configurações de notificação primeiro
     const loadSettings = async () => {
       const { data } = await supabase
         .from('notification_settings')
@@ -41,13 +37,17 @@ export const useGlobalNotifications = () => {
         setVolume(parseFloat(data.volume || '80') / 100);
         setSoundType(data.order_sound);
         
-        // Configurar sons personalizados
+        // Configurar sons personalizados PRIMEIRO
         soundNotifications.setCustomSoundUrls({
           custom_bell_url: data.custom_bell_url,
           custom_chime_url: data.custom_chime_url,
           custom_ding_url: data.custom_ding_url,
           custom_notification_url: data.custom_notification_url,
         });
+        
+        // Depois configurar sistema de som com as configurações carregadas
+        soundNotifications.setEnabled(data.sound_enabled);
+        soundNotifications.setVolume(parseFloat(data.volume || '80') / 100);
       }
     };
 

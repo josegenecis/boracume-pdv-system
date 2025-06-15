@@ -317,7 +317,7 @@ const Orders = () => {
 
   const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance');
   const activeOrders = filteredOrders.filter(order => order.status === 'preparing');
-  const completedOrders = filteredOrders.filter(order => ['ready', 'delivered'].includes(order.status));
+  const completedOrders = filteredOrders.filter(order => order.status === 'ready');
 
   if (loading) {
     return (
@@ -610,16 +610,16 @@ const Orders = () => {
             )}
           </div>
 
-          {/* Finalizados */}
+          {/* Prontos */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <h2 className="text-lg font-semibold text-green-800">Finalizados ({completedOrders.length})</h2>
+              <h2 className="text-lg font-semibold text-green-800">Prontos ({completedOrders.length})</h2>
             </div>
 
             {completedOrders.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-gray-500">Nenhum pedido finalizado</p>
+                <p className="text-gray-500">Nenhum pedido pronto</p>
               </div>
             ) : (
               <div className="space-y-4">
