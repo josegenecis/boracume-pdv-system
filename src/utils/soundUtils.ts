@@ -3,12 +3,29 @@ export class SoundNotifications {
   private isEnabled: boolean = true;
   private volume: number = 0.8;
   private audioFiles: Map<string, HTMLAudioElement> = new Map();
+  private customSoundUrls: Map<string, string> = new Map();
 
   constructor() {
     this.preloadSounds();
   }
 
+  setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
+    this.customSoundUrls.clear();
+    Object.entries(customUrls).forEach(([key, url]) => {
+      if (url) {
+        // Converter custom_bell_url para bell, etc.
+        const soundType = key.replace('custom_', '').replace('_url', '');
+        this.customSoundUrls.set(soundType, url);
+      }
+    });
+    // Recarregar sons com as novas URLs
+    this.preloadSounds();
+  }
+
   private preloadSounds() {
+    // Limpar áudios existentes
+    this.audioFiles.clear();
+    
     const sounds = [
       { name: 'bell', path: '/sounds/bell.mp3' },
       { name: 'chime', path: '/sounds/chime.mp3' },
@@ -18,17 +35,29 @@ export class SoundNotifications {
 
     sounds.forEach(sound => {
       try {
-        const audio = new Audio(sound.path);
+        // Usar som personalizado se disponível
+        const customUrl = this.customSoundUrls.get(sound.name);
+        const audioPath = customUrl || sound.path;
+        
+        const audio = new Audio(audioPath);
         audio.preload = 'auto';
         audio.volume = this.volume;
         this.audioFiles.set(sound.name, audio);
         
         audio.addEventListener('canplaythrough', () => {
-          console.log(`✅ Som ${sound.name} carregado com sucesso`);
+          console.log(`✅ Som ${sound.name} carregado com sucesso ${customUrl ? '(personalizado)' : '(padrão)'}`);
         });
         
         audio.addEventListener('error', (e) => {
           console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
+          // Em caso de erro com som personalizado, tentar carregar som padrão
+          if (customUrl) {
+            console.log(`Tentando carregar som padrão para ${sound.name}`);
+            const fallbackAudio = new Audio(sound.path);
+            fallbackAudio.preload = 'auto';
+            fallbackAudio.volume = this.volume;
+            this.audioFiles.set(sound.name, fallbackAudio);
+          }
         });
       } catch (error) {
         console.warn(`⚠️ Erro ao criar audio para ${sound.name}:`, error);

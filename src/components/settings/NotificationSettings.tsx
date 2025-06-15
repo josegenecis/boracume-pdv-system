@@ -9,6 +9,8 @@ import { Volume2, Bell, Mail, MessageSquare, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import SoundUploadManager from './SoundUploadManager';
+import { soundNotifications } from '@/utils/soundUtils';
 
 const NotificationSettings = () => {
   const [notifications, setNotifications] = useState({
@@ -22,6 +24,13 @@ const NotificationSettings = () => {
     soundEnabled: true,
     orderSound: 'bell',
     volume: '80'
+  });
+
+  const [customSoundUrls, setCustomSoundUrls] = useState({
+    custom_bell_url: null as string | null,
+    custom_chime_url: null as string | null,
+    custom_ding_url: null as string | null,
+    custom_notification_url: null as string | null,
   });
 
   const [loading, setLoading] = useState(false);
@@ -60,6 +69,21 @@ const NotificationSettings = () => {
           orderSound: data.order_sound,
           volume: data.volume
         });
+
+        setCustomSoundUrls({
+          custom_bell_url: data.custom_bell_url,
+          custom_chime_url: data.custom_chime_url,
+          custom_ding_url: data.custom_ding_url,
+          custom_notification_url: data.custom_notification_url,
+        });
+
+        // Configurar sons personalizados no sistema de som
+        soundNotifications.setCustomSoundUrls({
+          custom_bell_url: data.custom_bell_url,
+          custom_chime_url: data.custom_chime_url,
+          custom_ding_url: data.custom_ding_url,
+          custom_notification_url: data.custom_notification_url,
+        });
       }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
@@ -80,7 +104,7 @@ const NotificationSettings = () => {
     }));
   };
 
-  const playTestSound = () => {
+  const playTestSound = async () => {
     if (!notifications.soundEnabled) {
       toast({
         title: "Som desabilitado",
@@ -90,37 +114,20 @@ const NotificationSettings = () => {
       return;
     }
 
-    // Criar áudio baseado no tipo de som selecionado
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    // Configurar frequência baseada no som selecionado
-    let frequency = 800; // bell
-    switch (notifications.orderSound) {
-      case 'chime': frequency = 1000; break;
-      case 'ding': frequency = 1200; break;
-      case 'notification': frequency = 600; break;
+    try {
+      await soundNotifications.playSound(notifications.orderSound);
+      toast({
+        title: "Som reproduzido",
+        description: `Som "${notifications.orderSound}" com volume ${notifications.volume}%.`,
+      });
+    } catch (error) {
+      console.error('Erro ao reproduzir som:', error);
+      toast({
+        title: "Erro ao reproduzir som",
+        description: "Não foi possível reproduzir o som.",
+        variant: "destructive",
+      });
     }
-    
-    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-    oscillator.type = 'sine';
-    
-    // Configurar volume
-    const volume = parseInt(notifications.volume) / 100;
-    gainNode.gain.setValueAtTime(volume * 0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
-
-    toast({
-      title: "Som reproduzido",
-      description: `Som "${notifications.orderSound}" com volume ${notifications.volume}%.`,
-    });
   };
 
   const handleSave = async () => {
@@ -146,6 +153,10 @@ const NotificationSettings = () => {
         sound_enabled: notifications.soundEnabled,
         order_sound: notifications.orderSound,
         volume: notifications.volume,
+        custom_bell_url: customSoundUrls.custom_bell_url,
+        custom_chime_url: customSoundUrls.custom_chime_url,
+        custom_ding_url: customSoundUrls.custom_ding_url,
+        custom_notification_url: customSoundUrls.custom_notification_url,
         updated_at: new Date().toISOString()
       };
 
@@ -178,6 +189,20 @@ const NotificationSettings = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSoundUploaded = (soundType: string, url: string | null) => {
+    const urlKey = `custom_${soundType}_url` as keyof typeof customSoundUrls;
+    setCustomSoundUrls(prev => ({
+      ...prev,
+      [urlKey]: url
+    }));
+
+    // Atualizar sistema de som
+    soundNotifications.setCustomSoundUrls({
+      ...customSoundUrls,
+      [urlKey]: url
+    });
   };
 
   return (
@@ -372,6 +397,11 @@ const NotificationSettings = () => {
           )}
         </CardContent>
       </Card>
+
+      <SoundUploadManager 
+        customUrls={customSoundUrls}
+        onSoundUploaded={handleSoundUploaded}
+      />
 
       <div className="flex justify-end">
         <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>

@@ -40,6 +40,14 @@ export const useGlobalNotifications = () => {
         setSoundEnabled(data.sound_enabled);
         setVolume(parseFloat(data.volume) / 100);
         setSoundType(data.order_sound);
+        
+        // Configurar sons personalizados
+        soundNotifications.setCustomSoundUrls({
+          custom_bell_url: data.custom_bell_url,
+          custom_chime_url: data.custom_chime_url,
+          custom_ding_url: data.custom_ding_url,
+          custom_notification_url: data.custom_notification_url,
+        });
       }
     };
 
