@@ -1,159 +1,126 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Users, MousePointer, ShoppingCart } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { Plus, Users, Clock, Eye } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import TableDetailsModal from './TableDetailsModal';
-import AddProductToTableModal from './AddProductToTableModal';
 
 interface Table {
   id: string;
   table_number: number;
   capacity: number;
-  status: 'available' | 'occupied' | 'reserved';
+  status: string;
   location?: string;
-  current_order_id?: string;
 }
 
-const TableManager: React.FC = () => {
-  const [tables, setTables] = useState<Table[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingTable, setEditingTable] = useState<Table | null>(null);
-  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [showTableDetails, setShowTableDetails] = useState(false);
-  const [showAddProducts, setShowAddProducts] = useState(false);
-  const [tableForProducts, setTableForProducts] = useState<Table | null>(null);
-  const [formData, setFormData] = useState({
-    table_number: '',
-    capacity: 4,
-    location: ''
-  });
-  const { toast } = useToast();
+interface TableAccount {
+  id: string;
+  table_id: string;
+  total: number;
+  status: string;
+  items: any[];
+  created_at: string;
+}
+
+const TableManager = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [tables, setTables] = useState<Table[]>([]);
+  const [accounts, setAccounts] = useState<TableAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetchTables();
-  }, []);
+    if (user) {
+      fetchTables();
+      fetchAccounts();
+    }
+  }, [user]);
 
   const fetchTables = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('tables')
         .select('*')
+        .eq('user_id', user?.id)
         .order('table_number');
 
-      if (error) throw error;
-      
-      // Transform data to ensure proper typing
-      const transformedTables = (data || []).map(table => ({
-        ...table,
-        status: table.status as 'available' | 'occupied' | 'reserved'
-      }));
-      
-      setTables(transformedTables);
+      if (error) {
+        console.error('Erro ao buscar mesas:', error);
+        return;
+      }
+
+      setTables(data || []);
     } catch (error) {
-      console.error('Erro ao carregar mesas:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar mesas.",
-        variant: "destructive"
-      });
+      console.error('Erro ao buscar mesas:', error);
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('table_accounts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', 'open');
+
+      if (error) {
+        console.error('Erro ao buscar contas:', error);
+        return;
+      }
+
+      setAccounts(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar contas:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
+  const createTable = async () => {
+    if (!user) return;
+
     try {
-      if (editingTable) {
-        const { error } = await supabase
-          .from('tables')
-          .update({
-            table_number: parseInt(formData.table_number),
-            capacity: formData.capacity,
-            location: formData.location
-          })
-          .eq('id', editingTable.id);
+      const nextNumber = Math.max(...tables.map(t => t.table_number), 0) + 1;
+      
+      const { data, error } = await supabase
+        .from('tables')
+        .insert([{
+          user_id: user.id,
+          table_number: nextNumber,
+          capacity: 4,
+          status: 'available'
+        }])
+        .select()
+        .single();
 
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('tables')
-          .insert({
-            user_id: user?.id,
-            table_number: parseInt(formData.table_number),
-            capacity: formData.capacity,
-            location: formData.location,
-            status: 'available'
-          });
-
-        if (error) throw error;
+      if (error) {
+        console.error('Erro ao criar mesa:', error);
+        toast({
+          title: "Erro ao criar mesa",
+          description: "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
       }
 
+      setTables(prev => [...prev, data]);
       toast({
-        title: "Sucesso",
-        description: `Mesa ${editingTable ? 'atualizada' : 'criada'} com sucesso.`,
+        title: "Mesa criada com sucesso!",
+        description: `Mesa ${nextNumber} foi adicionada.`,
       });
-
-      setShowForm(false);
-      setEditingTable(null);
-      setFormData({ table_number: '', capacity: 4, location: '' });
-      fetchTables();
     } catch (error) {
-      console.error('Erro ao salvar mesa:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao salvar mesa.",
-        variant: "destructive"
-      });
+      console.error('Erro ao criar mesa:', error);
     }
   };
 
-  const handleDelete = async (tableId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta mesa?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('tables')
-        .delete()
-        .eq('id', tableId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Sucesso",
-        description: "Mesa excluída com sucesso.",
-      });
-
-      fetchTables();
-    } catch (error) {
-      console.error('Erro ao excluir mesa:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao excluir mesa.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleTableClick = (table: Table) => {
-    setSelectedTable(table);
-    setShowTableDetails(true);
-  };
-
-  const handleAddProductsClick = (table: Table, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTableForProducts(table);
-    setShowAddProducts(true);
+  const getTableAccount = (tableId: string) => {
+    return accounts.find(account => account.table_id === tableId);
   };
 
   const getStatusColor = (status: string) => {
@@ -169,7 +136,7 @@ const TableManager: React.FC = () => {
     }
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'available':
         return 'Disponível';
@@ -178,199 +145,132 @@ const TableManager: React.FC = () => {
       case 'reserved':
         return 'Reservada';
       default:
-        return status;
+        return 'Indisponível';
     }
   };
 
+  const openTableDetails = (table: Table) => {
+    setSelectedTable(table);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setSelectedTable(null);
+    setShowModal(false);
+    fetchTables();
+    fetchAccounts();
+  };
+
   if (loading) {
-    return <div className="text-center py-8">Carregando mesas...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Gerenciar Mesas</h2>
-        <Dialog open={showForm} onOpenChange={setShowForm}>
-          <DialogTrigger asChild>
-            <Button onClick={() => {
-              setEditingTable(null);
-              setFormData({ table_number: '', capacity: 4, location: '' });
-            }}>
-              <Plus size={16} className="mr-2" />
-              Nova Mesa
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingTable ? 'Editar Mesa' : 'Nova Mesa'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="table_number">Número da Mesa</Label>
-                <Input
-                  id="table_number"
-                  type="number"
-                  value={formData.table_number}
-                  onChange={(e) => setFormData(prev => ({ ...prev, table_number: e.target.value }))}
-                  placeholder="Ex: 1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="capacity">Capacidade</Label>
-                <Input
-                  id="capacity"
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) || 4 }))}
-                  placeholder="Ex: 4"
-                />
-              </div>
-              <div>
-                <Label htmlFor="location">Localização (opcional)</Label>
-                <Input
-                  id="location"
-                  value={formData.location}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                  placeholder="Ex: Varanda, Salão principal"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={handleSave} className="flex-1">
-                  {editingTable ? 'Atualizar' : 'Criar'}
-                </Button>
-                <Button variant="outline" onClick={() => setShowForm(false)}>
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <div className="flex items-center gap-2 mb-2">
-          <MousePointer size={16} className="text-blue-600" />
-          <span className="font-medium text-blue-800">Como usar as mesas:</span>
-        </div>
-        <p className="text-sm text-blue-700">
-          <strong>Clique na mesa</strong> para ver detalhes, transferir ou finalizar. 
-          <strong>Botão carrinho</strong> para adicionar produtos à mesa.
-        </p>
+        <h2 className="text-2xl font-bold">Gerenciamento de Mesas</h2>
+        <Button onClick={createTable}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nova Mesa
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {tables.map((table) => (
-          <Card 
-            key={table.id} 
-            className="hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handleTableClick(table)}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-lg">Mesa {table.table_number}</CardTitle>
-                <Badge className={getStatusColor(table.status)}>
-                  {getStatusLabel(table.status)}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Users size={14} />
-                  <span>{table.capacity} pessoas</span>
+        {tables.map((table) => {
+          const account = getTableAccount(table.id);
+          const hasAccount = !!account;
+          
+          return (
+            <Card 
+              key={table.id} 
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                hasAccount ? 'ring-2 ring-orange-500' : ''
+              }`}
+              onClick={() => openTableDetails(table)}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <CardTitle className="text-lg">
+                    Mesa {table.table_number}
+                  </CardTitle>
+                  <Badge className={getStatusColor(hasAccount ? 'occupied' : table.status)}>
+                    {hasAccount ? 'Ocupada' : getStatusText(table.status)}
+                  </Badge>
                 </div>
+              </CardHeader>
+              
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>Capacidade: {table.capacity} pessoas</span>
+                </div>
+                
                 {table.location && (
-                  <div className="text-sm text-gray-600">
-                    📍 {table.location}
+                  <div className="text-sm text-muted-foreground">
+                    <span>📍 {table.location}</span>
                   </div>
                 )}
-                {table.status === 'occupied' && (
-                  <div className="text-xs text-blue-600 font-medium mt-2">
-                    👆 Clique para ver detalhes
+
+                {hasAccount && account && (
+                  <div className="space-y-2 p-3 bg-orange-50 rounded-lg border">
+                    <div className="flex items-center gap-2 text-sm font-medium text-orange-800">
+                      <Clock className="h-4 w-4" />
+                      Conta aberta
+                    </div>
+                    <div className="text-sm text-orange-700">
+                      Total: R$ {Number(account.total).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-orange-600">
+                      Items: {account.items.length}
+                    </div>
                   </div>
                 )}
-              </div>
-              <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => handleAddProductsClick(table, e)}
-                  className="flex-1"
-                  title="Adicionar produtos"
-                >
-                  <ShoppingCart size={14} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setEditingTable(table);
-                    setFormData({
-                      table_number: table.table_number.toString(),
-                      capacity: table.capacity,
-                      location: table.location || ''
-                    });
-                    setShowForm(true);
+                    openTableDetails(table);
                   }}
                 >
-                  <Edit size={14} />
+                  <Eye className="h-4 w-4 mr-2" />
+                  {hasAccount ? 'Ver Conta' : 'Gerenciar'}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(table.id);
-                  }}
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {tables.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-8">
-            <p className="text-gray-500">Nenhuma mesa cadastrada.</p>
-            <Button
-              onClick={() => setShowForm(true)}
-              className="mt-3"
-            >
-              <Plus size={16} className="mr-2" />
-              Criar Primeira Mesa
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center py-12">
+          <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+            Nenhuma mesa cadastrada
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Crie sua primeira mesa para começar a gerenciar o atendimento presencial.
+          </p>
+          <Button onClick={createTable}>
+            <Plus className="h-4 w-4 mr-2" />
+            Criar Primeira Mesa
+          </Button>
+        </div>
       )}
 
-      {/* Modal de Detalhes da Mesa */}
-      <TableDetailsModal
-        table={selectedTable}
-        isOpen={showTableDetails}
-        onClose={() => {
-          setShowTableDetails(false);
-          setSelectedTable(null);
-        }}
-        onRefresh={fetchTables}
-        availableTables={tables}
-      />
-
-      {/* Modal de Adicionar Produtos */}
-      <AddProductToTableModal
-        table={tableForProducts}
-        isOpen={showAddProducts}
-        onClose={() => {
-          setShowAddProducts(false);
-          setTableForProducts(null);
-        }}
-        onSuccess={fetchTables}
-      />
+      {selectedTable && (
+        <TableDetailsModal
+          table={selectedTable}
+          account={getTableAccount(selectedTable.id)}
+          isOpen={showModal}
+          onClose={closeModal}
+        />
+      )}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -37,7 +38,7 @@ export const useCustomerLookup = (userId: string) => {
         };
       }
 
-      // Fallback para buscar nos pedidos
+      // Fallback para buscar nos pedidos se não encontrou na tabela customers
       const { data, error } = await supabase
         .from('orders')
         .select('customer_name, customer_phone, customer_address')
@@ -57,7 +58,7 @@ export const useCustomerLookup = (userId: string) => {
           name: customer.customer_name || '',
           phone: customer.customer_phone || '',
           address: customer.customer_address || '',
-          neighborhood: ''
+          neighborhood: '' // Orders não tem neighborhood salvo
         };
       }
 

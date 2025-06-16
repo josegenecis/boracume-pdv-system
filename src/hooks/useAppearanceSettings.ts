@@ -1,155 +1,146 @@
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface AppearanceSettings {
-  theme: string;
+  id?: string;
+  user_id?: string;
+  theme: 'light' | 'dark';
   primary_color: string;
-  font_size: string;
-  compact_mode: boolean;
-  show_animations: boolean;
-  high_contrast: boolean;
+  font_size: 'small' | 'medium' | 'large';
   reduced_motion: boolean;
+  high_contrast: boolean;
+  show_animations: boolean;
+  compact_mode: boolean;
 }
+
+const defaultSettings: AppearanceSettings = {
+  theme: 'light',
+  primary_color: 'orange',
+  font_size: 'medium',
+  reduced_motion: false,
+  high_contrast: false,
+  show_animations: true,
+  compact_mode: false,
+};
 
 export const useAppearanceSettings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState<AppearanceSettings>({
-    theme: 'light',
-    primary_color: 'orange',
-    font_size: 'medium',
-    compact_mode: false,
-    show_animations: true,
-    high_contrast: false,
-    reduced_motion: false,
-  });
+  const [settings, setSettings] = useState<AppearanceSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       fetchSettings();
     } else {
-      setLoading(false);
+      // Carregar configurações do localStorage para usuários não logados
+      loadFromLocalStorage();
     }
   }, [user]);
 
+  // Aplicar configurações no DOM quando mudarem
   useEffect(() => {
-    applySettings(settings);
+    applySettingsToDOM();
   }, [settings]);
 
   const fetchSettings = async () => {
+    if (!user) return;
+
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('appearance_settings')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao carregar configurações:', error);
+        console.error('Erro ao buscar configurações:', error);
         return;
       }
 
       if (data) {
-        const newSettings = {
-          theme: data.theme || 'light',
-          primary_color: data.primary_color || 'orange',
-          font_size: data.font_size || 'medium',
-          compact_mode: data.compact_mode || false,
-          show_animations: data.show_animations || true,
-          high_contrast: data.high_contrast || false,
-          reduced_motion: data.reduced_motion || false,
+        const loadedSettings = {
+          ...defaultSettings,
+          ...data,
         };
-        setSettings(newSettings);
+        setSettings(loadedSettings);
+        saveToLocalStorage(loadedSettings);
+      } else {
+        // Não há configurações salvas, usar padrão
+        setSettings(defaultSettings);
+        saveToLocalStorage(defaultSettings);
       }
     } catch (error) {
-      console.error('Erro ao carregar configurações de aparência:', error);
+      console.error('Erro ao buscar configurações:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateSettings = async (newSettings: Partial<AppearanceSettings>) => {
+  const loadFromLocalStorage = () => {
     try {
-      const updatedSettings = { ...settings, ...newSettings };
-      
-      const { error } = await supabase
-        .from('appearance_settings')
-        .upsert({
-          user_id: user?.id,
-          theme: updatedSettings.theme,
-          primary_color: updatedSettings.primary_color,
-          font_size: updatedSettings.font_size,
-          compact_mode: updatedSettings.compact_mode,
-          show_animations: updatedSettings.show_animations,
-          high_contrast: updatedSettings.high_contrast,
-          reduced_motion: updatedSettings.reduced_motion,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) throw error;
-
-      setSettings(updatedSettings);
-
-      toast({
-        title: "Configurações salvas",
-        description: "As configurações de aparência foram atualizadas com sucesso.",
-      });
+      const saved = localStorage.getItem('appearance_settings');
+      if (saved) {
+        const parsedSettings = JSON.parse(saved);
+        setSettings({ ...defaultSettings, ...parsedSettings });
+      } else {
+        setSettings(defaultSettings);
+      }
     } catch (error) {
-      console.error('Erro ao salvar configurações:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao salvar configurações de aparência.",
-        variant: "destructive"
-      });
+      console.error('Erro ao carregar do localStorage:', error);
+      setSettings(defaultSettings);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const applySettings = (settings: AppearanceSettings) => {
+  const saveToLocalStorage = (settingsToSave: AppearanceSettings) => {
+    try {
+      localStorage.setItem('appearance_settings', JSON.stringify(settingsToSave));
+    } catch (error) {
+      console.error('Erro ao salvar no localStorage:', error);
+    }
+  };
+
+  const applySettingsToDOM = () => {
     const root = document.documentElement;
     
-    // Apply theme
+    // Aplicar tema
     if (settings.theme === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
 
-    // Apply primary color with correct HSL values
-    const colorMap = {
-      orange: { primary: '25 95% 53%', accent: '25 95% 53%' },
-      blue: { primary: '221 83% 53%', accent: '217 91% 60%' },
-      green: { primary: '142 76% 36%', accent: '138 76% 49%' },
-      purple: { primary: '258 90% 66%', accent: '266 85% 58%' },
-      red: { primary: '0 72% 51%', accent: '0 84% 60%' }
+    // Aplicar cor primária
+    const colorMap: Record<string, string> = {
+      orange: '#f97316',
+      blue: '#3b82f6',
+      green: '#10b981',
+      purple: '#8b5cf6',
+      red: '#ef4444',
+      pink: '#ec4899',
     };
 
-    const colors = colorMap[settings.primary_color as keyof typeof colorMap];
-    if (colors) {
-      root.style.setProperty('--primary', colors.primary);
-      root.style.setProperty('--accent', colors.accent);
-    }
+    const colorValue = colorMap[settings.primary_color] || colorMap.orange;
+    root.style.setProperty('--color-primary', colorValue);
 
-    // Apply font size
-    const fontSizes = {
+    // Aplicar tamanho da fonte
+    const fontSizeMap = {
       small: '14px',
       medium: '16px',
       large: '18px',
-      'extra-large': '20px'
     };
-    root.style.fontSize = fontSizes[settings.font_size as keyof typeof fontSizes];
+    root.style.setProperty('--font-size-base', fontSizeMap[settings.font_size]);
 
-    // Apply other settings
-    if (settings.compact_mode) {
-      root.classList.add('compact-mode');
+    // Aplicar outras configurações
+    if (settings.reduced_motion) {
+      root.style.setProperty('--animation-duration', '0.01ms');
     } else {
-      root.classList.remove('compact-mode');
+      root.style.removeProperty('--animation-duration');
     }
 
     if (settings.high_contrast) {
@@ -158,23 +149,69 @@ export const useAppearanceSettings = () => {
       root.classList.remove('high-contrast');
     }
 
-    if (settings.reduced_motion) {
-      root.classList.add('reduced-motion');
+    if (settings.compact_mode) {
+      root.classList.add('compact-mode');
     } else {
-      root.classList.remove('reduced-motion');
+      root.classList.remove('compact-mode');
+    }
+  };
+
+  const updateSettings = async (newSettings: Partial<AppearanceSettings>) => {
+    const updatedSettings = { ...settings, ...newSettings };
+    setSettings(updatedSettings);
+    saveToLocalStorage(updatedSettings);
+
+    if (!user) {
+      // Para usuários não logados, apenas salvar no localStorage
+      toast({
+        title: "Configurações salvas localmente",
+        description: "As configurações foram aplicadas e salvas no seu navegador.",
+      });
+      return;
     }
 
-    if (!settings.show_animations) {
-      root.classList.add('no-animations');
-    } else {
-      root.classList.remove('no-animations');
+    try {
+      const { error } = await supabase
+        .from('appearance_settings')
+        .upsert({
+          user_id: user.id,
+          ...updatedSettings,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        console.error('Erro ao salvar configurações:', error);
+        toast({
+          title: "Erro ao salvar configurações",
+          description: "As configurações foram aplicadas mas não puderam ser salvas no servidor.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Configurações salvas com sucesso!",
+        description: "Suas preferências de aparência foram atualizadas.",
+      });
+    } catch (error) {
+      console.error('Erro ao salvar configurações:', error);
+      toast({
+        title: "Erro ao salvar configurações",
+        description: "Tente novamente em alguns instantes.",
+        variant: "destructive",
+      });
     }
+  };
+
+  const resetToDefaults = async () => {
+    await updateSettings(defaultSettings);
   };
 
   return {
     settings,
     loading,
     updateSettings,
-    applySettings
+    resetToDefaults,
   };
 };
