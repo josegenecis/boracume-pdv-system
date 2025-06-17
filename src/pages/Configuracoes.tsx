@@ -60,7 +60,11 @@ const Configuracoes: React.FC = () => {
         <TabsContent value="menu">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <MenuLinkGenerator />
-            <QRCodeGenerator />
+            <QRCodeGenerator 
+              value="https://exemplo.com/cardapio"
+              size={200}
+              title="QR Code do Cardápio"
+            />
           </div>
         </TabsContent>
         

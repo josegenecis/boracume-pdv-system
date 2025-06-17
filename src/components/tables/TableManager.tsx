@@ -56,12 +56,14 @@ const TableManager = () => {
         .from('tables')
         .select('*')
         .eq('user_id', user.id)
-        .order('number');
+        .order('table_number');
 
       if (error) throw error;
 
       setTables(data?.map(table => ({
-        ...table,
+        id: table.id,
+        number: table.table_number,
+        capacity: table.capacity || 4,
         status: table.status as 'available' | 'occupied' | 'reserved'
       })) || []);
     } catch (error) {
@@ -105,7 +107,7 @@ const TableManager = () => {
         .from('tables')
         .insert({
           user_id: user.id,
-          number: parseInt(newTableNumber),
+          table_number: parseInt(newTableNumber),
           capacity: parseInt(newTableCapacity),
           status: 'available'
         })
@@ -115,7 +117,9 @@ const TableManager = () => {
       if (error) throw error;
 
       const newTable: Table = {
-        ...data,
+        id: data.id,
+        number: data.table_number,
+        capacity: data.capacity,
         status: data.status as 'available' | 'occupied' | 'reserved'
       };
 

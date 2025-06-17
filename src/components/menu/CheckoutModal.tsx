@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { useAuth } from '@/contexts/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { CheckCircle, MapPin } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -204,15 +206,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="space-y-2">
                 <Label>Localização no Mapa</Label>
                 <CustomerLocationInput
-                  onLocationSelect={(location) => {
+                  onLocationSelect={(address, lat, lng) => {
                     setCustomerData(prev => ({
                       ...prev,
-                      address: location.address,
-                      latitude: location.lat,
-                      longitude: location.lng
+                      address: address,
+                      latitude: lat || null,
+                      longitude: lng || null
                     }));
                   }}
-                  initialAddress={customerData.address}
+                  defaultAddress={customerData.address}
                 />
                 <p className="text-sm text-green-600 flex items-center gap-1 mt-1">
                   🛵 Facilite a vida do nosso motoboy!
