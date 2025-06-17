@@ -14,7 +14,7 @@ import TableDetailsModal from '@/components/tables/TableDetailsModal';
 
 interface Table {
   id: string;
-  number: number;
+  table_number: number;
   capacity: number;
   status: 'available' | 'occupied' | 'reserved';
 }
@@ -62,7 +62,7 @@ const TableManager = () => {
 
       setTables(data?.map(table => ({
         id: table.id,
-        number: table.table_number,
+        table_number: table.table_number,
         capacity: table.capacity || 4,
         status: table.status as 'available' | 'occupied' | 'reserved'
       })) || []);
@@ -118,12 +118,12 @@ const TableManager = () => {
 
       const newTable: Table = {
         id: data.id,
-        number: data.table_number,
+        table_number: data.table_number,
         capacity: data.capacity,
         status: data.status as 'available' | 'occupied' | 'reserved'
       };
 
-      setTables(prev => [...prev, newTable].sort((a, b) => a.number - b.number));
+      setTables(prev => [...prev, newTable].sort((a, b) => a.table_number - b.table_number));
       setNewTableNumber('');
       setNewTableCapacity('');
       setShowAddTable(false);
@@ -243,7 +243,7 @@ const TableManager = () => {
                 <CardTitle className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    Mesa {table.number}
+                    Mesa {table.table_number}
                   </span>
                   <div className={`w-3 h-3 rounded-full ${getStatusColor(status)}`} />
                 </CardTitle>
