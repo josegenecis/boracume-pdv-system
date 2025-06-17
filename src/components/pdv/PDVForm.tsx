@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ const PDVForm = () => {
   const [categories, setCategories] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
@@ -122,7 +123,7 @@ const PDVForm = () => {
     const productCategory = product.category || '';
 
     const matchesSearchTerm = productNameLower.includes(searchTermLower);
-    const matchesCategory = selectedCategory ? productCategory === selectedCategory : true;
+    const matchesCategory = selectedCategory === 'all' ? true : productCategory === selectedCategory;
 
     return matchesSearchTerm && matchesCategory;
   });
@@ -293,7 +294,7 @@ const PDVForm = () => {
                 <ShoppingCart className="h-5 w-5" />
                 Produtos
               </span>
-              {selectedCategory && (
+              {selectedCategory !== 'all' && (
                 <Badge variant="secondary">{selectedCategory}</Badge>
               )}
             </CardTitle>
@@ -313,7 +314,7 @@ const PDVForm = () => {
                   <SelectValue placeholder="Categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="all">Todas</SelectItem>
                   {categories.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
