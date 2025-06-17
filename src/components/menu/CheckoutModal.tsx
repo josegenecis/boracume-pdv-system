@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -54,10 +53,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (!user) return;
 
       try {
+        // Use delivery_zones table instead of delivery_neighborhoods
         const { data, error } = await supabase
-          .from('delivery_neighborhoods')
+          .from('delivery_zones')
           .select('name')
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('active', true);
 
         if (error) {
           console.error('Erro ao buscar bairros:', error);
@@ -69,7 +70,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           return;
         }
 
-        const neighborhoodNames = data.map(item => item.name);
+        const neighborhoodNames = data?.map(item => item.name) || [];
         setNeighborhoods(neighborhoodNames);
       } catch (error) {
         console.error('Erro ao buscar bairros:', error);
