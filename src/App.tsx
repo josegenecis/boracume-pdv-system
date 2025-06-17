@@ -6,7 +6,6 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import RouteGuard from '@/components/auth/RouteGuard';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
-import PerformanceMonitor from '@/components/performance/PerformanceMonitor';
 
 // Pages
 import Index from '@/pages/Index';
@@ -36,7 +35,6 @@ function App() {
     <Router>
       <AuthProvider>
         <SubscriptionProvider>
-          <PerformanceMonitor />
           <div className="min-h-screen bg-background">
             <Routes>
               {/* Public routes */}
@@ -52,17 +50,17 @@ function App() {
                   <Dashboard />
                 </RouteGuard>
               } />
-              <Route path="/orders" element={
+              <Route path="/pedidos" element={
                 <RouteGuard>
                   <Orders />
                 </RouteGuard>
               } />
-              <Route path="/products" element={
+              <Route path="/produtos" element={
                 <RouteGuard>
                   <Products />
                 </RouteGuard>
               } />
-              <Route path="/kitchen" element={
+              <Route path="/cozinha" element={
                 <RouteGuard>
                   <Kitchen />
                 </RouteGuard>
