@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
@@ -13,6 +12,7 @@ import MenuLinkGenerator from '@/components/menu/MenuLinkGenerator';
 import DeviceManager from '@/components/devices/DeviceManager';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Configuracoes: React.FC = () => {
@@ -31,78 +31,80 @@ const Configuracoes: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-      
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="mb-4 flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="general">Geral</TabsTrigger>
-          <TabsTrigger value="menu">Cardápio</TabsTrigger>
-          <TabsTrigger value="devices">Dispositivos</TabsTrigger>
-          <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
-          <TabsTrigger value="appearance">Aparência</TabsTrigger>
-          <TabsTrigger value="delivery">Delivery</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-          {hasMarketingFeature() && (
-            <TabsTrigger value="marketing">Marketing</TabsTrigger>
-          )}
-        </TabsList>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
         
-        <TabsContent value="general" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <WhatsAppSettings />
-            <ScaleIntegrationSettings />
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="menu">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <MenuLinkGenerator />
-            <QRCodeGenerator 
-              value="https://exemplo.com/cardapio"
-              size={200}
-              title="QR Code do Cardápio"
-            />
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="devices">
-          <DeviceManager />
-        </TabsContent>
-        
-        <TabsContent value="profile">
-          <ProfileSettings />
-        </TabsContent>
-        
-        <TabsContent value="notifications">
-          <NotificationSettings />
-        </TabsContent>
-        
-        <TabsContent value="appearance">
-          <AppearanceSettings />
-        </TabsContent>
-        
-        <TabsContent value="delivery">
-          <DeliverySettings />
-        </TabsContent>
-        
-        <TabsContent value="whatsapp">
-          <WhatsAppIntegration />
-        </TabsContent>
-        
-        <TabsContent value="fiscal">
-          <FiscalSettings />
-        </TabsContent>
-        
-        {hasMarketingFeature() && (
-          <TabsContent value="marketing">
-            <MarketingSettings />
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList className="mb-4 flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="general">Geral</TabsTrigger>
+            <TabsTrigger value="menu">Cardápio</TabsTrigger>
+            <TabsTrigger value="devices">Dispositivos</TabsTrigger>
+            <TabsTrigger value="profile">Perfil</TabsTrigger>
+            <TabsTrigger value="notifications">Notificações</TabsTrigger>
+            <TabsTrigger value="appearance">Aparência</TabsTrigger>
+            <TabsTrigger value="delivery">Delivery</TabsTrigger>
+            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+            <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+            {hasMarketingFeature() && (
+              <TabsTrigger value="marketing">Marketing</TabsTrigger>
+            )}
+          </TabsList>
+          
+          <TabsContent value="general" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <WhatsAppSettings />
+              <ScaleIntegrationSettings />
+            </div>
           </TabsContent>
-        )}
-      </Tabs>
-    </div>
+          
+          <TabsContent value="menu">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MenuLinkGenerator />
+              <QRCodeGenerator 
+                value="https://exemplo.com/cardapio"
+                size={200}
+                title="QR Code do Cardápio"
+              />
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="devices">
+            <DeviceManager />
+          </TabsContent>
+          
+          <TabsContent value="profile">
+            <ProfileSettings />
+          </TabsContent>
+          
+          <TabsContent value="notifications">
+            <NotificationSettings />
+          </TabsContent>
+          
+          <TabsContent value="appearance">
+            <AppearanceSettings />
+          </TabsContent>
+          
+          <TabsContent value="delivery">
+            <DeliverySettings />
+          </TabsContent>
+          
+          <TabsContent value="whatsapp">
+            <WhatsAppIntegration />
+          </TabsContent>
+          
+          <TabsContent value="fiscal">
+            <FiscalSettings />
+          </TabsContent>
+          
+          {hasMarketingFeature() && (
+            <TabsContent value="marketing">
+              <MarketingSettings />
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
+    </DashboardLayout>
   );
 };
 

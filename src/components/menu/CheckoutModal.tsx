@@ -204,7 +204,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </Select>
               </div>
 
-              {/* Location Input - Moved below neighborhood */}
+              {/* Location Input - Fixed prop name */}
               <div className="space-y-2">
                 <Label>Localização no Mapa</Label>
                 <CustomerLocationInput
