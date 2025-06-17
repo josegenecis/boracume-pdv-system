@@ -1,359 +1,302 @@
-
 import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, CreditCard, Truck, Clock, Phone, User, Home, MapPin as LocationIcon } from 'lucide-react';
-import { CustomerLocationInput } from '@/components/customer/CustomerLocationInput';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import CustomerLocationInput from '@/components/customer/CustomerLocationInput';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
+import { useAuth } from '@/contexts/AuthContext';
+import { Separator } from '@/components/ui/separator';
+import { CheckCircle, MapPin } from 'lucide-react';
 
 interface CheckoutModalProps {
-  cart: any[];
-  total: number;
-  deliveryZones: any[];
-  userId: string;
-  onPlaceOrder: (orderData: any) => Promise<void>;
+  isOpen: boolean;
   onClose: () => void;
+  cartItems: any[];
+  total: number;
+  onOrderSubmit: (orderData: any) => void;
+  userId: string;
 }
 
 const CheckoutModal: React.FC<CheckoutModalProps> = ({
-  cart,
+  isOpen,
+  onClose,
+  cartItems,
   total,
-  deliveryZones,
-  userId,
-  onPlaceOrder,
-  onClose
+  onOrderSubmit,
+  userId
 }) => {
+  const { toast } = useToast();
+  const { lookupCustomer, isLoading } = useCustomerLookup(userId);
+  const [customerPhone, setCustomerPhone] = useState('');
   const [customerData, setCustomerData] = useState({
     name: '',
     phone: '',
     address: '',
+    addressReference: '',
     neighborhood: '',
-    notes: '',
-    paymentMethod: 'dinheiro',
-    changeAmount: 0
+    latitude: null,
+    longitude: null,
   });
-  
-  const [selectedZone, setSelectedZone] = useState<any>(null);
-  const [deliveryFee, setDeliveryFee] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
-  
-  const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
+  const [deliveryType, setDeliveryType] = useState('delivery');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [notes, setNotes] = useState('');
+  const [neighborhoods, setNeighborhoods] = useState<string[]>([]);
+  const { user } = useAuth();
 
-  // Buscar dados do cliente quando o telefone for preenchido
   useEffect(() => {
-    const searchCustomer = async () => {
-      if (customerData.phone.length >= 10) {
-        const customer = await lookupCustomer(customerData.phone);
-        if (customer) {
-          setCustomerData(prev => ({
-            ...prev,
-            name: customer.name || prev.name,
-            address: customer.address || prev.address,
-            neighborhood: customer.neighborhood || prev.neighborhood
-          }));
+    const fetchNeighborhoods = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('delivery_neighborhoods')
+          .select('name')
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('Erro ao buscar bairros:', error);
+          toast({
+            title: "Erro",
+            description: "Não foi possível carregar os bairros de entrega.",
+            variant: "destructive"
+          });
+          return;
         }
+
+        const neighborhoodNames = data.map(item => item.name);
+        setNeighborhoods(neighborhoodNames);
+      } catch (error) {
+        console.error('Erro ao buscar bairros:', error);
+        toast({
+          title: "Erro",
+          description: "Ocorreu um erro ao carregar os bairros de entrega.",
+          variant: "destructive"
+        });
       }
     };
 
-    const timeoutId = setTimeout(searchCustomer, 500);
-    return () => clearTimeout(timeoutId);
-  }, [customerData.phone, lookupCustomer]);
+    fetchNeighborhoods();
+  }, [userId, user, toast]);
 
-  // Calcular taxa de entrega quando zona for selecionada
-  useEffect(() => {
-    if (selectedZone) {
-      setDeliveryFee(Number(selectedZone.delivery_fee) || 0);
-    }
-  }, [selectedZone]);
+  const handlePhoneChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const phone = e.target.value;
+    setCustomerPhone(phone);
 
-  const handleInputChange = (field: string, value: string) => {
-    setCustomerData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleZoneChange = (zoneId: string) => {
-    const zone = deliveryZones.find(z => z.id === zoneId);
-    setSelectedZone(zone);
-  };
-
-  const handleLocationSelect = (locationData: any) => {
-    setLocation({ lat: locationData.lat, lng: locationData.lng });
-    if (locationData.address) {
-      setCustomerData(prev => ({
-        ...prev,
-        address: locationData.address
-      }));
+    if (phone.length >= 10) {
+      const customer = await lookupCustomer(phone);
+      if (customer) {
+        setCustomerData({
+          ...customerData,
+          ...customer,
+          phone: customer.phone || phone
+        });
+      }
     }
   };
 
-  const validateForm = () => {
-    const errors = [];
-    
-    if (!customerData.name.trim()) errors.push('Nome é obrigatório');
-    if (!customerData.phone.trim()) errors.push('Telefone é obrigatório');
-    if (!customerData.address.trim()) errors.push('Endereço é obrigatório');
-    if (!selectedZone) errors.push('Selecione uma área de entrega');
-    
-    return errors;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const orderData = {
+      customer_name: customerData.name,
+      customer_phone: customerData.phone,
+      customer_address: customerData.address,
+      customer_address_reference: customerData.addressReference,
+      customer_neighborhood: customerData.neighborhood,
+      latitude: customerData.latitude,
+      longitude: customerData.longitude,
+      delivery_type: deliveryType,
+      payment_method: paymentMethod,
+      notes: notes,
+      items: cartItems,
+      total: total,
+      user_id: userId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    onOrderSubmit(orderData);
+    onClose();
+    toast({
+      title: "Pedido enviado!",
+      description: "O pedido foi enviado com sucesso.",
+    });
   };
-
-  const handleSubmit = async () => {
-    const errors = validateForm();
-    if (errors.length > 0) {
-      alert('Por favor, preencha todos os campos obrigatórios:\n' + errors.join('\n'));
-      return;
-    }
-
-    setIsLoading(true);
-    
-    try {
-      const orderData = {
-        user_id: userId,
-        customer_name: customerData.name,
-        customer_phone: customerData.phone,
-        customer_address: customerData.address,
-        customer_neighborhood: customerData.neighborhood,
-        delivery_zone_id: selectedZone.id,
-        delivery_fee: deliveryFee,
-        payment_method: customerData.paymentMethod,
-        change_amount: customerData.paymentMethod === 'dinheiro' ? customerData.changeAmount : null,
-        delivery_instructions: customerData.notes,
-        total: total + deliveryFee,
-        order_type: 'delivery',
-        status: 'pending',
-        customer_latitude: location?.lat || null,
-        customer_longitude: location?.lng || null,
-        items: cart.map(item => ({
-          product_id: item.product.id,
-          product_name: item.product.name,
-          quantity: item.quantity,
-          unit_price: item.variationPrice || item.product.price,
-          variations: item.variations || [],
-          notes: item.notes || '',
-          total: (item.variationPrice || item.product.price) * item.quantity
-        }))
-      };
-
-      await onPlaceOrder(orderData);
-    } catch (error) {
-      console.error('Erro ao finalizar pedido:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const finalTotal = total + deliveryFee;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <h2 className="text-2xl font-bold mb-6">Finalizar Pedido</h2>
-          
-          {/* Dados do Cliente */}
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Dados do Cliente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="phone">Telefone *</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={customerData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    placeholder="(11) 99999-9999"
-                    disabled={isLookingUp}
-                  />
-                  {isLookingUp && (
-                    <p className="text-sm text-blue-600 mt-1">
-                      Buscando dados do cliente...
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="name">Nome Completo *</Label>
-                  <Input
-                    id="name"
-                    value={customerData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    placeholder="Digite seu nome"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Finalizar Pedido</DialogTitle>
+        </DialogHeader>
 
-          {/* Entrega */}
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Truck className="h-5 w-5" />
-                Dados de Entrega
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="zone">Área de Entrega *</Label>
-                <Select onValueChange={handleZoneChange}>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Customer Info Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-semibold">Informações do Cliente</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer-phone">Telefone</Label>
+                <Input
+                  id="customer-phone"
+                  placeholder="(00) 00000-0000"
+                  value={customerPhone}
+                  onChange={handlePhoneChange}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer-name">Nome</Label>
+                <Input
+                  id="customer-name"
+                  placeholder="Nome do cliente"
+                  value={customerData.name}
+                  onChange={(e) => setCustomerData(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery Type Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-semibold">Tipo de Entrega</Label>
+            <Select value={deliveryType} onValueChange={setDeliveryType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o tipo de entrega" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="delivery">🛵 Entrega</SelectItem>
+                <SelectItem value="pickup">Retirada</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Delivery Address Section */}
+          {deliveryType === 'delivery' && (
+            <div className="space-y-4">
+              <Label className="text-base font-semibold">Endereço de Entrega</Label>
+              
+              {/* Neighborhood Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="neighborhood">Bairro de Entrega</Label>
+                <Select value={customerData.neighborhood} onValueChange={(value) => 
+                  setCustomerData(prev => ({ ...prev, neighborhood: value }))
+                }>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione sua área de entrega" />
+                    <SelectValue placeholder="Selecione seu bairro" />
                   </SelectTrigger>
                   <SelectContent>
-                    {deliveryZones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        {zone.name} - R$ {Number(zone.delivery_fee).toFixed(2)} 
-                        {zone.minimum_order > 0 && ` (Mín. R$ ${Number(zone.minimum_order).toFixed(2)})`}
+                    {neighborhoods.map(neighborhood => (
+                      <SelectItem key={neighborhood} value={neighborhood}>
+                        {neighborhood}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div>
-                <Label htmlFor="address">Endereço Completo *</Label>
-                <Textarea
-                  id="address"
-                  value={customerData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="Rua, número, complemento, bairro"
-                  rows={3}
-                />
-              </div>
-
-              {/* Campo de Localização Movido para Baixo */}
-              <div>
+              {/* Location Input - Moved below neighborhood */}
+              <div className="space-y-2">
                 <Label>Localização no Mapa</Label>
                 <CustomerLocationInput
-                  onLocationSelect={handleLocationSelect}
+                  onLocationSelect={(location) => {
+                    setCustomerData(prev => ({
+                      ...prev,
+                      address: location.address,
+                      latitude: location.lat,
+                      longitude: location.lng
+                    }));
+                  }}
                   initialAddress={customerData.address}
                 />
-                <p className="text-sm text-orange-600 mt-2 flex items-center gap-1">
+                <p className="text-sm text-green-600 flex items-center gap-1 mt-1">
                   🛵 Facilite a vida do nosso motoboy!
                 </p>
               </div>
 
-              <div>
-                <Label htmlFor="neighborhood">Bairro</Label>
-                <Input
-                  id="neighborhood"
-                  value={customerData.neighborhood}
-                  onChange={(e) => handleInputChange('neighborhood', e.target.value)}
-                  placeholder="Nome do bairro"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="notes">Observações para Entrega</Label>
-                <Textarea
-                  id="notes"
-                  value={customerData.notes}
-                  onChange={(e) => handleInputChange('notes', e.target.value)}
-                  placeholder="Ponto de referência, observações especiais..."
-                  rows={2}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pagamento */}
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Forma de Pagamento
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Select 
-                value={customerData.paymentMethod} 
-                onValueChange={(value) => handleInputChange('paymentMethod', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="cartao-debito">Cartão de Débito</SelectItem>
-                  <SelectItem value="cartao-credito">Cartão de Crédito</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {customerData.paymentMethod === 'dinheiro' && (
-                <div>
-                  <Label htmlFor="change">Troco para quanto?</Label>
+              {/* Address Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="address">Endereço Completo</Label>
                   <Input
-                    id="change"
-                    type="number"
-                    step="0.01"
-                    value={customerData.changeAmount || ''}
-                    onChange={(e) => handleInputChange('changeAmount', e.target.value)}
-                    placeholder="0.00"
+                    id="address"
+                    value={customerData.address}
+                    onChange={(e) => setCustomerData(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder="Rua, número, complemento"
+                    required
                   />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Resumo do Pedido */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Resumo do Pedido</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>R$ {total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Taxa de Entrega:</span>
-                  <span>R$ {deliveryFee.toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-2">
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span>R$ {finalTotal.toFixed(2)}</span>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address-reference">Ponto de Referência</Label>
+                  <Input
+                    id="address-reference"
+                    value={customerData.addressReference}
+                    onChange={(e) => setCustomerData(prev => ({ ...prev, addressReference: e.target.value }))}
+                    placeholder="Ex: Próximo ao mercado"
+                  />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          )}
 
-          {/* Botões */}
-          <div className="flex gap-3">
-            <Button 
-              variant="outline" 
-              onClick={onClose}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              Voltar
-            </Button>
-            <Button 
-              onClick={handleSubmit}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Finalizando...' : `Finalizar Pedido - R$ ${finalTotal.toFixed(2)}`}
-            </Button>
+          {/* Payment Method Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-semibold">Forma de Pagamento</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Dinheiro</SelectItem>
+                <SelectItem value="card">Cartão</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-      </div>
-    </div>
+
+          {/* Notes Section */}
+          <div className="space-y-2">
+            <Label htmlFor="notes">Observações</Label>
+            <Textarea
+              id="notes"
+              placeholder="Alguma observação para o pedido?"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          {/* Order Summary */}
+          <div className="space-y-4">
+            <Label className="text-base font-semibold">Resumo do Pedido</Label>
+            <div className="rounded-md border">
+              {cartItems.map((item) => (
+                <div key={item.id} className="px-4 py-2 border-b last:border-b-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{item.name}</span>
+                    <span>
+                      {item.quantity} x R$ {item.price.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className="px-4 py-2 font-semibold">
+                Total: R$ {total.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <Button type="submit" className="w-full">
+            Finalizar Pedido
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 

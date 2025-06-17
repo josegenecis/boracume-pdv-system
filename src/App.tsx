@@ -5,8 +5,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import RouteGuard from '@/components/auth/RouteGuard';
-import { GlobalNotificationSystem } from '@/components/notifications/GlobalNotificationSystem';
-import { PerformanceMonitor } from '@/components/performance/PerformanceMonitor';
+import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
+import PerformanceMonitor from '@/components/performance/PerformanceMonitor';
 
 // Pages
 import Index from '@/pages/Index';

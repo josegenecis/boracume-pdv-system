@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Copy, ExternalLink, QrCode } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { QRCodeGenerator } from '@/components/products/QRCodeGenerator';
+import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 
 const MenuLinkGenerator = () => {
   const { user } = useAuth();
