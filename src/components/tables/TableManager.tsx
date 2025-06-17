@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -282,10 +281,13 @@ const TableManager = () => {
       {selectedTable && (
         <TableDetailsModal
           table={selectedTable}
-          account={getTableAccount(selectedTable.id)}
           isOpen={!!selectedTable}
           onClose={() => setSelectedTable(null)}
-          onAccountUpdate={fetchTableAccounts}
+          onRefresh={() => {
+            fetchTables();
+            fetchTableAccounts();
+          }}
+          availableTables={tables}
         />
       )}
     </div>
