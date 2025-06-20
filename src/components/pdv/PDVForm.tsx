@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +23,7 @@ const PDVForm = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [orderType, setOrderType] = useState('no_local'); // novo campo
   const [showProductModal, setShowProductModal] = useState(false);
   const [showTableModal, setShowTableModal] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -98,10 +98,8 @@ const PDVForm = () => {
     const phone = e.target.value;
     setCustomerPhone(phone);
   
-    // Limpa o nome do cliente ao alterar o telefone
     setCustomerName('');
   
-    // Apenas busca o cliente se o número tiver pelo menos 10 dígitos
     if (phone.length >= 10) {
       setIsLookingUp(true);
       try {
@@ -109,7 +107,7 @@ const PDVForm = () => {
         if (customer) {
           setCustomerName(customer.name);
         } else {
-          setCustomerName(''); // Garante que o nome seja limpo se não encontrar
+          setCustomerName('');
         }
       } finally {
         setIsLookingUp(false);
@@ -179,7 +177,7 @@ const PDVForm = () => {
       const { data, error } = await supabase.from('orders').insert([
         {
           user_id: user?.id,
-          customer_name: customerName || 'Cliente Balcão',
+          customer_name: customerName || 'Cliente',
           customer_phone: customerPhone || 'Não informado',
           items: cartItems.map(item => ({
             id: item.id,
@@ -191,8 +189,8 @@ const PDVForm = () => {
           total: total,
           status: 'pending',
           payment_method: 'dinheiro',
-          delivery_type: 'balcao',
-          customer_address: 'Não informado',
+          delivery_type: orderType,
+          customer_address: orderType === 'no_local' ? 'Consumo Local' : 'Não informado',
         }
       ]).select();
 
@@ -285,7 +283,7 @@ const PDVForm = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-      {/* Products Selection - Smaller cards */}
+      {/* Products Selection */}
       <div className="lg:col-span-2 space-y-4">
         <Card className="h-full">
           <CardHeader className="pb-4">
@@ -327,14 +325,14 @@ const PDVForm = () => {
 
           <CardContent className="p-4">
             <ScrollArea className="h-[400px]">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                 {filteredProducts.map((product) => (
                   <Card 
                     key={product.id} 
-                    className="cursor-pointer hover:shadow-md transition-shadow h-32"
+                    className="cursor-pointer hover:shadow-md transition-shadow h-20"
                     onClick={() => handleProductSelect(product)}
                   >
-                    <div className="relative h-16">
+                    <div className="relative h-12">
                       {product.image_url ? (
                         <img
                           src={product.image_url}
@@ -353,11 +351,11 @@ const PDVForm = () => {
                       )}
                     </div>
                     
-                    <CardContent className="p-2">
-                      <h3 className="font-medium text-xs leading-tight line-clamp-2 mb-1">
+                    <CardContent className="p-1">
+                      <h3 className="font-medium text-xs leading-tight line-clamp-1 mb-1">
                         {product.name}
                       </h3>
-                      <p className="text-sm font-bold text-green-600">
+                      <p className="text-xs font-bold text-green-600">
                         R$ {Number(product.price).toFixed(2)}
                       </p>
                     </CardContent>
@@ -369,7 +367,7 @@ const PDVForm = () => {
         </Card>
       </div>
 
-      {/* Cart and Customer Info - Fixed height and scrollable */}
+      {/* Cart and Customer Info */}
       <div className="space-y-4">
         <Card className="h-full">
           <CardHeader className="pb-4">
@@ -380,41 +378,53 @@ const PDVForm = () => {
           </CardHeader>
 
           <CardContent className="p-4 flex flex-col h-full">
-            {/* Customer Info - Fixed at top */}
+            {/* Customer Info */}
             <div className="space-y-3 mb-4">
-              <div className="space-y-2">
-                <Label htmlFor="customer-phone" className="text-sm font-medium">
-                  Telefone do Cliente
-                </Label>
-                <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="customer-phone" className="text-sm font-medium">
+                    Telefone
+                  </Label>
                   <Input
                     id="customer-phone"
                     placeholder="(00) 00000-0000"
                     value={customerPhone}
                     onChange={handlePhoneChange}
-                    className="flex-1"
+                    className="text-xs"
                   />
-                  {isLookingUp && (
-                    <div className="flex items-center">
-                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
-                    </div>
-                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customer-name" className="text-sm font-medium">
+                    Nome
+                  </Label>
+                  <Input
+                    id="customer-name"
+                    placeholder="Nome do cliente"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="text-xs"
+                  />
                 </div>
               </div>
 
-              {customerName && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Cliente</Label>
-                  <p className="text-sm p-2 bg-gray-50 rounded border">
-                    {customerName}
-                  </p>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Tipo de Pedido</Label>
+                <Select value={orderType} onValueChange={setOrderType}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no_local">🍽️ No Local</SelectItem>
+                    <SelectItem value="pickup">📦 Retirada</SelectItem>
+                    <SelectItem value="delivery">🛵 Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <Separator className="my-4" />
 
-            {/* Cart Items - Scrollable middle section */}
+            {/* Cart Items */}
             <div className="flex-1 min-h-0">
               <Label className="text-sm font-medium mb-2 block">Itens do Pedido</Label>
               <ScrollArea className="h-full">
@@ -465,7 +475,7 @@ const PDVForm = () => {
               </ScrollArea>
             </div>
 
-            {/* Total and Actions - Fixed at bottom */}
+            {/* Total and Actions */}
             <div className="mt-4 pt-4 border-t space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold">Total:</span>
@@ -485,16 +495,18 @@ const PDVForm = () => {
                   Finalizar Venda
                 </Button>
                 
-                <Button 
-                  onClick={() => setShowTableModal(true)}
-                  disabled={cartItems.length === 0}
-                  variant="outline"
-                  className="w-full"
-                  size="lg"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Adicionar à Mesa
-                </Button>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button 
+                    onClick={() => setShowTableModal(true)}
+                    disabled={cartItems.length === 0}
+                    variant="outline"
+                    className="w-full"
+                    size="sm"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Adicionar à Mesa
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -507,39 +519,6 @@ const PDVForm = () => {
         onClose={() => setShowProductModal(false)}
         onAddToCart={addToCart}
       />
-
-      {/* Table Selection Modal */}
-      {/*
-      <TableSelectionModal
-        isOpen={showTableModal}
-        onClose={() => setShowTableModal(false)}
-        onTableSelect={handleAssignTable}
-      />
-      */}
-
-      {/* Assign to Table Modal */}
-      {/*
-      <Dialog open={showAssignTableModal} onOpenChange={setShowAssignTableModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar Mesa</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p>
-              Deseja adicionar o pedido à mesa <strong>{selectedTable?.number}</strong>?
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowAssignTableModal(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={assignCartToTable}>
-                Confirmar
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      */}
     </div>
   );
 };
