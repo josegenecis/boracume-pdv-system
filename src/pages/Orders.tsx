@@ -117,6 +117,31 @@ const Orders = () => {
     setShowDetailsModal(true);
   };
 
+  const handleBulkAction = async (orderIds, action) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: action })
+        .in('id', orderIds);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Ação realizada com sucesso',
+        description: `${orderIds.length} pedidos foram atualizados.`,
+      });
+
+      fetchOrders();
+    } catch (error) {
+      console.error('Erro na ação em massa:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível realizar a ação em massa.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const getStatusCounts = () => {
     return {
       all: orders.length,
@@ -147,11 +172,9 @@ const Orders = () => {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
           <OrdersBulkActionButton
-            selectedOrders={selectedOrders}
-            onAction={() => {
-              setSelectedOrders([]);
-              fetchOrders();
-            }}
+            orderIds={selectedOrders}
+            action="accept_all"
+            onBulkAction={handleBulkAction}
           />
         </div>
 

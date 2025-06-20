@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -197,11 +196,6 @@ const MenuDigital = () => {
         } catch (customerError) {
           console.error('Erro na criação de cliente:', customerError);
         }
-      }
-
-      // Adicionar customer_id ao pedido se cliente foi criado/encontrado
-      if (customerId) {
-        finalOrderData.customer_id = customerId;
       }
 
       console.log('💾 Salvando pedido no banco...');
