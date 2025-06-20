@@ -105,7 +105,23 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
       if (existingAccount) {
         // Atualizar conta existente
-        const updatedItems = [...existingAccount.items, newItem];
+        let currentItems = [];
+        try {
+          // Converter Json para array de forma segura
+          if (existingAccount.items && typeof existingAccount.items === 'object') {
+            if (Array.isArray(existingAccount.items)) {
+              currentItems = existingAccount.items;
+            } else {
+              // Se items é um objeto Json, tentar converter para array
+              currentItems = Object.values(existingAccount.items);
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao processar items existentes:', e);
+          currentItems = [];
+        }
+
+        const updatedItems = [...currentItems, newItem];
         const updatedTotal = existingAccount.total + totalPrice;
 
         const { error: updateError } = await supabase

@@ -304,7 +304,7 @@ const PDVForm = () => {
               {filteredProducts.map((product) => (
                 <Card 
                   key={product.id} 
-                  className="cursor-pointer hover:shadow-md transition-shadow h-36"
+                  className="cursor-pointer hover:shadow-md transition-shadow h-40"
                   onClick={() => handleProductClick(product)}
                 >
                   <CardContent className="p-3 h-full flex flex-col">
@@ -312,7 +312,7 @@ const PDVForm = () => {
                       <img
                         src={product.image_url}
                         alt={product.name}
-                        className="w-full h-16 object-cover rounded mb-2"
+                        className="w-full h-20 object-cover rounded mb-2"
                       />
                     )}
                     <div className="flex-1 flex flex-col justify-between">
