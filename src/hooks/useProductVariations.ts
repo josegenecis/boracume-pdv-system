@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useDigitalCart } from '@/hooks/useDigitalCart';
+import { useSimpleCart } from '@/hooks/useSimpleCart';
 
 interface Product {
   id: string;
@@ -27,7 +27,7 @@ interface ProductVariation {
 
 export const useProductVariations = () => {
   const { toast } = useToast();
-  const { addToCart } = useDigitalCart();
+  const { addToCart } = useSimpleCart();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showVariationModal, setShowVariationModal] = useState(false);
@@ -186,7 +186,7 @@ export const useProductVariations = () => {
         });
       } else {
         console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
-        addToCart(product, 1, [], '');
+        addToCart(product);
         toast({
           title: "Produto adicionado!",
           description: `${product.name} foi adicionado ao carrinho.`,
@@ -195,7 +195,7 @@ export const useProductVariations = () => {
     } catch (error) {
       console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
       // Em caso de erro, adicionar sem variações
-      addToCart(product, 1, [], '');
+      addToCart(product);
       toast({
         title: "Produto adicionado!",
         description: `${product.name} foi adicionado ao carrinho.`,
@@ -211,7 +211,7 @@ export const useProductVariations = () => {
       notes
     });
     
-    addToCart(product, quantity, selectedVariations, notes);
+    addToCart(product, quantity, [], notes);
     setShowVariationModal(false);
     setSelectedProduct(null);
     setProductVariations([]);
