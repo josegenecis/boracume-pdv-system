@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
+import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { supabase } from '@/integrations/supabase/client';
-import { MapPin, Phone, User, CreditCard, Clock } from 'lucide-react';
+import CustomerLocationInput from '@/components/customer/CustomerLocationInput';
+import { MapPin, Phone, User, CreditCard, Clock, Search } from 'lucide-react';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -29,13 +31,23 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   userId
 }) => {
   const { toast } = useToast();
+  const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
   const [loading, setLoading] = useState(false);
   const [deliveryZones, setDeliveryZones] = useState([]);
+  const [customerLocationData, setCustomerLocationData] = useState({
+    latitude: null as number | null,
+    longitude: null as number | null,
+    accuracy: null as number | null,
+    googleMapsLink: '' as string
+  });
+  
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_phone: '',
     customer_address: '',
-    delivery_type: 'delivery',
+    customer_address_reference: '',
+    customer_neighborhood: '',
+    order_type: 'delivery', // Corrigido de delivery_type para order_type
     payment_method: 'cash',
     notes: '',
     delivery_zone_id: '',
@@ -47,6 +59,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       fetchDeliveryZones();
     }
   }, [isOpen, userId]);
+
+  // Buscar cliente automaticamente quando telefone for digitado
+  useEffect(() => {
+    const searchCustomer = async () => {
+      if (formData.customer_phone.length >= 10) {
+        console.log('🔍 Buscando cliente pelo telefone:', formData.customer_phone);
+        const customer = await lookupCustomer(formData.customer_phone);
+        
+        if (customer) {
+          console.log('✅ Cliente encontrado:', customer);
+          setFormData(prev => ({
+            ...prev,
+            customer_name: customer.name,
+            customer_address: customer.address,
+            customer_neighborhood: customer.neighborhood
+          }));
+          
+          toast({
+            title: "Cliente encontrado!",
+            description: `Dados de ${customer.name} foram preenchidos automaticamente.`,
+          });
+        } else {
+          console.log('ℹ️ Cliente não encontrado');
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(searchCustomer, 500);
+    return () => clearTimeout(timeoutId);
+  }, [formData.customer_phone, lookupCustomer]);
 
   const fetchDeliveryZones = async () => {
     try {
@@ -72,6 +114,27 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }));
   };
 
+  const handleLocationSelect = (address: string, lat?: number, lng?: number) => {
+    console.log('📍 Localização selecionada:', { address, lat, lng });
+    
+    setFormData(prev => ({
+      ...prev,
+      customer_address: address
+    }));
+
+    if (lat && lng) {
+      const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+      setCustomerLocationData({
+        latitude: lat,
+        longitude: lng,
+        accuracy: null,
+        googleMapsLink
+      });
+      
+      console.log('🗺️ Link do Google Maps gerado:', googleMapsLink);
+    }
+  };
+
   const validateForm = () => {
     const errors = [];
 
@@ -83,7 +146,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       errors.push('Telefone é obrigatório');
     }
 
-    if (formData.delivery_type === 'delivery') {
+    if (formData.order_type === 'delivery') {
       if (!formData.customer_address.trim()) {
         errors.push('Endereço é obrigatório para entrega');
       }
@@ -122,13 +185,21 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         user_id: userId,
         customer_name: formData.customer_name.trim(),
         customer_phone: formData.customer_phone.trim(),
-        customer_address: formData.delivery_type === 'delivery' ? formData.customer_address.trim() : 'Retirada no Local',
-        delivery_type: formData.delivery_type,
+        customer_address: formData.order_type === 'delivery' ? formData.customer_address.trim() : 'Retirada no Local',
+        customer_address_reference: formData.customer_address_reference.trim() || null,
+        customer_neighborhood: formData.customer_neighborhood.trim() || null,
+        customer_latitude: customerLocationData.latitude,
+        customer_longitude: customerLocationData.longitude,
+        customer_location_accuracy: customerLocationData.accuracy,
+        google_maps_link: customerLocationData.googleMapsLink || null,
+        order_type: formData.order_type, // Corrigido de delivery_type para order_type
         payment_method: formData.payment_method,
         notes: formData.notes.trim(),
-        delivery_fee: formData.delivery_type === 'delivery' ? formData.delivery_fee : 0,
-        delivery_zone_id: formData.delivery_type === 'delivery' ? formData.delivery_zone_id : null
+        delivery_fee: formData.order_type === 'delivery' ? formData.delivery_fee : 0,
+        delivery_zone_id: formData.order_type === 'delivery' ? formData.delivery_zone_id : null
       };
+
+      console.log('📋 Dados do pedido para envio:', orderData);
 
       await onOrderSubmit(orderData);
       
@@ -137,11 +208,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customer_name: '',
         customer_phone: '',
         customer_address: '',
-        delivery_type: 'delivery',
+        customer_address_reference: '',
+        customer_neighborhood: '',
+        order_type: 'delivery',
         payment_method: 'cash',
         notes: '',
         delivery_zone_id: '',
         delivery_fee: 0
+      });
+
+      setCustomerLocationData({
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        googleMapsLink: ''
       });
       
     } catch (error) {
@@ -152,7 +232,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
-  const finalTotal = total + (formData.delivery_type === 'delivery' ? formData.delivery_fee : 0);
+  const finalTotal = total + (formData.order_type === 'delivery' ? formData.delivery_fee : 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -181,7 +261,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <span>Subtotal:</span>
                 <span>R$ {total.toFixed(2)}</span>
               </div>
-              {formData.delivery_type === 'delivery' && formData.delivery_fee > 0 && (
+              {formData.order_type === 'delivery' && formData.delivery_fee > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>Taxa de entrega:</span>
                   <span>R$ {formData.delivery_fee.toFixed(2)}</span>
@@ -198,8 +278,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div className="space-y-3">
             <Label className="text-base font-medium">Tipo de Entrega</Label>
             <RadioGroup
-              value={formData.delivery_type}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, delivery_type: value }))}
+              value={formData.order_type}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, order_type: value }))}
               className="flex gap-6"
             >
               <div className="flex items-center space-x-2">
@@ -232,7 +312,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="space-y-2">
               <Label htmlFor="customer_phone" className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                Telefone *
+                Telefone * {isLookingUp && <Search className="h-4 w-4 animate-spin" />}
               </Label>
               <Input
                 id="customer_phone"
@@ -241,24 +321,46 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 placeholder="(11) 99999-9999"
                 required
               />
+              <p className="text-xs text-gray-500">
+                Digite o telefone para buscar dados automaticamente
+              </p>
             </div>
           </div>
 
           {/* Endereço (apenas para entrega) */}
-          {formData.delivery_type === 'delivery' && (
+          {formData.order_type === 'delivery' && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="customer_address" className="flex items-center gap-2">
+                <Label className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Endereço Completo *
+                  Endereço de Entrega *
                 </Label>
-                <Input
-                  id="customer_address"
-                  value={formData.customer_address}
-                  onChange={(e) => setFormData(prev => ({ ...prev, customer_address: e.target.value }))}
-                  placeholder="Rua, número, bairro"
-                  required={formData.delivery_type === 'delivery'}
+                <CustomerLocationInput
+                  onLocationSelect={handleLocationSelect}
+                  defaultAddress={formData.customer_address}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customer_address_reference">Ponto de Referência</Label>
+                  <Input
+                    id="customer_address_reference"
+                    value={formData.customer_address_reference}
+                    onChange={(e) => setFormData(prev => ({ ...prev, customer_address_reference: e.target.value }))}
+                    placeholder="Ex: Próximo ao mercado"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="customer_neighborhood">Bairro</Label>
+                  <Input
+                    id="customer_neighborhood"
+                    value={formData.customer_neighborhood}
+                    onChange={(e) => setFormData(prev => ({ ...prev, customer_neighborhood: e.target.value }))}
+                    placeholder="Nome do bairro"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -266,7 +368,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Select
                   value={formData.delivery_zone_id}
                   onValueChange={handleDeliveryZoneChange}
-                  required={formData.delivery_type === 'delivery'}
+                  required={formData.order_type === 'delivery'}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a zona" />
@@ -312,6 +414,19 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               rows={3}
             />
           </div>
+
+          {/* Informações de Localização */}
+          {customerLocationData.latitude && customerLocationData.longitude && (
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-blue-700">
+                <MapPin className="h-4 w-4" />
+                <span>Localização capturada com sucesso!</span>
+              </div>
+              <p className="text-xs text-blue-600 mt-1">
+                Coordenadas: {customerLocationData.latitude.toFixed(6)}, {customerLocationData.longitude.toFixed(6)}
+              </p>
+            </div>
+          )}
 
           {/* Botões */}
           <div className="flex gap-3 pt-4">
