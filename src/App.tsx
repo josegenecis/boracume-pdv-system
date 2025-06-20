@@ -15,7 +15,7 @@ import Orders from '@/pages/Orders';
 import Products from '@/pages/Products';
 import Kitchen from '@/pages/Kitchen';
 import Configuracoes from '@/pages/Configuracoes';
-import MenuDigital from '@/pages/MenuDigital';
+import DigitalMenu from '@/pages/DigitalMenu'; // Nova importação
 import Mesas from '@/pages/Mesas';
 import PDV from '@/pages/PDV';
 import Financeiro from '@/pages/Financeiro';
@@ -41,8 +41,8 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               
-              {/* Cardápio Digital - Rota pública */}
-              <Route path="/menu/:userId" element={<MenuDigital />} />
+              {/* Cardápio Digital - Nova Rota */}
+              <Route path="/cardapio/:userId" element={<DigitalMenu />} />
               
               {/* Protected routes */}
               <Route path="/dashboard" element={
