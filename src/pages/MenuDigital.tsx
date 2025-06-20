@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -146,16 +145,16 @@ const MenuDigital = () => {
 
       if (!customerId) {
         try {
-          // Criar novo cliente com TODOS os dados
+          // Criar novo cliente com dados básicos
           const customerData = {
             user_id: userId,
             name: orderData.customer_name,
             phone: orderData.customer_phone,
-            address: orderData.customer_address,
+            address: orderData.customer_address || '',
             neighborhood: orderData.customer_neighborhood || ''
           };
 
-          console.log('👤 Criando novo cliente com dados completos:', customerData);
+          console.log('👤 Criando novo cliente:', customerData);
 
           const { data: newCustomer, error: customerError } = await supabase
             .from('customers')
@@ -165,7 +164,6 @@ const MenuDigital = () => {
 
           if (customerError) {
             console.error('Erro ao criar cliente:', customerError);
-            // Continuar sem cliente se falhar - não é crítico
           } else {
             customerId = newCustomer.id;
             console.log('✅ Novo cliente criado:', customerId);
@@ -175,7 +173,7 @@ const MenuDigital = () => {
         }
       }
 
-      // Preparar dados do pedido para o banco (com TODOS os campos necessários)
+      // Preparar dados do pedido para o banco (corrigindo o campo notes)
       const finalOrderData = {
         user_id: userId,
         customer_name: orderData.customer_name.trim(),
@@ -189,18 +187,18 @@ const MenuDigital = () => {
         google_maps_link: orderData.google_maps_link || null,
         order_type: orderData.order_type || 'delivery',
         payment_method: orderData.payment_method || 'cash',
-        notes: orderData.notes?.trim() || '',
+        delivery_instructions: orderData.notes?.trim() || '', // CORRIGIDO: usar delivery_instructions em vez de notes
         items: formattedItems,
         total: getCartTotal(),
         delivery_fee: orderData.order_type === 'delivery' ? (orderData.delivery_fee || 0) : 0,
         delivery_zone_id: orderData.order_type === 'delivery' ? orderData.delivery_zone_id : null,
         status: 'pending',
         order_number: orderNumber,
-        customer_id: customerId // Incluir customer_id se existir
+        customer_id: customerId
       };
 
-      console.log('📝 Dados finais do pedido (COMPLETOS):', finalOrderData);
-      console.log('💾 Salvando pedido no banco com dados COMPLETOS...');
+      console.log('📝 Dados finais do pedido (com delivery_instructions):', finalOrderData);
+      console.log('💾 Salvando pedido no banco...');
 
       const { data, error } = await supabase
         .from('orders')
