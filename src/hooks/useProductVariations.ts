@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
+import { useDigitalCart } from '@/hooks/useDigitalCart';
 
 interface Product {
   id: string;
@@ -27,7 +27,7 @@ interface ProductVariation {
 
 export const useProductVariations = () => {
   const { toast } = useToast();
-  const { addToCart } = useDigitalMenuCart();
+  const { addToCart } = useDigitalCart();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [showVariationModal, setShowVariationModal] = useState(false);
