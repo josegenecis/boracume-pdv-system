@@ -52,22 +52,22 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
 }) => {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return 'bg-red-500';
-      case 'high': return 'bg-orange-500';
-      case 'normal': return 'bg-blue-500';
-      case 'low': return 'bg-gray-500';
-      default: return 'bg-blue-500';
+      case 'urgent': return 'border-l-red-500';
+      case 'high': return 'border-l-orange-500';
+      case 'normal': return 'border-l-blue-500';
+      case 'low': return 'border-l-gray-500';
+      default: return 'border-l-blue-500';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-500';
-      case 'preparing': return 'bg-blue-500';
-      case 'ready': return 'bg-green-500';
-      case 'completed': return 'bg-gray-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'pending': return 'bg-yellow-500 text-white';
+      case 'preparing': return 'bg-blue-500 text-white';
+      case 'ready': return 'bg-green-500 text-white';
+      case 'completed': return 'bg-gray-500 text-white';
+      case 'cancelled': return 'bg-red-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
@@ -82,7 +82,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
             <p className="text-sm text-muted-foreground">{order.customer_name}</p>
           </div>
           <div className="text-right">
-            <Badge className={`${getStatusColor(order.status)} text-white`}>
+            <Badge className={getStatusColor(order.status)}>
               {order.status === 'pending' && 'Pendente'}
               {order.status === 'preparing' && 'Preparando'}
               {order.status === 'ready' && 'Pronto'}
@@ -107,13 +107,20 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
       <CardContent>
         <div className="space-y-2 mb-4">
           {order.items.map((item: any, index: number) => (
-            <div key={index} className="flex justify-between items-center">
-              <span className="font-medium">{item.quantity}x {item.name}</span>
-              {item.variations && item.variations.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  {item.variations.join(', ')}
-                </span>
-              )}
+            <div key={index} className="flex justify-between items-start">
+              <div className="flex-1">
+                <span className="font-medium">{item.quantity}x {item.name}</span>
+                {item.variations && Array.isArray(item.variations) && item.variations.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {item.variations.join(', ')}
+                  </div>
+                )}
+                {item.notes && item.notes.trim() && (
+                  <div className="text-xs text-muted-foreground italic mt-1">
+                    Obs: {item.notes}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

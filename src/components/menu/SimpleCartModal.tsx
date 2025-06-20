@@ -174,8 +174,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         order_type: 'delivery'
       };
 
-      console.log('📦 Enviando pedido:', orderData);
-
       await onPlaceOrder(orderData);
       
       // Reset form
@@ -195,7 +193,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       
     } catch (error) {
       console.error('❌ Erro ao finalizar pedido:', error);
-      // O erro já foi tratado no componente pai
     } finally {
       setIsSubmitting(false);
     }
