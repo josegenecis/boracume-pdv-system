@@ -47,7 +47,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     customer_address: '',
     customer_address_reference: '',
     customer_neighborhood: '',
-    order_type: 'delivery', // Corrigido de delivery_type para order_type
+    order_type: 'delivery',
     payment_method: 'cash',
     notes: '',
     delivery_zone_id: '',
@@ -174,6 +174,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🚀 Iniciando submissão do pedido...');
+    console.log('📋 Dados do formulário:', formData);
+    console.log('📍 Dados de localização:', customerLocationData);
+    
     if (!validateForm()) {
       return;
     }
@@ -192,18 +196,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customer_longitude: customerLocationData.longitude,
         customer_location_accuracy: customerLocationData.accuracy,
         google_maps_link: customerLocationData.googleMapsLink || null,
-        order_type: formData.order_type, // Corrigido de delivery_type para order_type
+        order_type: formData.order_type,
         payment_method: formData.payment_method,
         notes: formData.notes.trim(),
         delivery_fee: formData.order_type === 'delivery' ? formData.delivery_fee : 0,
         delivery_zone_id: formData.order_type === 'delivery' ? formData.delivery_zone_id : null
       };
 
-      console.log('📋 Dados do pedido para envio:', orderData);
+      console.log('📋 Dados completos do pedido para envio:', orderData);
 
       await onOrderSubmit(orderData);
       
-      // Reset form
+      // Reset form apenas após sucesso
       setFormData({
         customer_name: '',
         customer_phone: '',
@@ -225,8 +229,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
       
     } catch (error) {
-      console.error('Erro ao finalizar pedido:', error);
-      // Erro já é tratado no onOrderSubmit
+      console.error('❌ Erro ao finalizar pedido no modal:', error);
     } finally {
       setLoading(false);
     }
@@ -367,7 +370,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Label htmlFor="delivery_zone">Zona de Entrega *</Label>
                 <Select
                   value={formData.delivery_zone_id}
-                  onValueChange={handleDeliveryZoneChange}
+                  onValueChange={(zoneId) => {
+                    const zone = deliveryZones.find(z => z.id === zoneId);
+                    setFormData(prev => ({
+                      ...prev,
+                      delivery_zone_id: zoneId,
+                      delivery_fee: zone ? zone.delivery_fee : 0
+                    }));
+                  }}
                   required={formData.order_type === 'delivery'}
                 >
                   <SelectTrigger>

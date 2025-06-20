@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -174,7 +175,7 @@ const MenuDigital = () => {
         }
       }
 
-      // Preparar dados do pedido para o banco (com TODOS os campos necessários, incluindo customer_id)
+      // Preparar dados do pedido para o banco (com TODOS os campos necessários)
       const finalOrderData = {
         user_id: userId,
         customer_name: orderData.customer_name.trim(),
@@ -195,7 +196,7 @@ const MenuDigital = () => {
         delivery_zone_id: orderData.order_type === 'delivery' ? orderData.delivery_zone_id : null,
         status: 'pending',
         order_number: orderNumber,
-        customer_id: customerId // Incluir customer_id diretamente na estrutura
+        customer_id: customerId // Incluir customer_id se existir
       };
 
       console.log('📝 Dados finais do pedido (COMPLETOS):', finalOrderData);
