@@ -1,40 +1,23 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useDigitalCart } from '@/hooks/useDigitalCart';
 import { supabase } from '@/integrations/supabase/client';
+import { useSimpleCart } from '@/hooks/useSimpleCart';
+import { useMenuData } from '@/hooks/useMenuData';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ShoppingCart, Plus, Minus, Trash2, Phone, User } from 'lucide-react';
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  image_url?: string;
-  category: string;
-}
-
-interface Profile {
-  restaurant_name?: string;
-  phone?: string;
-  address?: string;
-  description?: string;
-  logo_url?: string;
-}
+import { ShoppingCart, Plus, Minus, Trash2, Phone } from 'lucide-react';
 
 const DigitalMenu = () => {
   const { userId } = useParams();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  console.log('🚀 CARDÁPIO DIGITAL - Componente montado, userId:', userId);
+
+  // Estados para modal do carrinho e dados do pedido
   const [showCartModal, setShowCartModal] = useState(false);
   const [orderData, setOrderData] = useState({
     customer_name: '',
@@ -45,6 +28,8 @@ const DigitalMenu = () => {
     notes: ''
   });
 
+  // Usar hooks personalizados
+  const { products, categories, loading, profile } = useMenuData(userId || null);
   const {
     cart,
     addToCart,
@@ -53,54 +38,22 @@ const DigitalMenu = () => {
     clearCart,
     getCartTotal,
     getCartItemCount
-  } = useDigitalCart();
+  } = useSimpleCart();
 
-  useEffect(() => {
-    if (userId) {
-      loadMenuData();
-    }
-  }, [userId]);
+  console.log('📊 CARDÁPIO DIGITAL - Estado atual:', {
+    userId,
+    loading,
+    productsCount: products.length,
+    categoriesCount: categories.length,
+    hasProfile: !!profile,
+    cartItems: getCartItemCount()
+  });
 
-  const loadMenuData = async () => {
-    try {
-      console.log('🔄 Carregando dados do menu para usuário:', userId);
-      
-      // Buscar perfil do restaurante
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('restaurant_name, phone, address, description, logo_url')
-        .eq('id', userId)
-        .single();
-
-      if (profileError) {
-        console.error('❌ Erro ao carregar perfil:', profileError);
-      } else {
-        setProfile(profileData);
-      }
-
-      // Buscar produtos
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, name, price, description, image_url, category')
-        .eq('user_id', userId)
-        .eq('available', true)
-        .eq('show_in_delivery', true);
-
-      if (productsError) {
-        console.error('❌ Erro ao carregar produtos:', productsError);
-      } else {
-        setProducts(productsData || []);
-      }
-
-    } catch (error) {
-      console.error('❌ Erro geral:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Função para finalizar pedido
   const handlePlaceOrder = async () => {
     try {
+      console.log('📝 CARDÁPIO DIGITAL - Iniciando finalização do pedido');
+      
       if (!orderData.customer_name || !orderData.customer_phone) {
         alert('Por favor, preencha nome e telefone');
         return;
@@ -163,9 +116,9 @@ const DigitalMenu = () => {
     }
   };
 
-  const categories = [...new Set(products.map(p => p.category))];
-
+  // Estados de loading e erro
   if (loading) {
+    console.log('⏳ CARDÁPIO DIGITAL - Carregando dados...');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -174,15 +127,19 @@ const DigitalMenu = () => {
   }
 
   if (!profile) {
+    console.log('❌ CARDÁPIO DIGITAL - Perfil não encontrado');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
           <p className="text-muted-foreground">Este restaurante pode não existir ou estar indisponível.</p>
+          <p className="text-sm text-gray-500 mt-4">ID: {userId}</p>
         </div>
       </div>
     );
   }
+
+  console.log('✅ CARDÁPIO DIGITAL - Renderizando cardápio com sucesso');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -209,33 +166,40 @@ const DigitalMenu = () => {
 
       {/* Conteúdo Principal */}
       <div className="max-w-4xl mx-auto p-4 pb-24">
-        {categories.map(category => (
-          <div key={category} className="mb-8">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">{category}</h2>
-            <div className="grid gap-4">
-              {products.filter(p => p.category === category).map(product => (
-                <Card key={product.id} className="p-4">
-                  <div className="flex gap-4">
-                    {product.image_url && (
-                      <img src={product.image_url} alt={product.name} className="w-20 h-20 rounded object-cover" />
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{product.name}</h3>
-                      {product.description && (
-                        <p className="text-gray-600 text-sm mt-1">{product.description}</p>
-                      )}
-                      <p className="text-primary font-bold text-lg mt-2">R$ {product.price.toFixed(2)}</p>
-                    </div>
-                    <Button onClick={() => addToCart(product)} className="self-center">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Adicionar
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
+        {products.length === 0 ? (
+          <div className="text-center py-12">
+            <h2 className="text-xl font-semibold mb-2">Nenhum produto disponível</h2>
+            <p className="text-gray-600">Este restaurante ainda não possui produtos no cardápio.</p>
           </div>
-        ))}
+        ) : (
+          categories.map(category => (
+            <div key={category} className="mb-8">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">{category}</h2>
+              <div className="grid gap-4">
+                {products.filter(p => p.category === category).map(product => (
+                  <Card key={product.id} className="p-4">
+                    <div className="flex gap-4">
+                      {product.image_url && (
+                        <img src={product.image_url} alt={product.name} className="w-20 h-20 rounded object-cover" />
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg">{product.name}</h3>
+                        {product.description && (
+                          <p className="text-gray-600 text-sm mt-1">{product.description}</p>
+                        )}
+                        <p className="text-primary font-bold text-lg mt-2">R$ {product.price.toFixed(2)}</p>
+                      </div>
+                      <Button onClick={() => addToCart(product)} className="self-center">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Adicionar
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Carrinho Fixo */}
