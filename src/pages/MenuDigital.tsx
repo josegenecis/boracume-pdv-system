@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -8,7 +7,7 @@ import { useMenuData } from '@/hooks/useMenuData';
 import { MenuHeader } from '@/components/menu/MenuHeader';
 import { MenuContent } from '@/components/menu/MenuContent';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
-import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
+import SimpleCartModal from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
 

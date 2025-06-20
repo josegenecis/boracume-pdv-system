@@ -11,6 +11,12 @@ const Kitchen = () => {
   const preparingOrders = orders.filter(order => order.status === 'preparing');
   const readyOrders = orders.filter(order => order.status === 'ready');
 
+  // Dummy function for priority updates - can be enhanced later
+  const handleUpdatePriority = async (orderId: string, newPriority: string) => {
+    console.log('Priority update requested:', orderId, newPriority);
+    // TODO: Implement priority update logic if needed
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -43,7 +49,8 @@ const Kitchen = () => {
                 <KitchenOrderCard
                   key={order.id}
                   order={order}
-                  onStatusChange={updateOrderStatus}
+                  onUpdateStatus={updateOrderStatus}
+                  onUpdatePriority={handleUpdatePriority}
                 />
               ))}
               {pendingOrders.length === 0 && (
@@ -70,7 +77,8 @@ const Kitchen = () => {
                 <KitchenOrderCard
                   key={order.id}
                   order={order}
-                  onStatusChange={updateOrderStatus}
+                  onUpdateStatus={updateOrderStatus}
+                  onUpdatePriority={handleUpdatePriority}
                 />
               ))}
               {preparingOrders.length === 0 && (
@@ -97,7 +105,8 @@ const Kitchen = () => {
                 <KitchenOrderCard
                   key={order.id}
                   order={order}
-                  onStatusChange={updateOrderStatus}
+                  onUpdateStatus={updateOrderStatus}
+                  onUpdatePriority={handleUpdatePriority}
                 />
               ))}
               {readyOrders.length === 0 && (
