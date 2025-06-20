@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,7 +29,7 @@ interface ProductVariation {
 }
 
 interface ProductVariationSelectorProps {
-  product: Product;
+  product: Product | null;
   variations: ProductVariation[];
   onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
   onAddToTable?: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
@@ -45,6 +46,15 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   const [quantity, setQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
+
+  // Early return if product is null
+  if (!product) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-muted-foreground">Carregando produto...</p>
+      </div>
+    );
+  }
 
   const handleVariationChange = (variationId: string, optionName: string, optionPrice: number, isSelected: boolean) => {
     const variation = variations.find(v => v.id === variationId);
