@@ -65,53 +65,52 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     const searchCustomer = async () => {
       if (formData.customer_phone.length >= 10) {
         console.log('🔍 Buscando cliente pelo telefone:', formData.customer_phone);
-        const customer = await lookupCustomer(formData.customer_phone);
-        
-        if (customer) {
-          console.log('✅ Cliente encontrado:', customer);
-          setFormData(prev => ({
-            ...prev,
-            customer_name: customer.name,
-            customer_address: customer.address,
-            customer_neighborhood: customer.neighborhood
-          }));
+        try {
+          const customer = await lookupCustomer(formData.customer_phone);
           
-          toast({
-            title: "Cliente encontrado!",
-            description: `Dados de ${customer.name} foram preenchidos automaticamente.`,
-          });
-        } else {
-          console.log('ℹ️ Cliente não encontrado');
+          if (customer) {
+            console.log('✅ Cliente encontrado:', customer);
+            setFormData(prev => ({
+              ...prev,
+              customer_name: customer.name,
+              customer_address: customer.address,
+              customer_neighborhood: customer.neighborhood
+            }));
+            
+            toast({
+              title: "Cliente encontrado!",
+              description: `Dados de ${customer.name} foram preenchidos automaticamente.`,
+            });
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro na busca de cliente (não crítico):', error);
         }
       }
     };
 
     const timeoutId = setTimeout(searchCustomer, 500);
     return () => clearTimeout(timeoutId);
-  }, [formData.customer_phone, lookupCustomer]);
+  }, [formData.customer_phone, lookupCustomer, toast]);
 
   const fetchDeliveryZones = async () => {
     try {
+      console.log('🔄 Carregando zonas de entrega...');
       const { data, error } = await supabase
         .from('delivery_zones')
         .select('*')
         .eq('user_id', userId)
         .eq('active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro ao carregar zonas:', error);
+        return;
+      }
+      
+      console.log('✅ Zonas carregadas:', data?.length || 0);
       setDeliveryZones(data || []);
     } catch (error) {
-      console.error('Erro ao carregar zonas de entrega:', error);
+      console.error('❌ Erro ao carregar zonas de entrega:', error);
     }
-  };
-
-  const handleDeliveryZoneChange = (zoneId: string) => {
-    const zone = deliveryZones.find(z => z.id === zoneId);
-    setFormData(prev => ({
-      ...prev,
-      delivery_zone_id: zoneId,
-      delivery_fee: zone ? zone.delivery_fee : 0
-    }));
   };
 
   const handleLocationSelect = (address: string, lat?: number, lng?: number) => {
@@ -174,7 +173,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('🚀 Iniciando submissão do pedido...');
+    console.log('🚀 INICIANDO SUBMISSÃO DO CHECKOUT...');
     console.log('📋 Dados do formulário:', formData);
     console.log('📍 Dados de localização:', customerLocationData);
     
@@ -203,7 +202,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         delivery_zone_id: formData.order_type === 'delivery' ? formData.delivery_zone_id : null
       };
 
-      console.log('📋 Dados completos do pedido para envio:', orderData);
+      console.log('📋 DADOS COMPLETOS PARA ENVIO:', orderData);
 
       await onOrderSubmit(orderData);
       
@@ -229,7 +228,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
       
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido no modal:', error);
+      console.error('❌ ERRO NO CHECKOUT:', error);
     } finally {
       setLoading(false);
     }

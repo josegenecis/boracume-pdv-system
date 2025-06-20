@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -16,30 +17,20 @@ const MenuDigital = () => {
   const [searchParams] = useSearchParams();
   const queryUserId = searchParams.get('u');
   
-  // Usar parâmetro da URL ou query parameter
   const userId = paramUserId || queryUserId;
   
   console.log('🚀 CARDÁPIO DIGITAL - INICIADO:', {
     paramUserId,
     queryUserId,
     finalUserId: userId,
-    currentUrl: window.location.href,
-    expectedUrl: `${window.location.origin}/menu/{userId}`,
-    isCorrectUrl: window.location.pathname.includes('/menu/')
+    currentUrl: window.location.href
   });
-
-  if (!window.location.pathname.includes('/menu/')) {
-    console.warn('⚠️ CARDÁPIO DIGITAL - VOCÊ ESTÁ NA URL ERRADA!');
-    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
-    console.warn('⚠️ Não teste na área administrativa!');
-  }
   
   const { toast } = useToast();
   const [showCartModal, setShowCartModal] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
-  // Custom hooks
   const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
   const { fetchVariations } = useSimpleVariations();
   const {
@@ -53,32 +44,22 @@ const MenuDigital = () => {
   } = useSimpleCart();
   
   const handleProductClick = async (product: any) => {
-    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+    console.log('🚀 PRODUTO CLICADO:', product.name, 'ID:', product.id);
     
     try {
-      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
+      console.log('🔄 Buscando variações...');
       const variations = await fetchVariations(product.id);
       
-      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
+      console.log('📊 Variações encontradas:', {
         total: variations.length,
         variações: variations.map(v => v.name)
       });
       
-      // SEMPRE abrir modal de variações, mesmo se não houver variações
-      // Isso permite que o usuário ajuste quantidade e adicione observações
-      console.log('✅ CARDÁPIO DIGITAL - Abrindo modal de variações/detalhes...');
-      
       setSelectedProduct(product);
       setShowVariationModal(true);
       
-      console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
-        selectedProduct: product.name,
-        variationsCount: variations.length,
-        modalAberto: true
-      });
     } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
-      // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
+      console.error('❌ Erro ao buscar variações:', error);
       setSelectedProduct(product);
       setShowVariationModal(true);
     }
@@ -92,9 +73,9 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      console.log('🚀 Iniciando finalização do pedido:', orderData);
+      console.log('🚀 INICIANDO FINALIZAÇÃO DO PEDIDO:', orderData);
 
-      // Validar dados obrigatórios antes de enviar
+      // Validar dados essenciais
       if (!orderData.user_id) {
         throw new Error('ID do usuário é obrigatório');
       }
@@ -105,7 +86,7 @@ const MenuDigital = () => {
         throw new Error('Telefone do cliente é obrigatório');
       }
 
-      // Converter itens do carrinho para o formato esperado pelo banco
+      // Formatar itens do carrinho
       const formattedItems = cart.map(item => ({
         id: item.product.id,
         name: item.product.name,
@@ -123,29 +104,22 @@ const MenuDigital = () => {
       // Gerar número do pedido
       const orderNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
-      // Primeiro, verificar se o cliente já existe
+      // Tentar criar cliente (não crítico se falhar)
       let customerId = null;
       try {
-        const { data: existingCustomer, error: customerCheckError } = await supabase
+        // Verificar se cliente já existe
+        const { data: existingCustomer } = await supabase
           .from('customers')
           .select('id')
           .eq('user_id', userId)
           .eq('phone', orderData.customer_phone)
           .maybeSingle();
 
-        if (customerCheckError) {
-          console.error('Erro ao verificar cliente existente:', customerCheckError);
-        } else if (existingCustomer) {
+        if (existingCustomer) {
           customerId = existingCustomer.id;
           console.log('✅ Cliente existente encontrado:', customerId);
-        }
-      } catch (customerError) {
-        console.error('Erro na verificação de cliente:', customerError);
-      }
-
-      if (!customerId) {
-        try {
-          // Criar novo cliente com dados básicos
+        } else {
+          // Criar novo cliente
           const customerData = {
             user_id: userId,
             name: orderData.customer_name,
@@ -154,26 +128,22 @@ const MenuDigital = () => {
             neighborhood: orderData.customer_neighborhood || ''
           };
 
-          console.log('👤 Criando novo cliente:', customerData);
-
           const { data: newCustomer, error: customerError } = await supabase
             .from('customers')
             .insert([customerData])
             .select('id')
             .single();
 
-          if (customerError) {
-            console.error('Erro ao criar cliente:', customerError);
-          } else {
+          if (!customerError && newCustomer) {
             customerId = newCustomer.id;
             console.log('✅ Novo cliente criado:', customerId);
           }
-        } catch (customerError) {
-          console.error('Erro na criação de cliente:', customerError);
         }
+      } catch (customerError) {
+        console.warn('⚠️ Erro ao gerenciar cliente (não crítico):', customerError);
       }
 
-      // Preparar dados do pedido para o banco (corrigindo o campo notes)
+      // Preparar dados finais do pedido
       const finalOrderData = {
         user_id: userId,
         customer_name: orderData.customer_name.trim(),
@@ -187,7 +157,7 @@ const MenuDigital = () => {
         google_maps_link: orderData.google_maps_link || null,
         order_type: orderData.order_type || 'delivery',
         payment_method: orderData.payment_method || 'cash',
-        delivery_instructions: orderData.notes?.trim() || '', // CORRIGIDO: usar delivery_instructions em vez de notes
+        delivery_instructions: orderData.notes?.trim() || '',
         items: formattedItems,
         total: getCartTotal(),
         delivery_fee: orderData.order_type === 'delivery' ? (orderData.delivery_fee || 0) : 0,
@@ -197,9 +167,9 @@ const MenuDigital = () => {
         customer_id: customerId
       };
 
-      console.log('📝 Dados finais do pedido (com delivery_instructions):', finalOrderData);
-      console.log('💾 Salvando pedido no banco...');
+      console.log('📝 DADOS FINAIS DO PEDIDO:', finalOrderData);
 
+      // Criar o pedido
       const { data, error } = await supabase
         .from('orders')
         .insert([finalOrderData])
@@ -207,9 +177,8 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido no banco:', error);
+        console.error('❌ ERRO AO CRIAR PEDIDO:', error);
         
-        // Tratar erros específicos do banco
         if (error.code === '23505') {
           throw new Error('Número do pedido já existe. Tente novamente.');
         } else if (error.code === '23503') {
@@ -221,7 +190,7 @@ const MenuDigital = () => {
         }
       }
 
-      console.log('✅ Pedido criado com sucesso:', data);
+      console.log('✅ PEDIDO CRIADO COM SUCESSO:', data);
 
       toast({
         title: "Pedido realizado com sucesso!",
@@ -230,8 +199,9 @@ const MenuDigital = () => {
 
       clearCart();
       setShowCartModal(false);
+      
     } catch (error) {
-      console.error('❌ Erro completo ao finalizar pedido:', error);
+      console.error('❌ ERRO COMPLETO:', error);
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {
@@ -244,7 +214,6 @@ const MenuDigital = () => {
         variant: "destructive",
       });
       
-      // Re-throw para que o CheckoutModal saiba que houve erro
       throw error;
     }
   };

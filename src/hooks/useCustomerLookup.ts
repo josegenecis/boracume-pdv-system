@@ -19,6 +19,8 @@ export const useCustomerLookup = (userId: string) => {
 
     setIsLoading(true);
     try {
+      console.log('🔍 Buscando cliente pelo telefone:', phone);
+      
       // Primeiro tentar buscar na tabela customers
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
@@ -30,6 +32,7 @@ export const useCustomerLookup = (userId: string) => {
 
       if (!customerError && customerData && customerData.length > 0) {
         const customer = customerData[0];
+        console.log('✅ Cliente encontrado na tabela customers:', customer);
         return {
           name: customer.name || '',
           phone: customer.phone || '',
@@ -38,33 +41,31 @@ export const useCustomerLookup = (userId: string) => {
         };
       }
 
-      // Fallback para buscar nos pedidos se não encontrou na tabela customers
-      const { data, error } = await supabase
+      // Fallback: buscar nos pedidos se não encontrou na tabela customers
+      console.log('🔄 Buscando em pedidos anteriores...');
+      const { data: orderData, error: orderError } = await supabase
         .from('orders')
-        .select('customer_name, customer_phone, customer_address')
+        .select('customer_name, customer_phone, customer_address, customer_neighborhood')
         .eq('user_id', userId)
         .eq('customer_phone', phone)
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (error) {
-        console.error('Erro ao buscar cliente:', error);
-        return null;
-      }
-
-      if (data && data.length > 0) {
-        const customer = data[0];
+      if (!orderError && orderData && orderData.length > 0) {
+        const customer = orderData[0];
+        console.log('✅ Cliente encontrado em pedidos:', customer);
         return {
           name: customer.customer_name || '',
           phone: customer.customer_phone || '',
           address: customer.customer_address || '',
-          neighborhood: '' // Orders não tem neighborhood salvo
+          neighborhood: customer.customer_neighborhood || ''
         };
       }
 
+      console.log('ℹ️ Cliente não encontrado');
       return null;
     } catch (error) {
-      console.error('Erro na consulta de cliente:', error);
+      console.error('❌ Erro na consulta de cliente:', error);
       return null;
     } finally {
       setIsLoading(false);
