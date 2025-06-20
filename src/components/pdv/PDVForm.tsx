@@ -6,12 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingCart, Plus, Minus, Search, X, Users } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Search, X, Users, Store, Truck, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import ProductSelectionModal from './ProductSelectionModal';
 import ProductVariationModal from './ProductVariationModal';
 import AddProductToTableModal from './AddProductToTableModal';
 
@@ -24,17 +23,27 @@ interface CartItem {
   uniqueId: string;
 }
 
+interface Table {
+  id: string;
+  table_number: number;
+  status: string;
+  capacity: number;
+}
+
 const PDVForm = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [orderType, setOrderType] = useState('dine_in');
+  const [selectedTable, setSelectedTable] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [loading, setLoading] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showAddToTableModal, setShowAddToTableModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -48,6 +57,7 @@ const PDVForm = () => {
     if (user) {
       fetchProducts();
       fetchCategories();
+      fetchTables();
     }
   }, [user]);
 
@@ -85,6 +95,21 @@ const PDVForm = () => {
       setCategories(data || []);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tables')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('table_number');
+
+      if (error) throw error;
+      setTables(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar mesas:', error);
     }
   };
 
@@ -177,6 +202,15 @@ const PDVForm = () => {
     return cart.reduce((total, item) => total + item.totalPrice, 0);
   };
 
+  const getOrderTypeDisplay = () => {
+    switch (orderType) {
+      case 'dine_in': return { label: 'Local', icon: Store, color: 'text-orange-600' };
+      case 'delivery': return { label: 'Delivery', icon: Truck, color: 'text-blue-600' };
+      case 'pickup': return { label: 'Retirada', icon: MapPin, color: 'text-green-600' };
+      default: return { label: 'Local', icon: Store, color: 'text-orange-600' };
+    }
+  };
+
   const handleFinalizeSale = async () => {
     if (cart.length === 0) {
       toast({
@@ -196,6 +230,24 @@ const PDVForm = () => {
       return;
     }
 
+    if (orderType === 'dine_in' && !selectedTable) {
+      toast({
+        title: 'Mesa obrigatória',
+        description: 'Selecione uma mesa para pedidos no local.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (orderType === 'delivery' && !customerAddress.trim()) {
+      toast({
+        title: 'Endereço obrigatório',
+        description: 'Informe o endereço para delivery.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -205,10 +257,12 @@ const PDVForm = () => {
         user_id: user?.id,
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim() || null,
-        customer_address: 'Venda Presencial - PDV',
-        delivery_type: 'pickup',
+        customer_address: orderType === 'delivery' ? customerAddress.trim() : 
+                         orderType === 'dine_in' ? `Mesa ${tables.find(t => t.id === selectedTable)?.table_number}` : 
+                         'Retirada no Local',
+        order_type: orderType,
+        table_id: orderType === 'dine_in' ? selectedTable : null,
         payment_method: paymentMethod,
-        order_type: 'pdv',
         status: 'completed',
         order_number: orderNumber,
         total: getCartTotal(),
@@ -229,11 +283,19 @@ const PDVForm = () => {
 
       if (error) throw error;
 
-      // Enviar para o KDS se necessário
+      // Enviar para o KDS (PDV sempre envia direto)
       try {
-        await sendToKitchen(orderData);
+        await sendToKitchen({ ...orderData, status: 'accepted' });
       } catch (kdsError) {
         console.error('Erro ao enviar para KDS:', kdsError);
+      }
+
+      // Se for pedido para mesa, ocupar a mesa
+      if (orderType === 'dine_in' && selectedTable) {
+        await supabase
+          .from('tables')
+          .update({ status: 'occupied' })
+          .eq('id', selectedTable);
       }
 
       toast({
@@ -245,6 +307,9 @@ const PDVForm = () => {
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
+      setCustomerAddress('');
+      setSelectedTable('');
+      setOrderType('dine_in');
       setPaymentMethod('cash');
 
     } catch (error) {
@@ -258,6 +323,9 @@ const PDVForm = () => {
       setLoading(false);
     }
   };
+
+  const orderTypeData = getOrderTypeDisplay();
+  const OrderIcon = orderTypeData.icon;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
@@ -304,7 +372,7 @@ const PDVForm = () => {
               {filteredProducts.map((product) => (
                 <Card 
                   key={product.id} 
-                  className="cursor-pointer hover:shadow-md transition-shadow h-40"
+                  className="cursor-pointer hover:shadow-md transition-shadow"
                   onClick={() => handleProductClick(product)}
                 >
                   <CardContent className="p-3 h-full flex flex-col">
@@ -316,12 +384,14 @@ const PDVForm = () => {
                       />
                     )}
                     <div className="flex-1 flex flex-col justify-between">
-                      <h4 className="font-medium text-sm line-clamp-2 mb-1">
+                      <h4 className="font-medium text-sm line-clamp-2 mb-2">
                         {product.name}
                       </h4>
-                      <p className="text-lg font-bold text-primary">
-                        R$ {product.price.toFixed(2)}
-                      </p>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-primary">
+                          R$ {product.price.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -339,10 +409,48 @@ const PDVForm = () => {
 
       {/* Carrinho e Finalização */}
       <div className="space-y-4">
+        {/* Tipo de Pedido */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <OrderIcon className={`h-5 w-5 ${orderTypeData.color}`} />
+              <span className="font-medium">Tipo de Pedido</span>
+            </div>
+            <Select value={orderType} onValueChange={setOrderType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dine_in">
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4 text-orange-600" />
+                    <span>Consumir no Local</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="delivery">
+                  <div className="flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-blue-600" />
+                    <span>Delivery</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="pickup">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-green-600" />
+                    <span>Retirada</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
         {/* Carrinho */}
         <Card className="h-64">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Carrinho ({cart.length})</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              Carrinho ({cart.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 overflow-y-auto max-h-44">
@@ -394,7 +502,7 @@ const PDVForm = () => {
         </Card>
 
         {/* Dados do Cliente */}
-        <Card className="h-44">
+        <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Cliente</CardTitle>
           </CardHeader>
@@ -417,11 +525,41 @@ const PDVForm = () => {
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
             </div>
+            
+            {orderType === 'delivery' && (
+              <div className="space-y-2">
+                <Label htmlFor="customer-address">Endereço *</Label>
+                <Input
+                  id="customer-address"
+                  placeholder="Endereço completo"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                />
+              </div>
+            )}
+            
+            {orderType === 'dine_in' && (
+              <div className="space-y-2">
+                <Label>Mesa *</Label>
+                <Select value={selectedTable} onValueChange={setSelectedTable}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma mesa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.filter(table => table.status === 'available').map((table) => (
+                      <SelectItem key={table.id} value={table.id}>
+                        Mesa {table.table_number} ({table.capacity} lugares)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Finalização */}
-        <Card className="h-40">
+        <Card>
           <CardContent className="p-4 space-y-3">
             <div className="space-y-2">
               <Label>Método de Pagamento</Label>
@@ -464,7 +602,7 @@ const PDVForm = () => {
         product={selectedProduct}
         onAddToCart={handleAddToCart}
         onAddToTable={handleAddToTable}
-        showTableOption={true}
+        showTableOption={orderType === 'dine_in'}
       />
 
       <AddProductToTableModal

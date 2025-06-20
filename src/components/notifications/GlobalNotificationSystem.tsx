@@ -40,6 +40,13 @@ const GlobalNotificationSystem: React.FC = () => {
   // Verifica se está na página de pedidos para não mostrar notificação
   const isOnOrdersPage = location.pathname === '/orders' || location.pathname === '/kitchen';
 
+  // Função para parar sons e ocultar notificação
+  const stopSoundsAndHideNotification = () => {
+    console.log('🔇 Parando sons e ocultando notificação de pedidos aceitos');
+    soundNotifications.stopAllSounds();
+    setIsVisible(false);
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -78,29 +85,27 @@ const GlobalNotificationSystem: React.FC = () => {
           
           const newOrder = payload.new as PendingOrder;
           
-          // Adicionar à lista de pendentes
-          setPendingOrders(prev => [newOrder, ...prev]);
-          
-          // Mostrar notificação se não estiver na página de pedidos
-          if (!isOnOrdersPage) {
-            setIsVisible(true);
+          // Só mostrar notificação para pedidos pendentes
+          if (newOrder.acceptance_status === 'pending_acceptance') {
+            setPendingOrders(prev => [newOrder, ...prev]);
             
-            // Som de notificação usando Web Audio API
-            if (soundEnabled) {
-              soundNotifications.playSound('bell').catch(console.error);
+            if (!isOnOrdersPage) {
+              setIsVisible(true);
+              
+              if (soundEnabled) {
+                soundNotifications.playSound('bell').catch(console.error);
+              }
+              
+              if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200]);
+              }
+              
+              toast({
+                title: "🔔 Novo Pedido Recebido!",
+                description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
+                duration: 5000,
+              });
             }
-            
-            // Vibração (se suportado)
-            if (navigator.vibrate) {
-              navigator.vibrate([200, 100, 200]);
-            }
-            
-            // Toast notification
-            toast({
-              title: "🔔 Novo Pedido Recebido!",
-              description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
-              duration: 5000,
-            });
           }
         }
       )
@@ -115,10 +120,12 @@ const GlobalNotificationSystem: React.FC = () => {
         (payload) => {
           const updatedOrder = payload.new as PendingOrder;
           
-          // Se o pedido foi aceito ou cancelado, remover da lista e adicionar aos dispensados
+          // Se o pedido foi aceito ou cancelado, parar sons e ocultar
           if (updatedOrder.acceptance_status !== 'pending_acceptance') {
+            console.log('✅ Pedido aceito/cancelado - parando sons e ocultando notificação');
+            
             // Parar todos os sons imediatamente
-            soundNotifications.stopAllSounds();
+            stopSoundsAndHideNotification();
             
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
             setDismissedOrders(prev => {
@@ -127,7 +134,7 @@ const GlobalNotificationSystem: React.FC = () => {
               return newDismissed;
             });
             
-            // Forçar ocultação da notificação se não houver mais pedidos pendentes
+            // Verificar se ainda há pedidos pendentes
             setTimeout(() => {
               setPendingOrders(current => {
                 if (current.length === 0) {
@@ -143,7 +150,6 @@ const GlobalNotificationSystem: React.FC = () => {
 
     return () => {
       supabase.removeChannel(channel);
-      // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
     };
   }, [user, isOnOrdersPage, soundEnabled, toast]);
@@ -151,41 +157,33 @@ const GlobalNotificationSystem: React.FC = () => {
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
     if (isOnOrdersPage) {
-      // Parar sons quando navegar para página de pedidos
-      soundNotifications.stopAllSounds();
-      setIsVisible(false);
+      stopSoundsAndHideNotification();
     } else if (pendingOrders.length > 0) {
       setIsVisible(true);
     }
   }, [isOnOrdersPage, pendingOrders.length]);
 
   const handleGoToOrders = () => {
-    // Parar todos os sons que estão tocando
-    soundNotifications.stopAllSounds();
+    stopSoundsAndHideNotification();
     
-    // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
       const newDismissed = new Set([...prev, ...currentOrderIds]);
       localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
       return newDismissed;
     });
-    setIsVisible(false);
     navigate('/orders');
   };
 
   const handleDismiss = () => {
-    // Parar todos os sons que estão tocando
-    soundNotifications.stopAllSounds();
+    stopSoundsAndHideNotification();
     
-    // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
       const newDismissed = new Set([...prev, ...currentOrderIds]);
       localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
       return newDismissed;
     });
-    setIsVisible(false);
   };
 
   const getOrderTypeIcon = (type: string) => {

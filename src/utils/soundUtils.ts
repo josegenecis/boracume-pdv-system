@@ -1,3 +1,4 @@
+
 // Utility functions for sound notifications using HTML5 Audio
 export class SoundNotifications {
   private isEnabled: boolean = true;
@@ -7,7 +8,36 @@ export class SoundNotifications {
   private currentlyPlaying: Set<HTMLAudioElement> = new Set();
 
   constructor() {
+    this.loadCustomSoundsFromStorage();
     this.preloadSounds();
+  }
+
+  private loadCustomSoundsFromStorage() {
+    try {
+      const storedCustomSounds = localStorage.getItem('customSoundUrls');
+      if (storedCustomSounds) {
+        const parsed = JSON.parse(storedCustomSounds);
+        Object.entries(parsed).forEach(([key, url]) => {
+          if (url) {
+            this.customSoundUrls.set(key, url as string);
+          }
+        });
+        console.log('🔊 SOUND UTILS - Sons personalizados carregados do localStorage:', 
+          Array.from(this.customSoundUrls.entries()));
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar sons personalizados do localStorage:', error);
+    }
+  }
+
+  private saveCustomSoundsToStorage() {
+    try {
+      const customSoundsObj = Object.fromEntries(this.customSoundUrls);
+      localStorage.setItem('customSoundUrls', JSON.stringify(customSoundsObj));
+      console.log('💾 SOUND UTILS - Sons personalizados salvos no localStorage');
+    } catch (error) {
+      console.error('❌ Erro ao salvar sons personalizados no localStorage:', error);
+    }
   }
 
   setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
@@ -18,13 +48,16 @@ export class SoundNotifications {
       if (url) {
         // Converter custom_bell_url para bell, etc.
         const soundType = key.replace('custom_', '').replace('_url', '');
-        this.customSoundUrls.set(soundType, url);
+        this.customSoundUrls.set(soundType, url);  
         console.log(`✅ SOUND UTILS - URL personalizada configurada: ${soundType} -> ${url}`);
       }
     });
     
     console.log('🔧 SOUND UTILS - URLs personalizadas ativas:', 
       Array.from(this.customSoundUrls.entries()));
+    
+    // Salvar no localStorage
+    this.saveCustomSoundsToStorage();
     
     // Recarregar sons com as novas URLs
     this.preloadSounds();
