@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Phone, MapPin, CheckCircle, X, AlertTriangle } from 'lucide-react';
+import { Clock, Phone, CheckCircle, X, AlertTriangle } from 'lucide-react';
 
 interface KitchenOrderCardProps {
   order: {
@@ -28,14 +28,14 @@ const getTimePassed = (createdAt: string): string => {
   
   if (diffInMinutes < 60) {
     return `${diffInMinutes} min`;
-  } else if (diffInMinutes < 1440) { // menos de 24 horas
+  } else if (diffInMinutes < 1440) {
     const hours = Math.floor(diffInMinutes / 60);
     const remainingMinutes = diffInMinutes % 60;
     if (remainingMinutes === 0) {
       return `${hours}h`;
     }
     return `${hours}h ${remainingMinutes}min`;
-  } else { // 24 horas ou mais
+  } else {
     const days = Math.floor(diffInMinutes / 1440);
     const remainingHours = Math.floor((diffInMinutes % 1440) / 60);
     if (remainingHours === 0) {
@@ -43,6 +43,33 @@ const getTimePassed = (createdAt: string): string => {
     }
     return `${days} dia${days > 1 ? 's' : ''} ${remainingHours}h`;
   }
+};
+
+const formatVariations = (variations: any): string[] => {
+  if (!variations) return [];
+  
+  if (Array.isArray(variations)) {
+    return variations.map(variation => {
+      if (typeof variation === 'string') {
+        return variation;
+      } else if (typeof variation === 'object' && variation !== null) {
+        if (variation.name && variation.selectedOptions) {
+          const options = Array.isArray(variation.selectedOptions) 
+            ? variation.selectedOptions.join(', ') 
+            : String(variation.selectedOptions);
+          return `${variation.name}: ${options}`;
+        } else if (variation.selectedOptions) {
+          return Array.isArray(variation.selectedOptions) 
+            ? variation.selectedOptions.join(', ')
+            : String(variation.selectedOptions);
+        }
+        return String(variation.name || variation);
+      }
+      return String(variation);
+    });
+  }
+  
+  return [String(variations)];
 };
 
 const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
@@ -105,21 +132,39 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-2 mb-4">
+        <div className="space-y-3 mb-4">
           {order.items.map((item: any, index: number) => (
-            <div key={index} className="flex justify-between items-start">
-              <div className="flex-1">
-                <span className="font-medium">{item.quantity}x {item.name}</span>
-                {item.variations && Array.isArray(item.variations) && item.variations.length > 0 && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {item.variations.join(', ')}
-                  </div>
-                )}
-                {item.notes && item.notes.trim() && (
-                  <div className="text-xs text-muted-foreground italic mt-1">
-                    Obs: {item.notes}
-                  </div>
-                )}
+            <div key={index} className="border-b pb-2 last:border-b-0">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <span className="font-medium">{item.quantity}x {item.name}</span>
+                  
+                  {/* Mostrar variações formatadas corretamente */}
+                  {item.variations && formatVariations(item.variations).length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      <strong>Variações:</strong>
+                      <ul className="ml-2 list-disc list-inside">
+                        {formatVariations(item.variations).map((variation, idx) => (
+                          <li key={idx}>{variation}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {/* Mostrar opções se existirem */}
+                  {item.options && Array.isArray(item.options) && item.options.length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      <strong>Opções:</strong> {item.options.join(', ')}
+                    </div>
+                  )}
+                  
+                  {/* Mostrar observações */}
+                  {item.notes && item.notes.trim() && (
+                    <div className="text-xs text-muted-foreground italic mt-1">
+                      <strong>Obs:</strong> {item.notes}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}

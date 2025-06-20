@@ -1,485 +1,315 @@
+
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from '@/components/ui/card';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  CreditCard, 
-  DollarSign, 
-  Calendar, 
-  ArrowUp, 
-  ArrowDown, 
-  Download, 
-  Filter,
-  Percent
-} from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { DatePicker } from '@/components/ui/date-picker';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { DatePickerWithRange } from '@/components/ui/date-picker';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, Calendar, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { addDays, format, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
-
-interface Transaction {
-  id: string;
-  date: Date;
-  description: string;
-  amount: number;
-  type: 'entrada' | 'saida';
-  category: string;
-  paymentMethod: PaymentMethod;
+interface FinancialData {
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  paymentMethods: { [key: string]: number };
+  dailyRevenue: { date: string; revenue: number; orders: number }[];
 }
 
 const Financeiro = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [filters, setFilters] = useState({
-    paymentMethod: '' as '' | PaymentMethod,
-    type: '' as '' | 'entrada' | 'saida',
-    startDate: null as Date | null,
-    endDate: null as Date | null,
-    searchTerm: ''
+  const [financialData, setFinancialData] = useState<FinancialData>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    averageOrderValue: 0,
+    paymentMethods: {},
+    dailyRevenue: []
   });
-  
-  // Fetch transactions from Supabase
+  const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState({
+    from: startOfDay(addDays(new Date(), -30)),
+    to: endOfDay(new Date())
+  });
+  const [selectedPeriod, setSelectedPeriod] = useState('30days');
+  const { toast } = useToast();
+  const { user } = useAuth();
+
   useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!user) return;
-      
-      try {
-        setIsLoading(true);
-        
-        // Fetch orders as income transactions
-        const { data: orders, error: ordersError } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('user_id', user.id);
-        
-        if (ordersError) throw ordersError;
-        
-        // Transform orders to transactions format
-        const orderTransactions = (orders || []).map(order => ({
-          id: order.id,
-          date: new Date(order.created_at),
-          description: `Pedido #${order.id.substring(0, 8)}`,
-          amount: order.total,
-          type: 'entrada' as 'entrada',
-          category: 'Vendas',
-          paymentMethod: order.payment_method as PaymentMethod
-        }));
-        
-        // In a real app, you'd also fetch expense transactions
-        // For now, we'll use just the income from orders
-        const allTransactions = [...orderTransactions];
-        
-        setTransactions(allTransactions);
-        setFilteredTransactions(allTransactions);
-      } catch (error: any) {
-        toast({
-          title: 'Erro ao carregar transações',
-          description: error.message,
-          variant: 'destructive'
+    if (user) {
+      fetchFinancialData();
+    }
+  }, [user, dateRange]);
+
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period);
+    const now = new Date();
+    
+    switch (period) {
+      case 'today':
+        setDateRange({
+          from: startOfDay(now),
+          to: endOfDay(now)
         });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchTransactions();
-  }, [user, toast]);
-  
-  // Calculate financial summaries
-  const totalIncome = filteredTransactions
-    .filter(t => t.type === 'entrada')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-    
-  const totalExpenses = filteredTransactions
-    .filter(t => t.type === 'saida')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-    
-  const balance = totalIncome - totalExpenses;
-  
-  // Payment method breakdown
-  const pixTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'pix' && t.type === 'entrada')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-    
-  const cardTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'cartao' && t.type === 'entrada')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-    
-  const cashTotal = filteredTransactions
-    .filter(t => t.paymentMethod === 'dinheiro' && t.type === 'entrada')
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-  
-  // Apply filters
-  const applyFilters = () => {
-    let result = [...transactions];
-    
-    if (filters.paymentMethod) {
-      result = result.filter(t => t.paymentMethod === filters.paymentMethod);
+        break;
+      case '7days':
+        setDateRange({
+          from: startOfDay(addDays(now, -6)),
+          to: endOfDay(now)
+        });
+        break;
+      case '30days':
+        setDateRange({
+          from: startOfDay(addDays(now, -29)),
+          to: endOfDay(now)
+        });
+        break;
+      case '90days':
+        setDateRange({
+          from: startOfDay(addDays(now, -89)),
+          to: endOfDay(now)
+        });
+        break;
     }
-    
-    if (filters.type) {
-      result = result.filter(t => t.type === filters.type);
+  };
+
+  const fetchFinancialData = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user?.id)
+        .gte('created_at', dateRange.from.toISOString())
+        .lte('created_at', dateRange.to.toISOString())
+        .in('status', ['completed', 'delivered']);
+
+      if (error) throw error;
+
+      const completedOrders = orders || [];
+      
+      // Calcular métricas
+      const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+      const totalOrders = completedOrders.length;
+      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      // Métodos de pagamento
+      const paymentMethods: { [key: string]: number } = {};
+      completedOrders.forEach(order => {
+        const method = order.payment_method || 'Não informado';
+        paymentMethods[method] = (paymentMethods[method] || 0) + (order.total || 0);
+      });
+
+      // Receita diária
+      const dailyRevenue: { [key: string]: { revenue: number; orders: number } } = {};
+      completedOrders.forEach(order => {
+        const date = format(new Date(order.created_at), 'yyyy-MM-dd');
+        if (!dailyRevenue[date]) {
+          dailyRevenue[date] = { revenue: 0, orders: 0 };
+        }
+        dailyRevenue[date].revenue += order.total || 0;
+        dailyRevenue[date].orders += 1;
+      });
+
+      const dailyRevenueArray = Object.entries(dailyRevenue)
+        .map(([date, data]) => ({
+          date,
+          revenue: data.revenue,
+          orders: data.orders
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      setFinancialData({
+        totalRevenue,
+        totalOrders,
+        averageOrderValue,
+        paymentMethods,
+        dailyRevenue: dailyRevenueArray
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao carregar dados financeiros:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar os dados financeiros.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    if (filters.startDate) {
-      result = result.filter(t => t.date >= filters.startDate!);
-    }
-    
-    if (filters.endDate) {
-      result = result.filter(t => t.date <= filters.endDate!);
-    }
-    
-    if (filters.searchTerm) {
-      result = result.filter(t => 
-        t.description.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-        t.category.toLowerCase().includes(filters.searchTerm.toLowerCase())
-      );
-    }
-    
-    setFilteredTransactions(result);
   };
-  
-  const resetFilters = () => {
-    setFilters({
-      paymentMethod: '',
-      type: '',
-      startDate: null,
-      endDate: null,
-      searchTerm: ''
-    });
-    setFilteredTransactions(transactions);
-  };
-  
-  const handleFilterChange = (field: keyof typeof filters, value: any) => {
-    setFilters({
-      ...filters,
-      [field]: value
-    });
-  };
-  
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR').format(date);
-  };
-  
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-  
-  const formatCurrency = (amount: number) => {
+
+  const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
-      currency: 'BRL'
-    }).format(amount);
+      currency: 'BRL',
+    }).format(value);
   };
-  
-  const getPaymentMethodLabel = (method: PaymentMethod) => {
+
+  const getPaymentMethodLabel = (method: string) => {
     switch (method) {
+      case 'cash': return 'Dinheiro';
+      case 'card': return 'Cartão';
       case 'pix': return 'PIX';
-      case 'dinheiro': return 'DINHEIRO';
-      case 'cartao': return 'CARTÃO';
       default: return method;
     }
   };
-  
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Gestão Financeira</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <DollarSign className="h-6 w-6 text-green-500" />
+            <h1 className="text-2xl font-bold">Financeiro</h1>
+          </div>
+          <Button variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Exportar Relatório
+          </Button>
+        </div>
+
+        {/* Filtros */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowUp className="h-5 w-5 text-green-500" />
-              Receitas
-            </CardTitle>
-            <CardDescription>Total de vendas e entradas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(totalIncome)}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowDown className="h-5 w-5 text-red-500" />
-              Despesas
-            </CardTitle>
-            <CardDescription>Total de custos e saídas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(totalExpenses)}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-boracume-green" />
-              Saldo
-            </CardTitle>
-            <CardDescription>Balanço atual</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(balance)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-md flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              PIX
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(pixTotal)}</div>
-            <div className="text-sm text-muted-foreground">
-              {totalIncome ? Math.round((pixTotal / totalIncome) * 100) : 0}% das receitas
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-md flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              CARTÃO
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(cardTotal)}</div>
-            <div className="text-sm text-muted-foreground">
-              {totalIncome ? Math.round((cardTotal / totalIncome) * 100) : 0}% das receitas
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-md flex items-center gap-2">
-              <Percent className="h-4 w-4" />
-              DINHEIRO
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(cashTotal)}</div>
-            <div className="text-sm text-muted-foreground">
-              {totalIncome ? Math.round((cashTotal / totalIncome) * 100) : 0}% das receitas
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <Tabs defaultValue="fluxo-caixa" className="w-full">
-        <TabsList>
-          <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
-          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="fluxo-caixa" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Transações</CardTitle>
-              <CardDescription>
-                Gerencie todas as transações financeiras
-              </CardDescription>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 mt-4">
-                <div className="lg:col-span-2">
-                  <Input
-                    placeholder="Buscar transações..."
-                    value={filters.searchTerm}
-                    onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-                
-                <div>
-                  <Select
-                    value={filters.paymentMethod}
-                    onValueChange={(value) => handleFilterChange('paymentMethod', value as PaymentMethod | '')}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Forma de Pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="cartao">Cartão</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Select
-                    value={filters.type}
-                    onValueChange={(value) => handleFilterChange('type', value as 'entrada' | 'saida' | '')}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="entrada">Receitas</SelectItem>
-                      <SelectItem value="saida">Despesas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="flex items-center gap-2 justify-end lg:col-span-2">
-                  <Button variant="outline" onClick={resetFilters}>
-                    Limpar
-                  </Button>
-                  <Button onClick={applyFilters}>
-                    <Filter className="mr-2 h-4 w-4" />
-                    Aplicar Filtros
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Método</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Tipo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        Carregando transações...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredTransactions.length > 0 ? (
-                    filteredTransactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>
-                          <div>{formatDate(transaction.date)}</div>
-                          <div className="text-xs text-muted-foreground">{formatTime(transaction.date)}</div>
-                        </TableCell>
-                        <TableCell>{transaction.description}</TableCell>
-                        <TableCell>{transaction.category}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{getPaymentMethodLabel(transaction.paymentMethod)}</Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {formatCurrency(transaction.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={transaction.type === 'entrada' ? 'bg-green-500' : 'bg-red-500'}>
-                            {transaction.type === 'entrada' ? 'Receita' : 'Despesa'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        Nenhuma transação encontrada
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="relatorios" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Exportar Relatórios</CardTitle>
-              <CardDescription>Gere relatórios financeiros personalizados</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Data Inicial</div>
-                  <DatePicker
-                    date={filters.startDate}
-                    setDate={(date) => handleFilterChange('startDate', date)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Data Final</div>
-                  <DatePicker
-                    date={filters.endDate}
-                    setDate={(date) => handleFilterChange('endDate', date)}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Tipo de Relatório</div>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo de relatório" />
+          <CardContent className="pt-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="completo">Relatório Completo</SelectItem>
-                    <SelectItem value="receitas">Somente Receitas</SelectItem>
-                    <SelectItem value="despesas">Somente Despesas</SelectItem>
-                    <SelectItem value="pagamentos">Por Forma de Pagamento</SelectItem>
+                    <SelectItem value="today">Hoje</SelectItem>
+                    <SelectItem value="7days">Últimos 7 dias</SelectItem>
+                    <SelectItem value="30days">Últimos 30 dias</SelectItem>
+                    <SelectItem value="90days">Últimos 90 dias</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
-              <Button className="w-full mt-4">
-                <Download className="mr-2 h-4 w-4" />
-                Gerar Relatório
-              </Button>
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                {format(dateRange.from, 'dd/MM/yyyy', { locale: ptBR })} - {format(dateRange.to, 'dd/MM/yyyy', { locale: ptBR })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Métricas Principais */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {formatCurrency(financialData.totalRevenue)}
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {financialData.totalOrders}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(financialData.averageOrderValue)}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Métodos de Pagamento */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Métodos de Pagamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {Object.entries(financialData.paymentMethods).length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">
+                  Nenhum dado de pagamento disponível para o período selecionado.
+                </p>
+              ) : (
+                Object.entries(financialData.paymentMethods).map(([method, amount]) => (
+                  <div key={method} className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{getPaymentMethodLabel(method)}</Badge>
+                    </div>
+                    <div className="font-medium">
+                      {formatCurrency(amount)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Receita Diária */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Receita Diária</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {financialData.dailyRevenue.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">
+                  Nenhum dado de receita disponível para o período selecionado.
+                </p>
+              ) : (
+                financialData.dailyRevenue.map((day) => (
+                  <div key={day.date} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                    <div>
+                      <div className="font-medium">
+                        {format(new Date(day.date), 'dd/MM/yyyy', { locale: ptBR })}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {day.orders} pedido{day.orders !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div className="font-bold text-green-600">
+                      {formatCurrency(day.revenue)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
   );
 };
 
