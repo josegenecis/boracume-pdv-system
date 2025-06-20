@@ -123,31 +123,6 @@ const MenuDigital = () => {
       // Gerar número do pedido
       const orderNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
-      // Preparar dados do pedido para o banco (com TODOS os campos necessários)
-      const finalOrderData = {
-        user_id: userId,
-        customer_name: orderData.customer_name.trim(),
-        customer_phone: orderData.customer_phone.trim(),
-        customer_address: orderData.order_type === 'delivery' ? orderData.customer_address?.trim() || '' : 'Retirada no Local',
-        customer_address_reference: orderData.customer_address_reference || null,
-        customer_neighborhood: orderData.customer_neighborhood || null,
-        customer_latitude: orderData.customer_latitude || null,
-        customer_longitude: orderData.customer_longitude || null,
-        customer_location_accuracy: orderData.customer_location_accuracy || null,
-        google_maps_link: orderData.google_maps_link || null,
-        order_type: orderData.order_type || 'delivery', // Corrigido de delivery_type para order_type
-        payment_method: orderData.payment_method || 'cash',
-        notes: orderData.notes?.trim() || '',
-        items: formattedItems,
-        total: getCartTotal(),
-        delivery_fee: orderData.order_type === 'delivery' ? (orderData.delivery_fee || 0) : 0,
-        delivery_zone_id: orderData.order_type === 'delivery' ? orderData.delivery_zone_id : null,
-        status: 'pending',
-        order_number: orderNumber
-      };
-
-      console.log('📝 Dados finais do pedido (COMPLETOS):', finalOrderData);
-
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
       try {
@@ -155,7 +130,7 @@ const MenuDigital = () => {
           .from('customers')
           .select('id')
           .eq('user_id', userId)
-          .eq('phone', finalOrderData.customer_phone)
+          .eq('phone', orderData.customer_phone)
           .maybeSingle();
 
         if (customerCheckError) {
@@ -173,10 +148,10 @@ const MenuDigital = () => {
           // Criar novo cliente com TODOS os dados
           const customerData = {
             user_id: userId,
-            name: finalOrderData.customer_name,
-            phone: finalOrderData.customer_phone,
-            address: finalOrderData.customer_address,
-            neighborhood: finalOrderData.customer_neighborhood || ''
+            name: orderData.customer_name,
+            phone: orderData.customer_phone,
+            address: orderData.customer_address,
+            neighborhood: orderData.customer_neighborhood || ''
           };
 
           console.log('👤 Criando novo cliente com dados completos:', customerData);
@@ -199,11 +174,31 @@ const MenuDigital = () => {
         }
       }
 
-      // Adicionar customer_id se foi criado/encontrado
-      if (customerId) {
-        finalOrderData.customer_id = customerId;
-      }
+      // Preparar dados do pedido para o banco (com TODOS os campos necessários, incluindo customer_id)
+      const finalOrderData = {
+        user_id: userId,
+        customer_name: orderData.customer_name.trim(),
+        customer_phone: orderData.customer_phone.trim(),
+        customer_address: orderData.order_type === 'delivery' ? orderData.customer_address?.trim() || '' : 'Retirada no Local',
+        customer_address_reference: orderData.customer_address_reference || null,
+        customer_neighborhood: orderData.customer_neighborhood || null,
+        customer_latitude: orderData.customer_latitude || null,
+        customer_longitude: orderData.customer_longitude || null,
+        customer_location_accuracy: orderData.customer_location_accuracy || null,
+        google_maps_link: orderData.google_maps_link || null,
+        order_type: orderData.order_type || 'delivery',
+        payment_method: orderData.payment_method || 'cash',
+        notes: orderData.notes?.trim() || '',
+        items: formattedItems,
+        total: getCartTotal(),
+        delivery_fee: orderData.order_type === 'delivery' ? (orderData.delivery_fee || 0) : 0,
+        delivery_zone_id: orderData.order_type === 'delivery' ? orderData.delivery_zone_id : null,
+        status: 'pending',
+        order_number: orderNumber,
+        customer_id: customerId // Incluir customer_id diretamente na estrutura
+      };
 
+      console.log('📝 Dados finais do pedido (COMPLETOS):', finalOrderData);
       console.log('💾 Salvando pedido no banco com dados COMPLETOS...');
 
       const { data, error } = await supabase
