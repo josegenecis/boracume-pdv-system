@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -7,7 +8,7 @@ import { useMenuData } from '@/hooks/useMenuData';
 import { MenuHeader } from '@/components/menu/MenuHeader';
 import { MenuContent } from '@/components/menu/MenuContent';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
-import SimpleCartModal from '@/components/menu/SimpleCartModal';
+import CheckoutModal from '@/components/menu/CheckoutModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -92,6 +93,8 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
+      console.log('🚀 Iniciando finalização do pedido:', orderData);
+
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
         throw new Error('ID do usuário é obrigatório');
@@ -102,9 +105,48 @@ const MenuDigital = () => {
       if (!orderData.customer_phone?.trim()) {
         throw new Error('Telefone do cliente é obrigatório');
       }
-      if (!orderData.items || orderData.items.length === 0) {
+
+      // Converter itens do carrinho para o formato esperado pelo banco
+      const formattedItems = cart.map(item => ({
+        id: item.product.id,
+        name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity,
+        variations: item.variations || [],
+        notes: item.notes || '',
+        subtotal: item.totalPrice
+      }));
+
+      if (formattedItems.length === 0) {
         throw new Error('Pedido deve ter pelo menos um item');
       }
+
+      // Gerar número do pedido
+      const orderNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+
+      // Preparar dados do pedido para o banco
+      const finalOrderData = {
+        user_id: userId,
+        customer_name: orderData.customer_name.trim(),
+        customer_phone: orderData.customer_phone.trim(),
+        customer_address: orderData.delivery_type === 'delivery' ? orderData.customer_address?.trim() || '' : 'Retirada no Local',
+        customer_address_reference: orderData.customer_address_reference?.trim() || '',
+        customer_neighborhood: orderData.delivery_type === 'delivery' ? orderData.customer_neighborhood || '' : '',
+        latitude: orderData.latitude || null,
+        longitude: orderData.longitude || null,
+        delivery_type: orderData.delivery_type || 'delivery',
+        payment_method: orderData.payment_method || 'cash',
+        notes: orderData.notes?.trim() || '',
+        items: formattedItems,
+        total: getCartTotal(),
+        delivery_fee: orderData.delivery_type === 'delivery' ? (orderData.delivery_fee || 0) : 0,
+        delivery_zone_id: orderData.delivery_type === 'delivery' ? orderData.delivery_zone_id : null,
+        status: 'pending',
+        order_number: orderNumber,
+        order_type: 'delivery'
+      };
+
+      console.log('📝 Dados finais do pedido:', finalOrderData);
 
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
@@ -112,14 +154,15 @@ const MenuDigital = () => {
         const { data: existingCustomer, error: customerCheckError } = await supabase
           .from('customers')
           .select('id')
-          .eq('user_id', orderData.user_id)
-          .eq('phone', orderData.customer_phone)
+          .eq('user_id', userId)
+          .eq('phone', finalOrderData.customer_phone)
           .maybeSingle();
 
         if (customerCheckError) {
           console.error('Erro ao verificar cliente existente:', customerCheckError);
         } else if (existingCustomer) {
           customerId = existingCustomer.id;
+          console.log('✅ Cliente existente encontrado:', customerId);
         }
       } catch (customerError) {
         console.error('Erro na verificação de cliente:', customerError);
@@ -129,12 +172,14 @@ const MenuDigital = () => {
         try {
           // Criar novo cliente
           const customerData = {
-            user_id: orderData.user_id,
-            name: orderData.customer_name,
-            phone: orderData.customer_phone,
-            address: orderData.customer_address,
-            neighborhood: orderData.customer_neighborhood || ''
+            user_id: userId,
+            name: finalOrderData.customer_name,
+            phone: finalOrderData.customer_phone,
+            address: finalOrderData.customer_address,
+            neighborhood: finalOrderData.customer_neighborhood || ''
           };
+
+          console.log('👤 Criando novo cliente:', customerData);
 
           const { data: newCustomer, error: customerError } = await supabase
             .from('customers')
@@ -147,6 +192,7 @@ const MenuDigital = () => {
             // Continuar sem cliente se falhar - não é crítico
           } else {
             customerId = newCustomer.id;
+            console.log('✅ Novo cliente criado:', customerId);
           }
         } catch (customerError) {
           console.error('Erro na criação de cliente:', customerError);
@@ -155,17 +201,19 @@ const MenuDigital = () => {
 
       // Adicionar customer_id ao pedido se cliente foi criado/encontrado
       if (customerId) {
-        orderData.customer_id = customerId;
+        finalOrderData.customer_id = customerId;
       }
+
+      console.log('💾 Salvando pedido no banco...');
 
       const { data, error } = await supabase
         .from('orders')
-        .insert([orderData])
+        .insert([finalOrderData])
         .select()
         .single();
 
       if (error) {
-        console.error('Erro ao criar pedido no banco:', error);
+        console.error('❌ Erro ao criar pedido no banco:', error);
         
         // Tratar erros específicos do banco
         if (error.code === '23505') {
@@ -179,15 +227,17 @@ const MenuDigital = () => {
         }
       }
 
+      console.log('✅ Pedido criado com sucesso:', data);
+
       toast({
         title: "Pedido realizado com sucesso!",
-        description: `Seu pedido ${orderData.order_number} foi recebido e está sendo preparado.`,
+        description: `Seu pedido #${orderNumber} foi recebido e está sendo preparado.`,
       });
 
       clearCart();
       setShowCartModal(false);
     } catch (error) {
-      console.error('Erro completo ao finalizar pedido:', error);
+      console.error('❌ Erro completo ao finalizar pedido:', error);
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {
@@ -269,15 +319,12 @@ const MenuDigital = () => {
         onAddToCart={handleAddToCartFromModal}
       />
 
-      <SimpleCartModal
+      <CheckoutModal
         isOpen={showCartModal}
         onClose={() => setShowCartModal(false)}
-        cart={cart}
+        cartItems={cart}
         total={getCartTotal()}
-        onUpdateQuantity={updateQuantity}
-        onRemoveItem={removeFromCart}
-        onPlaceOrder={handlePlaceOrder}
-        deliveryZones={deliveryZones}
+        onOrderSubmit={handlePlaceOrder}
         userId={userId}
       />
 
