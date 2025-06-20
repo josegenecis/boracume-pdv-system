@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +30,8 @@ interface ProductVariation {
 interface ProductVariationSelectorProps {
   product: Product;
   variations: ProductVariation[];
-  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string) => void;
+  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
+  onAddToTable?: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
   onClose: () => void;
 }
 
@@ -39,6 +39,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   product,
   variations,
   onAddToCart,
+  onAddToTable,
   onClose
 }) => {
   const [quantity, setQuantity] = useState(1);
@@ -79,17 +80,20 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   };
 
   const calculateTotalPrice = () => {
-    let total = product.price * quantity;
+    let variationPrice = 0;
     
     Object.values(selectedVariations).forEach((options: any) => {
       if (Array.isArray(options)) {
         options.forEach(option => {
-          total += option.price * quantity;
+          variationPrice += option.price || 0;
         });
       }
     });
     
-    return total;
+    return {
+      total: (product.price + variationPrice) * quantity,
+      variationPrice
+    };
   };
 
   const canAddToCart = () => {
@@ -109,8 +113,21 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
       options: options || []
     }));
     
-    onAddToCart(product, quantity, formattedVariations, notes);
+    const { variationPrice } = calculateTotalPrice();
+    onAddToCart(product, quantity, formattedVariations, notes, variationPrice);
     onClose();
+  };
+
+  const handleAddToTable = () => {
+    if (!canAddToCart() || !onAddToTable) return;
+    
+    const formattedVariations = Object.entries(selectedVariations).map(([variationId, options]) => ({
+      variationId,
+      options: options || []
+    }));
+    
+    const { variationPrice } = calculateTotalPrice();
+    onAddToTable(product, quantity, formattedVariations, notes, variationPrice);
   };
 
   return (
@@ -238,7 +255,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Total</p>
             <p className="text-xl font-bold text-primary">
-              R$ {calculateTotalPrice().toFixed(2)}
+              R$ {calculateTotalPrice().total.toFixed(2)}
             </p>
           </div>
         </div>
@@ -254,6 +271,16 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
           >
             Adicionar ao Carrinho
           </Button>
+          {onAddToTable && (
+            <Button 
+              onClick={handleAddToTable} 
+              disabled={!canAddToCart()}
+              variant="secondary"
+              className="flex-1"
+            >
+              Adicionar à Mesa
+            </Button>
+          )}
         </div>
       </div>
     </div>
