@@ -123,16 +123,12 @@ const MenuDigital = () => {
       // Gerar número do pedido
       const orderNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
-      // Preparar dados do pedido para o banco
+      // Preparar dados do pedido para o banco (removendo campos problemáticos)
       const finalOrderData = {
         user_id: userId,
         customer_name: orderData.customer_name.trim(),
         customer_phone: orderData.customer_phone.trim(),
         customer_address: orderData.delivery_type === 'delivery' ? orderData.customer_address?.trim() || '' : 'Retirada no Local',
-        customer_address_reference: orderData.customer_address_reference?.trim() || '',
-        customer_neighborhood: orderData.delivery_type === 'delivery' ? orderData.customer_neighborhood || '' : '',
-        latitude: orderData.latitude || null,
-        longitude: orderData.longitude || null,
         delivery_type: orderData.delivery_type || 'delivery',
         payment_method: orderData.payment_method || 'cash',
         notes: orderData.notes?.trim() || '',
@@ -175,7 +171,7 @@ const MenuDigital = () => {
             name: finalOrderData.customer_name,
             phone: finalOrderData.customer_phone,
             address: finalOrderData.customer_address,
-            neighborhood: finalOrderData.customer_neighborhood || ''
+            neighborhood: ''
           };
 
           console.log('👤 Criando novo cliente:', customerData);

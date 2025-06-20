@@ -35,15 +35,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     customer_name: '',
     customer_phone: '',
     customer_address: '',
-    customer_address_reference: '',
-    customer_neighborhood: '',
     delivery_type: 'delivery',
     payment_method: 'cash',
     notes: '',
     delivery_zone_id: '',
-    delivery_fee: 0,
-    latitude: null,
-    longitude: null
+    delivery_fee: 0
   });
 
   useEffect(() => {
@@ -127,10 +123,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customer_name: formData.customer_name.trim(),
         customer_phone: formData.customer_phone.trim(),
         customer_address: formData.delivery_type === 'delivery' ? formData.customer_address.trim() : 'Retirada no Local',
-        customer_address_reference: formData.customer_address_reference.trim(),
-        customer_neighborhood: formData.customer_neighborhood.trim(),
-        latitude: formData.latitude,
-        longitude: formData.longitude,
         delivery_type: formData.delivery_type,
         payment_method: formData.payment_method,
         notes: formData.notes.trim(),
@@ -145,15 +137,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         customer_name: '',
         customer_phone: '',
         customer_address: '',
-        customer_address_reference: '',
-        customer_neighborhood: '',
         delivery_type: 'delivery',
         payment_method: 'cash',
         notes: '',
         delivery_zone_id: '',
-        delivery_fee: 0,
-        latitude: null,
-        longitude: null
+        delivery_fee: 0
       });
       
     } catch (error) {
@@ -273,36 +261,24 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="customer_address_reference">Referência</Label>
-                  <Input
-                    id="customer_address_reference"
-                    value={formData.customer_address_reference}
-                    onChange={(e) => setFormData(prev => ({ ...prev, customer_address_reference: e.target.value }))}
-                    placeholder="Próximo ao..."
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="delivery_zone">Zona de Entrega *</Label>
-                  <Select
-                    value={formData.delivery_zone_id}
-                    onValueChange={handleDeliveryZoneChange}
-                    required={formData.delivery_type === 'delivery'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a zona" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {deliveryZones.map((zone) => (
-                        <SelectItem key={zone.id} value={zone.id}>
-                          {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="delivery_zone">Zona de Entrega *</Label>
+                <Select
+                  value={formData.delivery_zone_id}
+                  onValueChange={handleDeliveryZoneChange}
+                  required={formData.delivery_type === 'delivery'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a zona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryZones.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
