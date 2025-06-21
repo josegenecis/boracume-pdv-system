@@ -15,14 +15,15 @@ interface CartItem {
   uniqueId: string;
   variations: any[];
   notes: string;
+  variationPrice: number;
 }
 
 export const useDigitalCart = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  const addToCart = (product: CartProduct, quantity: number = 1, variations: any[] = [], notes: string = '') => {
+  const addToCart = (product: CartProduct, quantity: number = 1, variations: any[] = [], notes: string = '', variationPrice: number = 0) => {
     const uniqueId = `${product.id}-${Date.now()}`;
-    const totalPrice = product.price * quantity;
+    const totalPrice = (product.price + variationPrice) * quantity;
     
     setCart(prev => [...prev, {
       product,
@@ -30,7 +31,8 @@ export const useDigitalCart = () => {
       totalPrice,
       uniqueId,
       variations,
-      notes
+      notes,
+      variationPrice
     }]);
   };
 
@@ -45,7 +47,7 @@ export const useDigitalCart = () => {
         return {
           ...item,
           quantity: newQuantity,
-          totalPrice: item.product.price * newQuantity
+          totalPrice: (item.product.price + item.variationPrice) * newQuantity
         };
       }
       return item;
