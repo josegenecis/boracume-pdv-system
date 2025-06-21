@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useSimpleCart } from '@/hooks/useSimpleCart';
+import { useDigitalCart } from '@/hooks/useDigitalCart';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ const DigitalMenu = () => {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
-  // Hooks
+  // Hooks - usando useDigitalCart que funcionava
   const { products, categories, loading, profile } = useMenuData(userId || null);
   const { fetchVariations } = useSimpleVariations();
   const {
@@ -40,7 +40,7 @@ const DigitalMenu = () => {
     clearCart,
     getCartTotal,
     getCartItemCount
-  } = useSimpleCart();
+  } = useDigitalCart();
 
   console.log('📊 CARDÁPIO DIGITAL - Estado atual:', {
     userId,
