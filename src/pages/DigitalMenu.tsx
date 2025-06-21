@@ -4,32 +4,34 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useMenuData } from '@/hooks/useMenuData';
+import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ShoppingCart, Plus, Minus, Trash2, Phone } from 'lucide-react';
+import { Phone, Plus } from 'lucide-react';
+import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
+import SimpleCartModal from '@/components/menu/SimpleCartModal';
+import CartBottomBar from '@/components/menu/CartBottomBar';
+
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
+}
 
 const DigitalMenu = () => {
   const { userId } = useParams();
   console.log('🚀 CARDÁPIO DIGITAL - Componente montado, userId:', userId);
 
-  // Estados para modal do carrinho e dados do pedido
+  // Estados principais
   const [showCartModal, setShowCartModal] = useState(false);
-  const [orderData, setOrderData] = useState({
-    customer_name: '',
-    customer_phone: '',
-    customer_address: '',
-    order_type: 'delivery',
-    payment_method: 'cash',
-    notes: ''
-  });
+  const [showVariationModal, setShowVariationModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
-  // Usar hooks personalizados
+  // Hooks
   const { products, categories, loading, profile } = useMenuData(userId || null);
+  const { fetchVariations } = useSimpleVariations();
   const {
     cart,
     addToCart,
@@ -49,70 +51,82 @@ const DigitalMenu = () => {
     cartItems: getCartItemCount()
   });
 
-  // Função para finalizar pedido
-  const handlePlaceOrder = async () => {
+  // Carregar zonas de entrega
+  useEffect(() => {
+    if (userId) {
+      loadDeliveryZones();
+    }
+  }, [userId]);
+
+  const loadDeliveryZones = async () => {
     try {
-      console.log('📝 CARDÁPIO DIGITAL - Iniciando finalização do pedido');
+      const { data, error } = await supabase
+        .from('delivery_zones')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('name');
+
+      if (error) {
+        console.error('Erro ao carregar zonas de entrega:', error);
+        return;
+      }
+
+      setDeliveryZones(data || []);
+      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
+    } catch (error) {
+      console.error('Erro ao carregar zonas de entrega:', error);
+    }
+  };
+
+  // Lidar com clique no produto
+  const handleProductClick = async (product: any) => {
+    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+    
+    try {
+      const variations = await fetchVariations(product.id);
+      console.log('📊 CARDÁPIO DIGITAL - Variações encontradas:', variations.length);
       
-      if (!orderData.customer_name || !orderData.customer_phone) {
-        alert('Por favor, preencha nome e telefone');
-        return;
+      if (variations && variations.length > 0) {
+        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+      } else {
+        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
+        addToCart(product);
       }
+    } catch (error) {
+      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
+      addToCart(product);
+    }
+  };
 
-      if (cart.length === 0) {
-        alert('Carrinho está vazio');
-        return;
-      }
-
-      const orderPayload = {
-        user_id: userId,
-        customer_name: orderData.customer_name,
-        customer_phone: orderData.customer_phone,
-        customer_address: orderData.order_type === 'delivery' ? orderData.customer_address : 'Retirada no Local',
-        order_type: orderData.order_type,
-        payment_method: orderData.payment_method,
-        delivery_instructions: orderData.notes,
-        status: 'pending',
-        items: cart.map(item => ({
-          id: item.product.id,
-          name: item.product.name,
-          price: item.product.price,
-          quantity: item.quantity,
-          subtotal: item.totalPrice
-        })),
-        total: getCartTotal()
-      };
-
-      console.log('📝 Enviando pedido:', orderPayload);
+  // Finalizar pedido
+  const handlePlaceOrder = async (orderData: any) => {
+    try {
+      console.log('📝 CARDÁPIO DIGITAL - Finalizando pedido:', orderData);
 
       const { data, error } = await supabase
         .from('orders')
-        .insert([orderPayload])
+        .insert([orderData])
         .select()
         .single();
 
       if (error) {
         console.error('❌ Erro ao criar pedido:', error);
-        alert('Erro ao finalizar pedido. Tente novamente.');
-        return;
+        throw new Error('Erro ao finalizar pedido');
       }
 
       console.log('✅ Pedido criado com sucesso:', data);
-      alert('Pedido realizado com sucesso!');
       clearCart();
       setShowCartModal(false);
-      setOrderData({
-        customer_name: '',
-        customer_phone: '',
-        customer_address: '',
-        order_type: 'delivery',
-        payment_method: 'cash',
-        notes: ''
-      });
-
+      
+      // Mostrar confirmação
+      alert('Pedido realizado com sucesso! Em breve entraremos em contato.');
+      
     } catch (error) {
       console.error('❌ Erro ao finalizar pedido:', error);
-      alert('Erro inesperado. Tente novamente.');
+      throw error;
     }
   };
 
@@ -189,7 +203,7 @@ const DigitalMenu = () => {
                         )}
                         <p className="text-primary font-bold text-lg mt-2">R$ {product.price.toFixed(2)}</p>
                       </div>
-                      <Button onClick={() => addToCart(product)} className="self-center">
+                      <Button onClick={() => handleProductClick(product)} className="self-center">
                         <Plus className="h-4 w-4 mr-1" />
                         Adicionar
                       </Button>
@@ -203,148 +217,39 @@ const DigitalMenu = () => {
       </div>
 
       {/* Carrinho Fixo */}
-      {getCartItemCount() > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-50">
-          <div className="max-w-4xl mx-auto">
-            <Button onClick={() => setShowCartModal(true)} className="w-full h-14 text-lg">
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  <span>Ver Carrinho ({getCartItemCount()})</span>
-                </div>
-                <span className="font-bold">R$ {getCartTotal().toFixed(2)}</span>
-              </div>
-            </Button>
-          </div>
-        </div>
-      )}
+      <CartBottomBar
+        itemCount={getCartItemCount()}
+        total={getCartTotal()}
+        onOpenCart={() => setShowCartModal(true)}
+      />
+
+      {/* Modal de Variações */}
+      <SimpleVariationModal
+        isOpen={showVariationModal}
+        onClose={() => {
+          setShowVariationModal(false);
+          setSelectedProduct(null);
+        }}
+        product={selectedProduct}
+        onAddToCart={(product, quantity, variations, notes, variationPrice) => {
+          addToCart(product, quantity, variations, notes, variationPrice);
+          setShowVariationModal(false);
+          setSelectedProduct(null);
+        }}
+      />
 
       {/* Modal do Carrinho */}
-      <Dialog open={showCartModal} onOpenChange={setShowCartModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Finalizar Pedido</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-6">
-            {/* Itens do Carrinho */}
-            <div className="space-y-4">
-              <h3 className="font-medium">Seus Itens</h3>
-              {cart.map(item => (
-                <div key={item.uniqueId} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
-                  <div className="flex-1">
-                    <h4 className="font-medium">{item.product.name}</h4>
-                    <p className="text-sm text-gray-600">R$ {item.product.price.toFixed(2)} cada</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueId, item.quantity - 1)}>
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-8 text-center">{item.quantity}</span>
-                    <Button size="sm" variant="outline" onClick={() => updateQuantity(item.uniqueId, item.quantity + 1)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => removeFromCart(item.uniqueId)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">R$ {item.totalPrice.toFixed(2)}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="text-right font-bold text-lg">
-                Total: R$ {getCartTotal().toFixed(2)}
-              </div>
-            </div>
-
-            {/* Dados do Cliente */}
-            <div className="space-y-4">
-              <h3 className="font-medium">Seus Dados</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome Completo *</Label>
-                  <Input
-                    id="name"
-                    value={orderData.customer_name}
-                    onChange={(e) => setOrderData(prev => ({ ...prev, customer_name: e.target.value }))}
-                    placeholder="Seu nome completo"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone *</Label>
-                  <Input
-                    id="phone"
-                    value={orderData.customer_phone}
-                    onChange={(e) => setOrderData(prev => ({ ...prev, customer_phone: e.target.value }))}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Tipo de Entrega</Label>
-                <Select value={orderData.order_type} onValueChange={(value) => setOrderData(prev => ({ ...prev, order_type: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="delivery">Entrega</SelectItem>
-                    <SelectItem value="pickup">Retirada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {orderData.order_type === 'delivery' && (
-                <div className="space-y-2">
-                  <Label htmlFor="address">Endereço de Entrega</Label>
-                  <Input
-                    id="address"
-                    value={orderData.customer_address}
-                    onChange={(e) => setOrderData(prev => ({ ...prev, customer_address: e.target.value }))}
-                    placeholder="Seu endereço completo"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Forma de Pagamento</Label>
-                <Select value={orderData.payment_method} onValueChange={(value) => setOrderData(prev => ({ ...prev, payment_method: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Dinheiro</SelectItem>
-                    <SelectItem value="card">Cartão</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Observações</Label>
-                <Textarea
-                  id="notes"
-                  value={orderData.notes}
-                  onChange={(e) => setOrderData(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Observações adicionais..."
-                  rows={3}
-                />
-              </div>
-            </div>
-
-            {/* Botões */}
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setShowCartModal(false)} className="flex-1">
-                Continuar Comprando
-              </Button>
-              <Button onClick={handlePlaceOrder} className="flex-1">
-                Finalizar Pedido
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SimpleCartModal
+        isOpen={showCartModal}
+        onClose={() => setShowCartModal(false)}
+        cart={cart}
+        total={getCartTotal()}
+        onUpdateQuantity={updateQuantity}
+        onRemoveItem={removeFromCart}
+        onPlaceOrder={handlePlaceOrder}
+        deliveryZones={deliveryZones}
+        userId={userId || ''}
+      />
     </div>
   );
 };
