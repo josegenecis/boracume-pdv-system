@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,8 +13,8 @@ const MenuLinkGenerator = () => {
   const { toast } = useToast();
   const [showQRCode, setShowQRCode] = useState(false);
 
-  // Gerar o link correto do cardápio
-  const menuLink = user ? `${window.location.origin}/menu/${user.id}` : '';
+  // Gerar o link correto do cardápio - corrigido para /cardapio/
+  const menuLink = user ? `${window.location.origin}/cardapio/${user.id}` : '';
 
   const copyToClipboard = () => {
     if (menuLink) {
