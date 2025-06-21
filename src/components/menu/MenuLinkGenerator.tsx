@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ const MenuLinkGenerator = () => {
   const { toast } = useToast();
   const [showQRCode, setShowQRCode] = useState(false);
 
-  // Gerar o link correto do cardápio - corrigido para /cardapio/
+  // Gerar o link correto do cardápio
   const menuLink = user ? `${window.location.origin}/cardapio/${user.id}` : '';
 
   const copyToClipboard = () => {
@@ -42,6 +43,11 @@ const MenuLinkGenerator = () => {
     } else {
       copyToClipboard();
     }
+  };
+
+  const generateQRCode = () => {
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuLink)}`;
+    return qrCodeUrl;
   };
 
   return (
@@ -103,8 +109,24 @@ const MenuLinkGenerator = () => {
           </Button>
         </div>
 
+        {/* QR Code Nativo */}
+        {showQRCode && menuLink && (
+          <div className="mt-4 text-center space-y-4">
+            <div>
+              <h4 className="font-medium mb-2">QR Code Nativo</h4>
+              <img 
+                src={generateQRCode()} 
+                alt="QR Code do Cardápio"
+                className="mx-auto border rounded-lg"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* QR Code Personalizado */}
         {showQRCode && menuLink && (
           <div className="mt-4 text-center">
+            <h4 className="font-medium mb-2">QR Code Personalizado</h4>
             <QRCodeGenerator 
               value={menuLink}
               size={200}
