@@ -29,7 +29,7 @@ const DigitalMenu = () => {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
-  // Hooks - usando useDigitalCart que funcionava
+  // Hooks
   const { products, categories, loading, profile } = useMenuData(userId || null);
   const { fetchVariations } = useSimpleVariations();
   const {

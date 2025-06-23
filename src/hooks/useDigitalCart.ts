@@ -13,7 +13,7 @@ interface CartItem {
   quantity: number;
   totalPrice: number;
   uniqueId: string;
-  variations: any[];
+  variations: string[];
   notes: string;
   variationPrice: number;
 }
@@ -21,7 +21,7 @@ interface CartItem {
 export const useDigitalCart = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  const addToCart = (product: CartProduct, quantity: number = 1, variations: any[] = [], notes: string = '', variationPrice: number = 0) => {
+  const addToCart = (product: CartProduct, quantity: number = 1, variations: string[] = [], notes: string = '', variationPrice: number = 0) => {
     const uniqueId = `${product.id}-${Date.now()}`;
     const totalPrice = (product.price + variationPrice) * quantity;
     

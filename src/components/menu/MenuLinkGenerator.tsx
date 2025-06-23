@@ -105,43 +105,53 @@ const MenuLinkGenerator = () => {
             disabled={!menuLink}
           >
             <QrCode className="h-4 w-4 mr-2" />
-            QR Code
+            {showQRCode ? 'Ocultar QR Codes' : 'Mostrar QR Codes'}
           </Button>
         </div>
 
-        {/* QR Code Nativo */}
+        {/* QR Codes */}
         {showQRCode && menuLink && (
-          <div className="mt-4 text-center space-y-4">
-            <div>
-              <h4 className="font-medium mb-2">QR Code Nativo</h4>
-              <img 
-                src={generateQRCode()} 
-                alt="QR Code do Cardápio"
-                className="mx-auto border rounded-lg"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            {/* QR Code Nativo */}
+            <div className="text-center space-y-4">
+              <h4 className="font-medium text-lg">QR Code Nativo</h4>
+              <div className="border rounded-lg p-4 bg-white">
+                <img 
+                  src={generateQRCode()} 
+                  alt="QR Code do Cardápio"
+                  className="mx-auto w-48 h-48"
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                QR Code simples e rápido
+              </p>
+            </div>
+
+            {/* QR Code Personalizado */}
+            <div className="text-center space-y-4">
+              <h4 className="font-medium text-lg">QR Code Personalizado</h4>
+              <div className="border rounded-lg p-4 bg-white">
+                <QRCodeGenerator 
+                  value={menuLink}
+                  size={200}
+                  title="Cardápio Digital"
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                QR Code com estilo personalizado
+              </p>
             </div>
           </div>
         )}
 
-        {/* QR Code Personalizado */}
-        {showQRCode && menuLink && (
-          <div className="mt-4 text-center">
-            <h4 className="font-medium mb-2">QR Code Personalizado</h4>
-            <QRCodeGenerator 
-              value={menuLink}
-              size={200}
-              title="Cardápio Digital"
-            />
-          </div>
-        )}
-
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground bg-blue-50 p-4 rounded-lg">
           <p><strong>Como usar:</strong></p>
           <ul className="list-disc list-inside space-y-1 mt-2">
-            <li>Copie e cole em redes sociais</li>
+            <li>Copie e cole o link em redes sociais</li>
             <li>Adicione na bio do Instagram</li>
             <li>Envie por WhatsApp para clientes</li>
-            <li>Use o QR Code em materiais impressos</li>
+            <li>Use qualquer um dos QR Codes em materiais impressos</li>
+            <li>Coloque QR Codes em mesas do restaurante</li>
           </ul>
         </div>
       </CardContent>
