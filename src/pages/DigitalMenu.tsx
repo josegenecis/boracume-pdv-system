@@ -21,7 +21,6 @@ interface DeliveryZone {
 
 const DigitalMenu = () => {
   const { userId } = useParams();
-  console.log('🚀 CARDÁPIO DIGITAL - Componente montado, userId:', userId);
 
   // Estados principais
   const [showCartModal, setShowCartModal] = useState(false);
@@ -41,15 +40,6 @@ const DigitalMenu = () => {
     getCartTotal,
     getCartItemCount
   } = useDigitalCart();
-
-  console.log('📊 CARDÁPIO DIGITAL - Estado atual:', {
-    userId,
-    loading,
-    productsCount: products.length,
-    categoriesCount: categories.length,
-    hasProfile: !!profile,
-    cartItems: getCartItemCount()
-  });
 
   // Carregar zonas de entrega
   useEffect(() => {
@@ -73,7 +63,6 @@ const DigitalMenu = () => {
       }
 
       setDeliveryZones(data || []);
-      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
     } catch (error) {
       console.error('Erro ao carregar zonas de entrega:', error);
     }
@@ -81,22 +70,17 @@ const DigitalMenu = () => {
 
   // Lidar com clique no produto
   const handleProductClick = async (product: any) => {
-    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
-    
     try {
       const variations = await fetchVariations(product.id);
-      console.log('📊 CARDÁPIO DIGITAL - Variações encontradas:', variations.length);
       
       if (variations && variations.length > 0) {
-        console.log('✅ CARDÁPIO DIGITAL - PRODUTO TEM VARIAÇÕES! Abrindo modal...');
         setSelectedProduct(product);
         setShowVariationModal(true);
       } else {
-        console.log('➡️ CARDÁPIO DIGITAL - Produto sem variações, adicionando direto ao carrinho');
         addToCart(product);
       }
     } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro crítico ao buscar variações:', error);
+      console.error('Erro ao buscar variações:', error);
       addToCart(product);
     }
   };
@@ -104,8 +88,6 @@ const DigitalMenu = () => {
   // Finalizar pedido
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      console.log('📝 CARDÁPIO DIGITAL - Finalizando pedido:', orderData);
-
       const { data, error } = await supabase
         .from('orders')
         .insert([orderData])
@@ -113,26 +95,23 @@ const DigitalMenu = () => {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido:', error);
+        console.error('Erro ao criar pedido:', error);
         throw new Error('Erro ao finalizar pedido');
       }
 
-      console.log('✅ Pedido criado com sucesso:', data);
       clearCart();
       setShowCartModal(false);
       
-      // Mostrar confirmação
       alert('Pedido realizado com sucesso! Em breve entraremos em contato.');
       
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido:', error);
+      console.error('Erro ao finalizar pedido:', error);
       throw error;
     }
   };
 
   // Estados de loading e erro
   if (loading) {
-    console.log('⏳ CARDÁPIO DIGITAL - Carregando dados...');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -141,19 +120,15 @@ const DigitalMenu = () => {
   }
 
   if (!profile) {
-    console.log('❌ CARDÁPIO DIGITAL - Perfil não encontrado');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
           <p className="text-muted-foreground">Este restaurante pode não existir ou estar indisponível.</p>
-          <p className="text-sm text-gray-500 mt-4">ID: {userId}</p>
         </div>
       </div>
     );
   }
-
-  console.log('✅ CARDÁPIO DIGITAL - Renderizando cardápio com sucesso');
 
   return (
     <div className="min-h-screen bg-gray-50">
