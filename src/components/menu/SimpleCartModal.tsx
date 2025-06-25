@@ -85,8 +85,17 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 INICIANDO CHECKOUT - Dados do formulário:', {
+      cart: cart.length,
+      customerData,
+      deliveryType,
+      paymentMethod,
+      selectedZone,
+      finalTotal
+    });
     
     if (cart.length === 0) {
+      console.log('❌ ERRO: Carrinho vazio');
       toast({
         title: "Carrinho vazio",
         description: "Adicione itens ao carrinho antes de finalizar o pedido.",
@@ -95,7 +104,9 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       return;
     }
 
+    // Validações básicas
     if (!customerData.name.trim()) {
+      console.log('❌ ERRO: Nome obrigatório');
       toast({
         title: "Nome obrigatório",
         description: "Por favor, informe seu nome.",
@@ -105,6 +116,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     }
 
     if (!customerData.phone.trim()) {
+      console.log('❌ ERRO: Telefone obrigatório');
       toast({
         title: "Telefone obrigatório",
         description: "Por favor, informe seu telefone.",
@@ -113,8 +125,10 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       return;
     }
 
+    // Validações específicas para entrega
     if (deliveryType === 'delivery') {
       if (!selectedZone) {
+        console.log('❌ ERRO: Área de entrega obrigatória');
         toast({
           title: "Área de entrega obrigatória",
           description: "Por favor, selecione sua área de entrega.",
@@ -124,6 +138,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
 
       if (!customerData.address.trim()) {
+        console.log('❌ ERRO: Endereço obrigatório para entrega');
         toast({
           title: "Endereço obrigatório",
           description: "Por favor, informe seu endereço para entrega.",
@@ -134,6 +149,10 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
       const zone = deliveryZones.find(z => z.id === selectedZone);
       if (zone && total < zone.minimum_order) {
+        console.log('❌ ERRO: Pedido mínimo não atingido', { 
+          total, 
+          minimum: zone.minimum_order 
+        });
         toast({
           title: "Pedido mínimo não atingido",
           description: `O pedido mínimo para esta área é R$ ${zone.minimum_order.toFixed(2)}.`,
@@ -143,6 +162,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
     }
 
+    console.log('✅ Todas as validações passaram, criando pedido...');
     setIsSubmitting(true);
 
     try {
@@ -159,24 +179,30 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         payment_method: paymentMethod,
         notes: notes.trim(),
         items: cart.map(item => ({
-          id: item.product.id,
+          product_id: item.product.id,
           name: item.product.name,
           price: item.product.price,
           quantity: item.quantity,
           variations: item.variations || [],
-          notes: item.notes || ''
+          notes: item.notes || '',
+          subtotal: item.totalPrice
         })),
         total: finalTotal,
         delivery_fee: deliveryType === 'delivery' ? deliveryFee : 0,
         delivery_zone_id: deliveryType === 'delivery' ? selectedZone : null,
         status: 'pending',
         order_number: generateOrderNumber(),
-        order_type: 'delivery'
+        order_type: 'delivery',
+        acceptance_status: 'pending_acceptance'
       };
+
+      console.log('📦 DADOS DO PEDIDO PREPARADOS:', orderData);
 
       await onPlaceOrder(orderData);
       
-      // Reset form
+      console.log('✅ Pedido finalizado com sucesso!');
+      
+      // Reset form apenas após sucesso
       setCustomerData({
         name: '',
         phone: '',
@@ -191,8 +217,18 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setNotes('');
       setSelectedZone('');
       
+      toast({
+        title: "Pedido enviado!",
+        description: "Seu pedido foi enviado com sucesso. Em breve entraremos em contato!",
+      });
+      
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido:', error);
+      console.error('❌ ERRO CRÍTICO no checkout:', error);
+      toast({
+        title: "Erro ao finalizar pedido",
+        description: "Ocorreu um erro ao enviar seu pedido. Tente novamente.",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -344,22 +380,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Localização no Mapa</Label>
-                <CustomerLocationInput
-                  onLocationSelect={(address, lat, lng) => {
-                    setCustomerData(prev => ({
-                      ...prev,
-                      address: address,
-                      latitude: lat,
-                      longitude: lng
-                    }));
-                  }}
-                  defaultAddress={customerData.address}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="address">Endereço Completo *</Label>
                   <Input
@@ -377,6 +398,15 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     value={customerData.addressReference}
                     onChange={(e) => setCustomerData(prev => ({ ...prev, addressReference: e.target.value }))}
                     placeholder="Ex: Próximo ao mercado"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="neighborhood">Bairro</Label>
+                  <Input
+                    id="neighborhood"
+                    value={customerData.neighborhood}
+                    onChange={(e) => setCustomerData(prev => ({ ...prev, neighborhood: e.target.value }))}
+                    placeholder="Nome do bairro"
                   />
                 </div>
               </div>
@@ -435,7 +465,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             size="lg"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Enviando...' : 'Finalizar Pedido'}
+            {isSubmitting ? 'Enviando Pedido...' : 'Finalizar Pedido'}
           </Button>
         </form>
       </DialogContent>

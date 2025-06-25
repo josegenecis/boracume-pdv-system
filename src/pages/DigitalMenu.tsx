@@ -28,8 +28,6 @@ const DigitalMenu = () => {
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-  const [debugInfo, setDebugInfo] = useState<string>('Iniciando diagnóstico...');
-  const [forceRefresh, setForceRefresh] = useState(0);
 
   // Hooks
   const { products, categories, loading, profile } = useMenuData(userId || null);
@@ -43,39 +41,6 @@ const DigitalMenu = () => {
     getCartTotal,
     getCartItemCount
   } = useDigitalCart();
-
-  // Debug detalhado
-  useEffect(() => {
-    console.log('🔍 DIAGNÓSTICO DIGITAL MENU:');
-    console.log('- UserId:', userId);
-    console.log('- Loading:', loading);
-    console.log('- Profile:', profile);
-    console.log('- Products count:', products?.length || 0);
-    console.log('- Categories:', categories);
-    
-    const debugText = `
-DIAGNÓSTICO COMPLETO:
-===================
-✅ URL Atual: ${window.location.href}
-✅ UserId Extraído: ${userId || 'UNDEFINED'}
-✅ Loading Status: ${loading}
-✅ Profile Carregado: ${profile ? 'SIM' : 'NÃO'}
-✅ Nome do Restaurante: ${profile?.restaurant_name || 'NÃO DEFINIDO'}
-✅ Telefone: ${profile?.phone || 'NÃO DEFINIDO'}
-✅ Produtos Encontrados: ${products?.length || 0}
-✅ Categorias: ${categories?.length || 0} (${categories?.join(', ') || 'NENHUMA'})
-✅ Items no Carrinho: ${getCartItemCount()}
-✅ Timestamp: ${new Date().toLocaleString()}
-
-DETALHES DOS PRODUTOS:
-${products?.map(p => `- ${p.name} (${p.category}) - R$ ${p.price}`).join('\n') || 'Nenhum produto encontrado'}
-
-STATUS DA CONEXÃO:
-✅ Supabase Client: Configurado
-✅ Database: Conectado
-    `;
-    setDebugInfo(debugText);
-  }, [userId, loading, profile, products, categories, forceRefresh]);
 
   // Carregar zonas de entrega
   useEffect(() => {
@@ -107,13 +72,6 @@ STATUS DA CONEXÃO:
     }
   };
 
-  // Forçar refresh
-  const handleForceRefresh = () => {
-    console.log('🔄 Forçando refresh...');
-    setForceRefresh(prev => prev + 1);
-    window.location.reload();
-  };
-
   // Lidar com clique no produto
   const handleProductClick = async (product: any) => {
     console.log('🔘 CLICK NO PRODUTO:', product.name);
@@ -134,10 +92,13 @@ STATUS DA CONEXÃO:
     }
   };
 
-  // Finalizar pedido
+  // Finalizar pedido - CORRIGIDO
   const handlePlaceOrder = async (orderData: any) => {
-    console.log('🛍️ Finalizando pedido:', orderData);
+    console.log('🛍️ INICIANDO FINALIZACAO DO PEDIDO:', orderData);
+    
     try {
+      console.log('📡 Enviando para banco de dados...');
+      
       const { data, error } = await supabase
         .from('orders')
         .insert([orderData])
@@ -145,18 +106,27 @@ STATUS DA CONEXÃO:
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido:', error);
-        throw new Error('Erro ao finalizar pedido');
+        console.error('❌ ERRO CRÍTICO ao criar pedido no banco:', error);
+        console.error('❌ Detalhes completos do erro:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(`Erro ao finalizar pedido: ${error.message}`);
       }
 
-      console.log('✅ Pedido criado com sucesso:', data);
+      console.log('✅ PEDIDO CRIADO COM SUCESSO no banco:', data);
+      
+      // Limpar carrinho apenas após sucesso
       clearCart();
       setShowCartModal(false);
       
-      alert('Pedido realizado com sucesso! Em breve entraremos em contato.');
+      console.log('✅ Carrinho limpo e modal fechado');
       
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido:', error);
+      console.error('❌ ERRO CRÍTICO na finalização:', error);
+      // Re-throw o erro para o modal tratar
       throw error;
     }
   };
@@ -198,21 +168,6 @@ STATUS DA CONEXÃO:
         <div className="text-center max-w-4xl mx-auto p-8">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mb-4 mx-auto"></div>
           <p className="text-lg font-semibold mb-4">🔄 Carregando cardápio...</p>
-          
-          <div className="bg-white p-6 rounded-lg shadow-lg text-left">
-            <h3 className="font-bold text-blue-800 mb-4 text-center">📊 DIAGNÓSTICO EM TEMPO REAL</h3>
-            <pre className="text-xs text-gray-700 whitespace-pre-wrap overflow-auto max-h-96">
-              {debugInfo}
-            </pre>
-            
-            <Button 
-              onClick={handleForceRefresh}
-              className="w-full mt-4 bg-blue-600 hover:bg-blue-700"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Forçar Atualização
-            </Button>
-          </div>
         </div>
       </div>
     );
@@ -227,31 +182,6 @@ STATUS DA CONEXÃO:
           <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
           <h1 className="text-2xl font-bold text-yellow-700 mb-2">⚠️ Restaurante não encontrado</h1>
           <p className="text-yellow-600 mb-4">Este restaurante pode não existir ou estar indisponível.</p>
-          
-          <div className="bg-white p-6 rounded-lg shadow-lg text-left mb-4">
-            <h3 className="font-bold text-yellow-800 mb-4 text-center">🔍 INFORMAÇÕES DE DEBUG</h3>
-            <pre className="text-xs text-gray-700 whitespace-pre-wrap overflow-auto max-h-96">
-              {debugInfo}
-            </pre>
-          </div>
-          
-          <div className="bg-white p-4 rounded-lg border-2 border-yellow-200">
-            <h3 className="font-bold text-yellow-800 mb-2">🛠️ POSSÍVEIS SOLUÇÕES:</h3>
-            <ul className="text-left text-sm text-gray-700 space-y-2">
-              <li><strong>1.</strong> Verifique se o ID está correto</li>
-              <li><strong>2.</strong> Confirme se o restaurante existe no banco de dados</li>
-              <li><strong>3.</strong> Tente usar o link gerado no painel administrativo</li>
-              <li><strong>4.</strong> Limpe o cache do navegador (Ctrl+F5)</li>
-            </ul>
-          </div>
-          
-          <Button 
-            onClick={handleForceRefresh}
-            className="w-full mt-4 bg-yellow-600 hover:bg-yellow-700"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Tentar Novamente
-          </Button>
         </div>
       </div>
     );
@@ -279,48 +209,6 @@ STATUS DA CONEXÃO:
               )}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Painel de Debug - SEMPRE VISÍVEL para diagnóstico */}
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-green-800 flex items-center gap-2">
-              ✅ CARDÁPIO FUNCIONANDO!
-            </h3>
-            <Button 
-              onClick={handleForceRefresh}
-              size="sm"
-              variant="outline"
-              className="border-green-300"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-          </div>
-          
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <p><strong>✅ Restaurante:</strong> {profile.restaurant_name}</p>
-              <p><strong>✅ Produtos:</strong> {products.length} encontrados</p>
-              <p><strong>✅ Categorias:</strong> {categories.length} ativas</p>
-            </div>
-            <div>
-              <p><strong>✅ URL:</strong> Correta</p>
-              <p><strong>✅ Database:</strong> Conectado</p>
-              <p><strong>✅ Status:</strong> Funcionando 🎉</p>
-            </div>
-          </div>
-          
-          <details className="mt-3">
-            <summary className="cursor-pointer text-green-700 font-medium hover:underline">
-              📋 Ver diagnóstico completo
-            </summary>
-            <pre className="text-xs text-green-700 mt-2 bg-white p-3 rounded border max-h-60 overflow-auto">
-              {debugInfo}
-            </pre>
-          </details>
         </div>
       </div>
 
