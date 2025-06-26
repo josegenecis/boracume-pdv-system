@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -80,33 +79,6 @@ const MenuDigital = () => {
 
       console.log('✅ CHECKOUT - Dados validados, processando...');
 
-      // Processar cliente (opcional - não bloqueia o pedido se falhar)
-      let customerId = null;
-      try {
-        const { data: newCustomer, error: customerError } = await supabase
-          .from('customers')
-          .upsert({
-            user_id: orderData.user_id,
-            name: orderData.customer_name,
-            phone: orderData.customer_phone,
-            address: orderData.customer_address || '',
-            neighborhood: orderData.customer_neighborhood || ''
-          }, { 
-            onConflict: 'user_id,phone',
-            ignoreDuplicates: false 
-          })
-          .select('id')
-          .single();
-
-        if (!customerError && newCustomer) {
-          customerId = newCustomer.id;
-          console.log('✅ CHECKOUT - Cliente processado:', customerId);
-        }
-      } catch (customerError) {
-        console.warn('⚠️ CHECKOUT - Aviso na criação do cliente:', customerError);
-        // Continuar sem cliente - não é crítico
-      }
-
       // Preparar dados finais do pedido
       const finalOrderData = {
         user_id: orderData.user_id,
@@ -115,23 +87,17 @@ const MenuDigital = () => {
         customer_phone: orderData.customer_phone.trim(),
         customer_address: orderData.customer_address?.trim() || '',
         customer_neighborhood: orderData.customer_neighborhood?.trim() || '',
-        customer_id: customerId,
         delivery_zone_id: orderData.delivery_zone_id || null,
         items: orderData.items,
         total: orderData.total,
         delivery_fee: orderData.delivery_fee || 0,
         payment_method: orderData.payment_method,
-        change_amount: orderData.change_amount,
+        change_amount: orderData.change_amount || 0,
         order_type: orderData.order_type || 'delivery',
         delivery_instructions: orderData.delivery_instructions || null,
         estimated_time: orderData.estimated_time || '30-45 min',
         status: 'pending',
-        acceptance_status: 'pending_acceptance',
-        customer_latitude: orderData.customer_latitude,
-        customer_longitude: orderData.customer_longitude,
-        customer_location_accuracy: orderData.customer_location_accuracy,
-        google_maps_link: orderData.google_maps_link,
-        customer_address_reference: orderData.customer_address_reference || null
+        acceptance_status: 'pending_acceptance'
       };
 
       console.log('🔄 CHECKOUT - Criando pedido no banco de dados...');
