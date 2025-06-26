@@ -47,6 +47,7 @@ interface SimpleCheckoutProps {
   cart: CartItem[];
   total: number;
   onClearCart: () => void;
+  onRemoveFromCart: (uniqueId: string) => void;
   userId: string;
   deliveryZones: DeliveryZone[];
   profile: Profile;
@@ -58,6 +59,7 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
   cart,
   total,
   onClearCart,
+  onRemoveFromCart,
   userId,
   deliveryZones,
   profile
@@ -85,7 +87,10 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🚀 Iniciando envio do pedido...');
+    
     if (!customerName.trim() || !customerPhone.trim()) {
+      console.log('❌ Validação falhou: nome ou telefone em branco');
       toast({
         title: "Dados obrigatórios",
         description: "Por favor, informe seu nome e telefone.",
@@ -96,6 +101,7 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
 
     if (deliveryType === 'delivery') {
       if (!customerAddress.trim()) {
+        console.log('❌ Validação falhou: endereço em branco para entrega');
         toast({
           title: "Endereço obrigatório",
           description: "Por favor, informe seu endereço para entrega.",
@@ -105,6 +111,7 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
       }
       
       if (!selectedZone) {
+        console.log('❌ Validação falhou: zona de entrega não selecionada');
         toast({
           title: "Bairro obrigatório",
           description: "Por favor, selecione o bairro para entrega.",
@@ -117,6 +124,8 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
     setIsSubmitting(true);
 
     try {
+      console.log('📋 Preparando dados do pedido...');
+      
       const orderData = {
         user_id: userId,
         customer_name: customerName.trim(),
@@ -128,7 +137,8 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         delivery_fee: deliveryType === 'delivery' ? deliveryFee : 0,
         items: cart.map(item => ({
           product_id: item.product.id,
-          name: item.product.name,
+          product_name: item.product.name, // Usando product_name para compatibilidade
+          name: item.product.name, // Mantendo name também
           price: item.product.price,
           quantity: item.quantity,
           subtotal: item.totalPrice,
@@ -137,11 +147,14 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         })),
         total: finalTotal,
         status: 'pending',
-        order_type: 'delivery',
+        order_type: deliveryType,
         acceptance_status: 'pending_acceptance'
       };
 
-      console.log('Enviando pedido:', orderData);
+      console.log('📤 Enviando pedido para o banco:', {
+        ...orderData,
+        items: orderData.items.length + ' items'
+      });
 
       const { data, error } = await supabase
         .from('orders')
@@ -149,12 +162,18 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         .select();
 
       if (error) {
-        console.error('Erro ao inserir pedido:', error);
-        throw error;
+        console.error('❌ Erro específico do Supabase:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(`Erro no banco de dados: ${error.message}`);
       }
 
-      console.log('Pedido inserido com sucesso:', data);
+      console.log('✅ Pedido inserido com sucesso:', data);
 
+      // Limpar carrinho e fechar modal
       onClearCart();
       onClose();
       
@@ -167,26 +186,28 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
       setSelectedZone('');
       setDeliveryFee(0);
       
+      console.log('🎉 Processo concluído com sucesso');
+      
       toast({
         title: "Pedido enviado!",
         description: "Seu pedido foi enviado com sucesso! Em breve entraremos em contato.",
       });
       
-    } catch (error) {
-      console.error('Erro ao finalizar pedido:', error);
+    } catch (error: any) {
+      console.error('💥 Erro geral ao finalizar pedido:', {
+        message: error.message,
+        stack: error.stack,
+        error: error
+      });
+      
       toast({
         title: "Erro ao finalizar pedido",
-        description: "Houve um erro ao enviar seu pedido. Tente novamente.",
+        description: error.message || "Houve um erro ao enviar seu pedido. Tente novamente.",
         variant: "destructive"
       });
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const removeItem = (uniqueId: string) => {
-    // Esta função seria implementada no hook useSimpleCart
-    console.log('Remover item:', uniqueId);
   };
 
   if (cart.length === 0) {
@@ -227,7 +248,7 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => removeItem(item.uniqueId)}
+                      onClick={() => onRemoveFromCart(item.uniqueId)}
                       className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
                     >
                       <Trash2 className="h-3 w-3" />
