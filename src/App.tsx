@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,7 +15,7 @@ import Orders from '@/pages/Orders';
 import Products from '@/pages/Products';
 import Kitchen from '@/pages/Kitchen';
 import Configuracoes from '@/pages/Configuracoes';
-import DigitalMenu from '@/pages/DigitalMenu'; // Nova importação
+import DigitalMenu from '@/pages/DigitalMenu';
 import Mesas from '@/pages/Mesas';
 import PDV from '@/pages/PDV';
 import Financeiro from '@/pages/Financeiro';
@@ -28,9 +29,6 @@ import SecurityDashboard from '@/pages/SecurityDashboard';
 import Subscription from '@/pages/Subscription';
 import Downloads from '@/pages/Downloads';
 import NotFound from '@/pages/NotFound';
-import NewDigitalMenu from '@/pages/NewDigitalMenu';
-import NewKitchen from '@/pages/NewKitchen';
-import NewPDV from '@/pages/NewPDV';
 
 function App() {
   return (
@@ -43,8 +41,8 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               
-              {/* Novo Cardápio Digital */}
-              <Route path="/cardapio/:userId" element={<NewDigitalMenu />} />
+              {/* Cardápio Digital */}
+              <Route path="/cardapio/:userId" element={<DigitalMenu />} />
               
               {/* Protected routes */}
               <Route path="/dashboard" element={
@@ -62,14 +60,11 @@ function App() {
                   <Products />
                 </RouteGuard>
               } />
-              
-              {/* Nova Cozinha */}
               <Route path="/cozinha" element={
                 <RouteGuard>
-                  <NewKitchen />
+                  <Kitchen />
                 </RouteGuard>
               } />
-              
               <Route path="/configuracoes" element={
                 <RouteGuard>
                   <Configuracoes />
@@ -80,14 +75,11 @@ function App() {
                   <Mesas />
                 </RouteGuard>
               } />
-              
-              {/* Novo PDV */}
               <Route path="/pdv" element={
                 <RouteGuard>
-                  <NewPDV />
+                  <PDV />
                 </RouteGuard>
               } />
-              
               <Route path="/financeiro" element={
                 <RouteGuard>
                   <Financeiro />
