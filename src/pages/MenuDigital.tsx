@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -16,30 +17,20 @@ const MenuDigital = () => {
   const [searchParams] = useSearchParams();
   const queryUserId = searchParams.get('u');
   
-  // Usar parâmetro da URL ou query parameter
   const userId = paramUserId || queryUserId;
   
-  console.log('🚀 CARDÁPIO DIGITAL - INICIADO:', {
+  console.log('🔄 CARDÁPIO DIGITAL - Inicializando:', {
     paramUserId,
     queryUserId,
     finalUserId: userId,
-    currentUrl: window.location.href,
-    expectedUrl: `${window.location.origin}/menu/{userId}`,
-    isCorrectUrl: window.location.pathname.includes('/menu/')
+    currentUrl: window.location.href
   });
-
-  if (!window.location.pathname.includes('/menu/')) {
-    console.warn('⚠️ CARDÁPIO DIGITAL - VOCÊ ESTÁ NA URL ERRADA!');
-    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
-    console.warn('⚠️ Não teste na área administrativa!');
-  }
   
   const { toast } = useToast();
   const [showCartModal, setShowCartModal] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
-  // Custom hooks
   const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
   const { fetchVariations } = useSimpleVariations();
   const {
@@ -53,32 +44,16 @@ const MenuDigital = () => {
   } = useSimpleCart();
   
   const handleProductClick = async (product: any) => {
-    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+    console.log('🔄 CARDÁPIO DIGITAL - Clique no produto:', product.name, 'ID:', product.id);
     
     try {
-      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
       const variations = await fetchVariations(product.id);
-      
-      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
-        total: variations.length,
-        variações: variations.map(v => v.name)
-      });
-      
-      // SEMPRE abrir modal de variações, mesmo se não houver variações
-      // Isso permite que o usuário ajuste quantidade e adicione observações
-      console.log('✅ CARDÁPIO DIGITAL - Abrindo modal de variações/detalhes...');
+      console.log('📊 CARDÁPIO DIGITAL - Variações encontradas:', variations.length);
       
       setSelectedProduct(product);
       setShowVariationModal(true);
-      
-      console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
-        selectedProduct: product.name,
-        variationsCount: variations.length,
-        modalAberto: true
-      });
     } catch (error) {
       console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
-      // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
       setSelectedProduct(product);
       setShowVariationModal(true);
     }
@@ -92,80 +67,47 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
-      console.log('🔄 Iniciando processo de checkout...');
+      console.log('🔄 CHECKOUT - Iniciando processamento do pedido...');
       
-      // Validar dados obrigatórios antes de enviar
-      if (!orderData.user_id) {
-        throw new Error('ID do usuário é obrigatório');
+      // Validações básicas
+      if (!orderData.user_id || !orderData.customer_name?.trim() || !orderData.customer_phone?.trim()) {
+        throw new Error('Dados obrigatórios não preenchidos');
       }
-      if (!orderData.customer_name?.trim()) {
-        throw new Error('Nome do cliente é obrigatório');
-      }
-      if (!orderData.customer_phone?.trim()) {
-        throw new Error('Telefone do cliente é obrigatório');
-      }
+      
       if (!orderData.items || orderData.items.length === 0) {
         throw new Error('Pedido deve ter pelo menos um item');
       }
 
-      console.log('✅ Dados validados, processando cliente...');
+      console.log('✅ CHECKOUT - Dados validados, processando...');
 
-      // Primeiro, verificar se o cliente já existe
+      // Processar cliente (opcional - não bloqueia o pedido se falhar)
       let customerId = null;
       try {
-        const { data: existingCustomer, error: customerCheckError } = await supabase
+        const { data: newCustomer, error: customerError } = await supabase
           .from('customers')
-          .select('id')
-          .eq('user_id', orderData.user_id)
-          .eq('phone', orderData.customer_phone)
-          .maybeSingle();
-
-        if (customerCheckError) {
-          console.warn('Erro ao verificar cliente existente:', customerCheckError);
-        } else if (existingCustomer) {
-          customerId = existingCustomer.id;
-          console.log('✅ Cliente existente encontrado:', customerId);
-        }
-      } catch (customerError) {
-        console.warn('Erro na verificação de cliente:', customerError);
-      }
-
-      if (!customerId) {
-        try {
-          console.log('🔄 Criando novo cliente...');
-          // Criar novo cliente com configuração específica para RLS
-          const customerData = {
+          .upsert({
             user_id: orderData.user_id,
             name: orderData.customer_name,
             phone: orderData.customer_phone,
             address: orderData.customer_address || '',
             neighborhood: orderData.customer_neighborhood || ''
-          };
+          }, { 
+            onConflict: 'user_id,phone',
+            ignoreDuplicates: false 
+          })
+          .select('id')
+          .single();
 
-          // Usar upsert para evitar conflitos RLS
-          const { data: newCustomer, error: customerError } = await supabase
-            .from('customers')
-            .upsert(customerData, { 
-              onConflict: 'user_id,phone',
-              ignoreDuplicates: false 
-            })
-            .select('id')
-            .single();
-
-          if (customerError) {
-            console.warn('Aviso ao criar cliente:', customerError);
-            // Continuar sem cliente se falhar - não é crítico para o pedido
-          } else {
-            customerId = newCustomer.id;
-            console.log('✅ Novo cliente criado:', customerId);
-          }
-        } catch (customerError) {
-          console.warn('Erro na criação de cliente:', customerError);
-          // Continuar sem cliente - não deve bloquear o pedido
+        if (!customerError && newCustomer) {
+          customerId = newCustomer.id;
+          console.log('✅ CHECKOUT - Cliente processado:', customerId);
         }
+      } catch (customerError) {
+        console.warn('⚠️ CHECKOUT - Aviso na criação do cliente:', customerError);
+        // Continuar sem cliente - não é crítico
       }
 
-      // Preparar dados do pedido com todos os campos necessários
+      // Preparar dados finais do pedido
       const finalOrderData = {
         user_id: orderData.user_id,
         order_number: orderData.order_number,
@@ -173,7 +115,7 @@ const MenuDigital = () => {
         customer_phone: orderData.customer_phone.trim(),
         customer_address: orderData.customer_address?.trim() || '',
         customer_neighborhood: orderData.customer_neighborhood?.trim() || '',
-        customer_id: customerId, // Pode ser null se falhou ao criar cliente
+        customer_id: customerId,
         delivery_zone_id: orderData.delivery_zone_id || null,
         items: orderData.items,
         total: orderData.total,
@@ -183,8 +125,8 @@ const MenuDigital = () => {
         order_type: orderData.order_type || 'delivery',
         delivery_instructions: orderData.delivery_instructions || null,
         estimated_time: orderData.estimated_time || '30-45 min',
-        status: orderData.status || 'pending',
-        acceptance_status: orderData.acceptance_status || 'pending_acceptance',
+        status: 'pending',
+        acceptance_status: 'pending_acceptance',
         customer_latitude: orderData.customer_latitude,
         customer_longitude: orderData.customer_longitude,
         customer_location_accuracy: orderData.customer_location_accuracy,
@@ -192,18 +134,8 @@ const MenuDigital = () => {
         customer_address_reference: orderData.customer_address_reference || null
       };
 
-      console.log('🔄 Criando pedido no banco de dados...');
-      console.log('📊 Dados do pedido final:', {
-        user_id: finalOrderData.user_id,
-        customer_name: finalOrderData.customer_name,
-        customer_phone: finalOrderData.customer_phone,
-        total: finalOrderData.total,
-        items_count: finalOrderData.items?.length || 0,
-        customer_id: finalOrderData.customer_id,
-        order_number: finalOrderData.order_number
-      });
+      console.log('🔄 CHECKOUT - Criando pedido no banco de dados...');
 
-      // Criar pedido com configuração RLS específica
       const { data, error } = await supabase
         .from('orders')
         .insert([finalOrderData])
@@ -211,25 +143,11 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('❌ Erro ao criar pedido no banco:', error);
-        
-        // Tratar erros específicos do banco com mensagens mais claras
-        if (error.code === '23505') {
-          throw new Error('Número do pedido já existe. Tente novamente.');
-        } else if (error.code === '23503') {
-          throw new Error('Dados de referência inválidos. Verifique área de entrega.');
-        } else if (error.code === '23502') {
-          throw new Error('Campos obrigatórios não preenchidos.');
-        } else if (error.message?.includes('row-level security')) {
-          throw new Error('Erro de permissão. Tente novamente.');
-        } else if (error.message?.includes('permission denied')) {
-          throw new Error('Sem permissão para criar pedido. Verifique configurações.');
-        } else {
-          throw new Error(`Erro no banco de dados: ${error.message}`);
-        }
+        console.error('❌ CHECKOUT - Erro ao criar pedido:', error);
+        throw new Error(`Erro ao criar pedido: ${error.message}`);
       }
 
-      console.log('✅ Pedido criado com sucesso:', data);
+      console.log('✅ CHECKOUT - Pedido criado com sucesso:', data);
 
       toast({
         title: "Pedido realizado com sucesso!",
@@ -239,20 +157,16 @@ const MenuDigital = () => {
       clearCart();
       setShowCartModal(false);
     } catch (error) {
-      console.error('❌ Erro completo ao finalizar pedido:', error);
+      console.error('❌ CHECKOUT - Erro completo:', error);
       
-      let userMessage = "Tente novamente ou entre em contato conosco.";
-      if (error instanceof Error) {
-        userMessage = error.message;
-      }
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido ao processar pedido";
       
       toast({
         title: "Erro ao finalizar pedido",
-        description: userMessage,
+        description: errorMessage,
         variant: "destructive",
       });
       
-      // Re-throw para que o CheckoutModal saiba que houve erro
       throw error;
     }
   };
@@ -310,7 +224,6 @@ const MenuDigital = () => {
         />
       </div>
 
-      {/* Modals */}
       <SimpleVariationModal
         isOpen={showVariationModal}
         onClose={() => {
@@ -333,7 +246,6 @@ const MenuDigital = () => {
         userId={userId}
       />
 
-      {/* Carrinho Fixo */}
       <CartBottomBar
         itemCount={getCartItemCount()}
         total={getCartTotal()}

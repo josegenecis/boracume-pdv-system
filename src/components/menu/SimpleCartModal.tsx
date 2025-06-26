@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -86,64 +87,41 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     setLocation(prev => ({ ...prev, isLoading: true, error: null }));
 
-    // Request permission first for mobile devices
-    const requestPermission = async () => {
-      if ('permissions' in navigator) {
-        try {
-          const permission = await navigator.permissions.query({ name: 'geolocation' });
-          console.log('📍 Permissão de geolocalização:', permission.state);
-          
-          if (permission.state === 'denied') {
-            setLocation(prev => ({ 
-              ...prev, 
-              isLoading: false, 
-              error: "Permissão de localização negada. Ative nas configurações do navegador." 
-            }));
-            return;
-          }
-        } catch (permError) {
-          console.log('⚠️ Não foi possível verificar permissões:', permError);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        console.log('✅ LOCALIZAÇÃO - Coordenadas obtidas:', position.coords);
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          isLoading: false,
+          error: null
+        });
+      },
+      (error) => {
+        console.error('❌ LOCALIZAÇÃO - Erro:', error);
+        let errorMessage = "Erro ao obter localização";
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Permissão de localização negada. Verifique as configurações do navegador.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Localização não disponível. Tente novamente.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Tempo esgotado. Tente novamente.";
+            break;
         }
+        
+        setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 300000
       }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          console.log('✅ Localização obtida:', position.coords);
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            isLoading: false,
-            error: null
-          });
-        },
-        (error) => {
-          console.error('❌ Erro de geolocalização:', error);
-          let errorMessage = "Erro desconhecido ao obter localização";
-          
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = "Permissão de localização negada. Verifique as configurações do seu navegador/celular.";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = "Informações de localização não disponíveis. Tente novamente.";
-              break;
-            case error.TIMEOUT:
-              errorMessage = "Tempo esgotado ao obter localização. Tente novamente.";
-              break;
-          }
-          
-          setLocation(prev => ({ ...prev, isLoading: false, error: errorMessage }));
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000, // Increased timeout for mobile
-          maximumAge: 300000 // 5 minutes cache
-        }
-      );
-    };
-
-    requestPermission();
+    );
   };
 
   const generateGoogleMapsLink = (lat: number, lng: number) => {
@@ -170,16 +148,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
     );
     
-    console.log('💳 VALIDAÇÃO FORMULÁRIO:', {
-      customerName: customerName.trim() !== '',
-      customerPhone: customerPhone.trim() !== '',
-      customerAddress: customerAddress.trim() !== '',
-      customerNeighborhood: customerNeighborhood.trim() !== '',
-      deliveryZoneId: deliveryZoneId !== '',
-      paymentMethod: paymentMethod,
-      isPaymentValid,
-      changeValid: paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal,
-      finalValid: valid
+    console.log('📋 FORMULÁRIO - Validação:', {
+      nome: customerName.trim() !== '',
+      telefone: customerPhone.trim() !== '',
+      endereco: customerAddress.trim() !== '',
+      bairro: customerNeighborhood.trim() !== '',
+      zona: deliveryZoneId !== '',
+      pagamento: isPaymentValid,
+      troco: paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal,
+      resultado: valid
     });
     
     return valid;
@@ -187,14 +164,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const handlePlaceOrder = async () => {
     if (!isFormValid()) {
-      console.warn('❌ Formulário inválido');
+      console.warn('❌ FORMULÁRIO - Dados inválidos');
       return;
     }
 
     setIsLoading(true);
     
     try {
-      console.log('🔄 Preparando dados do pedido...');
+      console.log('🔄 CHECKOUT - Preparando dados do pedido...');
       
       const orderNumber = generateOrderNumber();
       
@@ -231,7 +208,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         estimated_time: selectedZone?.delivery_time || '30-45 min'
       };
 
-      console.log('📊 Dados preparados para envio:', {
+      console.log('📊 CHECKOUT - Dados preparados:', {
         user_id: orderData.user_id,
         customer_name: orderData.customer_name,
         order_number: orderData.order_number,
@@ -241,7 +218,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
       await onPlaceOrder(orderData);
     } catch (error) {
-      console.error('❌ Erro ao finalizar pedido:', error);
+      console.error('❌ CHECKOUT - Erro:', error);
     } finally {
       setIsLoading(false);
     }
@@ -357,7 +334,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     const phone = e.target.value;
                     setCustomerPhone(phone);
                     
-                    // Auto-lookup customer if phone has enough digits
                     if (phone.replace(/\D/g, '').length >= 10) {
                       const customer = await lookupCustomer(phone);
                       if (customer) {
@@ -365,7 +341,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         setCustomerAddress(customer.address);
                         setCustomerNeighborhood(customer.neighborhood);
                         setIsExistingCustomer(true);
-                        console.log('✅ Cliente encontrado:', customer);
                       } else {
                         setIsExistingCustomer(false);
                       }
@@ -420,7 +395,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
 
             <div>
-              <Label>Localização Exata (GPS)</Label>
+              <Label>Localização GPS (Opcional)</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -430,13 +405,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   className="flex items-center gap-2"
                 >
                   <Navigation className="h-4 w-4" />
-                  {location.isLoading ? 'Obtendo localização...' : 'Usar minha localização'}
+                  {location.isLoading ? 'Obtendo...' : 'Usar minha localização'}
                 </Button>
               </div>
               
               {location.latitude && location.longitude && (
                 <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
-                  ✅ Localização capturada com precisão de {Math.round(location.accuracy || 0)}m
+                  ✅ Localização capturada (precisão: {Math.round(location.accuracy || 0)}m)
                 </div>
               )}
               
@@ -445,10 +420,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   ❌ {location.error}
                 </div>
               )}
-              
-              <p className="text-xs text-muted-foreground">
-                A localização GPS ajuda o entregador a encontrar você com mais facilidade
-              </p>
             </div>
 
             <div>
@@ -471,10 +442,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               <Label htmlFor="payment">Forma de pagamento *</Label>
               <RadioGroup 
                 value={paymentMethod} 
-                onValueChange={(value) => {
-                  console.log('💳 MUDANÇA PAGAMENTO:', { de: paymentMethod, para: value });
-                  setPaymentMethod(value);
-                }}
+                onValueChange={setPaymentMethod}
                 className="space-y-2"
               >
                 {paymentOptions.map((option) => {
@@ -535,7 +503,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
 
             <div>
-              <Label htmlFor="notes">Observações da entrega</Label>
+              <Label htmlFor="notes">Observações da entrega (opcional)</Label>
               <Textarea
                 id="notes"
                 value={notes}
