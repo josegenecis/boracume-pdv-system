@@ -1,233 +1,173 @@
-
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState } from 'react';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Phone, CheckCircle, X, AlertTriangle } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Clock } from 'lucide-react';
 
-interface KitchenOrderCardProps {
-  order: {
-    id: string;
-    order_number: string;
-    customer_name: string;
-    customer_phone?: string;
-    items: any[];
-    priority: 'low' | 'normal' | 'high' | 'urgent';
-    status: 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
-    created_at: string;
-    estimated_time?: string;
-  };
-  onUpdateStatus: (orderId: string, newStatus: string) => void;
-  onUpdatePriority: (orderId: string, newPriority: string) => void;
+interface OrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  notes?: string;
+  options?: string[];
+  variations?: {
+    name: string;
+    selectedOptions: string[];
+    price: number;
+  }[];
 }
 
-const getTimePassed = (createdAt: string): string => {
-  const now = new Date();
-  const orderTime = new Date(createdAt);
-  const diffInMinutes = Math.floor((now.getTime() - orderTime.getTime()) / (1000 * 60));
-  
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} min`;
-  } else if (diffInMinutes < 1440) {
-    const hours = Math.floor(diffInMinutes / 60);
-    const remainingMinutes = diffInMinutes % 60;
-    if (remainingMinutes === 0) {
-      return `${hours}h`;
-    }
-    return `${hours}h ${remainingMinutes}min`;
-  } else {
-    const days = Math.floor(diffInMinutes / 1440);
-    const remainingHours = Math.floor((diffInMinutes % 1440) / 60);
-    if (remainingHours === 0) {
-      return `${days} dia${days > 1 ? 's' : ''}`;
-    }
-    return `${days} dia${days > 1 ? 's' : ''} ${remainingHours}h`;
-  }
-};
+interface KitchenOrder {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  customer_phone?: string;
+  items: OrderItem[];
+  priority: 'normal' | 'high';
+  status: 'pending' | 'preparing' | 'ready' | 'completed';
+  created_at: string;
+  updated_at: string;
+  timestamp: Date;
+}
 
-const formatVariations = (variations: any): string[] => {
-  if (!variations) return [];
-  
-  if (Array.isArray(variations)) {
-    return variations.map(variation => {
-      if (typeof variation === 'string') {
-        return variation;
-      } else if (typeof variation === 'object' && variation !== null) {
-        if (variation.name && variation.selectedOptions) {
-          const options = Array.isArray(variation.selectedOptions) 
-            ? variation.selectedOptions.join(', ') 
-            : String(variation.selectedOptions);
-          return `${variation.name}: ${options}`;
-        } else if (variation.selectedOptions) {
-          return Array.isArray(variation.selectedOptions) 
-            ? variation.selectedOptions.join(', ')
-            : String(variation.selectedOptions);
-        }
-        return String(variation.name || variation);
-      }
-      return String(variation);
-    });
-  }
-  
-  return [String(variations)];
-};
+interface KitchenOrderCardProps {
+  order: KitchenOrder;
+  onStatusChange: (id: string, status: 'preparing' | 'ready') => void;
+}
 
-const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({
-  order,
-  onUpdateStatus,
-  onUpdatePriority
-}) => {
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'border-l-red-500';
-      case 'high': return 'border-l-orange-500';
-      case 'normal': return 'border-l-blue-500';
-      case 'low': return 'border-l-gray-500';
-      default: return 'border-l-blue-500';
-    }
+const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChange }) => {
+  const [currentStatus, setCurrentStatus] = useState<'pending' | 'preparing' | 'ready'>(order.status as 'pending' | 'preparing' | 'ready');
+  
+  const handleStatusChange = (newStatus: 'preparing' | 'ready') => {
+    setCurrentStatus(newStatus);
+    onStatusChange(order.id, newStatus);
   };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-500 text-white';
-      case 'preparing': return 'bg-blue-500 text-white';
-      case 'ready': return 'bg-green-500 text-white';
-      case 'completed': return 'bg-gray-500 text-white';
-      case 'cancelled': return 'bg-red-500 text-white';
-      default: return 'bg-gray-500 text-white';
-    }
+  
+  // Calculate time passed since order was created
+  const getTimePassed = (timestamp: Date) => {
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - timestamp.getTime()) / 1000 / 60); // minutes
+    
+    if (diff < 1) return 'Agora';
+    if (diff === 1) return '1 minuto';
+    return `${diff} minutos`;
   };
-
-  const timePassed = getTimePassed(order.created_at);
-
+  
+  const timePassed = getTimePassed(order.timestamp);
+  
   return (
-    <Card className={`border-l-4 ${getPriorityColor(order.priority)}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+    <Card className={`w-full ${order.priority === 'high' ? 'border-red-500 border-2' : ''}`}>
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-center">
           <div>
-            <CardTitle className="text-lg">#{order.order_number}</CardTitle>
-            <p className="text-sm text-muted-foreground">{order.customer_name}</p>
+            <CardTitle className="text-base flex items-center gap-2">
+              Pedido {order.order_number}
+              {order.priority === 'high' && (
+                <Badge className="bg-red-500">URGENTE</Badge>
+              )}
+            </CardTitle>
+            <div className="text-sm text-muted-foreground">Cliente: {order.customer_name}</div>
           </div>
-          <div className="text-right">
-            <Badge className={getStatusColor(order.status)}>
-              {order.status === 'pending' && 'Pendente'}
-              {order.status === 'preparing' && 'Preparando'}
-              {order.status === 'ready' && 'Pronto'}
-              {order.status === 'completed' && 'Concluído'}
-              {order.status === 'cancelled' && 'Cancelado'}
-            </Badge>
-            <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>{timePassed}</span>
-            </div>
+          <div className="flex items-center text-sm text-muted-foreground">
+            <Clock size={14} className="mr-1" />
+            {timePassed}
           </div>
         </div>
-
-        {order.customer_phone && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Phone className="h-3 w-3" />
-            <span>{order.customer_phone}</span>
-          </div>
-        )}
       </CardHeader>
-
-      <CardContent>
-        <div className="space-y-3 mb-4">
-          {order.items.map((item: any, index: number) => (
-            <div key={index} className="border-b pb-2 last:border-b-0">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <span className="font-medium">{item.quantity}x {item.name}</span>
-                  
-                  {/* Mostrar variações formatadas corretamente */}
-                  {item.variations && formatVariations(item.variations).length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      <strong>Variações:</strong>
-                      <ul className="ml-2 list-disc list-inside">
-                        {formatVariations(item.variations).map((variation, idx) => (
-                          <li key={idx}>{variation}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {/* Mostrar opções se existirem */}
-                  {item.options && Array.isArray(item.options) && item.options.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      <strong>Opções:</strong> {item.options.join(', ')}
-                    </div>
-                  )}
-                  
-                  {/* Mostrar observações */}
-                  {item.notes && item.notes.trim() && (
-                    <div className="text-xs text-muted-foreground italic mt-1">
-                      <strong>Obs:</strong> {item.notes}
-                    </div>
-                  )}
-                </div>
+      <CardContent className="pb-3">
+        <Separator className="my-2" />
+        <ul className="space-y-2">
+          {order.items.map((item) => (
+            <li key={item.id} className="text-base">
+              <div className="flex justify-between">
+                <div className="font-semibold">{item.quantity}x {item.name}</div>
               </div>
-            </div>
+              {item.options && item.options.length > 0 && (
+                <ul className="ml-4 mt-1 text-sm text-muted-foreground">
+                  {item.options.map((option, index) => {
+                    // Garantir que option seja sempre uma string e não seja null
+                    const optionText = option && typeof option === 'object' 
+                      ? String((option as any).name || option) 
+                      : String(option || '');
+                    return (
+                      <li key={index}>• {optionText}</li>
+                    );
+                  })}
+                </ul>
+              )}
+              {item.variations && item.variations.length > 0 && (
+                <ul className="ml-4 mt-1 text-sm">
+                  {item.variations.map((variation, index) => {
+                    // Processar variações e mostrar apenas os adicionais
+                    let optionsText = '';
+                    let priceText = '';
+                    
+                    try {
+                      if (variation && typeof variation === 'object' && variation.selectedOptions) {
+                        if (Array.isArray(variation.selectedOptions)) {
+                          optionsText = variation.selectedOptions
+                            .map(opt => String(opt))
+                            .filter(Boolean)
+                            .join(', ');
+                        } else {
+                          optionsText = String(variation.selectedOptions);
+                        }
+                        
+                        const price = Number(variation.price) || 0;
+                        priceText = price > 0 ? ` (+${price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '';
+                      } else {
+                        optionsText = String(variation);
+                      }
+                    } catch (error) {
+                      console.warn('Erro ao processar variation:', error, variation);
+                      optionsText = 'Variação';
+                    }
+                    
+                    // Mostrar apenas os adicionais sem o prefixo "Personalização:"
+                    return optionsText ? (
+                      <li key={index} className="font-medium text-blue-600">
+                        • {optionsText}{priceText}
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
+              )}
+              {item.notes && (
+                <div className="ml-4 mt-1 text-xs italic text-muted-foreground">
+                  Obs: {item.notes}
+                </div>
+              )}
+            </li>
           ))}
-        </div>
-
-        <div className="flex gap-2">
-          {order.status === 'pending' && (
-            <Button
-              size="sm"
-              onClick={() => onUpdateStatus(order.id, 'preparing')}
-              className="flex-1"
-            >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Iniciar
-            </Button>
-          )}
-
-          {order.status === 'preparing' && (
-            <Button
-              size="sm"
-              onClick={() => onUpdateStatus(order.id, 'ready')}
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Finalizar
-            </Button>
-          )}
-
-          {order.status === 'ready' && (
-            <Button
-              size="sm"
-              onClick={() => onUpdateStatus(order.id, 'completed')}
-              className="flex-1 bg-gray-600 hover:bg-gray-700"
-            >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Entregar
-            </Button>
-          )}
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const priorities = ['low', 'normal', 'high', 'urgent'];
-              const currentIndex = priorities.indexOf(order.priority);
-              const nextPriority = priorities[(currentIndex + 1) % priorities.length];
-              onUpdatePriority(order.id, nextPriority);
-            }}
-          >
-            <AlertTriangle className="h-3 w-3" />
-          </Button>
-
-          {order.status !== 'cancelled' && order.status !== 'completed' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onUpdateStatus(order.id, 'cancelled')}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
+        </ul>
       </CardContent>
+      <CardFooter className="pt-0 flex justify-between">
+        {currentStatus === 'pending' && (
+          <Button 
+            className="w-full" 
+            onClick={() => handleStatusChange('preparing')}
+          >
+            Iniciar Preparo
+          </Button>
+        )}
+        {currentStatus === 'preparing' && (
+          <Button 
+            className="w-full bg-green-600 hover:bg-green-700" 
+            onClick={() => handleStatusChange('ready')}
+          >
+            Marcar como Pronto
+          </Button>
+        )}
+        {currentStatus === 'ready' && (
+          <Button 
+            className="w-full bg-blue-600 hover:bg-blue-700" 
+            variant="default"
+          >
+            Saiu para Entrega
+          </Button>
+        )}
+      </CardFooter>
     </Card>
   );
 };

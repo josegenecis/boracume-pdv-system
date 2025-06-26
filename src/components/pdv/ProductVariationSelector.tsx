@@ -29,10 +29,9 @@ interface ProductVariation {
 }
 
 interface ProductVariationSelectorProps {
-  product: Product | null;
+  product: Product;
   variations: ProductVariation[];
-  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
-  onAddToTable?: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
+  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string) => void;
   onClose: () => void;
 }
 
@@ -40,21 +39,11 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   product,
   variations,
   onAddToCart,
-  onAddToTable,
   onClose
 }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
-
-  // Early return if product is null
-  if (!product) {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-muted-foreground">Carregando produto...</p>
-      </div>
-    );
-  }
 
   const handleVariationChange = (variationId: string, optionName: string, optionPrice: number, isSelected: boolean) => {
     const variation = variations.find(v => v.id === variationId);
@@ -90,20 +79,17 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   };
 
   const calculateTotalPrice = () => {
-    let variationPrice = 0;
+    let total = product.price * quantity;
     
     Object.values(selectedVariations).forEach((options: any) => {
       if (Array.isArray(options)) {
         options.forEach(option => {
-          variationPrice += option.price || 0;
+          total += option.price * quantity;
         });
       }
     });
     
-    return {
-      total: (product.price + variationPrice) * quantity,
-      variationPrice
-    };
+    return total;
   };
 
   const canAddToCart = () => {
@@ -123,21 +109,8 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
       options: options || []
     }));
     
-    const { variationPrice } = calculateTotalPrice();
-    onAddToCart(product, quantity, formattedVariations, notes, variationPrice);
+    onAddToCart(product, quantity, formattedVariations, notes);
     onClose();
-  };
-
-  const handleAddToTable = () => {
-    if (!canAddToCart() || !onAddToTable) return;
-    
-    const formattedVariations = Object.entries(selectedVariations).map(([variationId, options]) => ({
-      variationId,
-      options: options || []
-    }));
-    
-    const { variationPrice } = calculateTotalPrice();
-    onAddToTable(product, quantity, formattedVariations, notes, variationPrice);
   };
 
   return (
@@ -265,7 +238,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Total</p>
             <p className="text-xl font-bold text-primary">
-              R$ {calculateTotalPrice().total.toFixed(2)}
+              R$ {calculateTotalPrice().toFixed(2)}
             </p>
           </div>
         </div>
@@ -281,16 +254,6 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
           >
             Adicionar ao Carrinho
           </Button>
-          {onAddToTable && (
-            <Button 
-              onClick={handleAddToTable} 
-              disabled={!canAddToCart()}
-              variant="secondary"
-              className="flex-1"
-            >
-              Adicionar à Mesa
-            </Button>
-          )}
         </div>
       </div>
     </div>

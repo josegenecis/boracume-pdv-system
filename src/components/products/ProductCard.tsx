@@ -1,77 +1,127 @@
 
 import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Edit, Settings } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Edit, Trash2, Eye, EyeOff } from 'lucide-react';
+import ProductVariationsButton from './ProductVariationsButton';
 
-interface ProductCardProps {
-  product: any;
-  onEdit: (product: any) => void;
-  onVariations: (product: any) => void;
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description?: string;
+  image_url?: string;
+  available?: boolean;
+  show_in_pdv?: boolean;
+  show_in_delivery?: boolean;
+  send_to_kds?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onVariations }) => {
+interface ProductCardProps {
+  product: Product;
+  onEdit: (product: Product) => void;
+  onDelete: (id: string) => void;
+  onToggleAvailability: (id: string, available: boolean) => void;
+}
+
+const ProductCard: React.FC<ProductCardProps> = ({ 
+  product, 
+  onEdit, 
+  onDelete, 
+  onToggleAvailability 
+}) => {
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow h-48"> {/* Reduzido de h-64 para h-48 */}
-      <div className="relative h-24"> {/* Reduzido de h-32 para h-24 */}
-        {product.image_url ? (
+    <Card className="h-full flex flex-col">
+      {product.image_url && (
+        <div className="aspect-video w-full overflow-hidden rounded-t-lg">
           <img
             src={product.image_url}
             alt={product.name}
             className="w-full h-full object-cover"
           />
-        ) : (
-          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-            <span className="text-gray-400 text-xs">Sem imagem</span> {/* Reduzido tamanho do texto */}
-          </div>
-        )}
-        <div className="absolute top-1 right-1 flex gap-1"> {/* Reduzido espaçamento */}
-          {!product.available && (
-            <Badge variant="destructive" className="text-xs">Indisponível</Badge>
-          )}
-          {product.weight_based && (
-            <Badge variant="secondary" className="text-xs">Por Peso</Badge>
-          )}
         </div>
-      </div>
+      )}
       
-      <CardContent className="p-3"> {/* Reduzido padding de p-4 para p-3 */}
-        <div className="space-y-1"> {/* Reduzido espaçamento */}
-          <h3 className="font-semibold text-sm leading-tight line-clamp-2"> {/* Reduzido tamanho da fonte */}
-            {product.name}
-          </h3>
-          
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-start">
+          <CardTitle className="text-base leading-tight">{product.name}</CardTitle>
+          <div className="flex gap-1 flex-wrap">
+            {!product.available && (
+              <Badge variant="destructive" className="text-xs">
+                Indisponível
+              </Badge>
+            )}
+            {product.show_in_pdv && (
+              <Badge variant="outline" className="text-xs">
+                PDV
+              </Badge>
+            )}
+            {product.show_in_delivery && (
+              <Badge variant="outline" className="text-xs">
+                Delivery
+              </Badge>
+            )}
+            {product.send_to_kds && (
+              <Badge variant="secondary" className="text-xs">
+                KDS
+              </Badge>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="flex-1 flex flex-col">
+        <div className="flex-1">
+          <p className="text-lg font-bold text-primary mb-2">
+            {formatCurrency(product.price)}
+          </p>
+          <p className="text-xs text-gray-600 mb-2">
+            Categoria: {product.category}
+          </p>
           {product.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2"> {/* Reduzido tamanho da fonte */}
+            <p className="text-sm text-gray-700 line-clamp-2">
               {product.description}
             </p>
           )}
-          
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-green-600"> {/* Mantido tamanho do preço */}
-              R$ {Number(product.price).toFixed(2)}
-            </span>
+        </div>
+        
+        <div className="mt-4 space-y-2">
+          <div className="flex gap-2">
+            <ProductVariationsButton productId={product.id} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onToggleAvailability(product.id, !product.available)}
+            >
+              {product.available ? <Eye size={14} /> : <EyeOff size={14} />}
+            </Button>
           </div>
           
-          <div className="flex gap-1 pt-1"> {/* Reduzido gap e padding */}
-            <Button 
-              variant="outline" 
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => onEdit(product)}
-              className="flex-1 h-7 text-xs" // Reduzido altura e tamanho da fonte
+              className="flex-1"
             >
-              <Edit className="h-3 w-3 mr-1" />
+              <Edit size={14} className="mr-1" />
               Editar
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="destructive"
               size="sm"
-              onClick={() => onVariations(product)}
-              className="flex-1 h-7 text-xs" // Reduzido altura e tamanho da fonte
+              onClick={() => onDelete(product.id)}
             >
-              <Settings className="h-3 w-3 mr-1" />
-              Variações
+              <Trash2 size={14} />
             </Button>
           </div>
         </div>

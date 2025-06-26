@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ProductVariationSelector from './ProductVariationSelector';
@@ -26,28 +25,19 @@ interface ProductVariationModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product;
-  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
-  onAddToTable?: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
-  showTableOption?: boolean;
+  variations: ProductVariation[];
+  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string) => void;
 }
 
 const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   isOpen,
   onClose,
   product,
-  onAddToCart,
-  onAddToTable,
-  showTableOption = false
+  variations,
+  onAddToCart
 }) => {
-  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => {
-    onAddToCart(product, quantity, selectedVariations, notes, variationPrice);
-    onClose();
-  };
-
-  const handleAddToTable = (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => {
-    if (onAddToTable) {
-      onAddToTable(product, quantity, selectedVariations, notes, variationPrice);
-    }
+  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string) => {
+    onAddToCart(product, quantity, selectedVariations, notes);
     onClose();
   };
 
@@ -55,14 +45,13 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Personalizar {product?.name}</DialogTitle>
+          <DialogTitle>Personalizar {product.name}</DialogTitle>
         </DialogHeader>
         
         <ProductVariationSelector
           product={product}
-          variations={[]}
+          variations={variations}
           onAddToCart={handleAddToCart}
-          onAddToTable={showTableOption ? handleAddToTable : undefined}
           onClose={onClose}
         />
       </DialogContent>

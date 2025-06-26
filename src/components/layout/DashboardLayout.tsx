@@ -15,7 +15,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       <FixedHeader />
       <div className="flex">
         <CollapsibleSidebar />
-        <main className="flex-1 ml-16 lg:ml-64 pt-16 transition-all duration-300">
+        <main className="flex-1 ml-64 pt-16 transition-all duration-300">
           <div className="p-6 h-[calc(100vh-64px)] overflow-y-auto">
             {children}
           </div>

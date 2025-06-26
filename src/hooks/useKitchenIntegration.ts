@@ -21,7 +21,6 @@ interface OrderData {
   total: number;
   payment_method: string;
   order_type: string;
-  status?: string;
 }
 
 export const useKitchenIntegration = () => {
@@ -29,16 +28,6 @@ export const useKitchenIntegration = () => {
 
   const sendToKitchen = async (orderData: OrderData) => {
     try {
-      // Só enviar para o KDS se o pedido foi aceito ou é do tipo PDV/mesa
-      const shouldSendToKDS = orderData.status === 'accepted' || 
-                             orderData.order_type === 'pdv' || 
-                             orderData.order_type === 'dine_in';
-      
-      if (!shouldSendToKDS) {
-        console.log('🔄 Pedido não enviado para KDS - aguardando aceitação');
-        return;
-      }
-
       const kitchenItems = orderData.items.map(item => ({
         id: item.product_id,
         name: item.product_name,
@@ -49,7 +38,7 @@ export const useKitchenIntegration = () => {
         subtotal: item.subtotal
       }));
 
-      console.log('🔄 Enviando pedido aceito para o KDS:', {
+      console.log('🔄 Enviando pedido para o KDS:', {
         order_number: orderData.order_number,
         customer_name: orderData.customer_name,
         customer_phone: orderData.customer_phone,
@@ -58,19 +47,6 @@ export const useKitchenIntegration = () => {
         total: orderData.total,
         items: kitchenItems
       });
-
-      // Verificar se já existe no KDS para evitar duplicatas
-      const { data: existingOrder } = await supabase
-        .from('kitchen_orders')
-        .select('id')
-        .eq('order_number', orderData.order_number)
-        .eq('user_id', orderData.user_id)
-        .single();
-
-      if (existingOrder) {
-        console.log('⚠️ Pedido já existe no KDS, não enviando duplicata');
-        return;
-      }
 
       const kitchenOrder = {
         user_id: orderData.user_id,
@@ -91,7 +67,7 @@ export const useKitchenIntegration = () => {
         throw error;
       }
 
-      console.log('✅ Pedido aceito enviado para o KDS com sucesso');
+      console.log('✅ Pedido enviado para o KDS com sucesso');
       
       // Enviar notificação em tempo real
       const channel = supabase.channel('kitchen-notifications');
@@ -111,13 +87,7 @@ export const useKitchenIntegration = () => {
     }
   };
 
-  const sendAcceptedOrderToKitchen = async (orderData: OrderData) => {
-    // Função específica para enviar pedidos aceitos
-    await sendToKitchen({ ...orderData, status: 'accepted' });
-  };
-
   return {
-    sendToKitchen,
-    sendAcceptedOrderToKitchen
+    sendToKitchen
   };
 };

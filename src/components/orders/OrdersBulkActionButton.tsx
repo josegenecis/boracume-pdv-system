@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -13,7 +12,7 @@ interface OrdersBulkActionButtonProps {
 }
 
 const OrdersBulkActionButton: React.FC<OrdersBulkActionButtonProps> = ({
-  orderIds = [],
+  orderIds,
   action,
   onBulkAction,
   disabled = false
@@ -57,15 +56,6 @@ const OrdersBulkActionButton: React.FC<OrdersBulkActionButtonProps> = ({
   const config = getButtonConfig();
 
   const handleBulkAction = async () => {
-    if (!orderIds || orderIds.length === 0) {
-      toast({
-        title: "Erro",
-        description: "Nenhum pedido selecionado para ação em massa.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     try {
       setIsProcessing(true);
       await onBulkAction(orderIds, action);
@@ -86,7 +76,7 @@ const OrdersBulkActionButton: React.FC<OrdersBulkActionButtonProps> = ({
     }
   };
 
-  if (!orderIds || orderIds.length === 0 || disabled) {
+  if (orderIds.length === 0 || disabled) {
     return null;
   }
 

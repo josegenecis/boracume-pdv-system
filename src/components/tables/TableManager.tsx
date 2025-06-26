@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -5,71 +6,65 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Users, DollarSign, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, MousePointer, ShoppingCart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import TableDetailsModal from '@/components/tables/TableDetailsModal';
+import { useAuth } from '@/contexts/AuthContext';
+import TableDetailsModal from './TableDetailsModal';
+import AddProductToTableModal from './AddProductToTableModal';
 
 interface Table {
   id: string;
   table_number: number;
   capacity: number;
   status: 'available' | 'occupied' | 'reserved';
+  location?: string;
+  current_order_id?: string;
 }
 
-interface TableAccount {
-  id: string;
-  table_id: string;
-  items: any[];
-  total: number;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-}
-
-const TableManager = () => {
+const TableManager: React.FC = () => {
   const [tables, setTables] = useState<Table[]>([]);
-  const [tableAccounts, setTableAccounts] = useState<TableAccount[]>([]);
-  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [showAddTable, setShowAddTable] = useState(false);
-  const [newTableNumber, setNewTableNumber] = useState('');
-  const [newTableCapacity, setNewTableCapacity] = useState('');
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const [showForm, setShowForm] = useState(false);
+  const [editingTable, setEditingTable] = useState<Table | null>(null);
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [showTableDetails, setShowTableDetails] = useState(false);
+  const [showAddProducts, setShowAddProducts] = useState(false);
+  const [tableForProducts, setTableForProducts] = useState<Table | null>(null);
+  const [formData, setFormData] = useState({
+    table_number: '',
+    capacity: 4,
+    location: ''
+  });
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
-      fetchTables();
-      fetchTableAccounts();
-    }
-  }, [user]);
+    fetchTables();
+  }, []);
 
   const fetchTables = async () => {
-    if (!user) return;
-
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('tables')
         .select('*')
-        .eq('user_id', user.id)
         .order('table_number');
 
       if (error) throw error;
-
-      setTables(data?.map(table => ({
-        id: table.id,
-        table_number: table.table_number,
-        capacity: table.capacity || 4,
+      
+      // Transform data to ensure proper typing
+      const transformedTables = (data || []).map(table => ({
+        ...table,
         status: table.status as 'available' | 'occupied' | 'reserved'
-      })) || []);
+      }));
+      
+      setTables(transformedTables);
     } catch (error) {
-      console.error('Error fetching tables:', error);
+      console.error('Erro ao carregar mesas:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível carregar as mesas.",
+        description: "Erro ao carregar mesas.",
         variant: "destructive"
       });
     } finally {
@@ -77,94 +72,104 @@ const TableManager = () => {
     }
   };
 
-  const fetchTableAccounts = async () => {
-    if (!user) return;
-
+  const handleSave = async () => {
     try {
-      const { data, error } = await supabase
-        .from('table_accounts')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'open');
+      if (editingTable) {
+        const { error } = await supabase
+          .from('tables')
+          .update({
+            table_number: parseInt(formData.table_number),
+            capacity: formData.capacity,
+            location: formData.location
+          })
+          .eq('id', editingTable.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('tables')
+          .insert({
+            user_id: user?.id,
+            table_number: parseInt(formData.table_number),
+            capacity: formData.capacity,
+            location: formData.location,
+            status: 'available'
+          });
 
-      setTableAccounts(data?.map(account => ({
-        ...account,
-        items: Array.isArray(account.items) ? account.items : []
-      })) || []);
-    } catch (error) {
-      console.error('Error fetching table accounts:', error);
-    }
-  };
-
-  const addTable = async () => {
-    if (!user || !newTableNumber || !newTableCapacity) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('tables')
-        .insert({
-          user_id: user.id,
-          table_number: parseInt(newTableNumber),
-          capacity: parseInt(newTableCapacity),
-          status: 'available'
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const newTable: Table = {
-        id: data.id,
-        table_number: data.table_number,
-        capacity: data.capacity,
-        status: data.status as 'available' | 'occupied' | 'reserved'
-      };
-
-      setTables(prev => [...prev, newTable].sort((a, b) => a.table_number - b.table_number));
-      setNewTableNumber('');
-      setNewTableCapacity('');
-      setShowAddTable(false);
+        if (error) throw error;
+      }
 
       toast({
-        title: "Mesa adicionada",
-        description: `Mesa ${newTableNumber} foi adicionada com sucesso.`,
+        title: "Sucesso",
+        description: `Mesa ${editingTable ? 'atualizada' : 'criada'} com sucesso.`,
       });
+
+      setShowForm(false);
+      setEditingTable(null);
+      setFormData({ table_number: '', capacity: 4, location: '' });
+      fetchTables();
     } catch (error) {
-      console.error('Error adding table:', error);
+      console.error('Erro ao salvar mesa:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível adicionar a mesa.",
+        description: "Erro ao salvar mesa.",
         variant: "destructive"
       });
     }
   };
 
-  const getTableStatus = (table: Table) => {
-    const account = tableAccounts.find(acc => acc.table_id === table.id);
-    if (account) return 'occupied';
-    return table.status;
+  const handleDelete = async (tableId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta mesa?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('tables')
+        .delete()
+        .eq('id', tableId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Mesa excluída com sucesso.",
+      });
+
+      fetchTables();
+    } catch (error) {
+      console.error('Erro ao excluir mesa:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir mesa.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const getTableAccount = (tableId: string) => {
-    return tableAccounts.find(acc => acc.table_id === tableId);
+  const handleTableClick = (table: Table) => {
+    setSelectedTable(table);
+    setShowTableDetails(true);
+  };
+
+  const handleAddProductsClick = (table: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTableForProducts(table);
+    setShowAddProducts(true);
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
-        return 'bg-green-500';
+        return 'bg-green-100 text-green-800';
       case 'occupied':
-        return 'bg-red-500';
+        return 'bg-red-100 text-red-800';
       case 'reserved':
-        return 'bg-yellow-500';
+        return 'bg-yellow-100 text-yellow-800';
       default:
-        return 'bg-gray-500';
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusLabel = (status: string) => {
     switch (status) {
       case 'available':
         return 'Disponível';
@@ -173,123 +178,199 @@ const TableManager = () => {
       case 'reserved':
         return 'Reservada';
       default:
-        return 'Desconhecido';
+        return status;
     }
   };
 
   if (loading) {
-    return <div>Carregando mesas...</div>;
+    return <div className="text-center py-8">Carregando mesas...</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Gerenciamento de Mesas</h2>
-        <Dialog open={showAddTable} onOpenChange={setShowAddTable}>
+        <h2 className="text-2xl font-bold">Gerenciar Mesas</h2>
+        <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Mesa
+            <Button onClick={() => {
+              setEditingTable(null);
+              setFormData({ table_number: '', capacity: 4, location: '' });
+            }}>
+              <Plus size={16} className="mr-2" />
+              Nova Mesa
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Adicionar Nova Mesa</DialogTitle>
+              <DialogTitle>
+                {editingTable ? 'Editar Mesa' : 'Nova Mesa'}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="table-number">Número da Mesa</Label>
+              <div>
+                <Label htmlFor="table_number">Número da Mesa</Label>
                 <Input
-                  id="table-number"
-                  value={newTableNumber}
-                  onChange={(e) => setNewTableNumber(e.target.value)}
+                  id="table_number"
+                  type="number"
+                  value={formData.table_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, table_number: e.target.value }))}
                   placeholder="Ex: 1"
-                  type="number"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="table-capacity">Capacidade</Label>
+              <div>
+                <Label htmlFor="capacity">Capacidade</Label>
                 <Input
-                  id="table-capacity"
-                  value={newTableCapacity}
-                  onChange={(e) => setNewTableCapacity(e.target.value)}
-                  placeholder="Ex: 4"
+                  id="capacity"
                   type="number"
+                  value={formData.capacity}
+                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) || 4 }))}
+                  placeholder="Ex: 4"
                 />
               </div>
-              <Button onClick={addTable} className="w-full">
-                Adicionar Mesa
-              </Button>
+              <div>
+                <Label htmlFor="location">Localização (opcional)</Label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder="Ex: Varanda, Salão principal"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSave} className="flex-1">
+                  {editingTable ? 'Atualizar' : 'Criar'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowForm(false)}>
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {tables.map((table) => {
-          const status = getTableStatus(table);
-          const account = getTableAccount(table.id);
-          
-          return (
-            <Card 
-              key={table.id} 
-              className={`cursor-pointer hover:shadow-md transition-shadow ${
-                status === 'occupied' ? 'ring-2 ring-red-200' : ''
-              }`}
-              onClick={() => setSelectedTable(table)}
-            >
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Mesa {table.table_number}
-                  </span>
-                  <div className={`w-3 h-3 rounded-full ${getStatusColor(status)}`} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Capacidade:</span>
-                  <span className="text-sm font-medium">{table.capacity} pessoas</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Status:</span>
-                  <Badge variant={status === 'available' ? 'default' : 'secondary'}>
-                    {getStatusText(status)}
-                  </Badge>
-                </div>
-                {account && (
-                  <>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Total:</span>
-                      <span className="text-sm font-bold text-green-600">
-                        R$ {account.total.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Itens:</span>
-                      <span className="text-sm">{account.items.length}</span>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="flex items-center gap-2 mb-2">
+          <MousePointer size={16} className="text-blue-600" />
+          <span className="font-medium text-blue-800">Como usar as mesas:</span>
+        </div>
+        <p className="text-sm text-blue-700">
+          <strong>Clique na mesa</strong> para ver detalhes, transferir ou finalizar. 
+          <strong>Botão carrinho</strong> para adicionar produtos à mesa.
+        </p>
       </div>
 
-      {selectedTable && (
-        <TableDetailsModal
-          table={selectedTable}
-          isOpen={!!selectedTable}
-          onClose={() => setSelectedTable(null)}
-          onRefresh={() => {
-            fetchTables();
-            fetchTableAccounts();
-          }}
-          availableTables={tables}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {tables.map((table) => (
+          <Card 
+            key={table.id} 
+            className="hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => handleTableClick(table)}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-lg">Mesa {table.table_number}</CardTitle>
+                <Badge className={getStatusColor(table.status)}>
+                  {getStatusLabel(table.status)}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Users size={14} />
+                  <span>{table.capacity} pessoas</span>
+                </div>
+                {table.location && (
+                  <div className="text-sm text-gray-600">
+                    📍 {table.location}
+                  </div>
+                )}
+                {table.status === 'occupied' && (
+                  <div className="text-xs text-blue-600 font-medium mt-2">
+                    👆 Clique para ver detalhes
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleAddProductsClick(table, e)}
+                  className="flex-1"
+                  title="Adicionar produtos"
+                >
+                  <ShoppingCart size={14} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTable(table);
+                    setFormData({
+                      table_number: table.table_number.toString(),
+                      capacity: table.capacity,
+                      location: table.location || ''
+                    });
+                    setShowForm(true);
+                  }}
+                >
+                  <Edit size={14} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(table.id);
+                  }}
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {tables.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-gray-500">Nenhuma mesa cadastrada.</p>
+            <Button
+              onClick={() => setShowForm(true)}
+              className="mt-3"
+            >
+              <Plus size={16} className="mr-2" />
+              Criar Primeira Mesa
+            </Button>
+          </CardContent>
+        </Card>
       )}
+
+      {/* Modal de Detalhes da Mesa */}
+      <TableDetailsModal
+        table={selectedTable}
+        isOpen={showTableDetails}
+        onClose={() => {
+          setShowTableDetails(false);
+          setSelectedTable(null);
+        }}
+        onRefresh={fetchTables}
+        availableTables={tables}
+      />
+
+      {/* Modal de Adicionar Produtos */}
+      <AddProductToTableModal
+        table={tableForProducts}
+        isOpen={showAddProducts}
+        onClose={() => {
+          setShowAddProducts(false);
+          setTableForProducts(null);
+        }}
+        onSuccess={fetchTables}
+      />
     </div>
   );
 };

@@ -1,26 +1,29 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ShoppingCart, Plus, Minus, Search, X, Users, Store, Truck, MapPin } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Minus, Trash2, Calculator, DollarSign, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import ProductVariationModal from './ProductVariationModal';
-import AddProductToTableModal from './AddProductToTableModal';
+import ProductSelectionModal from './ProductSelectionModal';
 
 interface CartItem {
-  product: any;
+  id: string;
+  product_id: string;
+  product_name: string;
+  price: number;
   quantity: number;
-  variations: any[];
-  notes: string;
-  totalPrice: number;
-  uniqueId: string;
+  subtotal: number;
+  options?: string[];
+  notes?: string;
 }
 
 interface Table {
@@ -30,71 +33,219 @@ interface Table {
   capacity: number;
 }
 
-const PDVForm = () => {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [tables, setTables] = useState<Table[]>([]);
+const PDVForm: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [orderType, setOrderType] = useState('dine_in');
-  const [selectedTable, setSelectedTable] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [loading, setLoading] = useState(false);
-  const [showVariationModal, setShowVariationModal] = useState(false);
-  const [showAddToTableModal, setShowAddToTableModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [pendingTableItem, setPendingTableItem] = useState(null);
-  
-  const { toast } = useToast();
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [changeAmount, setChangeAmount] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [tables, setTables] = useState<Table[]>([]);
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+
   const { user } = useAuth();
+  const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
-  useEffect(() => {
-    if (user) {
-      fetchProducts();
-      fetchCategories();
-      fetchTables();
-    }
-  }, [user]);
-
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', user?.id)
-        .eq('available', true)
-        .eq('show_in_pdv', true);
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar produtos:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar os produtos.',
-        variant: 'destructive',
-      });
+  const addToCart = (product: any, quantity: number = 1, selectedOptions: string[] = [], notes: string = '') => {
+    const existingItem = cart.find(item => item.product_id === product.id);
+    
+    if (existingItem) {
+      updateQuantity(existingItem.id, existingItem.quantity + quantity);
+    } else {
+      const newItem: CartItem = {
+        id: Date.now().toString(),
+        product_id: product.id,
+        product_name: product.name,
+        price: product.price,
+        quantity,
+        subtotal: product.price * quantity,
+        options: selectedOptions.length > 0 ? selectedOptions : undefined,
+        notes: notes || undefined
+      };
+      setCart([...cart, newItem]);
     }
   };
 
-  const fetchCategories = async () => {
+  const updateQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(itemId);
+      return;
+    }
+
+    setCart(cart.map(item => 
+      item.id === itemId 
+        ? { ...item, quantity: newQuantity, subtotal: item.price * newQuantity }
+        : item
+    ));
+  };
+
+  const removeFromCart = (itemId: string) => {
+    setCart(cart.filter(item => item.id !== itemId));
+  };
+
+  const getTotalValue = () => {
+    return cart.reduce((total, item) => total + item.subtotal, 0);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const generateOrderNumber = () => {
+    return `PDV${Date.now()}`;
+  };
+
+  const addToTable = async () => {
+    if (!selectedTable || cart.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Selecione uma mesa e adicione produtos ao carrinho.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('product_categories')
+      // Convert CartItem[] to the format expected by the database
+      const orderItems = cart.map(item => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+        options: item.options || [],
+        notes: item.notes || ''
+      }));
+
+      const { data: existingAccount } = await supabase
+        .from('table_accounts')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('active', true)
-        .order('display_order');
+        .eq('table_id', selectedTable)
+        .eq('status', 'open')
+        .single();
+
+      if (existingAccount) {
+        const updatedItems = [...existingAccount.items as any[], ...orderItems];
+        const newTotal = updatedItems.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+
+        const { error } = await supabase
+          .from('table_accounts')
+          .update({
+            items: updatedItems,
+            total: newTotal
+          })
+          .eq('id', existingAccount.id);
+
+        if (error) throw error;
+      } else {
+        const total = getTotalValue();
+        
+        const { error } = await supabase
+          .from('table_accounts')
+          .insert({
+            user_id: user?.id,
+            table_id: selectedTable,
+            items: orderItems,
+            total: total,
+            status: 'open'
+          });
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Sucesso!",
+        description: "Produtos adicionados à mesa com sucesso.",
+      });
+
+      setCart([]);
+      setSelectedTable('');
+    } catch (error) {
+      console.error('Erro ao adicionar à mesa:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar os produtos à mesa.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const finalizeSale = async () => {
+    if (cart.length === 0 || !paymentMethod) {
+      toast({
+        title: "Erro",
+        description: "Adicione produtos ao carrinho e selecione o método de pagamento.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Convert CartItem[] to the format expected by the database
+      const orderItems = cart.map(item => ({
+        product_id: item.product_id,
+        product_name: item.product_name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+        options: item.options || [],
+        notes: item.notes || ''
+      }));
+
+      const orderData = {
+        user_id: user?.id,
+        order_number: generateOrderNumber(),
+        customer_name: customerName || 'Cliente Balcão',
+        customer_phone: customerPhone || null,
+        items: orderItems, // This is now in the correct format for jsonb
+        total: getTotalValue(),
+        payment_method: paymentMethod,
+        change_amount: changeAmount ? parseFloat(changeAmount) : null,
+        status: 'completed',
+        order_type: 'local',
+        table_id: selectedTable || null
+      };
+
+      const { error } = await supabase
+        .from('orders')
+        .insert([orderData]);
 
       if (error) throw error;
-      setCategories(data || []);
+
+      await sendToKitchen(orderData);
+
+      toast({
+        title: "Venda finalizada!",
+        description: `Pedido ${orderData.order_number} foi processado com sucesso.`,
+      });
+
+      // Reset form
+      setCart([]);
+      setCustomerName('');
+      setCustomerPhone('');
+      setPaymentMethod('');
+      setChangeAmount('');
+      setOrderNotes('');
+      setSelectedTable('');
     } catch (error) {
-      console.error('Erro ao carregar categorias:', error);
+      console.error('Erro ao finalizar venda:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível finalizar a venda.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -113,512 +264,230 @@ const PDVForm = () => {
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || 
-      product.category === selectedCategory || 
-      product.category_id === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const handleProductClick = (product: any) => {
-    setSelectedProduct(product);
-    setShowVariationModal(true);
-  };
-
-  const handleAddToCart = (product: any, quantity: number, variations: any[], notes: string, variationPrice: number) => {
-    const uniqueId = `${product.id}-${variations.map(v => v.id || v).join(',')}-${notes}`;
-    const totalPrice = (product.price + variationPrice) * quantity;
-
-    setCart(prev => {
-      const existingIndex = prev.findIndex(item => item.uniqueId === uniqueId);
-      
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex].quantity += quantity;
-        updated[existingIndex].totalPrice = 
-          (product.price + variationPrice) * updated[existingIndex].quantity;
-        return updated;
-      } else {
-        return [...prev, {
-          product,
-          quantity,
-          variations,
-          notes,
-          totalPrice,
-          uniqueId
-        }];
-      }
-    });
-
-    setShowVariationModal(false);
-    setSelectedProduct(null);
-    
-    toast({
-      title: 'Produto adicionado',
-      description: `${product.name} foi adicionado ao carrinho.`,
-    });
-  };
-
-  const handleAddToTable = (product: any, quantity: number, variations: any[], notes: string, variationPrice: number) => {
-    const totalPrice = (product.price + variationPrice) * quantity;
-    
-    setPendingTableItem({
-      product,
-      quantity,
-      variations,
-      notes,
-      totalPrice
-    });
-    
-    setShowVariationModal(false);
-    setShowAddToTableModal(true);
-  };
-
-  const updateQuantity = (uniqueId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeFromCart(uniqueId);
-      return;
-    }
-
-    setCart(prev => prev.map(item => {
-      if (item.uniqueId === uniqueId) {
-        const basePrice = item.totalPrice / item.quantity;
-        return {
-          ...item,
-          quantity: newQuantity,
-          totalPrice: basePrice * newQuantity
-        };
-      }
-      return item;
-    }));
-  };
-
-  const removeFromCart = (uniqueId: string) => {
-    setCart(prev => prev.filter(item => item.uniqueId !== uniqueId));
-  };
-
-  const getCartTotal = () => {
-    return cart.reduce((total, item) => total + item.totalPrice, 0);
-  };
-
-  const getOrderTypeDisplay = () => {
-    switch (orderType) {
-      case 'dine_in': return { label: 'Local', icon: Store, color: 'text-orange-600' };
-      case 'delivery': return { label: 'Delivery', icon: Truck, color: 'text-blue-600' };
-      case 'pickup': return { label: 'Retirada', icon: MapPin, color: 'text-green-600' };
-      default: return { label: 'Local', icon: Store, color: 'text-orange-600' };
-    }
-  };
-
-  const handleFinalizeSale = async () => {
-    if (cart.length === 0) {
-      toast({
-        title: 'Carrinho vazio',
-        description: 'Adicione produtos ao carrinho antes de finalizar.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!customerName.trim()) {
-      toast({
-        title: 'Nome obrigatório',
-        description: 'Informe o nome do cliente.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (orderType === 'dine_in' && !selectedTable) {
-      toast({
-        title: 'Mesa obrigatória',
-        description: 'Selecione uma mesa para pedidos no local.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (orderType === 'delivery' && !customerAddress.trim()) {
-      toast({
-        title: 'Endereço obrigatório',
-        description: 'Informe o endereço para delivery.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const orderNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      
-      const orderData = {
-        user_id: user?.id,
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim() || null,
-        customer_address: orderType === 'delivery' ? customerAddress.trim() : 
-                         orderType === 'dine_in' ? `Mesa ${tables.find(t => t.id === selectedTable)?.table_number}` : 
-                         'Retirada no Local',
-        order_type: orderType,
-        table_id: orderType === 'dine_in' ? selectedTable : null,
-        payment_method: paymentMethod,
-        status: 'completed',
-        order_number: orderNumber,
-        total: getCartTotal(),
-        items: cart.map(item => ({
-          product_id: item.product.id,
-          product_name: item.product.name,
-          price: item.product.price,
-          quantity: item.quantity,
-          variations: item.variations,
-          notes: item.notes,
-          subtotal: item.totalPrice
-        }))
-      };
-
-      const { error } = await supabase
-        .from('orders')
-        .insert([orderData]);
-
-      if (error) throw error;
-
-      // Enviar para o KDS (PDV sempre envia direto)
-      try {
-        await sendToKitchen({ ...orderData, status: 'accepted' });
-      } catch (kdsError) {
-        console.error('Erro ao enviar para KDS:', kdsError);
-      }
-
-      // Se for pedido para mesa, ocupar a mesa
-      if (orderType === 'dine_in' && selectedTable) {
-        await supabase
-          .from('tables')
-          .update({ status: 'occupied' })
-          .eq('id', selectedTable);
-      }
-
-      toast({
-        title: 'Venda finalizada',
-        description: `Venda #${orderNumber} finalizada com sucesso!`,
-      });
-
-      // Limpar formulário
-      setCart([]);
-      setCustomerName('');
-      setCustomerPhone('');
-      setCustomerAddress('');
-      setSelectedTable('');
-      setOrderType('dine_in');
-      setPaymentMethod('cash');
-
-    } catch (error) {
-      console.error('Erro ao finalizar venda:', error);
-      toast({
-        title: 'Erro na venda',
-        description: 'Não foi possível finalizar a venda. Tente novamente.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const orderTypeData = getOrderTypeDisplay();
-  const OrderIcon = orderTypeData.icon;
+  useEffect(() => {
+    fetchTables();
+  }, [user]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-      {/* Produtos */}
-      <div className="lg:col-span-2 space-y-4">
-        <Card className="h-full">
-          <CardHeader className="pb-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Produtos e Carrinho */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
+              <DollarSign size={20} />
               Produtos
+            </CardTitle>
+            <CardDescription>
+              Adicione produtos ao carrinho
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={() => setIsProductModalOpen(true)}
+              className="w-full"
+            >
+              <Plus size={16} className="mr-2" />
+              Adicionar Produto
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Carrinho */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Carrinho ({cart.length} itens)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {cart.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">
+                Nenhum produto no carrinho
+              </p>
+            ) : (
+              <>
+                {cart.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded">
+                    <div className="flex-1">
+                      <p className="font-medium">{item.product_name}</p>
+                      <p className="text-sm text-gray-600">
+                        {formatCurrency(item.price)} cada
+                      </p>
+                      {item.options && item.options.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {item.options.map((option, index) => (
+                            <div key={index}>• {option}</div>
+                          ))}
+                        </div>
+                      )}
+                      {item.notes && (
+                        <div className="text-xs text-gray-500 mt-1 italic">
+                          Obs: {item.notes}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >
+                        <Minus size={12} />
+                      </Button>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus size={12} />
+                      </Button>
+                      <span className="w-20 text-right">{formatCurrency(item.subtotal)}</span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                
+                <Separator />
+                
+                <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Total:</span>
+                  <span>{formatCurrency(getTotalValue())}</span>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Informações do Cliente e Finalização */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users size={20} />
+              Informações do Cliente
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Filtros */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Buscar produtos..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
+            <div>
+              <Label htmlFor="customerName">Nome do Cliente</Label>
+              <Input
+                id="customerName"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Nome do cliente (opcional)"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="customerPhone">Telefone</Label>
+              <Input
+                id="customerPhone"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="(11) 99999-9999 (opcional)"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="table">Mesa (opcional)</Label>
+              <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma mesa" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as categorias</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
+                  {tables.map((table) => (
+                    <SelectItem key={table.id} value={table.id}>
+                      Mesa {table.table_number} ({table.capacity} lugares)
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Grid de Produtos */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto max-h-[calc(100vh-400px)]">
-              {filteredProducts.map((product) => (
-                <Card 
-                  key={product.id} 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleProductClick(product)}
-                >
-                  <CardContent className="p-3 h-full flex flex-col">
-                    {product.image_url && (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="w-full h-20 object-cover rounded mb-2"
-                      />
-                    )}
-                    <div className="flex-1 flex flex-col justify-between">
-                      <h4 className="font-medium text-sm line-clamp-2 mb-2">
-                        {product.name}
-                      </h4>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-primary">
-                          R$ {product.price.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">Nenhum produto encontrado</p>
-              </div>
-            )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Carrinho e Finalização */}
-      <div className="space-y-4">
-        {/* Tipo de Pedido */}
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <OrderIcon className={`h-5 w-5 ${orderTypeData.color}`} />
-              <span className="font-medium">Tipo de Pedido</span>
-            </div>
-            <Select value={orderType} onValueChange={setOrderType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dine_in">
-                  <div className="flex items-center gap-2">
-                    <Store className="h-4 w-4 text-orange-600" />
-                    <span>Consumir no Local</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="delivery">
-                  <div className="flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-blue-600" />
-                    <span>Delivery</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="pickup">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-green-600" />
-                    <span>Retirada</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-
-        {/* Carrinho */}
-        <Card className="h-64">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Carrinho ({cart.length})
-            </CardTitle>
+          <CardHeader>
+            <CardTitle>Pagamento</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 overflow-y-auto max-h-44">
-              {cart.map((item) => (
-                <div key={item.uniqueId} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{item.product.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      R$ {item.totalPrice.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 w-6 p-0"
-                      onClick={() => updateQuantity(item.uniqueId, item.quantity - 1)}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="text-sm w-6 text-center">{item.quantity}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 w-6 p-0"
-                      onClick={() => updateQuantity(item.uniqueId, item.quantity + 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 w-6 p-0 ml-1"
-                      onClick={() => removeFromCart(item.uniqueId)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              
-              {cart.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">
-                  Carrinho vazio
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Dados do Cliente */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Cliente</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="customer-name">Nome *</Label>
-              <Input
-                id="customer-name"
-                placeholder="Nome do cliente"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer-phone">Telefone</Label>
-              <Input
-                id="customer-phone"
-                placeholder="(11) 99999-9999"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-              />
-            </div>
-            
-            {orderType === 'delivery' && (
-              <div className="space-y-2">
-                <Label htmlFor="customer-address">Endereço *</Label>
-                <Input
-                  id="customer-address"
-                  placeholder="Endereço completo"
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                />
-              </div>
-            )}
-            
-            {orderType === 'dine_in' && (
-              <div className="space-y-2">
-                <Label>Mesa *</Label>
-                <Select value={selectedTable} onValueChange={setSelectedTable}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma mesa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tables.filter(table => table.status === 'available').map((table) => (
-                      <SelectItem key={table.id} value={table.id}>
-                        Mesa {table.table_number} ({table.capacity} lugares)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Finalização */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="space-y-2">
-              <Label>Método de Pagamento</Label>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="paymentMethod">Método de Pagamento</Label>
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione o método" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="card">Cartão</SelectItem>
                   <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            <div className="flex justify-between items-center pt-2 border-t">
-              <span className="text-lg font-bold">
-                Total: R$ {getCartTotal().toFixed(2)}
-              </span>
+
+            {paymentMethod === 'dinheiro' && (
+              <div>
+                <Label htmlFor="changeAmount">Valor pago</Label>
+                <Input
+                  id="changeAmount"
+                  type="number"
+                  step="0.01"
+                  value={changeAmount}
+                  onChange={(e) => setChangeAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="orderNotes">Observações</Label>
+              <Textarea
+                id="orderNotes"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="Observações do pedido (opcional)"
+                rows={3}
+              />
             </div>
-            
-            <Button
-              onClick={handleFinalizeSale}
-              className="w-full"
-              disabled={loading || cart.length === 0}
-            >
-              {loading ? 'Finalizando...' : 'Finalizar Venda'}
-            </Button>
           </CardContent>
         </Card>
+
+        <div className="space-y-2">
+          {selectedTable && (
+            <Button
+              onClick={addToTable}
+              disabled={cart.length === 0 || isLoading}
+              className="w-full bg-blue-900 hover:bg-blue-800"
+              size="lg"
+            >
+              <Users size={16} className="mr-2" />
+              Adicionar à Mesa
+            </Button>
+          )}
+          
+          <Button
+            onClick={finalizeSale}
+            disabled={cart.length === 0 || !paymentMethod || isLoading}
+            className="w-full bg-green-600 hover:bg-green-700"
+            size="lg"
+          >
+            <Calculator size={16} className="mr-2" />
+            Finalizar Venda
+          </Button>
+        </div>
       </div>
 
-      {/* Modals */}
-      <ProductVariationModal
-        isOpen={showVariationModal}
-        onClose={() => {
-          setShowVariationModal(false);
-          setSelectedProduct(null);
-        }}
-        product={selectedProduct}
-        onAddToCart={handleAddToCart}
-        onAddToTable={handleAddToTable}
-        showTableOption={orderType === 'dine_in'}
-      />
-
-      <AddProductToTableModal
-        isOpen={showAddToTableModal}
-        onClose={() => {
-          setShowAddToTableModal(false);
-          setPendingTableItem(null);
-        }}
-        product={pendingTableItem?.product}
-        quantity={pendingTableItem?.quantity || 1}
-        variations={pendingTableItem?.variations || []}
-        notes={pendingTableItem?.notes || ''}
-        totalPrice={pendingTableItem?.totalPrice || 0}
-        onSuccess={() => {
-          setPendingTableItem(null);
-        }}
+      <ProductSelectionModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onAddToCart={addToCart}
       />
     </div>
   );

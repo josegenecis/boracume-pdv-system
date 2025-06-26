@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import ProductForm from '@/components/products/ProductForm';
 import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
 // Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
@@ -182,179 +182,177 @@ const Products = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Package className="h-6 w-6 text-orange-500" />
-            <h1 className="text-2xl font-bold">Produtos</h1>
-          </div>
-          <Button onClick={() => setShowForm(true)}>
-            <Package className="h-4 w-4 mr-2" />
-            Novo Produto
-          </Button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Package className="h-6 w-6 text-orange-500" />
+          <h1 className="text-2xl font-bold">Produtos</h1>
         </div>
+        <Button onClick={() => setShowForm(true)}>
+          <Package className="h-4 w-4 mr-2" />
+          Novo Produto
+        </Button>
+      </div>
 
-        <Tabs defaultValue="products" className="w-full">
-          <TabsList>
-            <TabsTrigger value="products">Produtos</TabsTrigger>
-            <TabsTrigger value="categories">Categorias</TabsTrigger>
-            <TabsTrigger value="banners">Banners</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="products" className="space-y-6">
-            {showForm ? (
-              <ProductForm
-                product={editingProduct}
-                onSave={handleFormSubmit}
-                onCancel={() => {
-                  setShowForm(false);
-                  setEditingProduct(null);
-                }}
-              />
-            ) : (
-              <>
-                {/* Filtros */}
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="flex flex-col md:flex-row gap-4">
-                      <div className="flex-1">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                          <Input
-                            placeholder="Buscar produtos..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          variant={selectedCategory === 'all' ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSelectedCategory('all')}
-                        >
-                          Todos
-                        </Button>
-                        {categories.map(category => (
-                          <Button
-                            key={category.id}
-                            variant={selectedCategory === category.id ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setSelectedCategory(category.id)}
-                          >
-                            {category.name}
-                          </Button>
-                        ))}
+      <Tabs defaultValue="products" className="w-full">
+        <TabsList>
+          <TabsTrigger value="products">Produtos</TabsTrigger>
+          <TabsTrigger value="categories">Categorias</TabsTrigger>
+          <TabsTrigger value="banners">Banners</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="products" className="space-y-6">
+          {showForm ? (
+            <ProductForm
+              product={editingProduct}
+              onSave={handleFormSubmit}
+              onCancel={() => {
+                setShowForm(false);
+                setEditingProduct(null);
+              }}
+            />
+          ) : (
+            <>
+              {/* Filtros */}
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          placeholder="Buscar produtos..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
                       </div>
                     </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant={selectedCategory === 'all' ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSelectedCategory('all')}
+                      >
+                        Todos
+                      </Button>
+                      {categories.map(category => (
+                        <Button
+                          key={category.id}
+                          variant={selectedCategory === category.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedCategory(category.id)}
+                        >
+                          {category.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Lista de Produtos */}
+              {filteredProducts.length === 0 ? (
+                <Card>
+                  <CardContent className="text-center py-12">
+                    <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
+                    <p className="text-muted-foreground mb-4">
+                      {searchQuery || selectedCategory !== 'all'
+                        ? 'Tente ajustar os filtros ou buscar por outros termos.'
+                        : 'Comece criando seu primeiro produto.'}
+                    </p>
+                    <Button onClick={() => setShowForm(true)}>
+                      <Package className="h-4 w-4 mr-2" />
+                      Criar Produto
+                    </Button>
                   </CardContent>
                 </Card>
-
-                {/* Lista de Produtos */}
-                {filteredProducts.length === 0 ? (
-                  <Card>
-                    <CardContent className="text-center py-12">
-                      <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
-                      <p className="text-muted-foreground mb-4">
-                        {searchQuery || selectedCategory !== 'all'
-                          ? 'Tente ajustar os filtros ou buscar por outros termos.'
-                          : 'Comece criando seu primeiro produto.'}
-                      </p>
-                      <Button onClick={() => setShowForm(true)}>
-                        <Package className="h-4 w-4 mr-2" />
-                        Criar Produto
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredProducts.map((product) => (
-                      <Card key={product.id} className="overflow-hidden h-80">
-                        {product.image_url && (
-                          <div className="aspect-video w-full overflow-hidden">
-                            <img 
-                              src={product.image_url} 
-                              alt={product.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredProducts.map((product) => (
+                    <Card key={product.id} className="overflow-hidden">
+                      {product.image_url && (
+                        <div className="aspect-video w-full overflow-hidden">
+                          <img 
+                            src={product.image_url} 
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-lg">{product.name}</CardTitle>
+                          <Badge variant={product.available ? "default" : "secondary"}>
+                            {product.available ? 'Disponível' : 'Indisponível'}
+                          </Badge>
+                        </div>
+                        {product.description && (
+                          <p className="text-gray-600 text-sm line-clamp-2">{product.description}</p>
                         )}
-                        <CardHeader className="pb-2">
-                          <div className="flex justify-between items-start">
-                            <CardTitle className="text-base leading-tight">{product.name}</CardTitle>
-                            <Badge variant={product.available ? "default" : "secondary"} className="text-xs">
-                              {product.available ? 'Disponível' : 'Indisponível'}
-                            </Badge>
-                          </div>
-                          {product.description && (
-                            <p className="text-gray-600 text-sm line-clamp-2">{product.description}</p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-2xl font-bold text-primary">
+                            {formatCurrency(product.price)}
+                            {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
+                          </span>
+                          <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
+                        </div>
+
+                        {/* Status badges */}
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {product.show_in_delivery && (
+                            <Badge variant="outline" className="text-xs">Delivery</Badge>
                           )}
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="flex justify-between items-center mb-3">
-                            <span className="text-xl font-bold text-primary">
-                              {formatCurrency(product.price)}
-                              {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
-                            </span>
-                            <Badge variant="outline" className="text-xs">{getCategoryName(product.category_id)}</Badge>
-                          </div>
+                          {product.show_in_pdv && (
+                            <Badge variant="outline" className="text-xs">PDV</Badge>
+                          )}
+                          {product.send_to_kds && (
+                            <Badge variant="outline" className="text-xs">KDS</Badge>
+                          )}
+                        </div>
 
-                          {/* Status badges */}
-                          <div className="flex flex-wrap gap-1 mb-3">
-                            {product.show_in_delivery && (
-                              <Badge variant="outline" className="text-xs">Delivery</Badge>
-                            )}
-                            {product.show_in_pdv && (
-                              <Badge variant="outline" className="text-xs">PDV</Badge>
-                            )}
-                            {product.send_to_kds && (
-                              <Badge variant="outline" className="text-xs">KDS</Badge>
-                            )}
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => handleEditProduct(product)}
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              Editar
-                            </Button>
-                            
-                            <ProductVariationsButton productId={product.id} />
-                            
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteProduct(product.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="categories">
-            <CategoryManager />
-          </TabsContent>
-          
-          <TabsContent value="banners">
-            <BannerManager />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </DashboardLayout>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleEditProduct(product)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Editar
+                          </Button>
+                          
+                          <ProductVariationsButton productId={product.id} />
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteProduct(product.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="categories">
+          <CategoryManager />
+        </TabsContent>
+        
+        <TabsContent value="banners">
+          <BannerManager />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
 

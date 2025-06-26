@@ -12,7 +12,7 @@ const Menu = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const menuUrl = `${window.location.origin}/cardapio/${user?.id}`;
+  const menuUrl = `${window.location.origin}/menu/${user?.id}`;
 
   const copyToClipboard = async () => {
     try {
