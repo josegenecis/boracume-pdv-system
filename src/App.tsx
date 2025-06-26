@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
@@ -29,6 +28,9 @@ import SecurityDashboard from '@/pages/SecurityDashboard';
 import Subscription from '@/pages/Subscription';
 import Downloads from '@/pages/Downloads';
 import NotFound from '@/pages/NotFound';
+import NewDigitalMenu from '@/pages/NewDigitalMenu';
+import NewKitchen from '@/pages/NewKitchen';
+import NewPDV from '@/pages/NewPDV';
 
 function App() {
   return (
@@ -41,8 +43,8 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               
-              {/* Cardápio Digital - Nova Rota */}
-              <Route path="/cardapio/:userId" element={<DigitalMenu />} />
+              {/* Novo Cardápio Digital */}
+              <Route path="/cardapio/:userId" element={<NewDigitalMenu />} />
               
               {/* Protected routes */}
               <Route path="/dashboard" element={
@@ -60,11 +62,14 @@ function App() {
                   <Products />
                 </RouteGuard>
               } />
+              
+              {/* Nova Cozinha */}
               <Route path="/cozinha" element={
                 <RouteGuard>
-                  <Kitchen />
+                  <NewKitchen />
                 </RouteGuard>
               } />
+              
               <Route path="/configuracoes" element={
                 <RouteGuard>
                   <Configuracoes />
@@ -75,11 +80,14 @@ function App() {
                   <Mesas />
                 </RouteGuard>
               } />
+              
+              {/* Novo PDV */}
               <Route path="/pdv" element={
                 <RouteGuard>
-                  <PDV />
+                  <NewPDV />
                 </RouteGuard>
               } />
+              
               <Route path="/financeiro" element={
                 <RouteGuard>
                   <Financeiro />
