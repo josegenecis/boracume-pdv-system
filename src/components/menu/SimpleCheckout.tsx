@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -131,14 +130,14 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_address: deliveryType === 'delivery' ? customerAddress.trim() : 'Retirada no Local',
-        delivery_type: deliveryType,
+        order_type: deliveryType, // ✅ CORRIGIDO: Era delivery_type, agora é order_type
         payment_method: paymentMethod,
         delivery_zone_id: deliveryType === 'delivery' ? selectedZone : null,
         delivery_fee: deliveryType === 'delivery' ? deliveryFee : 0,
         items: cart.map(item => ({
           product_id: item.product.id,
-          product_name: item.product.name, // Usando product_name para compatibilidade
-          name: item.product.name, // Mantendo name também
+          product_name: item.product.name,
+          name: item.product.name,
           price: item.product.price,
           quantity: item.quantity,
           subtotal: item.totalPrice,
@@ -147,7 +146,6 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         })),
         total: finalTotal,
         status: 'pending',
-        order_type: deliveryType,
         acceptance_status: 'pending_acceptance'
       };
 
