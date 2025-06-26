@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Minus, Trash2, ShoppingCart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import CustomerLocationInput from '@/components/customer/CustomerLocationInput';
 
 interface CartProduct {
   id: string;
@@ -65,8 +64,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     address: '',
     addressReference: '',
     neighborhood: '',
-    latitude: null as number | null,
-    longitude: null as number | null,
   });
   const [deliveryType, setDeliveryType] = useState('delivery');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -85,17 +82,8 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('🚀 INICIANDO CHECKOUT - Dados do formulário:', {
-      cart: cart.length,
-      customerData,
-      deliveryType,
-      paymentMethod,
-      selectedZone,
-      finalTotal
-    });
     
     if (cart.length === 0) {
-      console.log('❌ ERRO: Carrinho vazio');
       toast({
         title: "Carrinho vazio",
         description: "Adicione itens ao carrinho antes de finalizar o pedido.",
@@ -104,9 +92,7 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       return;
     }
 
-    // Validações básicas
     if (!customerData.name.trim()) {
-      console.log('❌ ERRO: Nome obrigatório');
       toast({
         title: "Nome obrigatório",
         description: "Por favor, informe seu nome.",
@@ -116,7 +102,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     }
 
     if (!customerData.phone.trim()) {
-      console.log('❌ ERRO: Telefone obrigatório');
       toast({
         title: "Telefone obrigatório",
         description: "Por favor, informe seu telefone.",
@@ -125,10 +110,8 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       return;
     }
 
-    // Validações específicas para entrega
     if (deliveryType === 'delivery') {
       if (!selectedZone) {
-        console.log('❌ ERRO: Área de entrega obrigatória');
         toast({
           title: "Área de entrega obrigatória",
           description: "Por favor, selecione sua área de entrega.",
@@ -138,7 +121,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
 
       if (!customerData.address.trim()) {
-        console.log('❌ ERRO: Endereço obrigatório para entrega');
         toast({
           title: "Endereço obrigatório",
           description: "Por favor, informe seu endereço para entrega.",
@@ -149,10 +131,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
       const zone = deliveryZones.find(z => z.id === selectedZone);
       if (zone && total < zone.minimum_order) {
-        console.log('❌ ERRO: Pedido mínimo não atingido', { 
-          total, 
-          minimum: zone.minimum_order 
-        });
         toast({
           title: "Pedido mínimo não atingido",
           description: `O pedido mínimo para esta área é R$ ${zone.minimum_order.toFixed(2)}.`,
@@ -162,7 +140,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
     }
 
-    console.log('✅ Todas as validações passaram, criando pedido...');
     setIsSubmitting(true);
 
     try {
@@ -173,8 +150,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_address: deliveryType === 'delivery' ? customerData.address.trim() : 'Retirada no Local',
         customer_address_reference: customerData.addressReference?.trim() || '',
         customer_neighborhood: deliveryType === 'delivery' ? customerData.neighborhood || '' : '',
-        latitude: customerData.latitude,
-        longitude: customerData.longitude,
         delivery_type: deliveryType,
         payment_method: paymentMethod,
         notes: notes.trim(),
@@ -196,21 +171,14 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         acceptance_status: 'pending_acceptance'
       };
 
-      console.log('📦 DADOS DO PEDIDO PREPARADOS:', orderData);
-
       await onPlaceOrder(orderData);
       
-      console.log('✅ Pedido finalizado com sucesso!');
-      
-      // Reset form apenas após sucesso
       setCustomerData({
         name: '',
         phone: '',
         address: '',
         addressReference: '',
         neighborhood: '',
-        latitude: null,
-        longitude: null,
       });
       setDeliveryType('delivery');
       setPaymentMethod('cash');
@@ -223,7 +191,6 @@ const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       });
       
     } catch (error) {
-      console.error('❌ ERRO CRÍTICO no checkout:', error);
       toast({
         title: "Erro ao finalizar pedido",
         description: "Ocorreu um erro ao enviar seu pedido. Tente novamente.",
