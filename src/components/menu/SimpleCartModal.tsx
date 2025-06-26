@@ -150,6 +150,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     return `https://maps.google.com/maps?q=${lat},${lng}`;
   };
 
+  const generateOrderNumber = () => {
+    const now = new Date();
+    const timestamp = now.getTime().toString().slice(-6);
+    return `PED${timestamp}`;
+  };
+
   const isFormValid = () => {
     const validPaymentMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
     const isPaymentValid = paymentMethod !== '' && validPaymentMethods.includes(paymentMethod);
@@ -190,8 +196,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     try {
       console.log('🔄 Preparando dados do pedido...');
       
+      const orderNumber = generateOrderNumber();
+      
       const orderData = {
         user_id: userId,
+        order_number: orderNumber,
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_address: customerAddress.trim(),
@@ -218,7 +227,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         total: finalTotal,
         status: 'pending',
         order_type: 'delivery',
-        order_number: 'PED' + Date.now().toString().slice(-6),
         acceptance_status: 'pending_acceptance',
         estimated_time: selectedZone?.delivery_time || '30-45 min'
       };
@@ -226,6 +234,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       console.log('📊 Dados preparados para envio:', {
         user_id: orderData.user_id,
         customer_name: orderData.customer_name,
+        order_number: orderData.order_number,
         total: orderData.total,
         items_count: orderData.items.length
       });

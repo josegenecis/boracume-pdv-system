@@ -133,7 +133,7 @@ const MenuDigital = () => {
       if (!customerId) {
         try {
           console.log('🔄 Criando novo cliente...');
-          // Criar novo cliente
+          // Criar novo cliente com configuração específica para RLS
           const customerData = {
             user_id: orderData.user_id,
             name: orderData.customer_name,
@@ -142,9 +142,13 @@ const MenuDigital = () => {
             neighborhood: orderData.customer_neighborhood || ''
           };
 
+          // Usar upsert para evitar conflitos RLS
           const { data: newCustomer, error: customerError } = await supabase
             .from('customers')
-            .insert([customerData])
+            .upsert(customerData, { 
+              onConflict: 'user_id,phone',
+              ignoreDuplicates: false 
+            })
             .select('id')
             .single();
 
@@ -161,27 +165,45 @@ const MenuDigital = () => {
         }
       }
 
-      // Preparar dados do pedido
+      // Preparar dados do pedido com todos os campos necessários
       const finalOrderData = {
-        ...orderData,
+        user_id: orderData.user_id,
+        order_number: orderData.order_number,
+        customer_name: orderData.customer_name.trim(),
+        customer_phone: orderData.customer_phone.trim(),
+        customer_address: orderData.customer_address?.trim() || '',
+        customer_neighborhood: orderData.customer_neighborhood?.trim() || '',
         customer_id: customerId, // Pode ser null se falhou ao criar cliente
-        // Garantir que campos obrigatórios estão preenchidos
-        customer_address: orderData.customer_address || '',
-        customer_neighborhood: orderData.customer_neighborhood || '',
+        delivery_zone_id: orderData.delivery_zone_id || null,
+        items: orderData.items,
+        total: orderData.total,
+        delivery_fee: orderData.delivery_fee || 0,
+        payment_method: orderData.payment_method,
+        change_amount: orderData.change_amount,
+        order_type: orderData.order_type || 'delivery',
         delivery_instructions: orderData.delivery_instructions || null,
+        estimated_time: orderData.estimated_time || '30-45 min',
+        status: orderData.status || 'pending',
+        acceptance_status: orderData.acceptance_status || 'pending_acceptance',
+        customer_latitude: orderData.customer_latitude,
+        customer_longitude: orderData.customer_longitude,
+        customer_location_accuracy: orderData.customer_location_accuracy,
+        google_maps_link: orderData.google_maps_link,
         customer_address_reference: orderData.customer_address_reference || null
       };
 
       console.log('🔄 Criando pedido no banco de dados...');
-      console.log('📊 Dados do pedido:', {
+      console.log('📊 Dados do pedido final:', {
         user_id: finalOrderData.user_id,
         customer_name: finalOrderData.customer_name,
         customer_phone: finalOrderData.customer_phone,
         total: finalOrderData.total,
         items_count: finalOrderData.items?.length || 0,
-        customer_id: finalOrderData.customer_id
+        customer_id: finalOrderData.customer_id,
+        order_number: finalOrderData.order_number
       });
 
+      // Criar pedido com configuração RLS específica
       const { data, error } = await supabase
         .from('orders')
         .insert([finalOrderData])
@@ -191,7 +213,7 @@ const MenuDigital = () => {
       if (error) {
         console.error('❌ Erro ao criar pedido no banco:', error);
         
-        // Tratar erros específicos do banco
+        // Tratar erros específicos do banco com mensagens mais claras
         if (error.code === '23505') {
           throw new Error('Número do pedido já existe. Tente novamente.');
         } else if (error.code === '23503') {
@@ -200,6 +222,8 @@ const MenuDigital = () => {
           throw new Error('Campos obrigatórios não preenchidos.');
         } else if (error.message?.includes('row-level security')) {
           throw new Error('Erro de permissão. Tente novamente.');
+        } else if (error.message?.includes('permission denied')) {
+          throw new Error('Sem permissão para criar pedido. Verifique configurações.');
         } else {
           throw new Error(`Erro no banco de dados: ${error.message}`);
         }
