@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, MapPin, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,8 +17,28 @@ interface CartItem {
     price: number;
   };
   quantity: number;
+  variations: string[];
+  notes: string;
   totalPrice: number;
   uniqueId: string;
+}
+
+interface DeliveryZone {
+  id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order: number;
+  delivery_time: string;
+  active: boolean;
+}
+
+interface Profile {
+  restaurant_name?: string;
+  phone?: string;
+  address?: string;
+  opening_hours?: string;
+  description?: string;
+  logo_url?: string;
 }
 
 interface SimpleCheckoutProps {
@@ -28,6 +48,8 @@ interface SimpleCheckoutProps {
   total: number;
   onClearCart: () => void;
   userId: string;
+  deliveryZones: DeliveryZone[];
+  profile: Profile;
 }
 
 export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
@@ -36,7 +58,9 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
   cart,
   total,
   onClearCart,
-  userId
+  userId,
+  deliveryZones,
+  profile
 }) => {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,10 +69,18 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
   const [deliveryType, setDeliveryType] = useState('delivery');
   const [customerAddress, setCustomerAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [deliveryFee, setDeliveryFee] = useState(0);
 
-  const generateOrderNumber = () => {
-    return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  const handleZoneChange = (zoneId: string) => {
+    setSelectedZone(zoneId);
+    const zone = deliveryZones.find(z => z.id === zoneId);
+    if (zone) {
+      setDeliveryFee(zone.delivery_fee);
+    }
   };
+
+  const finalTotal = total + deliveryFee;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,13 +94,24 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
       return;
     }
 
-    if (deliveryType === 'delivery' && !customerAddress.trim()) {
-      toast({
-        title: "Endereço obrigatório",
-        description: "Por favor, informe seu endereço para entrega.",
-        variant: "destructive"
-      });
-      return;
+    if (deliveryType === 'delivery') {
+      if (!customerAddress.trim()) {
+        toast({
+          title: "Endereço obrigatório",
+          description: "Por favor, informe seu endereço para entrega.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (!selectedZone) {
+        toast({
+          title: "Bairro obrigatório",
+          description: "Por favor, selecione o bairro para entrega.",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -81,27 +124,36 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
         customer_address: deliveryType === 'delivery' ? customerAddress.trim() : 'Retirada no Local',
         delivery_type: deliveryType,
         payment_method: paymentMethod,
+        delivery_zone_id: deliveryType === 'delivery' ? selectedZone : null,
+        delivery_fee: deliveryType === 'delivery' ? deliveryFee : 0,
         items: cart.map(item => ({
           product_id: item.product.id,
           name: item.product.name,
           price: item.product.price,
           quantity: item.quantity,
-          subtotal: item.totalPrice
+          subtotal: item.totalPrice,
+          variations: item.variations,
+          notes: item.notes
         })),
-        total: total,
+        total: finalTotal,
         status: 'pending',
-        order_number: generateOrderNumber(),
         order_type: 'delivery',
         acceptance_status: 'pending_acceptance'
       };
 
-      const { error } = await supabase
+      console.log('Enviando pedido:', orderData);
+
+      const { data, error } = await supabase
         .from('orders')
-        .insert([orderData]);
+        .insert([orderData])
+        .select();
 
       if (error) {
+        console.error('Erro ao inserir pedido:', error);
         throw error;
       }
+
+      console.log('Pedido inserido com sucesso:', data);
 
       onClearCart();
       onClose();
@@ -112,22 +164,29 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
       setCustomerAddress('');
       setDeliveryType('delivery');
       setPaymentMethod('cash');
+      setSelectedZone('');
+      setDeliveryFee(0);
       
       toast({
         title: "Pedido enviado!",
-        description: "Seu pedido foi enviado com sucesso!",
+        description: "Seu pedido foi enviado com sucesso! Em breve entraremos em contato.",
       });
       
     } catch (error) {
       console.error('Erro ao finalizar pedido:', error);
       toast({
         title: "Erro ao finalizar pedido",
-        description: "Tente novamente.",
+        description: "Houve um erro ao enviar seu pedido. Tente novamente.",
         variant: "destructive"
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const removeItem = (uniqueId: string) => {
+    // Esta função seria implementada no hook useSimpleCart
+    console.log('Remover item:', uniqueId);
   };
 
   if (cart.length === 0) {
@@ -160,15 +219,53 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
           <div className="space-y-2">
             <Label className="font-semibold">Seu Pedido</Label>
             {cart.map((item) => (
-              <div key={item.uniqueId} className="flex justify-between text-sm">
-                <span>{item.quantity}x {item.product.name}</span>
-                <span>R$ {item.totalPrice.toFixed(2)}</span>
+              <div key={item.uniqueId} className="flex justify-between items-start text-sm border-b pb-2">
+                <div className="flex-1">
+                  <div className="flex justify-between items-start">
+                    <span className="font-medium">{item.quantity}x {item.product.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeItem(item.uniqueId)}
+                      className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  {item.variations.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {item.variations.join(', ')}
+                    </div>
+                  )}
+                  {item.notes && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Obs: {item.notes}
+                    </div>
+                  )}
+                  <div className="text-right font-medium">
+                    R$ {item.totalPrice.toFixed(2)}
+                  </div>
+                </div>
               </div>
             ))}
-            <Separator />
-            <div className="flex justify-between font-semibold">
-              <span>Total:</span>
-              <span>R$ {total.toFixed(2)}</span>
+            
+            <div className="space-y-1 pt-2">
+              <div className="flex justify-between text-sm">
+                <span>Subtotal:</span>
+                <span>R$ {total.toFixed(2)}</span>
+              </div>
+              {deliveryFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span>Taxa de entrega:</span>
+                  <span>R$ {deliveryFee.toFixed(2)}</span>
+                </div>
+              )}
+              <Separator />
+              <div className="flex justify-between font-semibold">
+                <span>Total:</span>
+                <span>R$ {finalTotal.toFixed(2)}</span>
+              </div>
             </div>
           </div>
 
@@ -212,16 +309,40 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
             </div>
 
             {deliveryType === 'delivery' && (
-              <div>
-                <Label htmlFor="address">Endereço *</Label>
-                <Input
-                  id="address"
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
-                  placeholder="Rua, número, bairro"
-                  required
-                />
-              </div>
+              <>
+                <div>
+                  <Label>Bairro/Zona de Entrega *</Label>
+                  <Select value={selectedZone} onValueChange={handleZoneChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione seu bairro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliveryZones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            <span>{zone.name}</span>
+                            <span className="text-sm text-gray-500">
+                              (R$ {zone.delivery_fee.toFixed(2)})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="address">Endereço Completo *</Label>
+                  <Input
+                    id="address"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                    placeholder="Rua, número, complemento"
+                    required
+                  />
+                </div>
+              </>
             )}
 
             <div>
@@ -244,7 +365,7 @@ export const SimpleCheckout: React.FC<SimpleCheckoutProps> = ({
             className="w-full" 
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Enviando...' : 'Finalizar Pedido'}
+            {isSubmitting ? 'Enviando...' : `Finalizar Pedido - R$ ${finalTotal.toFixed(2)}`}
           </Button>
         </form>
       </DialogContent>

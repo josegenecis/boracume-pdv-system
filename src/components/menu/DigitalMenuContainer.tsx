@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
-import { useDigitalCart } from '@/hooks/useDigitalCart';
+import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCheckout } from '@/components/menu/SimpleCheckout';
 import CartBottomBar from '@/components/menu/CartBottomBar';
@@ -19,7 +19,7 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
-  const { products, categories, loading, profile } = useMenuData(userId);
+  const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
   const { fetchVariations } = useSimpleVariations();
   const {
     cart,
@@ -27,7 +27,7 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
     clearCart,
     getCartTotal,
     getCartItemCount
-  } = useDigitalCart();
+  } = useSimpleCart();
 
   const handleProductClick = async (product: any) => {
     try {
@@ -92,6 +92,8 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
         total={getCartTotal()}
         onClearCart={clearCart}
         userId={userId}
+        deliveryZones={deliveryZones}
+        profile={profile}
       />
     </div>
   );
