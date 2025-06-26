@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -93,6 +92,8 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
+      console.log('🔄 Iniciando processo de checkout...');
+      
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
         throw new Error('ID do usuário é obrigatório');
@@ -107,6 +108,8 @@ const MenuDigital = () => {
         throw new Error('Pedido deve ter pelo menos um item');
       }
 
+      console.log('✅ Dados validados, processando cliente...');
+
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
       try {
@@ -118,22 +121,24 @@ const MenuDigital = () => {
           .maybeSingle();
 
         if (customerCheckError) {
-          console.error('Erro ao verificar cliente existente:', customerCheckError);
+          console.warn('Erro ao verificar cliente existente:', customerCheckError);
         } else if (existingCustomer) {
           customerId = existingCustomer.id;
+          console.log('✅ Cliente existente encontrado:', customerId);
         }
       } catch (customerError) {
-        console.error('Erro na verificação de cliente:', customerError);
+        console.warn('Erro na verificação de cliente:', customerError);
       }
 
       if (!customerId) {
         try {
+          console.log('🔄 Criando novo cliente...');
           // Criar novo cliente
           const customerData = {
             user_id: orderData.user_id,
             name: orderData.customer_name,
             phone: orderData.customer_phone,
-            address: orderData.customer_address,
+            address: orderData.customer_address || '',
             neighborhood: orderData.customer_neighborhood || ''
           };
 
@@ -144,29 +149,47 @@ const MenuDigital = () => {
             .single();
 
           if (customerError) {
-            console.error('Erro ao criar cliente:', customerError);
-            // Continuar sem cliente se falhar - não é crítico
+            console.warn('Aviso ao criar cliente:', customerError);
+            // Continuar sem cliente se falhar - não é crítico para o pedido
           } else {
             customerId = newCustomer.id;
+            console.log('✅ Novo cliente criado:', customerId);
           }
         } catch (customerError) {
-          console.error('Erro na criação de cliente:', customerError);
+          console.warn('Erro na criação de cliente:', customerError);
+          // Continuar sem cliente - não deve bloquear o pedido
         }
       }
 
-      // Adicionar customer_id ao pedido se cliente foi criado/encontrado
-      if (customerId) {
-        orderData.customer_id = customerId;
-      }
+      // Preparar dados do pedido
+      const finalOrderData = {
+        ...orderData,
+        customer_id: customerId, // Pode ser null se falhou ao criar cliente
+        // Garantir que campos obrigatórios estão preenchidos
+        customer_address: orderData.customer_address || '',
+        customer_neighborhood: orderData.customer_neighborhood || '',
+        delivery_instructions: orderData.delivery_instructions || null,
+        customer_address_reference: orderData.customer_address_reference || null
+      };
+
+      console.log('🔄 Criando pedido no banco de dados...');
+      console.log('📊 Dados do pedido:', {
+        user_id: finalOrderData.user_id,
+        customer_name: finalOrderData.customer_name,
+        customer_phone: finalOrderData.customer_phone,
+        total: finalOrderData.total,
+        items_count: finalOrderData.items?.length || 0,
+        customer_id: finalOrderData.customer_id
+      });
 
       const { data, error } = await supabase
         .from('orders')
-        .insert([orderData])
+        .insert([finalOrderData])
         .select()
         .single();
 
       if (error) {
-        console.error('Erro ao criar pedido no banco:', error);
+        console.error('❌ Erro ao criar pedido no banco:', error);
         
         // Tratar erros específicos do banco
         if (error.code === '23505') {
@@ -175,20 +198,24 @@ const MenuDigital = () => {
           throw new Error('Dados de referência inválidos. Verifique área de entrega.');
         } else if (error.code === '23502') {
           throw new Error('Campos obrigatórios não preenchidos.');
+        } else if (error.message?.includes('row-level security')) {
+          throw new Error('Erro de permissão. Tente novamente.');
         } else {
           throw new Error(`Erro no banco de dados: ${error.message}`);
         }
       }
 
+      console.log('✅ Pedido criado com sucesso:', data);
+
       toast({
         title: "Pedido realizado com sucesso!",
-        description: `Seu pedido ${orderData.order_number} foi recebido e está sendo preparado.`,
+        description: `Seu pedido ${finalOrderData.order_number} foi recebido e está sendo preparado.`,
       });
 
       clearCart();
       setShowCartModal(false);
     } catch (error) {
-      console.error('Erro completo ao finalizar pedido:', error);
+      console.error('❌ Erro completo ao finalizar pedido:', error);
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {

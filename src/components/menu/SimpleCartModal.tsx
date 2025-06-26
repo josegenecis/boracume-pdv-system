@@ -50,6 +50,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [customerName, setCustomerName] = React.useState('');
   const [customerPhone, setCustomerPhone] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
+  const [customerNeighborhood, setCustomerNeighborhood] = React.useState('');
   const [isExistingCustomer, setIsExistingCustomer] = React.useState(false);
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
   const [paymentMethod, setPaymentMethod] = React.useState('');
@@ -157,6 +158,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       customerName.trim() !== '' &&
       customerPhone.trim() !== '' &&
       customerAddress.trim() !== '' &&
+      customerNeighborhood.trim() !== '' &&
       deliveryZoneId !== '' &&
       isPaymentValid &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
@@ -166,6 +168,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       customerName: customerName.trim() !== '',
       customerPhone: customerPhone.trim() !== '',
       customerAddress: customerAddress.trim() !== '',
+      customerNeighborhood: customerNeighborhood.trim() !== '',
       deliveryZoneId: deliveryZoneId !== '',
       paymentMethod: paymentMethod,
       isPaymentValid,
@@ -178,21 +181,25 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const handlePlaceOrder = async () => {
     if (!isFormValid()) {
+      console.warn('❌ Formulário inválido');
       return;
     }
 
     setIsLoading(true);
     
     try {
+      console.log('🔄 Preparando dados do pedido...');
+      
       const orderData = {
         user_id: userId,
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_address: customerAddress,
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        customer_address: customerAddress.trim(),
+        customer_neighborhood: customerNeighborhood.trim(),
         delivery_zone_id: deliveryZoneId,
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
-        delivery_instructions: notes,
+        delivery_instructions: notes.trim() || null,
         customer_latitude: location.latitude,
         customer_longitude: location.longitude,
         customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
@@ -211,12 +218,21 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         total: finalTotal,
         status: 'pending',
         order_type: 'delivery',
-        order_number: 'PED' + Date.now().toString().slice(-6)
+        order_number: 'PED' + Date.now().toString().slice(-6),
+        acceptance_status: 'pending_acceptance',
+        estimated_time: selectedZone?.delivery_time || '30-45 min'
       };
+
+      console.log('📊 Dados preparados para envio:', {
+        user_id: orderData.user_id,
+        customer_name: orderData.customer_name,
+        total: orderData.total,
+        items_count: orderData.items.length
+      });
 
       await onPlaceOrder(orderData);
     } catch (error) {
-      console.error('Erro ao finalizar pedido:', error);
+      console.error('❌ Erro ao finalizar pedido:', error);
     } finally {
       setIsLoading(false);
     }
@@ -338,7 +354,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       if (customer) {
                         setCustomerName(customer.name);
                         setCustomerAddress(customer.address);
+                        setCustomerNeighborhood(customer.neighborhood);
                         setIsExistingCustomer(true);
+                        console.log('✅ Cliente encontrado:', customer);
                       } else {
                         setIsExistingCustomer(false);
                       }
@@ -371,8 +389,22 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   id="address"
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
-                  placeholder="Rua, número, complemento, bairro"
+                  placeholder="Rua, número, complemento"
                   rows={2}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="neighborhood">Bairro *</Label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="neighborhood"
+                  value={customerNeighborhood}
+                  onChange={(e) => setCustomerNeighborhood(e.target.value)}
+                  placeholder="Nome do bairro"
                   className="pl-10"
                 />
               </div>
