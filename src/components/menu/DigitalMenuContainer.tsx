@@ -1,22 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useDigitalCart } from '@/hooks/useDigitalCart';
+import React, { useState } from 'react';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
+import { useDigitalCart } from '@/hooks/useDigitalCart';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
-import SimpleCartModal from '@/components/menu/SimpleCartModal';
+import { SimpleCheckout } from '@/components/menu/SimpleCheckout';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { DigitalMenuHeader } from './DigitalMenuHeader';
 import { DigitalMenuContent } from './DigitalMenuContent';
 import { DigitalMenuErrorStates } from './DigitalMenuErrorStates';
-
-interface DeliveryZone {
-  id: string;
-  name: string;
-  delivery_fee: number;
-  minimum_order: number;
-}
 
 interface DigitalMenuContainerProps {
   userId: string;
@@ -26,45 +18,16 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
   const [showCartModal, setShowCartModal] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
   const { products, categories, loading, profile } = useMenuData(userId);
   const { fetchVariations } = useSimpleVariations();
   const {
     cart,
     addToCart,
-    updateQuantity,
-    removeFromCart,
     clearCart,
     getCartTotal,
     getCartItemCount
   } = useDigitalCart();
-
-  useEffect(() => {
-    if (userId) {
-      loadDeliveryZones();
-    }
-  }, [userId]);
-
-  const loadDeliveryZones = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('name');
-
-      if (error) {
-        console.error('Erro ao carregar zonas de entrega:', error);
-        return;
-      }
-
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar zonas de entrega:', error);
-    }
-  };
 
   const handleProductClick = async (product: any) => {
     try {
@@ -79,27 +42,6 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
     } catch (error) {
       console.error('Erro ao buscar variações:', error);
       addToCart(product);
-    }
-  };
-
-  const handlePlaceOrder = async (orderData: any) => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([orderData])
-        .select()
-        .single();
-
-      if (error) {
-        throw new Error(`Erro ao finalizar pedido: ${error.message}`);
-      }
-
-      clearCart();
-      setShowCartModal(false);
-      
-    } catch (error) {
-      console.error('Erro na finalização:', error);
-      throw error;
     }
   };
 
@@ -143,15 +85,12 @@ export const DigitalMenuContainer: React.FC<DigitalMenuContainerProps> = ({ user
         }}
       />
 
-      <SimpleCartModal
+      <SimpleCheckout
         isOpen={showCartModal}
         onClose={() => setShowCartModal(false)}
         cart={cart}
         total={getCartTotal()}
-        onUpdateQuantity={updateQuantity}
-        onRemoveItem={removeFromCart}
-        onPlaceOrder={handlePlaceOrder}
-        deliveryZones={deliveryZones}
+        onClearCart={clearCart}
         userId={userId}
       />
     </div>
