@@ -66,7 +66,16 @@ const NewKitchen = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setOrders(data || []);
+
+      // Convert Supabase data to our KitchenOrder format
+      const formattedOrders: KitchenOrder[] = (data || []).map(order => ({
+        ...order,
+        items: Array.isArray(order.items) ? order.items : [],
+        status: order.status as 'pending' | 'preparing' | 'ready' | 'completed',
+        priority: order.priority as 'low' | 'normal' | 'high'
+      }));
+
+      setOrders(formattedOrders);
     } catch (error) {
       console.error('Error fetching kitchen orders:', error);
       toast({
@@ -260,10 +269,15 @@ const NewKitchen = () => {
                   <div className="space-y-2">
                     {order.items.map((item: any, index: number) => (
                       <div key={index} className="text-sm">
-                        <span className="font-medium">{item.quantity}x {item.product_name}</span>
+                        <span className="font-medium">
+                          {item.quantity}x {item.product_name || item.name}
+                        </span>
                         {item.variations && item.variations.length > 0 && (
                           <div className="text-xs text-gray-600 ml-2">
-                            {item.variations.join(', ')}
+                            {Array.isArray(item.variations) 
+                              ? item.variations.map((v: any) => v.name || v).join(', ')
+                              : item.variations
+                            }
                           </div>
                         )}
                         {item.notes && (
@@ -317,10 +331,15 @@ const NewKitchen = () => {
                   <div className="space-y-2">
                     {order.items.map((item: any, index: number) => (
                       <div key={index} className="text-sm">
-                        <span className="font-medium">{item.quantity}x {item.product_name}</span>
+                        <span className="font-medium">
+                          {item.quantity}x {item.product_name || item.name}
+                        </span>
                         {item.variations && item.variations.length > 0 && (
                           <div className="text-xs text-gray-600 ml-2">
-                            {item.variations.join(', ')}
+                            {Array.isArray(item.variations) 
+                              ? item.variations.map((v: any) => v.name || v).join(', ')
+                              : item.variations
+                            }
                           </div>
                         )}
                         {item.notes && (
@@ -374,10 +393,15 @@ const NewKitchen = () => {
                   <div className="space-y-2">
                     {order.items.map((item: any, index: number) => (
                       <div key={index} className="text-sm">
-                        <span className="font-medium">{item.quantity}x {item.product_name}</span>
+                        <span className="font-medium">
+                          {item.quantity}x {item.product_name || item.name}
+                        </span>
                         {item.variations && item.variations.length > 0 && (
                           <div className="text-xs text-gray-600 ml-2">
-                            {item.variations.join(', ')}
+                            {Array.isArray(item.variations) 
+                              ? item.variations.map((v: any) => v.name || v).join(', ')
+                              : item.variations
+                            }
                           </div>
                         )}
                         {item.notes && (
