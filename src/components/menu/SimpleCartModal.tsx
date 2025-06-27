@@ -9,14 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-interface CartItem {
+interface CartProduct {
   id: string;
   name: string;
   price: number;
+  image_url?: string;
+}
+
+interface CartItem {
+  product: CartProduct;
   quantity: number;
   variations: string[];
   notes: string;
-  variationPrice: number;
+  totalPrice: number;
+  uniqueId: string;
 }
 
 interface SimpleCartModalProps {
@@ -24,8 +30,8 @@ interface SimpleCartModalProps {
   onClose: () => void;
   cart: CartItem[];
   total: number;
-  onUpdateQuantity: (id: string, quantity: number) => void;
-  onRemoveItem: (id: string) => void;
+  onUpdateQuantity: (uniqueId: string, quantity: number) => void;
+  onRemoveItem: (uniqueId: string) => void;
   onPlaceOrder: (orderData: any) => Promise<void>;
   deliveryZones: any[];
   userId: string | null;
@@ -93,13 +99,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       // Gerar número do pedido
       const orderNumber = `${Date.now().toString().slice(-6)}`;
 
-      // Preparar itens do pedido
+      // Preparar itens do pedido - usando a estrutura correta do CartItem
       const orderItems = cart.map(item => ({
-        product_id: item.id,
-        product_name: item.name,
+        product_id: item.product.id,
+        product_name: item.product.name,
         quantity: item.quantity,
-        unit_price: item.price,
-        total_price: (item.price + item.variationPrice) * item.quantity,
+        unit_price: item.product.price,
+        total_price: item.totalPrice,
         variations: item.variations,
         notes: item.notes
       }));
@@ -183,9 +189,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <h3 className="font-medium mb-3">Seus itens</h3>
             <div className="space-y-2">
               {cart.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={item.uniqueId} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <h4 className="font-medium">{item.name}</h4>
+                    <h4 className="font-medium">{item.product.name}</h4>
                     {item.variations.length > 0 && (
                       <p className="text-sm text-muted-foreground">
                         {item.variations.join(', ')}
@@ -197,14 +203,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       </p>
                     )}
                     <p className="text-sm font-medium">
-                      R$ {((item.price + item.variationPrice) * item.quantity).toFixed(2)}
+                      R$ {item.totalPrice.toFixed(2)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                      onClick={() => onUpdateQuantity(item.uniqueId, Math.max(1, item.quantity - 1))}
                     >
                       <Minus className="w-4 h-4" />
                     </Button>
@@ -212,14 +218,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                      onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)}
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="destructive"
                       size="icon"
-                      onClick={() => onRemoveItem(item.id)}
+                      onClick={() => onRemoveItem(item.uniqueId)}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
