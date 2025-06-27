@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -93,6 +92,13 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
+      console.log('📦 INICIANDO PROCESSO DE PEDIDO:', {
+        userId: orderData.user_id,
+        customerName: orderData.customer_name,
+        items: orderData.items?.length || 0,
+        total: orderData.total
+      });
+
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
         throw new Error('ID do usuário é obrigatório');
@@ -121,6 +127,7 @@ const MenuDigital = () => {
           console.error('Erro ao verificar cliente existente:', customerCheckError);
         } else if (existingCustomer) {
           customerId = existingCustomer.id;
+          console.log('✅ Cliente existente encontrado:', customerId);
         }
       } catch (customerError) {
         console.error('Erro na verificação de cliente:', customerError);
@@ -137,6 +144,8 @@ const MenuDigital = () => {
             neighborhood: orderData.customer_neighborhood || ''
           };
 
+          console.log('👤 Criando novo cliente:', customerData);
+
           const { data: newCustomer, error: customerError } = await supabase
             .from('customers')
             .insert([customerData])
@@ -148,6 +157,7 @@ const MenuDigital = () => {
             // Continuar sem cliente se falhar - não é crítico
           } else {
             customerId = newCustomer.id;
+            console.log('✅ Novo cliente criado:', customerId);
           }
         } catch (customerError) {
           console.error('Erro na criação de cliente:', customerError);
@@ -159,6 +169,8 @@ const MenuDigital = () => {
         orderData.customer_id = customerId;
       }
 
+      // Criar o pedido principal
+      console.log('🔄 Inserindo pedido no banco de dados...');
       const { data, error } = await supabase
         .from('orders')
         .insert([orderData])
@@ -166,7 +178,7 @@ const MenuDigital = () => {
         .single();
 
       if (error) {
-        console.error('Erro ao criar pedido no banco:', error);
+        console.error('❌ Erro ao criar pedido no banco:', error);
         
         // Tratar erros específicos do banco
         if (error.code === '23505') {
@@ -175,10 +187,14 @@ const MenuDigital = () => {
           throw new Error('Dados de referência inválidos. Verifique área de entrega.');
         } else if (error.code === '23502') {
           throw new Error('Campos obrigatórios não preenchidos.');
+        } else if (error.message.includes('row-level security')) {
+          throw new Error('Erro de permissão. Tente novamente.');
         } else {
           throw new Error(`Erro no banco de dados: ${error.message}`);
         }
       }
+
+      console.log('✅ Pedido criado com sucesso:', data);
 
       toast({
         title: "Pedido realizado com sucesso!",
@@ -188,7 +204,7 @@ const MenuDigital = () => {
       clearCart();
       setShowCartModal(false);
     } catch (error) {
-      console.error('Erro completo ao finalizar pedido:', error);
+      console.error('❌ Erro completo ao finalizar pedido:', error);
       
       let userMessage = "Tente novamente ou entre em contato conosco.";
       if (error instanceof Error) {
