@@ -82,11 +82,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .select('*')
         .eq('product_id', productId);
 
-      console.log('📋 PDV - Variações específicas encontradas:', productVariations?.length || 0);
-
-      if (productError) {
-        console.error('Erro ao buscar variações específicas:', productError);
-      }
+      console.log('📋 PDV - Variações específicas encontradas:', productVariations?.length || 0, productVariations);
 
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
@@ -94,7 +90,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .select('global_variation_id')
         .eq('product_id', productId);
 
-      console.log('📋 PDV - Links de variações globais:', globalVariationLinks?.length || 0);
+      console.log('📋 PDV - Links de variações globais:', globalVariationLinks?.length || 0, globalVariationLinks);
 
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
@@ -105,11 +101,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           .select('*')
           .in('id', globalVariationIds);
 
-        if (globalVarError) {
-          console.error('Erro ao buscar variações globais:', globalVarError);
-        } else {
-          globalVariations = globalVars || [];
-          console.log('📋 PDV - Variações globais encontradas:', globalVariations.length);
+        if (!globalVarError && globalVars) {
+          globalVariations = globalVars;
+          console.log('📋 PDV - Variações globais encontradas:', globalVariations.length, globalVariations);
         }
       }
 
@@ -121,29 +115,39 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
       console.log('📋 PDV - Total de variações encontradas:', allVariations.length);
       
-      // Processar e formatar as variações
+      // Processar e formatar as variações com validação mais rigorosa
       const formattedVariations: ProductVariation[] = [];
       
       for (const item of allVariations) {
         try {
+          console.log('🔄 PDV - Processando variação:', item.name, 'Opções raw:', item.options);
+          
           if (!item || !item.id || !item.name) {
-            console.log('⚠️ PDV - Variação inválida:', item);
+            console.log('⚠️ PDV - Variação sem dados básicos:', item);
             continue;
           }
 
           let processedOptions = [];
           
+          // Processar opções com mais cuidado
           if (typeof item.options === 'string') {
             try {
-              processedOptions = JSON.parse(item.options);
+              const parsed = JSON.parse(item.options);
+              processedOptions = Array.isArray(parsed) ? parsed : [];
+              console.log('📝 PDV - Opções parseadas de string:', processedOptions);
             } catch (parseError) {
-              console.error('Erro ao fazer parse das opções:', parseError);
+              console.error('❌ PDV - Erro ao fazer parse das opções string:', parseError, item.options);
               continue;
             }
           } else if (Array.isArray(item.options)) {
             processedOptions = item.options;
+            console.log('📝 PDV - Opções já são array:', processedOptions);
+          } else if (item.options && typeof item.options === 'object') {
+            // Se é um objeto, tentar extrair como array
+            processedOptions = Object.values(item.options);
+            console.log('📝 PDV - Opções extraídas de objeto:', processedOptions);
           } else {
-            console.log('⚠️ PDV - Opções em formato inválido:', typeof item.options);
+            console.log('⚠️ PDV - Opções em formato inválido:', typeof item.options, item.options);
             continue;
           }
 
@@ -152,12 +156,29 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             continue;
           }
 
+          // Validar e processar cada opção
           const validOptions = processedOptions
-            .filter(opt => opt && opt.name && String(opt.name).trim().length > 0)
-            .map(opt => ({
-              name: String(opt.name).trim(),
-              price: Number(opt.price) >= 0 ? Number(opt.price) : 0
-            }));
+            .filter(opt => {
+              const isValid = opt && 
+                (opt.name || opt.option_name) && 
+                String(opt.name || opt.option_name).trim().length > 0;
+              
+              if (!isValid) {
+                console.log('⚠️ PDV - Opção inválida filtrada:', opt);
+              }
+              return isValid;
+            })
+            .map(opt => {
+              const name = String(opt.name || opt.option_name || '').trim();
+              const price = Number(opt.price || opt.option_price || 0);
+              
+              console.log('✅ PDV - Opção processada:', { name, price });
+              
+              return {
+                name,
+                price: price >= 0 ? price : 0
+              };
+            });
 
           if (validOptions.length === 0) {
             console.log('⚠️ PDV - Nenhuma opção válida processada para:', item.name);
@@ -173,13 +194,17 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           };
 
           formattedVariations.push(formatted);
-          console.log('✅ PDV - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções');
+          console.log('✅ PDV - Variação formatada com sucesso:', formatted.name, 'com', formatted.options.length, 'opções');
         } catch (itemError) {
           console.error('❌ PDV - Erro ao processar variação:', itemError, item);
         }
       }
       
       console.log('🎯 PDV - Variações finais formatadas:', formattedVariations.length);
+      formattedVariations.forEach(v => {
+        console.log(`📋 Variação: ${v.name} - ${v.options.length} opções:`, v.options);
+      });
+      
       return formattedVariations;
     } catch (error) {
       console.error('❌ PDV - Erro geral ao buscar variações:', error);
