@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import ProductVariationSelector from './ProductVariationSelector';
+import ProductVariationModal from './ProductVariationModal';
 
 interface Product {
   id: string;
@@ -45,7 +45,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
-  const [showVariations, setShowVariations] = useState(false);
+  const [showVariationModal, setShowVariationModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && user) {
@@ -73,6 +73,8 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   };
 
   const fetchProductVariations = async (productId: string) => {
+    console.log('🔄 PDV - Buscando variações para produto:', productId);
+    
     try {
       // Buscar variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
@@ -80,7 +82,11 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .select('*')
         .eq('product_id', productId);
 
-      if (productError) throw productError;
+      console.log('📋 PDV - Variações específicas encontradas:', productVariations?.length || 0);
+
+      if (productError) {
+        console.error('Erro ao buscar variações específicas:', productError);
+      }
 
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
@@ -88,11 +94,8 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         .select('global_variation_id')
         .eq('product_id', productId);
 
-      if (globalError) {
-        console.error('Erro ao carregar variações globais:', globalError);
-      }
+      console.log('📋 PDV - Links de variações globais:', globalVariationLinks?.length || 0);
 
-      // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
@@ -106,6 +109,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           console.error('Erro ao buscar variações globais:', globalVarError);
         } else {
           globalVariations = globalVars || [];
+          console.log('📋 PDV - Variações globais encontradas:', globalVariations.length);
         }
       }
 
@@ -114,61 +118,113 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         ...(productVariations || []),
         ...globalVariations
       ];
-      
-      // Convert Json type to proper ProductVariation[]
-      const transformedData = allVariations.map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
 
-        return {
-          id: item.id,
-          name: item.name,
-          options: Array.isArray(parsedOptions) ? parsedOptions : [],
-          max_selections: item.max_selections,
-          required: item.required
-        };
-      });
+      console.log('📋 PDV - Total de variações encontradas:', allVariations.length);
       
-      return transformedData;
+      // Processar e formatar as variações
+      const formattedVariations: ProductVariation[] = [];
+      
+      for (const item of allVariations) {
+        try {
+          if (!item || !item.id || !item.name) {
+            console.log('⚠️ PDV - Variação inválida:', item);
+            continue;
+          }
+
+          let processedOptions = [];
+          
+          if (typeof item.options === 'string') {
+            try {
+              processedOptions = JSON.parse(item.options);
+            } catch (parseError) {
+              console.error('Erro ao fazer parse das opções:', parseError);
+              continue;
+            }
+          } else if (Array.isArray(item.options)) {
+            processedOptions = item.options;
+          } else {
+            console.log('⚠️ PDV - Opções em formato inválido:', typeof item.options);
+            continue;
+          }
+
+          if (!Array.isArray(processedOptions) || processedOptions.length === 0) {
+            console.log('⚠️ PDV - Nenhuma opção válida para:', item.name);
+            continue;
+          }
+
+          const validOptions = processedOptions
+            .filter(opt => opt && opt.name && String(opt.name).trim().length > 0)
+            .map(opt => ({
+              name: String(opt.name).trim(),
+              price: Number(opt.price) >= 0 ? Number(opt.price) : 0
+            }));
+
+          if (validOptions.length === 0) {
+            console.log('⚠️ PDV - Nenhuma opção válida processada para:', item.name);
+            continue;
+          }
+
+          const formatted: ProductVariation = {
+            id: String(item.id),
+            name: String(item.name).trim(),
+            options: validOptions,
+            max_selections: Math.max(1, Number(item.max_selections) || 1),
+            required: Boolean(item.required)
+          };
+
+          formattedVariations.push(formatted);
+          console.log('✅ PDV - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções');
+        } catch (itemError) {
+          console.error('❌ PDV - Erro ao processar variação:', itemError, item);
+        }
+      }
+      
+      console.log('🎯 PDV - Variações finais formatadas:', formattedVariations.length);
+      return formattedVariations;
     } catch (error) {
-      console.error('Erro ao carregar variações:', error);
+      console.error('❌ PDV - Erro geral ao buscar variações:', error);
       return [];
     }
   };
 
   const handleProductSelect = async (product: Product) => {
-    console.log('🔄 ProductSelectionModal - Produto selecionado:', product.name);
+    console.log('🔄 PDV - Produto selecionado:', product.name);
     setSelectedProduct(product);
     
-    // Check if product has variations
+    // Buscar variações do produto
     const variations = await fetchProductVariations(product.id);
-    console.log('🔍 ProductSelectionModal - Variações encontradas:', variations.length);
+    console.log('🔍 PDV - Variações encontradas:', variations.length);
     
     if (variations.length > 0) {
       setProductVariations(variations);
-      setShowVariations(true);
+      setShowVariationModal(true);
+      console.log('✅ PDV - Abrindo modal de variações');
     } else {
-      // Add directly to cart without variations
-      console.log('✅ ProductSelectionModal - Adicionando produto sem variações ao carrinho');
+      // Adicionar direto ao carrinho sem variações
+      console.log('✅ PDV - Adicionando produto sem variações ao carrinho');
       onAddToCart(product, 1);
       onClose();
     }
   };
 
   const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string) => {
+    console.log('🛒 PDV - Adicionando ao carrinho:', {
+      product: product.name,
+      quantity,
+      variations: variations.length,
+      notes
+    });
+    
     onAddToCart(product, quantity, variations, notes);
-    setShowVariations(false);
+    setShowVariationModal(false);
     setSelectedProduct(null);
     onClose();
+  };
+
+  const handleCloseVariationModal = () => {
+    setShowVariationModal(false);
+    setSelectedProduct(null);
+    setProductVariations([]);
   };
 
   const filteredProducts = products.filter(product =>
@@ -176,24 +232,15 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     product.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (showVariations && selectedProduct) {
+  if (showVariationModal && selectedProduct) {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Personalizar Produto</DialogTitle>
-          </DialogHeader>
-          <ProductVariationSelector
-            product={selectedProduct}
-            variations={productVariations}
-            onAddToCart={handleAddToCart}
-            onClose={() => {
-              setShowVariations(false);
-              setSelectedProduct(null);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      <ProductVariationModal
+        isOpen={showVariationModal}
+        onClose={handleCloseVariationModal}
+        product={selectedProduct}
+        variations={productVariations}
+        onAddToCart={handleAddToCart}
+      />
     );
   }
 
