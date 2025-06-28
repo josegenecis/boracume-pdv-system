@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -11,6 +12,7 @@ interface Product {
   category_id?: string;
   category?: string;
   user_id: string;
+  available: boolean;
 }
 
 interface Profile {
@@ -31,10 +33,16 @@ interface DeliveryZone {
   active: boolean;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export const useMenuData = (userId: string | null) => {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -82,8 +90,14 @@ export const useMenuData = (userId: string | null) => {
       console.log('✅ Produtos carregados:', data?.length || 0);
       setProducts(data || []);
       
+      // Criar categorias a partir dos produtos únicos
       const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
-      setCategories(uniqueCategories);
+      const categoryObjects: Category[] = uniqueCategories.map((name, index) => ({
+        id: `cat-${index}`,
+        name,
+        description: `Categoria ${name}`
+      }));
+      setCategories(categoryObjects);
       
     } catch (error) {
       console.error('❌ Erro ao carregar produtos:', error);

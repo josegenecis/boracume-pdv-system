@@ -11,6 +11,7 @@ interface Product {
   image_url?: string;
   category: string;
   available: boolean;
+  user_id: string;
 }
 
 interface Category {
@@ -63,26 +64,28 @@ export const MenuContent: React.FC<MenuContentProps> = ({
   return (
     <div className="w-full">
       <Tabs value={activeCategory} onValueChange={setSelectedCategory} className="w-full">
-        {/* Tabs List com scroll horizontal em mobile */}
-        <div className="sticky top-0 bg-white z-10 border-b mb-6">
-          <TabsList className="h-12 w-full justify-start overflow-x-auto overflow-y-hidden bg-gray-50 p-1 rounded-lg">
-            <div className="flex space-x-1 min-w-max px-2">
-              {availableCategories.map((category) => (
-                <TabsTrigger
-                  key={category}
-                  value={category}
-                  className="whitespace-nowrap px-4 py-2 text-sm font-medium transition-all duration-200 
-                           data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm
-                           hover:bg-white/50 flex-shrink-0"
-                >
-                  {category}
-                  <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
-                    {productsByCategory[category].length}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </div>
-          </TabsList>
+        {/* Tabs List com scroll horizontal em mobile e posição sticky */}
+        <div className="sticky top-0 bg-white z-20 border-b mb-6 shadow-sm">
+          <div className="max-w-4xl mx-auto px-4">
+            <TabsList className="h-12 w-full justify-start overflow-x-auto overflow-y-hidden bg-gray-50 p-1 rounded-lg">
+              <div className="flex space-x-1 min-w-max px-2">
+                {availableCategories.map((category) => (
+                  <TabsTrigger
+                    key={category}
+                    value={category}
+                    className="whitespace-nowrap px-4 py-2 text-sm font-medium transition-all duration-200 
+                             data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm
+                             hover:bg-white/50 flex-shrink-0 min-w-fit"
+                  >
+                    {category}
+                    <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
+                      {productsByCategory[category].length}
+                    </span>
+                  </TabsTrigger>
+                ))}
+              </div>
+            </TabsList>
+          </div>
         </div>
 
         {/* Conteúdo das categorias */}
