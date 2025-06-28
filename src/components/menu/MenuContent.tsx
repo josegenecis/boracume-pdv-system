@@ -105,7 +105,7 @@ export const MenuContent: React.FC<MenuContentProps> = ({
                     <ProductCard
                       key={product.id}
                       product={product}
-                      onClick={() => onProductClick(product)}
+                      onProductClick={onProductClick}
                     />
                   ))}
                 </div>

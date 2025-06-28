@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +9,7 @@ interface Product {
   description?: string;
   image_url?: string;
   category_id?: string;
-  category?: string;
+  category: string;
   user_id: string;
   available: boolean;
 }
@@ -88,10 +87,18 @@ export const useMenuData = (userId: string | null) => {
       }
 
       console.log('✅ Produtos carregados:', data?.length || 0);
-      setProducts(data || []);
+      
+      // Ensure all products have required fields with defaults
+      const processedProducts: Product[] = (data || []).map(product => ({
+        ...product,
+        category: product.category || 'Outros',
+        available: product.available ?? true
+      }));
+      
+      setProducts(processedProducts);
       
       // Criar categorias a partir dos produtos únicos
-      const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
+      const uniqueCategories = [...new Set(processedProducts.map(p => p.category).filter(Boolean))];
       const categoryObjects: Category[] = uniqueCategories.map((name, index) => ({
         id: `cat-${index}`,
         name,
