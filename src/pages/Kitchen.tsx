@@ -64,7 +64,16 @@ const Kitchen = () => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Convert the raw data to match our KitchenOrder interface
+      const formattedOrders: KitchenOrder[] = (data || []).map(order => ({
+        ...order,
+        items: Array.isArray(order.items) ? order.items : 
+               typeof order.items === 'string' ? JSON.parse(order.items) : 
+               order.items ? [order.items] : []
+      }));
+      
+      setOrders(formattedOrders);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({
