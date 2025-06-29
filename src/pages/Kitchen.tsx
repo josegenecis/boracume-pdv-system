@@ -1,14 +1,13 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDateRangePicker } from "@/components/ui/calendar";
-import { CalendarIcon } from "@radix-ui/react-icons"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { format } from "date-fns"
+import { Calendar } from "lucide-react"
 import { DragDropKitchenBoard } from '@/components/kitchen/DragDropKitchenBoard';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface KitchenOrder {
   id: string;
@@ -23,6 +22,7 @@ interface KitchenOrder {
 }
 
 const Kitchen = () => {
+  const { toast } = useToast();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -132,15 +132,6 @@ const Kitchen = () => {
                     <SelectItem value="normal">Normal</SelectItem>
                   </SelectContent>
                 </Select>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Filtrar por Data</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <CalendarDateRangePicker date={dateRange} onDateChange={setDateRange} />
               </CardContent>
             </Card>
           </div>

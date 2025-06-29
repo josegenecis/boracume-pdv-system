@@ -53,7 +53,21 @@ const OrderTracking: React.FC = () => {
         .single();
 
       if (error) throw error;
-      setOrder(data);
+      
+      // Convert database row to Order interface
+      const orderData: Order = {
+        id: data.id,
+        order_number: data.order_number,
+        customer_name: data.customer_name,
+        customer_phone: data.customer_phone,
+        status: data.status,
+        total: data.total,
+        estimated_time: data.estimated_time || '30-45 min',
+        items: Array.isArray(data.items) ? data.items : [],
+        created_at: data.created_at
+      };
+      
+      setOrder(orderData);
     } catch (error) {
       console.error('Erro ao carregar pedido:', error);
       toast({
@@ -79,11 +93,25 @@ const OrderTracking: React.FC = () => {
         },
         (payload) => {
           console.log('📡 Atualização do pedido recebida:', payload);
-          setOrder(payload.new as Order);
+          const newData = payload.new as any;
+          
+          const updatedOrder: Order = {
+            id: newData.id,
+            order_number: newData.order_number,
+            customer_name: newData.customer_name,
+            customer_phone: newData.customer_phone,
+            status: newData.status,
+            total: newData.total,
+            estimated_time: newData.estimated_time || '30-45 min',
+            items: Array.isArray(newData.items) ? newData.items : [],
+            created_at: newData.created_at
+          };
+          
+          setOrder(updatedOrder);
           
           toast({
             title: "Status Atualizado!",
-            description: `Seu pedido está: ${getStatusLabel(payload.new.status)}`,
+            description: `Seu pedido está: ${getStatusLabel(newData.status)}`,
           });
         }
       )
