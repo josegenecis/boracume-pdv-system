@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import ProductSelectionModal from './ProductSelectionModal';
+import SimpleProductSelectionModal from './SimpleProductSelectionModal';
 
 interface CartItem {
   id: string;
@@ -22,8 +21,9 @@ interface CartItem {
   price: number;
   quantity: number;
   subtotal: number;
-  options?: string[];
+  variations?: string[];
   notes?: string;
+  variationPrice?: number;
 }
 
 interface Table {
@@ -49,24 +49,45 @@ const PDVForm: React.FC = () => {
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
-  const addToCart = (product: any, quantity: number = 1, selectedOptions: string[] = [], notes: string = '') => {
-    const existingItem = cart.find(item => item.product_id === product.id);
+  const addToCart = (product: any, quantity: number = 1, variations: string[] = [], notes: string = '', variationPrice: number = 0) => {
+    console.log('🛒 PDV - Adicionando produto ao carrinho:', {
+      product: product.name,
+      quantity,
+      variations,
+      notes,
+      variationPrice
+    });
+
+    const totalPrice = product.price + variationPrice;
+    const existingItemIndex = cart.findIndex(item => 
+      item.product_id === product.id && 
+      JSON.stringify(item.variations || []) === JSON.stringify(variations) &&
+      item.notes === notes
+    );
     
-    if (existingItem) {
-      updateQuantity(existingItem.id, existingItem.quantity + quantity);
+    if (existingItemIndex >= 0) {
+      // Atualizar item existente
+      const updatedCart = [...cart];
+      updatedCart[existingItemIndex].quantity += quantity;
+      updatedCart[existingItemIndex].subtotal = updatedCart[existingItemIndex].quantity * totalPrice;
+      setCart(updatedCart);
     } else {
+      // Adicionar novo item
       const newItem: CartItem = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random(),
         product_id: product.id,
         product_name: product.name,
-        price: product.price,
+        price: totalPrice,
         quantity,
-        subtotal: product.price * quantity,
-        options: selectedOptions.length > 0 ? selectedOptions : undefined,
-        notes: notes || undefined
+        subtotal: totalPrice * quantity,
+        variations: variations.length > 0 ? variations : undefined,
+        notes: notes || undefined,
+        variationPrice
       };
       setCart([...cart, newItem]);
     }
+
+    console.log('✅ PDV - Produto adicionado com sucesso');
   };
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
@@ -120,7 +141,7 @@ const PDVForm: React.FC = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.subtotal,
-        options: item.options || [],
+        variations: item.variations || [],
         notes: item.notes || ''
       }));
 
@@ -198,7 +219,7 @@ const PDVForm: React.FC = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.subtotal,
-        options: item.options || [],
+        variations: item.variations || [],
         notes: item.notes || ''
       }));
 
@@ -320,10 +341,10 @@ const PDVForm: React.FC = () => {
                           <p className="text-sm text-gray-600">
                             {formatCurrency(item.price)} cada
                           </p>
-                          {item.options && item.options.length > 0 && (
+                          {item.variations && item.variations.length > 0 && (
                             <div className="text-xs text-gray-500 mt-1">
-                              {item.options.map((option, index) => (
-                                <div key={index}>• {option}</div>
+                              {item.variations.map((variation, index) => (
+                                <div key={index}>• {variation}</div>
                               ))}
                             </div>
                           )}
@@ -503,7 +524,7 @@ const PDVForm: React.FC = () => {
         </div>
       </div>
 
-      <ProductSelectionModal
+      <SimpleProductSelectionModal
         isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
         onAddToCart={addToCart}

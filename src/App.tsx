@@ -11,6 +11,8 @@ import Kitchen from './pages/Kitchen';
 import Login from './pages/Login';
 import PDV from './pages/PDV';
 import MenuDigital from './pages/MenuDigital';
+import Configuracoes from './pages/Configuracoes';
+import Mesas from './pages/Mesas';
 
 import { AuthProvider } from './contexts/AuthContext';
 import RouteGuard from './components/auth/RouteGuard';
@@ -60,6 +62,8 @@ function App() {
               <Route path="/cozinha" element={<RouteGuard><Kitchen /></RouteGuard>} />
               <Route path="/kitchen" element={<RouteGuard><Kitchen /></RouteGuard>} />
               <Route path="/pdv" element={<RouteGuard><PDV /></RouteGuard>} />
+              <Route path="/mesas" element={<RouteGuard><Mesas /></RouteGuard>} />
+              <Route path="/configuracoes" element={<RouteGuard><Configuracoes /></RouteGuard>} />
               <Route path="/menu-digital" element={<MenuDigital />} />
               <Route path="/cardapio/:userId" element={<MenuDigital />} />
               <Route 
