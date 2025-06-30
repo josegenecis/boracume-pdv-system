@@ -10,8 +10,9 @@ import Orders from './pages/Orders';
 import Kitchen from './pages/Kitchen';
 import Login from './pages/Login';
 import PDV from './pages/PDV';
+import MenuDigital from './pages/MenuDigital';
 
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
 import RouteGuard from './components/auth/RouteGuard';
 import OrderTracking from '@/pages/OrderTracking';
 import PWAInstallButton from '@/components/pwa/PWAInstallButton';
@@ -51,10 +52,16 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<RouteGuard><Dashboard /></RouteGuard>} />
+              <Route path="/dashboard" element={<RouteGuard><Dashboard /></RouteGuard>} />
+              <Route path="/produtos" element={<RouteGuard><Products /></RouteGuard>} />
               <Route path="/products" element={<RouteGuard><Products /></RouteGuard>} />
+              <Route path="/pedidos" element={<RouteGuard><Orders /></RouteGuard>} />
               <Route path="/orders" element={<RouteGuard><Orders /></RouteGuard>} />
+              <Route path="/cozinha" element={<RouteGuard><Kitchen /></RouteGuard>} />
               <Route path="/kitchen" element={<RouteGuard><Kitchen /></RouteGuard>} />
               <Route path="/pdv" element={<RouteGuard><PDV /></RouteGuard>} />
+              <Route path="/menu-digital" element={<MenuDigital />} />
+              <Route path="/cardapio/:userId" element={<MenuDigital />} />
               <Route 
                 path="/pedido/:orderNumber" 
                 element={
