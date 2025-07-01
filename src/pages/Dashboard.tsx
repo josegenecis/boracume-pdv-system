@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
@@ -217,63 +218,59 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-gray-600">Carregando dados...</p>
-          </div>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando dados...</p>
         </div>
-      </DashboardLayout>
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard 
-            title="Vendas de Hoje" 
-            value={formatCurrency(stats.todaySales)} 
-            description={`${stats.todayOrders} pedidos realizados`}
-            icon={<CreditCard />}
-            trend={getStatsTrend(stats.todaySales, 'sales')}
-          />
-          <StatsCard 
-            title="Pedidos Pendentes" 
-            value={stats.pendingOrders.toString()} 
-            description="Aguardando preparo/entrega"
-            icon={<ShoppingCart />}
-            trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
-          />
-          <StatsCard 
-            title="Novos Clientes" 
-            value={stats.newCustomers.toString()} 
-            description={`Total: ${stats.totalCustomers} clientes`}
-            icon={<Users />}
-            trend={getStatsTrend(stats.newCustomers, 'customers')}
-          />
-          <StatsCard 
-            title="Produtos Vendidos" 
-            value={stats.productsSold.toString()} 
-            description="Hoje"
-            icon={<Package />}
-          />
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <RevenueChart data={revenueData} />
-        </div>
-        
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
-          <RecentOrdersTable orders={recentOrders} />
-        </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard 
+          title="Vendas de Hoje" 
+          value={formatCurrency(stats.todaySales)} 
+          description={`${stats.todayOrders} pedidos realizados`}
+          icon={<CreditCard />}
+          trend={getStatsTrend(stats.todaySales, 'sales')}
+        />
+        <StatsCard 
+          title="Pedidos Pendentes" 
+          value={stats.pendingOrders.toString()} 
+          description="Aguardando preparo/entrega"
+          icon={<ShoppingCart />}
+          trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
+        />
+        <StatsCard 
+          title="Novos Clientes" 
+          value={stats.newCustomers.toString()} 
+          description={`Total: ${stats.totalCustomers} clientes`}
+          icon={<Users />}
+          trend={getStatsTrend(stats.newCustomers, 'customers')}
+        />
+        <StatsCard 
+          title="Produtos Vendidos" 
+          value={stats.productsSold.toString()} 
+          description="Hoje"
+          icon={<Package />}
+        />
       </div>
-    </DashboardLayout>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <RevenueChart data={revenueData} />
+      </div>
+      
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
+        <RecentOrdersTable orders={recentOrders} />
+      </div>
+    </div>
   );
 };
 

@@ -9,9 +9,8 @@ interface Product {
   description?: string;
   image_url?: string;
   category_id?: string;
-  category: string;
+  category?: string;
   user_id: string;
-  available: boolean;
 }
 
 interface Profile {
@@ -32,16 +31,10 @@ interface DeliveryZone {
   active: boolean;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  description?: string;
-}
-
 export const useMenuData = (userId: string | null) => {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -87,24 +80,10 @@ export const useMenuData = (userId: string | null) => {
       }
 
       console.log('✅ Produtos carregados:', data?.length || 0);
+      setProducts(data || []);
       
-      // Ensure all products have required fields with defaults
-      const processedProducts: Product[] = (data || []).map(product => ({
-        ...product,
-        category: product.category || 'Outros',
-        available: product.available ?? true
-      }));
-      
-      setProducts(processedProducts);
-      
-      // Criar categorias a partir dos produtos únicos
-      const uniqueCategories = [...new Set(processedProducts.map(p => p.category).filter(Boolean))];
-      const categoryObjects: Category[] = uniqueCategories.map((name, index) => ({
-        id: `cat-${index}`,
-        name,
-        description: `Categoria ${name}`
-      }));
-      setCategories(categoryObjects);
+      const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
+      setCategories(uniqueCategories);
       
     } catch (error) {
       console.error('❌ Erro ao carregar produtos:', error);

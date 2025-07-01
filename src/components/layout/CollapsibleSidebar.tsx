@@ -61,8 +61,7 @@ const CollapsibleSidebar = () => {
         <ul className="space-y-1">
           {links.map((link) => {
             const Icon = link.icon;
-            const isActive = location.pathname === link.to || 
-                           (link.to === '/dashboard' && location.pathname === '/');
+            const isActive = location.pathname === link.to;
             
             return (
               <li key={link.to}>

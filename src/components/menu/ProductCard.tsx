@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,7 +12,6 @@ interface Product {
   category_id?: string;
   category?: string;
   user_id: string;
-  available: boolean;
 }
 
 interface ProductCardProps {

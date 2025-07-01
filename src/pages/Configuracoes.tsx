@@ -14,7 +14,6 @@ import DeviceManager from '@/components/devices/DeviceManager';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 
 const Configuracoes: React.FC = () => {
   const { subscription } = useAuth();
@@ -32,9 +31,8 @@ const Configuracoes: React.FC = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
       
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="mb-4 flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
@@ -100,8 +98,7 @@ const Configuracoes: React.FC = () => {
           </TabsContent>
         )}
       </Tabs>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 };
 

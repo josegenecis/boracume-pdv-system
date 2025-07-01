@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import SimpleProductSelectionModal from './SimpleProductSelectionModal';
+import ProductSelectionModal from './ProductSelectionModal';
 
 interface CartItem {
   id: string;
@@ -21,9 +22,8 @@ interface CartItem {
   price: number;
   quantity: number;
   subtotal: number;
-  variations?: string[];
+  options?: string[];
   notes?: string;
-  variationPrice?: number;
 }
 
 interface Table {
@@ -49,45 +49,24 @@ const PDVForm: React.FC = () => {
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
 
-  const addToCart = (product: any, quantity: number = 1, variations: string[] = [], notes: string = '', variationPrice: number = 0) => {
-    console.log('🛒 PDV - Adicionando produto ao carrinho:', {
-      product: product.name,
-      quantity,
-      variations,
-      notes,
-      variationPrice
-    });
-
-    const totalPrice = product.price + variationPrice;
-    const existingItemIndex = cart.findIndex(item => 
-      item.product_id === product.id && 
-      JSON.stringify(item.variations || []) === JSON.stringify(variations) &&
-      item.notes === notes
-    );
+  const addToCart = (product: any, quantity: number = 1, selectedOptions: string[] = [], notes: string = '') => {
+    const existingItem = cart.find(item => item.product_id === product.id);
     
-    if (existingItemIndex >= 0) {
-      // Atualizar item existente
-      const updatedCart = [...cart];
-      updatedCart[existingItemIndex].quantity += quantity;
-      updatedCart[existingItemIndex].subtotal = updatedCart[existingItemIndex].quantity * totalPrice;
-      setCart(updatedCart);
+    if (existingItem) {
+      updateQuantity(existingItem.id, existingItem.quantity + quantity);
     } else {
-      // Adicionar novo item
       const newItem: CartItem = {
-        id: Date.now().toString() + Math.random(),
+        id: Date.now().toString(),
         product_id: product.id,
         product_name: product.name,
-        price: totalPrice,
+        price: product.price,
         quantity,
-        subtotal: totalPrice * quantity,
-        variations: variations.length > 0 ? variations : undefined,
-        notes: notes || undefined,
-        variationPrice
+        subtotal: product.price * quantity,
+        options: selectedOptions.length > 0 ? selectedOptions : undefined,
+        notes: notes || undefined
       };
       setCart([...cart, newItem]);
     }
-
-    console.log('✅ PDV - Produto adicionado com sucesso');
   };
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
@@ -141,7 +120,7 @@ const PDVForm: React.FC = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.subtotal,
-        variations: item.variations || [],
+        options: item.options || [],
         notes: item.notes || ''
       }));
 
@@ -219,7 +198,7 @@ const PDVForm: React.FC = () => {
         price: item.price,
         quantity: item.quantity,
         subtotal: item.subtotal,
-        variations: item.variations || [],
+        options: item.options || [],
         notes: item.notes || ''
       }));
 
@@ -228,7 +207,7 @@ const PDVForm: React.FC = () => {
         order_number: generateOrderNumber(),
         customer_name: customerName || 'Cliente Balcão',
         customer_phone: customerPhone || null,
-        items: orderItems,
+        items: orderItems, // This is now in the correct format for jsonb
         total: getTotalValue(),
         payment_method: paymentMethod,
         change_amount: changeAmount ? parseFloat(changeAmount) : null,
@@ -290,221 +269,202 @@ const PDVForm: React.FC = () => {
   }, [user]);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Header fixo */}
-      <div className="bg-white border-b p-4 flex-shrink-0">
-        <h2 className="text-xl font-bold">Ponto de Venda</h2>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Produtos e Carrinho */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign size={20} />
+              Produtos
+            </CardTitle>
+            <CardDescription>
+              Adicione produtos ao carrinho
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={() => setIsProductModalOpen(true)}
+              className="w-full"
+            >
+              <Plus size={16} className="mr-2" />
+              Adicionar Produto
+            </Button>
+          </CardContent>
+        </Card>
 
-      {/* Conteúdo principal */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Produtos e Carrinho - Coluna Esquerda */}
-        <div className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
-          {/* Adicionar Produtos */}
-          <Card className="flex-shrink-0">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <DollarSign size={20} />
-                Produtos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                onClick={() => setIsProductModalOpen(true)}
-                className="w-full"
-              >
-                <Plus size={16} className="mr-2" />
-                Adicionar Produto
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Carrinho */}
-          <Card className="flex-1 flex flex-col overflow-hidden">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <CardTitle>Carrinho ({cart.length} itens)</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col overflow-hidden">
-              {cart.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-gray-500 text-center">
-                    Nenhum produto no carrinho
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex-1 overflow-y-auto space-y-3 mb-4">
-                    {cart.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 border rounded">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{item.product_name}</p>
-                          <p className="text-sm text-gray-600">
-                            {formatCurrency(item.price)} cada
-                          </p>
-                          {item.variations && item.variations.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {item.variations.map((variation, index) => (
-                                <div key={index}>• {variation}</div>
-                              ))}
-                            </div>
-                          )}
-                          {item.notes && (
-                            <div className="text-xs text-gray-500 mt-1 italic">
-                              Obs: {item.notes}
-                            </div>
-                          )}
+        {/* Carrinho */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Carrinho ({cart.length} itens)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {cart.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">
+                Nenhum produto no carrinho
+              </p>
+            ) : (
+              <>
+                {cart.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded">
+                    <div className="flex-1">
+                      <p className="font-medium">{item.product_name}</p>
+                      <p className="text-sm text-gray-600">
+                        {formatCurrency(item.price)} cada
+                      </p>
+                      {item.options && item.options.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {item.options.map((option, index) => (
+                            <div key={index}>• {option}</div>
+                          ))}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          >
-                            <Minus size={12} />
-                          </Button>
-                          <span className="w-8 text-center">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          >
-                            <Plus size={12} />
-                          </Button>
-                          <span className="w-20 text-right text-sm">{formatCurrency(item.subtotal)}</span>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => removeFromCart(item.id)}
-                          >
-                            <Trash2 size={12} />
-                          </Button>
+                      )}
+                      {item.notes && (
+                        <div className="text-xs text-gray-500 mt-1 italic">
+                          Obs: {item.notes}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="border-t pt-3 flex-shrink-0">
-                    <div className="flex justify-between items-center text-lg font-bold">
-                      <span>Total:</span>
-                      <span>{formatCurrency(getTotalValue())}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >
+                        <Minus size={12} />
+                      </Button>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus size={12} />
+                      </Button>
+                      <span className="w-20 text-right">{formatCurrency(item.subtotal)}</span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
                     </div>
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Informações e Finalização - Coluna Direita */}
-        <div className="w-80 flex flex-col p-4 space-y-4 border-l overflow-hidden">
-          {/* Informações do Cliente */}
-          <Card className="flex-shrink-0">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Users size={20} />
-                Cliente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label htmlFor="customerName" className="text-sm">Nome</Label>
-                <Input
-                  id="customerName"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nome do cliente"
-                  className="mt-1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="customerPhone" className="text-sm">Telefone</Label>
-                <Input
-                  id="customerPhone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="table" className="text-sm">Mesa</Label>
-                <Select value={selectedTable} onValueChange={setSelectedTable}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione uma mesa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tables.map((table) => (
-                      <SelectItem key={table.id} value={table.id}>
-                        Mesa {table.table_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pagamento */}
-          <Card className="flex-1 flex flex-col">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <CardTitle className="text-lg">Pagamento</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col space-y-3">
-              <div>
-                <Label htmlFor="paymentMethod" className="text-sm">Método</Label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="cartao">Cartão</SelectItem>
-                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {paymentMethod === 'dinheiro' && (
-                <div>
-                  <Label htmlFor="changeAmount" className="text-sm">Valor pago</Label>
-                  <Input
-                    id="changeAmount"
-                    type="number"
-                    step="0.01"
-                    value={changeAmount}
-                    onChange={(e) => setChangeAmount(e.target.value)}
-                    placeholder="0,00"
-                    className="mt-1"
-                  />
+                ))}
+                
+                <Separator />
+                
+                <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Total:</span>
+                  <span>{formatCurrency(getTotalValue())}</span>
                 </div>
-              )}
-
-              <div className="flex-1">
-                <Label htmlFor="orderNotes" className="text-sm">Observações</Label>
-                <Textarea
-                  id="orderNotes"
-                  value={orderNotes}
-                  onChange={(e) => setOrderNotes(e.target.value)}
-                  placeholder="Observações do pedido"
-                  rows={3}
-                  className="mt-1 resize-none"
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Footer fixo com botões de ação */}
-      <div className="bg-white border-t p-4 flex-shrink-0">
-        <div className="flex gap-2">
+      {/* Informações do Cliente e Finalização */}
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users size={20} />
+              Informações do Cliente
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="customerName">Nome do Cliente</Label>
+              <Input
+                id="customerName"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Nome do cliente (opcional)"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="customerPhone">Telefone</Label>
+              <Input
+                id="customerPhone"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="(11) 99999-9999 (opcional)"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="table">Mesa (opcional)</Label>
+              <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma mesa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((table) => (
+                    <SelectItem key={table.id} value={table.id}>
+                      Mesa {table.table_number} ({table.capacity} lugares)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pagamento</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="paymentMethod">Método de Pagamento</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentMethod === 'dinheiro' && (
+              <div>
+                <Label htmlFor="changeAmount">Valor pago</Label>
+                <Input
+                  id="changeAmount"
+                  type="number"
+                  step="0.01"
+                  value={changeAmount}
+                  onChange={(e) => setChangeAmount(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="orderNotes">Observações</Label>
+              <Textarea
+                id="orderNotes"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                placeholder="Observações do pedido (opcional)"
+                rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-2">
           {selectedTable && (
             <Button
               onClick={addToTable}
               disabled={cart.length === 0 || isLoading}
-              className="flex-1 bg-blue-900 hover:bg-blue-800"
+              className="w-full bg-blue-900 hover:bg-blue-800"
               size="lg"
             >
               <Users size={16} className="mr-2" />
@@ -515,16 +475,16 @@ const PDVForm: React.FC = () => {
           <Button
             onClick={finalizeSale}
             disabled={cart.length === 0 || !paymentMethod || isLoading}
-            className="flex-1 bg-green-600 hover:bg-green-700"
+            className="w-full bg-green-600 hover:bg-green-700"
             size="lg"
           >
             <Calculator size={16} className="mr-2" />
-            Finalizar Venda - {formatCurrency(getTotalValue())}
+            Finalizar Venda
           </Button>
         </div>
       </div>
 
-      <SimpleProductSelectionModal
+      <ProductSelectionModal
         isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
         onAddToCart={addToCart}
