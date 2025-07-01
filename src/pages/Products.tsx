@@ -13,6 +13,7 @@ import ProductForm from '@/components/products/ProductForm';
 import CategoryManager from '@/components/products/CategoryManager';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 // Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
@@ -182,17 +183,18 @@ const Products = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Package className="h-6 w-6 text-orange-500" />
-          <h1 className="text-2xl font-bold">Produtos</h1>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Package className="h-6 w-6 text-orange-500" />
+            <h1 className="text-2xl font-bold">Produtos</h1>
+          </div>
+          <Button onClick={() => setShowForm(true)}>
+            <Package className="h-4 w-4 mr-2" />
+            Novo Produto
+          </Button>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Package className="h-4 w-4 mr-2" />
-          Novo Produto
-        </Button>
-      </div>
 
       <Tabs defaultValue="products" className="w-full">
         <TabsList>
@@ -352,7 +354,8 @@ const Products = () => {
           <BannerManager />
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 };
 

@@ -13,6 +13,7 @@ import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Order {
   id: string;
@@ -385,14 +386,15 @@ const Orders = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-120px)] overflow-y-auto">
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
-          <Button onClick={fetchOrders} variant="outline">
-            Atualizar
-          </Button>
-        </div>
+    <DashboardLayout>
+      <div className="h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
+            <Button onClick={fetchOrders} variant="outline">
+              Atualizar
+            </Button>
+          </div>
 
         {/* Filters */}
         <Card>
@@ -764,7 +766,8 @@ const Orders = () => {
           onStatusChange={updateOrderStatus}
         />
       </div>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 };
 

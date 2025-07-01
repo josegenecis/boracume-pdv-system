@@ -13,6 +13,17 @@ import PDV from './pages/PDV';
 import MenuDigital from './pages/MenuDigital';
 import Configuracoes from './pages/Configuracoes';
 import Mesas from './pages/Mesas';
+import Relatorios from './pages/Relatorios';
+import Downloads from './pages/Downloads';
+import Entregadores from './pages/Entregadores';
+import BairrosEntrega from './pages/BairrosEntrega';
+import Loyalty from './pages/Loyalty';
+import Financeiro from './pages/Financeiro';
+import WhatsAppBot from './pages/WhatsAppBot';
+import Subscription from './pages/Subscription';
+import SecurityDashboard from './pages/SecurityDashboard';
+import NFCe from './pages/NFCe';
+import NotFound from './pages/NotFound';
 
 import { AuthProvider } from './contexts/AuthContext';
 import RouteGuard from './components/auth/RouteGuard';
@@ -64,6 +75,16 @@ function App() {
               <Route path="/pdv" element={<RouteGuard><PDV /></RouteGuard>} />
               <Route path="/mesas" element={<RouteGuard><Mesas /></RouteGuard>} />
               <Route path="/configuracoes" element={<RouteGuard><Configuracoes /></RouteGuard>} />
+              <Route path="/relatorios" element={<RouteGuard><Relatorios /></RouteGuard>} />
+              <Route path="/downloads" element={<RouteGuard><Downloads /></RouteGuard>} />
+              <Route path="/entregadores" element={<RouteGuard><Entregadores /></RouteGuard>} />
+              <Route path="/bairros-entrega" element={<RouteGuard><BairrosEntrega /></RouteGuard>} />
+              <Route path="/loyalty" element={<RouteGuard><Loyalty /></RouteGuard>} />
+              <Route path="/financeiro" element={<RouteGuard><Financeiro /></RouteGuard>} />
+              <Route path="/whatsapp-bot" element={<RouteGuard><WhatsAppBot /></RouteGuard>} />
+              <Route path="/subscription" element={<RouteGuard><Subscription /></RouteGuard>} />
+              <Route path="/security" element={<RouteGuard><SecurityDashboard /></RouteGuard>} />
+              <Route path="/nfce" element={<RouteGuard><NFCe /></RouteGuard>} />
               <Route path="/menu-digital" element={<MenuDigital />} />
               <Route path="/cardapio/:userId" element={<MenuDigital />} />
               <Route 
@@ -74,6 +95,7 @@ function App() {
                   </RouteGuard>
                 } 
               />
+              <Route path="*" element={<NotFound />} />
             </Routes>
             
             <PWAInstallButton />
