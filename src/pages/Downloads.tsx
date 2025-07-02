@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import PWAInstallButton from '@/components/pwa/PWAInstallButton';
 import { 
   Download, 
   Monitor, 
@@ -17,7 +18,10 @@ import {
   Scale,
   Wifi,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Zap,
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 
 interface OSInfo {
@@ -81,26 +85,36 @@ const Downloads = () => {
     }
   ];
 
-  const features = [
+  const pwaFeatures = [
     {
-      icon: <Printer className="w-5 h-5 text-green-600" />,
-      title: 'Impressão Térmica',
-      description: 'Conecte impressoras térmicas via USB ou Bluetooth'
+      icon: <Zap className="w-5 h-5 text-yellow-600" />,
+      title: 'Instalação Instantânea',
+      description: 'Instale em segundos direto do navegador, sem downloads grandes'
     },
     {
-      icon: <Scale className="w-5 h-5 text-blue-600" />,
-      title: 'Balança Digital',
-      description: 'Integração com balanças digitais para produtos por peso'
+      icon: <Globe className="w-5 h-5 text-blue-600" />,
+      title: 'Funciona Offline',
+      description: 'Continue trabalhando mesmo sem internet, sincroniza quando voltar online'
     },
     {
-      icon: <Wifi className="w-5 h-5 text-purple-600" />,
-      title: 'Sincronização',
-      description: 'Sincronização automática com a plataforma web'
+      icon: <RefreshCw className="w-5 h-5 text-green-600" />,
+      title: 'Sempre Atualizado',
+      description: 'Atualizações automáticas, sempre a versão mais recente'
+    },
+    {
+      icon: <Smartphone className="w-5 h-5 text-purple-600" />,
+      title: 'Mobile e Desktop',
+      description: 'Funciona perfeitamente em celular, tablet e desktop'
     },
     {
       icon: <Shield className="w-5 h-5 text-orange-600" />,
-      title: 'Segurança',
-      description: 'Dados criptografados e autenticação segura'
+      title: 'Seguro e Rápido',
+      description: 'Mesma segurança da web, com performance de app nativo'
+    },
+    {
+      icon: <Monitor className="w-5 h-5 text-indigo-600" />,
+      title: 'Experiência Nativa',
+      description: 'Tela cheia, sem barras do navegador, como um app real'
     }
   ];
 
@@ -163,90 +177,66 @@ const Downloads = () => {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">App Desktop</h1>
+          <h1 className="text-3xl font-bold">Instalar App</h1>
           <p className="text-muted-foreground mt-2">
-            Baixe o aplicativo desktop para recursos avançados de hardware
+            Instale o BoraCumê como um app nativo no seu dispositivo
           </p>
         </div>
+        <PWAInstallButton />
       </div>
 
-      {/* Alerta sobre Windows SmartScreen */}
-      {detectedOS === 'Windows' && (
-        <Alert className="border-orange-200 bg-orange-50">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <AlertDescription className="text-orange-800">
-            <strong>Importante para usuários Windows:</strong> O Windows pode exibir um aviso de segurança. 
-            Clique em "Mais informações" e depois "Executar mesmo assim" para prosseguir. 
-            Recomendamos a versão portátil para evitar problemas de instalação.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Alerta sobre PWA */}
+      <Alert className="border-green-200 bg-green-50">
+        <CheckCircle className="h-4 w-4 text-green-600" />
+        <AlertDescription className="text-green-800">
+          <strong>Novidade:</strong> Agora você pode instalar o BoraCumê como um aplicativo nativo! 
+          Funciona offline, recebe notificações e tem performance de app nativo. 
+          Compatible com todos os dispositivos e navegadores modernos.
+        </AlertDescription>
+      </Alert>
 
-      {/* Alerta de detecção do SO */}
-      {detectedOS !== 'Unknown' && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>
-            Sistema detectado: <strong>{detectedOS}</strong> - Recomendamos o download abaixo
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Download Recomendado */}
+      {/* Instalação PWA Recomendada */}
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Download className="w-5 h-5 text-primary" />
-            <CardTitle>Download Recomendado</CardTitle>
-            <Badge variant="default">Disponível</Badge>
+            <Smartphone className="w-5 h-5 text-primary" />
+            <CardTitle>Aplicativo Web Progressivo (PWA)</CardTitle>
+            <Badge variant="default">Recomendado</Badge>
           </div>
           <CardDescription>
-            Versão otimizada para {detectedOS || 'seu sistema'}
-            {getRecommendedRelease().type === 'portable' && ' (Não requer instalação)'}
+            Instale o BoraCumê como um app nativo - funciona em qualquer dispositivo
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {getRecommendedRelease().icon}
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-6 h-6" />
+                <Monitor className="w-6 h-6" />
+              </div>
               <div>
-                <h3 className="font-semibold">{getRecommendedRelease().name}</h3>
+                <h3 className="font-semibold">Instalar App Nativo</h3>
                 <p className="text-sm text-muted-foreground">
-                  Versão {getRecommendedRelease().version} • {getRecommendedRelease().fileSize}
+                  Instalação instantânea • Funciona offline • Sempre atualizado
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline"
-                onClick={buildLocalApp}
-              >
-                Construir Localmente
-              </Button>
-              <Button 
-                size="lg"
-                onClick={() => handleDownload(getRecommendedRelease())}
-                disabled={!getRecommendedRelease().available}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Baixar Agora
-              </Button>
-            </div>
+            <PWAInstallButton />
           </div>
         </CardContent>
       </Card>
 
-      {/* Funcionalidades do App Desktop */}
+      {/* Funcionalidades do PWA */}
       <Card>
         <CardHeader>
-          <CardTitle>Funcionalidades Exclusivas</CardTitle>
+          <CardTitle>Por que instalar o App?</CardTitle>
           <CardDescription>
-            O que você ganha com o aplicativo desktop
+            Vantagens do aplicativo instalado vs navegador
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {features.map((feature, index) => (
+            {pwaFeatures.map((feature, index) => (
               <div key={index} className="flex items-start gap-3 p-3 rounded-lg border">
                 {feature.icon}
                 <div>
@@ -259,121 +249,65 @@ const Downloads = () => {
         </CardContent>
       </Card>
 
-      {/* Todas as Versões */}
+      {/* Como Instalar */}
       <Card>
         <CardHeader>
-          <CardTitle>Todas as Versões</CardTitle>
+          <CardTitle>Como Instalar o App</CardTitle>
           <CardDescription>
-            Escolha a versão específica para seu sistema operacional
+            Guia passo a passo para diferentes dispositivos
           </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {releases.map((release, index) => (
-              <div key={index}>
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {release.icon}
-                    <div>
-                      <h3 className="font-medium">{release.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Versão {release.version} • {release.fileSize}
-                        {release.type === 'portable' && ' • Portátil'}
-                      </p>
-                    </div>
-                    {(release.name.includes(detectedOS) || 
-                      (detectedOS === 'Windows' && release.name === 'Windows (Portátil)')) && (
-                      <Badge variant="secondary">Recomendado</Badge>
-                    )}
-                    {release.available && (
-                      <Badge variant="default">Disponível</Badge>
-                    )}
-                  </div>
-                  <Button 
-                    variant="outline"
-                    onClick={() => handleDownload(release)}
-                    disabled={!release.available}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Baixar
-                  </Button>
-                </div>
-                {index < releases.length - 1 && <Separator />}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Instruções de Instalação */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Como Instalar</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
             <div>
               <h4 className="font-medium mb-2 flex items-center gap-2">
                 <Monitor className="w-4 h-4" />
-                Windows
-              </h4>
-              <div className="ml-6 space-y-3">
-                <div>
-                  <h5 className="font-medium text-sm">Versão Portátil (Recomendada):</h5>
-                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-                    <li>Baixe o arquivo portátil (.exe)</li>
-                    <li>Se aparecer aviso do Windows, clique em "Mais informações" → "Executar mesmo assim"</li>
-                    <li>Execute o arquivo diretamente (não precisa instalar)</li>
-                    <li>Faça login com suas credenciais</li>
-                  </ol>
-                </div>
-                <div>
-                  <h5 className="font-medium text-sm">Versão Instalador:</h5>
-                  <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-                    <li>Baixe o arquivo de instalação (.exe)</li>
-                    <li>Execute como administrador</li>
-                    <li>Siga as instruções do assistente</li>
-                    <li>Execute o aplicativo e faça login</li>
-                  </ol>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Monitor className="w-4 h-4" />
-                macOS
+                Chrome/Edge (Desktop)
               </h4>
               <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground ml-6">
-                <li>Baixe o arquivo .dmg</li>
-                <li>Abra o arquivo e arraste o app para a pasta Aplicativos</li>
-                <li>Abra o aplicativo (pode precisar autorizar nas Preferências de Segurança)</li>
-                <li>Faça login com suas credenciais</li>
+                <li>Clique no botão "Instalar App" acima</li>
+                <li>Ou clique no ícone de instalação na barra de endereços</li>
+                <li>Confirme a instalação</li>
+                <li>O app será adicionado ao menu iniciar/desktop</li>
               </ol>
             </div>
 
             <div>
               <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Monitor className="w-4 h-4" />
-                Linux
+                <Smartphone className="w-4 h-4" />
+                Android (Chrome/Firefox)
               </h4>
               <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground ml-6">
-                <li>Baixe o arquivo .AppImage</li>
-                <li>Torne o arquivo executável: <code className="bg-muted px-1 rounded">chmod +x arquivo.AppImage</code></li>
-                <li>Execute o arquivo diretamente</li>
-                <li>Faça login com suas credenciais</li>
+                <li>Clique no botão "Instalar App" ou no banner de instalação</li>
+                <li>Ou acesse Menu → "Adicionar à tela inicial"</li>
+                <li>Confirme a instalação</li>
+                <li>O app aparecerá na tela inicial como qualquer outro app</li>
+              </ol>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2 flex items-center gap-2">
+                <Smartphone className="w-4 h-4" />
+                iOS (Safari)
+              </h4>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground ml-6">
+                <li>Toque no ícone de compartilhar (quadrado com seta)</li>
+                <li>Selecione "Adicionar à Tela Inicial"</li>
+                <li>Confirme o nome e toque em "Adicionar"</li>
+                <li>O app aparecerá na tela inicial</li>
               </ol>
             </div>
           </div>
         </CardContent>
       </Card>
 
+
       {/* Suporte */}
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Precisa de ajuda?</strong> Entre em contato com nosso suporte através das configurações do sistema ou 
-          acesse nossa documentação online para mais informações sobre a configuração de dispositivos.
+          <strong>Precisa de ajuda?</strong> O aplicativo PWA funciona em todos os navegadores modernos. 
+          Entre em contato com nosso suporte através das configurações se tiver dificuldades na instalação.
         </AlertDescription>
       </Alert>
     </div>

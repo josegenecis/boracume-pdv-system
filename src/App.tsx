@@ -8,6 +8,7 @@ import RouteGuard from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
+import { useEffect } from 'react';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -86,6 +87,21 @@ const SoundPermissionManager = () => {
 };
 
 function App() {
+  useEffect(() => {
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration);
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
