@@ -47,14 +47,12 @@ export class SoundNotifications {
         const customUrl = this.customSoundUrls.get(sound.name);
         const audioPath = customUrl || sound.path;
         
-        const audio = new Audio(audioPath);
-        audio.preload = 'auto';
+        const audio = new Audio();
         audio.volume = this.volume;
-        this.audioFiles.set(sound.name, audio);
+        audio.preload = 'none'; // Changed to 'none' to avoid loading issues
         
-        audio.addEventListener('canplaythrough', () => {
-          console.log(`✅ Som ${sound.name} carregado com sucesso ${customUrl ? '(personalizado)' : '(padrão)'}`);
-        });
+        // Only set src when we need to play
+        this.audioFiles.set(sound.name, audio);
         
         // Adicionar evento para quando o som terminar de tocar
         audio.addEventListener('ended', () => {
@@ -63,19 +61,8 @@ export class SoundNotifications {
         
         audio.addEventListener('error', (e) => {
           console.warn(`⚠️ Erro ao carregar som ${sound.name}:`, e);
-          console.warn('URL que falhou:', audioPath);
-          // Em caso de erro com som personalizado, tentar carregar som padrão
-          if (customUrl) {
-            console.log(`Tentando carregar som padrão para ${sound.name}`);
-            const fallbackAudio = new Audio(sound.path);
-            fallbackAudio.preload = 'auto';
-            fallbackAudio.volume = this.volume;
-            this.audioFiles.set(sound.name, fallbackAudio);
-            
-            fallbackAudio.addEventListener('error', (fallbackError) => {
-              console.error(`❌ Erro também no som padrão para ${sound.name}:`, fallbackError);
-            });
-          }
+          // Use fallback sound instead of trying to reload
+          this.createFallbackSound();
         });
       } catch (error) {
         console.warn(`⚠️ Erro ao criar audio para ${sound.name}:`, error);
@@ -91,36 +78,30 @@ export class SoundNotifications {
 
   async playSound(soundType: string = 'bell') {
     if (!this.isEnabled) {
-      console.log('🔇 SOUND UTILS - Som desabilitado');
       return;
     }
-
-    console.log(`🔊 SOUND UTILS - Tentando reproduzir som: ${soundType}`);
-    console.log(`🔊 SOUND UTILS - Volume configurado: ${this.volume}`);
-    console.log(`🔊 SOUND UTILS - Sons disponíveis:`, Array.from(this.audioFiles.keys()));
-    console.log(`🔊 SOUND UTILS - URLs personalizadas:`, Array.from(this.customSoundUrls.entries()));
 
     try {
       const audio = this.audioFiles.get(soundType);
       
       if (audio) {
-        // Reset o áudio se já estiver tocando
+        // Set the source only when playing to avoid preloading issues
+        const customUrl = this.customSoundUrls.get(soundType);
+        const audioPath = customUrl || `/sounds/${soundType}.mp3`;
+        
+        if (!audio.src) {
+          audio.src = audioPath;
+        }
+        
         audio.currentTime = 0;
         audio.volume = this.volume;
-        
-        console.log(`🔊 SOUND UTILS - Reproduzindo som ${soundType} com volume ${this.volume}`);
-        
-        // Adicionar à lista de áudios tocando
         this.currentlyPlaying.add(audio);
         
         await audio.play();
-        console.log(`✅ SOUND UTILS - Som ${soundType} reproduzido com sucesso`);
       } else {
-        console.warn(`⚠️ SOUND UTILS - Som ${soundType} não encontrado, usando fallback`);
         this.createFallbackSound();
       }
     } catch (error) {
-      console.error('❌ SOUND UTILS - Erro ao reproduzir som:', error);
       // Fallback para Web Audio API em caso de erro
       this.createFallbackSound();
     }
