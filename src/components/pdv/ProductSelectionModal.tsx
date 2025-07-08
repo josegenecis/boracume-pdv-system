@@ -73,123 +73,40 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   };
 
   const fetchProductVariations = async (productId: string) => {
-    console.log('🔄 PDV - Iniciando busca de variações para produto:', productId);
-    
     try {
-      // Buscar variações específicas do produto
-      const { data: productVariations, error: productError } = await supabase
+      const { data, error } = await supabase
         .from('product_variations')
         .select('*')
-        .eq('product_id', productId);
+        .eq('product_id', productId)
+        .order('name');
 
-      console.log('📋 PDV - Variações específicas encontradas:', {
-        data: productVariations,
-        error: productError,
-        count: productVariations?.length || 0
-      });
-
-      // Buscar IDs das variações globais associadas ao produto
-      const { data: globalVariationLinks, error: globalLinksError } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
-
-      console.log('📋 PDV - Links de variações globais:', {
-        data: globalVariationLinks,
-        error: globalLinksError,
-        count: globalVariationLinks?.length || 0
-      });
-
-      // Buscar dados das variações globais se existirem links
-      let globalVariations: any[] = [];
-      if (globalVariationLinks && globalVariationLinks.length > 0) {
-        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
-        console.log('🔍 PDV - IDs das variações globais a buscar:', globalVariationIds);
-        
-        const { data: globalVars, error: globalVarsError } = await supabase
-          .from('global_variations')
-          .select('*')
-          .in('id', globalVariationIds);
-
-        console.log('📋 PDV - Variações globais encontradas:', {
-          data: globalVars,
-          error: globalVarsError,
-          count: globalVars?.length || 0
-        });
-
-        if (!globalVarsError && globalVars) {
-          globalVariations = globalVars;
-        }
-      }
-
-      // Combinar todas as variações
-      const allVariations = [
-        ...(productVariations || []),
-        ...globalVariations
-      ];
-
-      console.log('🔄 PDV - Combinando variações:', {
-        especificas: productVariations?.length || 0,
-        globais: globalVariations.length,
-        total: allVariations.length,
-        dados: allVariations
-      });
+      if (error) throw error;
       
-      // Processar e formatar as variações
-      const formattedVariations: ProductVariation[] = [];
-      
-      for (const item of allVariations) {
-        console.log('🔄 PDV - Processando variação:', item.name, item);
-        
+      const transformedData = (data || []).map(item => {
+        let parsedOptions = [];
         try {
-          // Verificar se tem dados básicos válidos
-          if (!item || !item.id || !item.name) {
-            console.log('⚠️ PDV - Variação sem dados básicos:', item);
-            continue;
+          if (typeof item.options === 'string') {
+            parsedOptions = JSON.parse(item.options);
+          } else if (Array.isArray(item.options)) {
+            parsedOptions = item.options;
           }
-
-          // Verificar se tem opções válidas
-          if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
-            console.log('⚠️ PDV - Variação sem opções válidas:', item.name);
-            continue;
-          }
-
-          // Processar opções
-          const validOptions = item.options
-            .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
-            .map((opt: any) => ({
-              name: String(opt.name).trim(),
-              price: Number(opt.price) >= 0 ? Number(opt.price) : 0
-            }));
-
-          if (validOptions.length === 0) {
-            console.log('⚠️ PDV - Nenhuma opção válida encontrada para:', item.name);
-            continue;
-          }
-
-          const formatted: ProductVariation = {
-            id: item.id,
-            name: String(item.name || '').trim(),
-            options: validOptions,
-            max_selections: Math.max(1, Number(item.max_selections) || 1),
-            required: Boolean(item.required)
-          };
-
-          formattedVariations.push(formatted);
-          console.log('✅ PDV - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções válidas');
-        } catch (itemError) {
-          console.error('❌ PDV - Erro ao processar variação:', itemError, item);
+        } catch (e) {
+          console.error('Error parsing options:', e);
+          parsedOptions = [];
         }
-      }
-      
-      console.log('🎯 PDV - RESULTADO FINAL:', {
-        total: formattedVariations.length,
-        variações: formattedVariations.map(v => ({ name: v.name, opções: v.options.length }))
+
+        return {
+          id: item.id,
+          name: item.name,
+          required: item.required,
+          max_selections: item.max_selections,
+          options: Array.isArray(parsedOptions) ? parsedOptions : []
+        };
       });
       
-      return formattedVariations;
+      return transformedData;
     } catch (error) {
-      console.error('❌ PDV - Erro geral ao carregar variações:', error);
+      console.error('Erro ao carregar variações:', error);
       return [];
     }
   };
