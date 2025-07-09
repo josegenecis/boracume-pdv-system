@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
@@ -87,7 +86,11 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
         name: item.name,
         required: item.required,
         max_selections: item.max_selections,
-        options: Array.isArray(item.options) ? item.options : []
+        options: Array.isArray(item.options) ? 
+          item.options.map((opt: any) => ({
+            name: opt.name || '',
+            price: opt.price || 0
+          })) : []
       }));
     } catch (error) {
       console.error('Erro ao carregar variações:', error);
