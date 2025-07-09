@@ -74,88 +74,42 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
   const fetchProductVariations = async (productId: string) => {
     try {
-      console.log('🔍 PDV - Buscando variações para produto:', productId);
-      
       const { data, error } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId)
         .order('name');
 
-      if (error) {
-        console.error('❌ PDV - Erro ao buscar variações:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('📋 PDV - Variações encontradas (raw):', data);
-      
-      if (!data || data.length === 0) {
-        console.log('⚠️ PDV - Nenhuma variação encontrada para o produto');
-        return [];
-      }
-
-      const processedVariations = data.map(variation => {
-        console.log('🔄 PDV - Processando variação:', variation.name, 'Options:', variation.options);
-        
-        let parsedOptions = [];
-        try {
-          if (typeof variation.options === 'string') {
-            parsedOptions = JSON.parse(variation.options);
-          } else if (Array.isArray(variation.options)) {
-            parsedOptions = variation.options;
-          }
-        } catch (e) {
-          console.error('❌ PDV - Erro ao fazer parse das opções:', e);
-          parsedOptions = [];
-        }
-
-        const processedVariation = {
-          id: variation.id,
-          name: variation.name,
-          required: variation.required || false,
-          max_selections: variation.max_selections || 1,
-          options: Array.isArray(parsedOptions) ? parsedOptions : []
-        };
-        
-        console.log('✅ PDV - Variação processada:', processedVariation);
-        return processedVariation;
-      });
-      
-      console.log('🎯 PDV - Total de variações processadas:', processedVariations.length);
-      return processedVariations;
+      return (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        required: item.required,
+        max_selections: item.max_selections,
+        options: Array.isArray(item.options) ? item.options : []
+      }));
     } catch (error) {
-      console.error('❌ PDV - Erro geral ao carregar variações:', error);
+      console.error('Erro ao carregar variações:', error);
       return [];
     }
   };
 
   const handleProductSelect = async (product: Product) => {
-    console.log('🚀 PDV - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
     setSelectedProduct(product);
     
-    // Buscar variações do produto
     const variations = await fetchProductVariations(product.id);
-    console.log('🔍 PDV - Variações retornadas:', variations);
     
-    if (variations && variations.length > 0) {
-      console.log('✅ PDV - PRODUTO TEM VARIAÇÕES! Total:', variations.length);
+    if (variations.length > 0) {
       setProductVariations(variations);
       setShowVariations(true);
     } else {
-      console.log('➡️ PDV - Produto sem variações, adicionando direto ao carrinho');
       onAddToCart(product, 1);
       onClose();
     }
   };
 
   const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string) => {
-    console.log('🔄 PDV - Adicionando produto personalizado ao carrinho:', {
-      product: product.name,
-      quantity,
-      variations,
-      notes
-    });
-    
     onAddToCart(product, quantity, variations, notes);
     setShowVariations(false);
     setSelectedProduct(null);
