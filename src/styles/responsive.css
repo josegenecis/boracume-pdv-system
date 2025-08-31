@@ -1,0 +1,331 @@
+/* Responsive Styles for Mobile */
+
+/* Sidebar Overlay for Mobile */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  transition: opacity 0.3s ease-in-out;
+}
+
+/* Mobile First Approach - Base styles for mobile */
+.order-card {
+  min-width: 280px;
+  max-width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.order-address {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.order-actions {
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.orders-grid {
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.page-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.search-filters {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.status-header {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.card-content-mobile {
+  padding: 0.75rem;
+}
+
+.mobile-button {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  height: 1.75rem;
+  min-height: 44px; /* Touch target */
+  min-width: 44px;
+}
+
+/* Small Mobile (320px - 480px) */
+@media (max-width: 480px) {
+  .order-card {
+    min-width: 260px;
+  }
+  
+  .responsive-title {
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+  }
+  
+  .responsive-subtitle {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  
+  .responsive-text {
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+  }
+  
+  .mobile-card-button {
+    min-height: 40px;
+    font-size: 0.625rem;
+    padding: 0.25rem 0.375rem;
+  }
+}
+
+/* Mobile Landscape & Small Tablets (481px - 768px) */
+@media (min-width: 481px) and (max-width: 768px) {
+  .orders-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  
+  .order-card {
+    min-width: 280px;
+  }
+  
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+  }
+  
+  .search-filters {
+    flex-direction: row;
+    gap: 1rem;
+  }
+}
+
+/* Tablets (769px - 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .orders-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+  
+  .order-card {
+    min-width: 300px;
+  }
+  
+  .status-header {
+    padding: 1rem;
+    font-size: 1rem;
+  }
+}
+
+/* Desktop (1025px+) */
+@media (min-width: 1025px) {
+  .orders-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+  
+  .order-card {
+    min-width: 320px;
+  }
+  
+  .card-content-mobile {
+    padding: 1rem;
+  }
+  
+  .mobile-button {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    height: auto;
+  }
+}
+
+/* Large Desktop (1440px+) */
+@media (min-width: 1440px) {
+  .orders-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+  }
+}
+
+/* Text handling */
+.text-truncate-mobile {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .text-truncate-mobile {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
+/* Smooth transitions */
+.sidebar-transition {
+  transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+}
+
+.main-content-transition {
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Mobile menu button */
+.mobile-menu-button {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Status badges responsive */
+.order-status-badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .order-status-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+  }
+}
+
+.order-type-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+@media (max-width: 640px) {
+  .order-type-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+}
+
+/* Touch targets for mobile */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Fix for overlapping elements */
+.prevent-overlap {
+  position: relative;
+  z-index: 1;
+}
+
+.card-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Scrolling optimization */
+.mobile-scroll-container {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Kitchen Display System responsive */
+@media (max-width: 768px) {
+  .kds-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .kds-column {
+    max-height: 60vh;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .kds-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1025px) {
+  .kds-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* PDV responsive */
+@media (max-width: 768px) {
+  .pdv-layout {
+    flex-direction: column;
+  }
+  
+  .product-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  
+  .cart-summary {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    padding: 1rem;
+    margin: 0 -1rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1025px) {
+  .product-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* Form responsive */
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .form-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+}

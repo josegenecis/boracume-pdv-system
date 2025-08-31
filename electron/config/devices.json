@@ -1,0 +1,9 @@
+{
+  "autoConnect": true,
+  "scanInterval": 5000,
+  "retryAttempts": 3,
+  "devices": {
+    "printers": [],
+    "scales": []
+  }
+}

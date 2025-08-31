@@ -1,0 +1,95 @@
+
+{
+  "name": "bora-cume-hub-desktop",
+  "version": "1.0.0",
+  "description": "Desktop application for Bora Cume Hub",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --publish=never",
+    "build-win": "electron-builder --win --publish=never",
+    "build-mac": "electron-builder --mac --publish=never",
+    "build-linux": "electron-builder --linux --publish=never",
+    "rebuild": "electron-rebuild -f -w serialport",
+    "postinstall": "electron-builder install-app-deps && npm run rebuild"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-rebuild": "^3.2.9"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "node-thermal-printer": "^4.5.0"
+  },
+  "build": {
+    "appId": "com.boracumehub.desktop",
+    "productName": "Bora Cume Hub Desktop",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "../dist/**/*",
+      "**/*",
+      "!node_modules/**/*",
+      "node_modules/serialport/**/*",
+      "node_modules/node-thermal-printer/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../public/favicon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "verifyUpdateCodeSignature": false,
+      "artifactName": "${productName}-${version}.${ext}",
+      "publisherName": "Bora Cume Hub"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "allowElevation": false,
+      "runAfterFinish": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "../public/favicon.ico",
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../public/favicon.ico",
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "nodeGypRebuild": true,
+    "npmRebuild": true,
+    "buildDependenciesFromSource": true
+  }
+}

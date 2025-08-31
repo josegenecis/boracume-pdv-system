@@ -1,0 +1,56 @@
+{
+  "name": "BoraCumê - Sistema de Delivery e PDV",
+  "short_name": "BoraCumê",
+  "description": "Plataforma completa de delivery e PDV para restaurantes com gestão de pedidos, cozinha, entregas e financeiro",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a1a1a",
+  "orientation": "any",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "food"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Pedidos",
+      "short_name": "Pedidos",
+      "description": "Visualizar pedidos",
+      "url": "/pedidos",
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
+    },
+    {
+      "name": "PDV",
+      "short_name": "PDV",
+      "description": "Ponto de Venda",
+      "url": "/pdv",
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
+    },
+    {
+      "name": "Cozinha",
+      "short_name": "Cozinha",
+      "description": "Kitchen Display System",
+      "url": "/cozinha",
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
+    }
+  ]
+}
