@@ -35,6 +35,7 @@ import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
 import DesktopApp from '@/pages/DesktopApp';
 import { HardwareTestPage } from '@/pages/HardwareTestPage';
+import AuthCallback from '@/pages/AuthCallback';
 import './App.css';
 import './styles/responsive.css';
 
@@ -46,6 +47,9 @@ function AppContent() {
       {/* Rotas públicas para o menu digital - aceita ambos os formatos */}
       <Route path="/menu/:userId" element={<MenuDigital />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
+      
+      {/* Rota de callback OAuth */}
+      <Route path="/auth/callback" element={<AuthCallback />} />
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />

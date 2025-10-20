@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useInputValidation } from '@/hooks/useInputValidation';
 import { loginSchema, signupSchema, type LoginData, type SignupData } from '@/schemas/authSchemas';
 import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
+import { handleOAuthError } from '../../utils/oauth-errors';
+import { logOAuthLoginAttempt, logOAuthLoginFailure } from '../../utils/oauth-security-logger';
 
 const AuthForm: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();
@@ -74,22 +76,51 @@ const AuthForm: React.FC = () => {
   
   const handleGoogleLogin = async () => {
     try {
+      console.log('🔐 Iniciando login com Google...');
+      
+      // Log da tentativa de login
+      await logOAuthLoginAttempt('google', {
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        referrer: document.referrer
+      });
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent'
+          }
         }
       });
+
+      if (error) {
+        console.error('❌ Erro no login com Google:', error);
+        
+        // Log da falha no login
+        await logOAuthLoginFailure('google', error.message, {
+          errorCode: error.status,
+          errorDetails: error
+        });
+        
+        handleOAuthError(error);
+        return;
+      }
+
+      console.log('✅ Redirecionamento para Google OAuth iniciado');
       
-      if (error) throw error;
-      await logSecurityEvent('login', 'OAuth login with Google', 'low');
     } catch (error: any) {
-      toast({
-        title: "Erro ao entrar com Google",
-        description: error.message,
-        variant: "destructive",
+      console.error('❌ Erro inesperado no login com Google:', error);
+      
+      // Log da falha inesperada
+      await logOAuthLoginFailure('google', 'Erro inesperado durante login', {
+        error: error.message,
+        stack: error.stack
       });
-      await logSecurityEvent('failed_login', `Failed OAuth login: ${error.message}`, 'medium');
+      
+      handleOAuthError(error);
     }
   };
 

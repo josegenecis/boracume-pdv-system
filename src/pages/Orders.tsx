@@ -165,8 +165,33 @@ const Orders = () => {
   };
 
   const openOrderDetails = (order: Order) => {
-    setSelectedOrder(order);
-    setIsDetailsModalOpen(true);
+    console.log('🔍 ORDERS - Abrindo detalhes do pedido:', {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      status: order.status,
+      items: order.items?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+    
+    try {
+      console.log('🔍 ORDERS - Dados completos do pedido:', JSON.stringify(order, null, 2));
+      
+      setSelectedOrder(order);
+      setIsDetailsModalOpen(true);
+      
+      console.log('✅ ORDERS - Modal configurado para abrir:', {
+        selectedOrderSet: !!order,
+        modalOpen: true
+      });
+    } catch (error) {
+      console.error('❌ ORDERS - Erro ao abrir detalhes do pedido:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao abrir detalhes do pedido. Tente novamente.",
+        variant: "destructive"
+      });
+    }
   };
 
   const filterOrders = () => {

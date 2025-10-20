@@ -4,16 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
+import { Plus } from 'lucide-react';
 import ProductImageUpload from './ProductImageUpload';
-import ProductVariationManager from './ProductVariationManager';
 
 // Defining the interface here to ensure consistency
 interface ProductItem {
@@ -56,8 +55,94 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
   const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number }>>({});
   const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
-  const { user } = useAuth();
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
+  // Função para formatar preço em Real brasileiro
+  const formatPrice = (value: string) => {
+    // Remove tudo que não é número
+    const numericValue = value.replace(/\D/g, '');
+    
+    if (!numericValue) return '';
+    
+    // Converte para número e divide por 100 para ter centavos
+    const number = parseInt(numericValue) / 100;
+    
+    // Formata como moeda brasileira
+    return number.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  // Função para converter preço formatado para número
+  const parsePrice = (formattedPrice: string): number => {
+    if (!formattedPrice) return 0;
+    
+    // Remove pontos de milhares e substitui vírgula por ponto
+    const numericString = formattedPrice
+      .replace(/\./g, '')
+      .replace(',', '.');
+    
+    return parseFloat(numericString) || 0;
+  };
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+    const formatted = formatPrice(inputValue);
+    const numericValue = parsePrice(formatted);
+    
+    setFormData(prev => ({ ...prev, price: numericValue }));
+  };
+
+  const createCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast({
+        title: "Nome da categoria é obrigatório",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .insert([{ name: newCategoryName.trim() }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Atualiza a lista de categorias
+      setCategories(prev => [...prev, data]);
+      
+      // Seleciona a nova categoria
+      setFormData(prev => ({ 
+        ...prev, 
+        category: data.name,
+        category_id: data.id 
+      }));
+
+      setNewCategoryName('');
+      setShowCreateCategory(false);
+      
+      toast({
+        title: "Categoria criada com sucesso!",
+        description: `A categoria "${data.name}" foi adicionada.`
+      });
+    } catch (error: any) {
+      console.error('Erro ao criar categoria:', error);
+      toast({
+        title: "Erro ao criar categoria",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
 
   useEffect(() => {
     loadCategories();
@@ -65,72 +150,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (product?.id) {
       loadProductVariations(product.id);
     }
-    // DEBUG: Log após carregar produto
-    setTimeout(() => {
-      console.log('DEBUG useEffect selectedVariations:', selectedVariations);
-      console.log('DEBUG useEffect variationSettings:', variationSettings);
-    }, 1000);
   }, [product?.id]);
 
-  // NOVA FUNÇÃO: Garante que globalVariations sempre contenha todas as variações globais do usuário
-  // e que selectedVariations contenha apenas os IDs vinculados ao produto
-  const reloadGlobalVariationsWithLinks = async (productId?: string) => {
-    try {
-      // Carrega todas as variações globais do usuário
-      const { data: allGlobals, error: globalsError } = await supabase
-        .from('global_variations')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('name');
-      if (globalsError) throw globalsError;
-      const parsedGlobals = (allGlobals || []).map((variation: any) => ({
-        ...variation,
-        options: typeof variation.options === 'string' ? JSON.parse(variation.options) : variation.options
-      }));
-      setGlobalVariations(parsedGlobals);
-      // Se for edição, carrega os links do produto
-      if (productId) {
-        const { data: links, error: linksError } = await supabase
-          .from('product_global_variation_links')
-          .select('global_variation_id, required, min_selections, max_selections')
-          .eq('product_id', productId);
-        if (linksError) throw linksError;
-        setSelectedVariations(links?.map(link => link.global_variation_id) || []);
-        const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
-        links?.forEach(link => {
-          settings[link.global_variation_id] = {
-            required: link.required,
-            min_selections: link.min_selections,
-            max_selections: link.max_selections
-          };
-        });
-        setVariationSettings(settings);
-      } else {
-        setSelectedVariations([]);
-        setVariationSettings({});
-      }
-    } catch (error) {
-      console.error('Erro ao recarregar variações globais e links:', error);
-    }
-  };
 
-  // Substitui o useEffect para usar a nova função
-  useEffect(() => {
-    loadCategories();
-    reloadGlobalVariationsWithLinks(product?.id);
-    // DEBUG: Log após carregar produto
-    setTimeout(() => {
-      console.log('DEBUG useEffect selectedVariations:', selectedVariations);
-      console.log('DEBUG useEffect variationSettings:', variationSettings);
-    }, 1000);
-  }, [product?.id]);
 
   const loadCategories = async () => {
     try {
       const { data, error } = await supabase
         .from('product_categories')
         .select('*')
-        .eq('user_id', user?.id)
         .eq('active', true);
 
       if (error) throw error;
@@ -145,7 +173,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       const { data, error } = await supabase
         .from('global_variations')
         .select('*')
-        .eq('user_id', user?.id)
         .order('name');
 
       if (error) throw error;
@@ -159,14 +186,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const loadProductVariations = async (productId: string) => {
+    console.log('🔍 Carregando variações do produto:', productId);
     try {
       const { data, error } = await supabase
         .from('product_global_variation_links')
         .select('global_variation_id, required, min_selections, max_selections')
         .eq('product_id', productId);
 
+      console.log('📊 Resultado da consulta de variações:', { data, error });
+
       if (error) throw error;
-      setSelectedVariations(data?.map(link => link.global_variation_id) || []);
+      
+      const variationIds = data?.map(link => link.global_variation_id) || [];
+      console.log('🎯 IDs das variações carregadas:', variationIds);
+      
+      setSelectedVariations(variationIds);
+      
       const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
       data?.forEach(link => {
         settings[link.global_variation_id] = {
@@ -175,9 +210,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           max_selections: link.max_selections
         };
       });
+      
+      console.log('⚙️ Configurações das variações carregadas:', settings);
       setVariationSettings(settings);
+      
     } catch (error) {
-      console.error('Erro ao carregar variações do produto:', error);
+      console.error('❌ Erro ao carregar variações do produto:', error);
     }
   };
 
@@ -191,20 +229,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       });
       return;
     }
-    if (!user || !user.id) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Usuário não autenticado. Faça login novamente.",
-        variant: "destructive"
-      });
-      console.error('Usuário não autenticado ao salvar produto. user:', user);
-      return;
-    }
+
     try {
       setLoading(true);
       const productData = {
         ...formData,
-        user_id: user?.id,
         updated_at: new Date().toISOString()
       };
       let productId = product?.id;
@@ -247,27 +276,54 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations, settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = variationSettings) => {
+    console.log('🔄 Iniciando saveProductVariations:', { 
+      productId, 
+      variations, 
+      settings,
+      selectedVariations,
+      variationSettings 
+    });
+    
     try {
-      await supabase
+      // Primeiro, deletar vínculos existentes
+      console.log('🗑️ Deletando vínculos existentes para produto:', productId);
+      const { error: deleteError } = await supabase
         .from('product_global_variation_links')
         .delete()
         .eq('product_id', productId);
+      
+      if (deleteError) {
+        console.error('❌ Erro ao deletar vínculos existentes:', deleteError);
+        throw deleteError;
+      }
+      
+      console.log('✅ Vínculos existentes deletados com sucesso');
+      
       if (variations.length > 0) {
+        console.log('📝 Criando novos vínculos para', variations.length, 'variações');
+        
         const links = variations.map(variationId => {
           const setting = settings[variationId];
-          return {
+          const link = {
             product_id: productId,
             global_variation_id: variationId,
             required: setting?.required || false,
             min_selections: setting?.min_selections || 0,
             max_selections: setting?.max_selections || 1
           };
+          console.log('🔗 Criando vínculo:', link);
+          return link;
         });
+        
+        console.log('💾 Inserindo vínculos no banco:', links);
         const { data, error } = await supabase
           .from('product_global_variation_links')
           .insert(links);
-        console.log('DEBUG insert product_global_variation_links:', { data, error, links });
+          
+        console.log('📊 Resultado da inserção:', { data, error });
+        
         if (error) {
+          console.error('❌ Erro ao inserir vínculos:', error);
           toast({
             title: "Erro ao salvar vínculo de variações globais",
             description: error.message,
@@ -275,15 +331,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           });
           throw error;
         } else {
+          console.log('✅ Vínculos inseridos com sucesso!');
           toast({
             title: "Variações globais vinculadas",
-            description: "Variações globais salvas com sucesso!",
-            variant: "success"
+            description: `${variations.length} variações globais salvas com sucesso!`,
+            variant: "default"
           });
         }
+      } else {
+        console.log('ℹ️ Nenhuma variação selecionada para salvar');
       }
     } catch (error) {
-      console.error('Erro ao salvar variações do produto:', error);
+      console.error('💥 Erro geral ao salvar variações do produto:', error);
+      toast({
+        title: "Erro ao salvar variações",
+        description: "Ocorreu um erro ao salvar as variações globais",
+        variant: "destructive"
+      });
     }
   };
 
@@ -340,42 +404,98 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
             <div className="space-y-2">
               <Label htmlFor="price">Preço *</Label>
-              <Input
-                id="price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.price}
-                onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                required
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
+                  R$
+                </span>
+                <Input
+                  id="price"
+                  type="text"
+                  value={formatPrice((formData.price * 100).toString())}
+                  onChange={handlePriceChange}
+                  className="pl-10"
+                  placeholder="0,00"
+                  required
+                />
+              </div>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="category">Categoria *</Label>
-            <Select 
-              value={formData.category} 
-              onValueChange={(value) => {
-                const category = categories.find((cat: any) => cat.name === value);
-                setFormData(prev => ({ 
-                  ...prev, 
-                  category: value,
-                  category_id: category?.id
-                }));
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category: any) => (
-                  <SelectItem key={category.id} value={category.name}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select 
+                value={formData.category} 
+                onValueChange={(value) => {
+                  const category = categories.find((cat: any) => cat.name === value);
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    category: value,
+                    category_id: category?.id || null
+                  }));
+                }}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Selecione uma categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category: any) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="outline" size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Criar Nova Categoria</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-category">Nome da Categoria</Label>
+                      <Input
+                        id="new-category"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Digite o nome da categoria"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            createCategory();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          setShowCreateCategory(false);
+                          setNewCategoryName('');
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button 
+                        type="button" 
+                        onClick={createCategory}
+                        disabled={creatingCategory || !newCategoryName.trim()}
+                      >
+                        {creatingCategory ? 'Criando...' : 'Criar'}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -535,3 +655,90 @@ export default ProductForm;
 
 // TODO: Removido temporariamente toda a lógica de variações globais para reimplementação.
 // O formulário de produto funcionará apenas com os campos básicos até a nova lógica ser implementada.
+
+
+
+// Função para formatar preço em Real brasileiro
+const formatPrice = (value: string) => {
+// Remove tudo que não é número
+const numericValue = value.replace(/\D/g, '');
+
+if (!numericValue) return '';
+
+// Converte para número e divide por 100 para ter centavos
+const number = parseInt(numericValue) / 100;
+
+// Formata como moeda brasileira
+return number.toLocaleString('pt-BR', {
+minimumFractionDigits: 2,
+maximumFractionDigits: 2
+});
+};
+
+// Função para converter preço formatado para número
+const parsePrice = (formattedPrice: string): number => {
+if (!formattedPrice) return 0;
+
+// Remove pontos de milhares e substitui vírgula por ponto
+const numericString = formattedPrice
+.replace(/\./g, '')
+.replace(',', '.');
+
+return parseFloat(numericString) || 0;
+};
+
+const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+const inputValue = e.target.value;
+const formatted = formatPrice(inputValue);
+const numericValue = parsePrice(formatted);
+
+setFormData(prev => ({ ...prev, price: numericValue }));
+};
+
+const createCategory = async () => {
+if (!newCategoryName.trim()) {
+toast({
+title: "Nome da categoria é obrigatório",
+variant: "destructive"
+});
+return;
+}
+
+setCreatingCategory(true);
+try {
+const { data, error } = await supabase
+.from('categories')
+.insert([{ name: newCategoryName.trim() }])
+.select()
+.single();
+
+if (error) throw error;
+
+// Atualiza a lista de categorias
+setCategories(prev => [...prev, data]);
+
+// Seleciona a nova categoria
+setFormData(prev => ({ 
+...prev, 
+category: data.name,
+category_id: data.id 
+}));
+
+setNewCategoryName('');
+setShowCreateCategory(false);
+
+toast({
+title: "Categoria criada com sucesso!",
+description: `A categoria "${data.name}" foi adicionada.`
+});
+} catch (error: any) {
+console.error('Erro ao criar categoria:', error);
+toast({
+title: "Erro ao criar categoria",
+description: error.message,
+variant: "destructive"
+});
+} finally {
+setCreatingCategory(false);
+}
+};

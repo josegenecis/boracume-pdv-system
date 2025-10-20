@@ -279,71 +279,105 @@ const Products = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
                   {filteredProducts.map((product) => (
-                    <Card key={product.id} className="overflow-hidden">
-                      {product.image_url && (
-                        <div className="aspect-video w-full overflow-hidden">
-                          <img 
-                            src={product.image_url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="text-lg">{product.name}</CardTitle>
-                          <Badge variant={product.available ? "default" : "secondary"}>
-                            {product.available ? 'Disponível' : 'Indisponível'}
-                          </Badge>
-                        </div>
-                        {product.description && (
-                          <p className="text-gray-600 text-sm line-clamp-2">{product.description}</p>
-                        )}
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="text-2xl font-bold text-primary">
-                            {formatCurrency(product.price)}
-                            {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
-                          </span>
-                          <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
-                        </div>
+                    <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-4">
+                          {/* Imagem do produto */}
+                          {product.image_url ? (
+                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                              <img 
+                                src={product.image_url} 
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                              <Package className="h-6 w-6 text-gray-400" />
+                            </div>
+                          )}
 
-                        {/* Status badges */}
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {product.show_in_delivery && (
-                            <Badge variant="outline" className="text-xs">Delivery</Badge>
-                          )}
-                          {product.show_in_pdv && (
-                            <Badge variant="outline" className="text-xs">PDV</Badge>
-                          )}
-                          {product.send_to_kds && (
-                            <Badge variant="outline" className="text-xs">KDS</Badge>
-                          )}
-                        </div>
+                          {/* Informações principais */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <h3 className="font-semibold text-sm leading-tight truncate flex-1">
+                                {product.name}
+                              </h3>
+                              <Badge 
+                                variant={product.available ? "default" : "secondary"}
+                                className="text-xs shrink-0"
+                              >
+                                {product.available ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            </div>
+                            
+                            {product.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
+                                {product.description}
+                              </p>
+                            )}
 
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleEditProduct(product)}
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Editar
-                          </Button>
-                          
-                          <ProductVariationsButton productId={product.id} />
-                          
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteProduct(product.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-lg font-bold text-primary">
+                                    {formatCurrency(product.price)}
+                                  </span>
+                                  {product.weight_based && (
+                                    <span className="text-xs text-muted-foreground">/kg</span>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className="text-xs">
+                                  {getCategoryName(product.category_id)}
+                                </Badge>
+                              </div>
+
+                              {/* Status badges inline */}
+                              <div className="flex items-center gap-1">
+                                {product.show_in_delivery && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                    Delivery
+                                  </Badge>
+                                )}
+                                {product.show_in_pdv && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                    PDV
+                                  </Badge>
+                                )}
+                                {product.send_to_kds && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                    KDS
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Botões de ação */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => handleEditProduct(product)}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />
+                              Editar
+                            </Button>
+                            
+                            <ProductVariationsButton productId={product.id} />
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2"
+                              onClick={() => handleDeleteProduct(product.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>

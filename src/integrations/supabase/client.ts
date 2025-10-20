@@ -20,5 +20,19 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     params: {
       eventsPerSecond: 10
     }
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'boracume-app'
+    },
+    fetch: (url, options = {}) => {
+      return fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+    }
+  },
+  db: {
+    schema: 'public'
   }
 });

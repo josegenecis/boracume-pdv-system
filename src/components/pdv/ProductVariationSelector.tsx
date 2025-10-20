@@ -41,6 +41,12 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   onAddToCart,
   onClose
 }) => {
+  console.log('🎯 ProductVariationSelector - Recebendo variações:', {
+    produto: product.name,
+    totalVariacoes: variations.length,
+    variacoes: variations
+  });
+
   const [quantity, setQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
