@@ -106,8 +106,12 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   };
 
   const handleAddToCart = () => {
+<<<<<<< HEAD
     // Garantir que apenas nomes únicos e não agrupados sejam enviados
     const selectedOptionsArray = Array.from(new Set(Object.values(selectedOptions).flat().filter(opt => typeof opt === 'string' && !opt.includes(','))));
+=======
+    const selectedOptionsArray = Object.values(selectedOptions).flat();
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     onAddToCart(product, quantity, selectedOptionsArray, notes);
     setIsOpen(false);
     setQuantity(1);

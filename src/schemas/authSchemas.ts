@@ -32,7 +32,11 @@ export const signupSchema = z.object({
     .string()
     .min(1, 'Nome do restaurante é obrigatório')
     .max(100, 'Nome do restaurante deve ter no máximo 100 caracteres')
+<<<<<<< HEAD
     .regex(/^[a-zA-ZÀ-ÿ0-9\s\-.]+$/, 'Nome do restaurante contém caracteres inválidos'),
+=======
+    .regex(/^[a-zA-ZÀ-ÿ0-9\s\-\.]+$/, 'Nome do restaurante contém caracteres inválidos'),
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   name: z
     .string()
     .min(1, 'Seu nome é obrigatório')

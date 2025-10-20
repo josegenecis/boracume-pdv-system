@@ -1,4 +1,5 @@
 
+<<<<<<< HEAD
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Globe, CheckCircle, Star, Shield, Smartphone, Package, TrendingUp, Clock, Users, DollarSign, BarChart3, Truck, CreditCard, MessageCircle, Award, ArrowRight, Play, Plus, Rocket } from 'lucide-react';
@@ -1164,6 +1165,24 @@ const Index = () => {
           </div>
         </div>
       </footer>
+=======
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+const Index = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    navigate('/dashboard', { replace: true });
+  }, [navigate]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-boracume-light">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold mb-4">BoraCumê</h1>
+        <p className="text-xl text-gray-600">Redirecionando...</p>
+      </div>
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     </div>
   );
 };

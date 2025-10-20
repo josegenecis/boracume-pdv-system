@@ -41,12 +41,15 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   onAddToCart,
   onClose
 }) => {
+<<<<<<< HEAD
   console.log('🎯 ProductVariationSelector - Recebendo variações:', {
     produto: product.name,
     totalVariacoes: variations.length,
     variacoes: variations
   });
 
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   const [quantity, setQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
@@ -109,6 +112,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
 
   const handleAddToCart = () => {
     if (!canAddToCart()) return;
+<<<<<<< HEAD
     // Transformar selectedVariations em um array plano de nomes de opções
     const selectedOptions: string[] = [];
     Object.values(selectedVariations).forEach((options: any) => {
@@ -121,6 +125,15 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
       }
     });
     onAddToCart(product, quantity, selectedOptions, notes);
+=======
+    
+    const formattedVariations = Object.entries(selectedVariations).map(([variationId, options]) => ({
+      variationId,
+      options: options || []
+    }));
+    
+    onAddToCart(product, quantity, formattedVariations, notes);
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     onClose();
   };
 

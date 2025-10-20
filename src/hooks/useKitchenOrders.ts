@@ -35,12 +35,20 @@ export const useKitchenOrders = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = async () => {
+<<<<<<< HEAD
     // TEMPORARY: Remove user dependency for KDS testing
     // if (!user) {
     //   setOrders([]);
     //   setLoading(false);
     //   return;
     // }
+=======
+    if (!user) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
     try {
       setLoading(true);
@@ -61,6 +69,7 @@ export const useKitchenOrders = () => {
       
       // Convert the data to match our KitchenOrder interface
       const formattedOrders: KitchenOrder[] = (data || []).map(order => {
+<<<<<<< HEAD
         // Corrigir caso items venha como string JSON
         let itemsRaw = order.items;
         if (typeof itemsRaw === 'string') {
@@ -73,6 +82,10 @@ export const useKitchenOrders = () => {
         }
         // Process items to ensure all data is properly formatted
         const processedItems = Array.isArray(itemsRaw) ? itemsRaw.map((item: any) => {
+=======
+        // Process items to ensure all data is properly formatted
+        const processedItems = Array.isArray(order.items) ? order.items.map((item: any) => {
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           console.log('🔍 KITCHEN - Processando item:', item);
           
           // Detectar formato do item (do useKitchenIntegration vs direto do pedido)
@@ -86,6 +99,7 @@ export const useKitchenOrders = () => {
             notes: item.notes || '',
           };
           
+<<<<<<< HEAD
           // Processar opções e variações (evitar duplicação)
           processedItem.options = [];
           processedItem.variations = [];
@@ -131,6 +145,55 @@ export const useKitchenOrders = () => {
                 price: 0
               }
             ];
+=======
+          // Processar opções e variações
+          if (isKitchenFormat) {
+            // Formato do useKitchenIntegration (mais simples)
+            processedItem.options = Array.isArray(item.options) ? item.options : [];
+            processedItem.variations = [];
+          } else if (isOrderFormat) {
+            // Formato direto do pedido (com variations)
+            processedItem.options = [];
+            
+            // Processar variations se existirem
+            if (Array.isArray(item.variations)) {
+              processedItem.variations = item.variations.map((variation: any) => {
+                console.log('🔍 KITCHEN - Processando variation:', variation);
+                
+                if (typeof variation === 'string') {
+                  // Variation como string simples
+                  return {
+                    name: 'Personalização',
+                    selectedOptions: [variation],
+                    price: 0
+                  };
+                } else if (typeof variation === 'object' && variation !== null) {
+                  // Variation como objeto
+                  return {
+                    name: variation.name || 'Personalização',
+                    selectedOptions: Array.isArray(variation.selectedOptions) 
+                      ? variation.selectedOptions.map((opt: any) => 
+                          typeof opt === 'string' ? opt : String(opt.name || opt.option || opt)
+                        )
+                      : (variation.selectedOptions ? [String(variation.selectedOptions)] : []),
+                    price: Number(variation.price) || 0
+                  };
+                } else {
+                  return {
+                    name: 'Personalização',
+                    selectedOptions: [String(variation)],
+                    price: 0
+                  };
+                }
+              });
+            } else {
+              processedItem.variations = [];
+            }
+          } else {
+            // Formato desconhecido - tentar extrair o que for possível
+            processedItem.options = [];
+            processedItem.variations = [];
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           }
           
           console.log('✅ KITCHEN - Item processado:', processedItem);
@@ -156,7 +219,11 @@ export const useKitchenOrders = () => {
     }
   };
 
+<<<<<<< HEAD
   const updateOrderStatus = async (orderId: string, newStatus: 'pending' | 'preparing' | 'ready' | 'completed') => {
+=======
+  const updateOrderStatus = async (orderId: string, newStatus: 'preparing' | 'ready' | 'completed') => {
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     try {
       console.log(`🔄 Updating order ${orderId} status to ${newStatus}`);
       
@@ -184,7 +251,11 @@ export const useKitchenOrders = () => {
     }
   };
 
+<<<<<<< HEAD
   const updateMultipleOrdersStatus = async (orderIds: string[], newStatus: 'pending' | 'preparing' | 'ready' | 'completed') => {
+=======
+  const updateMultipleOrdersStatus = async (orderIds: string[], newStatus: 'preparing' | 'ready' | 'completed') => {
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     try {
       console.log(`🔄 Updating ${orderIds.length} orders to status ${newStatus}`);
       
@@ -213,6 +284,7 @@ export const useKitchenOrders = () => {
     }
   };
 
+<<<<<<< HEAD
   useEffect(() => {
     fetchOrders();
 
@@ -286,6 +358,49 @@ export const useKitchenOrders = () => {
       supabase.removeChannel(channel);
     };
   }, []); // Remove user dependency
+=======
+  const createSampleOrder = async () => {
+    if (!user) return;
+
+    try {
+      const sampleOrder = {
+        user_id: user.id,
+        order_number: `${Date.now()}`,
+        customer_name: 'Cliente Teste',
+        customer_phone: '(11) 99999-9999',
+        items: [
+          {
+            id: '1',
+            name: 'X-Burger Especial',
+            quantity: 1,
+            options: ['Sem cebola'],
+            notes: 'Bem passado'
+          }
+        ],
+        priority: 'normal' as const,
+        status: 'pending' as const
+      };
+
+      const { error } = await supabase
+        .from('kitchen_orders')
+        .insert([sampleOrder]);
+
+      if (error) {
+        console.error('❌ Error creating sample order:', error);
+        throw error;
+      }
+
+      console.log('✅ Sample order created');
+      fetchOrders(); // Refresh the list
+    } catch (err) {
+      console.error('❌ Failed to create sample order:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [user]);
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
   return {
     orders,
@@ -293,6 +408,10 @@ export const useKitchenOrders = () => {
     error,
     updateOrderStatus,
     updateMultipleOrdersStatus,
+<<<<<<< HEAD
+=======
+    createSampleOrder,
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     refetch: fetchOrders
   };
 };

@@ -3,6 +3,7 @@ import React from 'react';
 import KitchenOrderCard from '@/components/kitchen/KitchenOrderCard';
 import BulkActionButton from '@/components/kitchen/BulkActionButton';
 import { useKitchenOrders } from '@/hooks/useKitchenOrders';
+<<<<<<< HEAD
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,6 +19,11 @@ const Kitchen = () => {
     const newStatus = destination.droppableId as 'pending' | 'preparing' | 'ready';
     await updateOrderStatus(draggableId, newStatus);
   };
+=======
+
+const Kitchen = () => {
+  const { orders, updateOrderStatus, updateMultipleOrdersStatus, loading } = useKitchenOrders();
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
   const pendingOrders = orders.filter(order => order.status === 'pending');
   const preparingOrders = orders.filter(order => order.status === 'preparing');
@@ -31,6 +37,7 @@ const Kitchen = () => {
     );
   }
 
+<<<<<<< HEAD
   if (error) {
     return (
       <div className="flex items-center justify-center h-64 text-red-600">
@@ -39,11 +46,14 @@ const Kitchen = () => {
     );
   }
 
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   return (
     <div className="h-[calc(100vh-120px)] overflow-y-auto">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Cozinha (KDS)</h1>
+<<<<<<< HEAD
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
               {orders.length} pedidos ativos
@@ -189,6 +199,92 @@ const Kitchen = () => {
             </div>
           </div>
         </DragDropContext>
+=======
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-yellow-600">
+                Pendentes ({pendingOrders.length})
+              </h2>
+              <BulkActionButton
+                orderIds={pendingOrders.map(o => o.id)}
+                action="preparing"
+                onBulkAction={updateMultipleOrdersStatus}
+              />
+            </div>
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+              {pendingOrders.map((order) => (
+                <KitchenOrderCard
+                  key={order.id}
+                  order={order}
+                  onStatusChange={updateOrderStatus}
+                />
+              ))}
+              {pendingOrders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhum pedido pendente
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-blue-600">
+                Preparando ({preparingOrders.length})
+              </h2>
+              <BulkActionButton
+                orderIds={preparingOrders.map(o => o.id)}
+                action="ready"
+                onBulkAction={updateMultipleOrdersStatus}
+              />
+            </div>
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+              {preparingOrders.map((order) => (
+                <KitchenOrderCard
+                  key={order.id}
+                  order={order}
+                  onStatusChange={updateOrderStatus}
+                />
+              ))}
+              {preparingOrders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhum pedido em preparo
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-green-600">
+                Prontos ({readyOrders.length})
+              </h2>
+              <BulkActionButton
+                orderIds={readyOrders.map(o => o.id)}
+                action="completed"
+                onBulkAction={updateMultipleOrdersStatus}
+              />
+            </div>
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+              {readyOrders.map((order) => (
+                <KitchenOrderCard
+                  key={order.id}
+                  order={order}
+                  onStatusChange={updateOrderStatus}
+                />
+              ))}
+              {readyOrders.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhum pedido pronto
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       </div>
     </div>
   );

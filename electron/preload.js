@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+<<<<<<< HEAD
   // Device scanning and management
   scanSerialPorts: () => ipcRenderer.invoke('scan-serial-ports'),
   getConnectedDevices: () => ipcRenderer.invoke('get-connected-devices'),
@@ -25,6 +26,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   calibrateScale: (deviceId, knownWeight, currentReading) => ipcRenderer.invoke('calibrate-scale', deviceId, knownWeight, currentReading),
   startAutoReading: (deviceId) => ipcRenderer.invoke('start-auto-reading', deviceId),
   stopAutoReading: (deviceId) => ipcRenderer.invoke('stop-auto-reading', deviceId),
+=======
+  // Device scanning
+  scanSerialPorts: () => ipcRenderer.invoke('scan-serial-ports'),
+  
+  // Printer operations
+  connectPrinter: (devicePath) => ipcRenderer.invoke('connect-printer', devicePath),
+  printReceipt: (orderData) => ipcRenderer.invoke('print-receipt', orderData),
+  disconnectPrinter: () => ipcRenderer.invoke('disconnect-printer'),
+  
+  // Scale operations
+  connectScale: (devicePath) => ipcRenderer.invoke('connect-scale', devicePath),
+  readWeight: () => ipcRenderer.invoke('read-weight'),
+  disconnectScale: () => ipcRenderer.invoke('disconnect-scale'),
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   
   // System notifications
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', title, body),

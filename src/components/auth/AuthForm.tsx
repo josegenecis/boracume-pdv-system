@@ -13,8 +13,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useInputValidation } from '@/hooks/useInputValidation';
 import { loginSchema, signupSchema, type LoginData, type SignupData } from '@/schemas/authSchemas';
 import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
+<<<<<<< HEAD
 import { handleOAuthError } from '../../utils/oauth-errors';
 import { logOAuthLoginAttempt, logOAuthLoginFailure } from '../../utils/oauth-security-logger';
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
 const AuthForm: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();
@@ -76,6 +79,7 @@ const AuthForm: React.FC = () => {
   
   const handleGoogleLogin = async () => {
     try {
+<<<<<<< HEAD
       console.log('🔐 Iniciando login com Google...');
       
       // Log da tentativa de login
@@ -121,6 +125,24 @@ const AuthForm: React.FC = () => {
       });
       
       handleOAuthError(error);
+=======
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+      
+      if (error) throw error;
+      await logSecurityEvent('login', 'OAuth login with Google', 'low');
+    } catch (error: any) {
+      toast({
+        title: "Erro ao entrar com Google",
+        description: error.message,
+        variant: "destructive",
+      });
+      await logSecurityEvent('failed_login', `Failed OAuth login: ${error.message}`, 'medium');
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     }
   };
 

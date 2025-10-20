@@ -83,6 +83,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
               <div className="flex justify-between">
                 <div className="font-semibold">{item.quantity}x {item.name}</div>
               </div>
+<<<<<<< HEAD
               {item.variations && item.variations.length > 0 && (
                 <ul className="ml-4 mt-1 text-sm">
                   {item.variations.map((variation, index) => {
@@ -95,6 +96,55 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                         • {option}
                       </li>
                     ));
+=======
+              {item.options && item.options.length > 0 && (
+                <ul className="ml-4 mt-1 text-sm text-muted-foreground">
+                  {item.options.map((option, index) => {
+                    // Garantir que option seja sempre uma string e não seja null
+                    const optionText = option && typeof option === 'object' 
+                      ? String((option as any).name || option) 
+                      : String(option || '');
+                    return (
+                      <li key={index}>• {optionText}</li>
+                    );
+                  })}
+                </ul>
+              )}
+              {item.variations && item.variations.length > 0 && (
+                <ul className="ml-4 mt-1 text-sm">
+                  {item.variations.map((variation, index) => {
+                    // Processar variações e mostrar apenas os adicionais
+                    let optionsText = '';
+                    let priceText = '';
+                    
+                    try {
+                      if (variation && typeof variation === 'object' && variation.selectedOptions) {
+                        if (Array.isArray(variation.selectedOptions)) {
+                          optionsText = variation.selectedOptions
+                            .map(opt => String(opt))
+                            .filter(Boolean)
+                            .join(', ');
+                        } else {
+                          optionsText = String(variation.selectedOptions);
+                        }
+                        
+                        const price = Number(variation.price) || 0;
+                        priceText = price > 0 ? ` (+${price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '';
+                      } else {
+                        optionsText = String(variation);
+                      }
+                    } catch (error) {
+                      console.warn('Erro ao processar variation:', error, variation);
+                      optionsText = 'Variação';
+                    }
+                    
+                    // Mostrar apenas os adicionais sem o prefixo "Personalização:"
+                    return optionsText ? (
+                      <li key={index} className="font-medium text-blue-600">
+                        • {optionsText}{priceText}
+                      </li>
+                    ) : null;
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
                   })}
                 </ul>
               )}

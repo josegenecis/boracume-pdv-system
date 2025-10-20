@@ -91,6 +91,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
   };
 
   const handleSaveVariation = async (variationData: ProductVariation) => {
+<<<<<<< HEAD
     // Verifica se já existe uma variação com o mesmo nome (ignorando maiúsculas/minúsculas)
     const nomeExiste = variations.some(v => v.name.trim().toLowerCase() === variationData.name.trim().toLowerCase() && v.id !== editingVariation?.id);
     if (nomeExiste) {
@@ -101,6 +102,8 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
       });
       return;
     }
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     try {
       if (editingVariation?.id) {
         const updateData = {

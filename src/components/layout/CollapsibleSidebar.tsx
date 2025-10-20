@@ -1,8 +1,14 @@
 
+<<<<<<< HEAD
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/contexts/SidebarContext';
+=======
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -18,12 +24,20 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+<<<<<<< HEAD
   Download,
   X
 } from 'lucide-react';
 
 const CollapsibleSidebar = () => {
   const { isOpen, isMobile, toggleSidebar, closeSidebar } = useSidebar();
+=======
+  Download
+} from 'lucide-react';
+
+const CollapsibleSidebar = () => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   const location = useLocation();
 
   const links = [
@@ -44,6 +58,7 @@ const CollapsibleSidebar = () => {
     { to: '/subscription', icon: Crown, label: 'Planos' },
   ];
 
+<<<<<<< HEAD
   const handleLinkClick = () => {
     if (isMobile) {
       closeSidebar();
@@ -58,10 +73,17 @@ const CollapsibleSidebar = () => {
         : `${isOpen ? 'w-64' : 'w-16'}`
       }
     `}>
+=======
+  return (
+    <aside className={`bg-white shadow-md h-screen fixed left-0 top-16 z-30 transition-all duration-300 ${
+      isCollapsed ? 'w-16' : 'w-64'
+    }`}>
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       <div className="p-2 border-b">
         <Button
           variant="ghost"
           size="sm"
+<<<<<<< HEAD
           onClick={toggleSidebar}
           className="w-full flex justify-center hover:bg-gray-50 text-gray-400 hover:text-gray-600"
         >
@@ -70,6 +92,12 @@ const CollapsibleSidebar = () => {
           ) : (
             isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />
           )}
+=======
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="w-full flex justify-center hover:bg-gray-50 text-gray-400 hover:text-gray-600"
+        >
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         </Button>
       </div>
       
@@ -83,16 +111,26 @@ const CollapsibleSidebar = () => {
               <li key={link.to}>
                 <Link
                   to={link.to}
+<<<<<<< HEAD
                   onClick={handleLinkClick}
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
                   className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                     isActive
                       ? 'bg-primary text-primary-foreground'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
+<<<<<<< HEAD
                   title={(!isOpen && !isMobile) ? link.label : undefined}
                 >
                   <Icon size={18} className={`${(!isOpen && !isMobile) ? '' : 'mr-3'} flex-shrink-0`} />
                   {(isOpen || isMobile) && <span className="truncate">{link.label}</span>}
+=======
+                  title={isCollapsed ? link.label : undefined}
+                >
+                  <Icon size={18} className={`${isCollapsed ? '' : 'mr-3'} flex-shrink-0`} />
+                  {!isCollapsed && <span className="truncate">{link.label}</span>}
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
                 </Link>
               </li>
             );

@@ -280,7 +280,11 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           await sendToKitchen({
             user_id: user.id,
             order_number: existingOrder.order_number,
+<<<<<<< HEAD
             customer_name: existingOrder.customer_name || 'Cliente não informado',
+=======
+            customer_name: existingOrder.customer_name,
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
             customer_phone: existingOrder.customer_phone || '',
             items: itemsForKitchen,
             total: getTotalValue(),
@@ -330,7 +334,11 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           await sendToKitchen({
             user_id: user.id,
             order_number: orderNumber,
+<<<<<<< HEAD
             customer_name: customerName.trim() || 'Cliente não informado',
+=======
+            customer_name: customerName,
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
             customer_phone: customerPhone || '',
             items: itemsForKitchen,
             total: getTotalValue(),

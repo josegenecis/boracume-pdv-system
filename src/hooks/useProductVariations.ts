@@ -51,7 +51,11 @@ export const useProductVariations = () => {
       // Buscar IDs das variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalLinksError } = await supabase
         .from('product_global_variation_links')
+<<<<<<< HEAD
         .select('global_variation_id, required, min_selections, max_selections')
+=======
+        .select('global_variation_id')
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         .eq('product_id', productId);
 
       console.log('📋 CARDÁPIO DIGITAL - Query links globais resultado:', {
@@ -65,6 +69,10 @@ export const useProductVariations = () => {
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
         console.log('🔍 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalVariationIds);
+<<<<<<< HEAD
+=======
+        
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         const { data: globalVars, error: globalVarsError } = await supabase
           .from('global_variations')
           .select('*')
@@ -77,6 +85,7 @@ export const useProductVariations = () => {
         });
 
         if (!globalVarsError && globalVars) {
+<<<<<<< HEAD
           // Mesclar configurações do vínculo (required, min_selections, max_selections) nas variações globais
           globalVariations = globalVars.map(globalVar => {
             const link = globalVariationLinks.find(l => l.global_variation_id === globalVar.id);
@@ -87,6 +96,9 @@ export const useProductVariations = () => {
               max_selections: link?.max_selections ?? 1
             };
           });
+=======
+          globalVariations = globalVars;
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         }
       }
 
@@ -108,6 +120,7 @@ export const useProductVariations = () => {
       
       for (const item of allVariations) {
         console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name, item);
+<<<<<<< HEAD
         try {
           // Converter options de string para array, se necessário
           let optionsArr = item.options;
@@ -119,11 +132,16 @@ export const useProductVariations = () => {
               optionsArr = [];
             }
           }
+=======
+        
+        try {
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           // Verificar se tem dados básicos válidos
           if (!item || !item.id || !item.name) {
             console.log('⚠️ CARDÁPIO DIGITAL - Variação sem dados básicos:', item);
             continue;
           }
+<<<<<<< HEAD
           // Verificar se tem opções válidas - ACEITAR PREÇO ZERO
           if (!optionsArr || !Array.isArray(optionsArr) || optionsArr.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
@@ -131,15 +149,34 @@ export const useProductVariations = () => {
           }
           // Processar opções - SIMPLIFICADO: apenas verificar se tem nome
           const validOptions = optionsArr
+=======
+
+          // Verificar se tem opções válidas - ACEITAR PREÇO ZERO
+          if (!item.options || !Array.isArray(item.options) || item.options.length === 0) {
+            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem opções válidas:', item.name);
+            continue;
+          }
+
+          // Processar opções - SIMPLIFICADO: apenas verificar se tem nome
+          const validOptions = item.options
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
             .filter((opt: any) => opt && opt.name && String(opt.name).trim().length > 0)
             .map((opt: any) => ({
               name: String(opt.name).trim(),
               price: Number(opt.price) >= 0 ? Number(opt.price) : 0 // Aceitar preço zero
             }));
+<<<<<<< HEAD
+=======
+
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           if (validOptions.length === 0) {
             console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
             continue;
           }
+<<<<<<< HEAD
+=======
+
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           const formatted: ProductVariation = {
             id: item.id,
             name: String(item.name || '').trim(),
@@ -147,6 +184,10 @@ export const useProductVariations = () => {
             max_selections: Math.max(1, Number(item.max_selections) || 1),
             required: Boolean(item.required)
           };
+<<<<<<< HEAD
+=======
+
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           formattedVariations.push(formatted);
           console.log('✅ CARDÁPIO DIGITAL - Variação processada:', formatted.name, 'com', formatted.options.length, 'opções válidas');
         } catch (itemError) {

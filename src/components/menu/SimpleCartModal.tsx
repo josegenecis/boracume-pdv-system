@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+=======
+import React from 'react';
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +69,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     error: null as string | null
   });
 
+<<<<<<< HEAD
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   // Remove this line:
@@ -95,6 +100,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
   const finalTotal = total + deliveryFee + computedExtraFee;
+=======
+  const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
+  const deliveryFee = selectedZone?.delivery_fee || 0;
+  const finalTotal = total + deliveryFee;
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
 
@@ -178,7 +188,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const isFormValid = () => {
+<<<<<<< HEAD
     const isPaymentValid = paymentMethod !== '';
+=======
+    const validPaymentMethods = ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro'];
+    const isPaymentValid = paymentMethod !== '' && validPaymentMethods.includes(paymentMethod);
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     
     const valid = (
       customerName.trim() !== '' &&
@@ -454,6 +469,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
 
             <div>
+<<<<<<< HEAD
               <RadioGroup 
                 value={selectedPaymentMethod?.id || ''} 
                 onValueChange={(value) => {
@@ -476,6 +492,29 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       />
                       <Label
                         htmlFor={option.id}
+=======
+              <Label htmlFor="payment">Forma de pagamento *</Label>
+              <RadioGroup 
+                value={paymentMethod} 
+                onValueChange={(value) => {
+                  console.log('💳 MUDANÇA PAGAMENTO:', { de: paymentMethod, para: value });
+                  setPaymentMethod(value);
+                }}
+                className="space-y-2"
+              >
+                {paymentOptions.map((option) => {
+                  const IconComponent = option.icon;
+                  const isSelected = paymentMethod === option.value;
+                  return (
+                    <div key={option.value} className="relative">
+                      <RadioGroupItem 
+                        value={option.value} 
+                        id={option.value}
+                        className="sr-only"
+                      />
+                      <Label
+                        htmlFor={option.value}
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
                         className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
                           isSelected 
                             ? 'border-primary bg-primary/5 shadow-sm' 
@@ -494,6 +533,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         }`} />
                         <span className={`flex-1 font-medium transition-colors ${
                           isSelected ? 'text-primary' : 'text-gray-900'
+<<<<<<< HEAD
                         }`}>{option.name}</span>
                         {option.is_card && option.extra_fee_percent > 0 && (
                           <span className="ml-2 text-xs text-orange-600 font-bold">+{option.extra_fee_percent}%</span>
@@ -508,6 +548,33 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   );
                 }) : <span className="text-muted-foreground">Nenhuma forma de pagamento cadastrada</span>}
               </RadioGroup>
+=======
+                        }`}>{option.label}</span>
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+
+              {paymentMethod === 'dinheiro' && (
+                <div className="space-y-2 mt-3">
+                  <Label htmlFor="change">Troco para quanto? (opcional)</Label>
+                  <Input
+                    id="change"
+                    type="number"
+                    step="0.01"
+                    placeholder={`Mínimo: R$ ${finalTotal.toFixed(2)}`}
+                    value={changeAmount}
+                    onChange={(e) => setChangeAmount(e.target.value)}
+                  />
+                  {changeAmount && parseFloat(changeAmount) < finalTotal && (
+                    <p className="text-sm text-red-500">
+                      O valor deve ser maior ou igual ao total do pedido
+                    </p>
+                  )}
+                </div>
+              )}
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
             </div>
 
             <div>

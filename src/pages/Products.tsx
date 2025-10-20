@@ -10,9 +10,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
+<<<<<<< HEAD
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
+=======
+import CategoryManager from '@/components/products/CategoryManager';
+import BannerManager from '@/components/banners/BannerManager';
+import ProductVariationsButton from '@/components/products/ProductVariationsButton';
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
 // Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
@@ -162,6 +168,7 @@ const Products = () => {
     setShowForm(true);
   };
 
+<<<<<<< HEAD
   const handleFormSubmit = async (savedProductId?: string) => {
     await fetchProducts();
     if (savedProductId) {
@@ -174,6 +181,10 @@ const Products = () => {
       }
     }
     
+=======
+  const handleFormSubmit = () => {
+    fetchProducts();
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     setShowForm(false);
     setEditingProduct(null);
   };
@@ -207,7 +218,11 @@ const Products = () => {
       <Tabs defaultValue="products" className="w-full">
         <TabsList>
           <TabsTrigger value="products">Produtos</TabsTrigger>
+<<<<<<< HEAD
           <TabsTrigger value="global-variations">Variações Globais</TabsTrigger>
+=======
+          <TabsTrigger value="categories">Categorias</TabsTrigger>
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           <TabsTrigger value="banners">Banners</TabsTrigger>
         </TabsList>
         
@@ -279,6 +294,7 @@ const Products = () => {
                   </CardContent>
                 </Card>
               ) : (
+<<<<<<< HEAD
                 <div className="space-y-2">
                   {filteredProducts.map((product) => (
                     <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
@@ -378,6 +394,73 @@ const Products = () => {
                               <Trash2 className="h-3 w-3" />
                             </Button>
                           </div>
+=======
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredProducts.map((product) => (
+                    <Card key={product.id} className="overflow-hidden">
+                      {product.image_url && (
+                        <div className="aspect-video w-full overflow-hidden">
+                          <img 
+                            src={product.image_url} 
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-lg">{product.name}</CardTitle>
+                          <Badge variant={product.available ? "default" : "secondary"}>
+                            {product.available ? 'Disponível' : 'Indisponível'}
+                          </Badge>
+                        </div>
+                        {product.description && (
+                          <p className="text-gray-600 text-sm line-clamp-2">{product.description}</p>
+                        )}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-2xl font-bold text-primary">
+                            {formatCurrency(product.price)}
+                            {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
+                          </span>
+                          <Badge variant="outline">{getCategoryName(product.category_id)}</Badge>
+                        </div>
+
+                        {/* Status badges */}
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {product.show_in_delivery && (
+                            <Badge variant="outline" className="text-xs">Delivery</Badge>
+                          )}
+                          {product.show_in_pdv && (
+                            <Badge variant="outline" className="text-xs">PDV</Badge>
+                          )}
+                          {product.send_to_kds && (
+                            <Badge variant="outline" className="text-xs">KDS</Badge>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleEditProduct(product)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Editar
+                          </Button>
+                          
+                          <ProductVariationsButton productId={product.id} />
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteProduct(product.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
                         </div>
                       </CardContent>
                     </Card>
@@ -388,8 +471,13 @@ const Products = () => {
           )}
         </TabsContent>
         
+<<<<<<< HEAD
         <TabsContent value="global-variations">
           <GlobalVariationManager />
+=======
+        <TabsContent value="categories">
+          <CategoryManager />
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         </TabsContent>
         
         <TabsContent value="banners">

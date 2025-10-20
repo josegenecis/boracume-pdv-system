@@ -160,6 +160,7 @@ export class ScaleService {
   private parseWeight(data: string, protocol: string): number | null {
     try {
       switch (protocol) {
+<<<<<<< HEAD
         case 'toledo': {
           // Toledo format: "ST,GS,+00000.000kg"
           const toledoMatch = data.match(/\+?(\d+\.?\d*)/);
@@ -177,6 +178,22 @@ export class ScaleService {
           const uranoMatch = data.match(/\+?(\d+\.?\d*)/);
           return uranoMatch ? parseFloat(uranoMatch[1]) : null;
         }
+=======
+        case 'toledo':
+          // Toledo format: "ST,GS,+00000.000kg"
+          const toledoMatch = data.match(/\+?(\d+\.?\d*)/);
+          return toledoMatch ? parseFloat(toledoMatch[1]) : null;
+
+        case 'filizola':
+          // Filizola format: "+00000.000"
+          const filizMatch = data.match(/[+-](\d+\.?\d*)/);
+          return filizMatch ? parseFloat(filizMatch[1]) : null;
+
+        case 'urano':
+          // Urano format similar to Toledo
+          const uranoMatch = data.match(/\+?(\d+\.?\d*)/);
+          return uranoMatch ? parseFloat(uranoMatch[1]) : null;
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
         default:
           return null;

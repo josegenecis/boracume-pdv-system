@@ -212,7 +212,11 @@ const PDVForm: React.FC = () => {
         payment_method: paymentMethod,
         change_amount: changeAmount ? parseFloat(changeAmount) : null,
         status: 'completed',
+<<<<<<< HEAD
         order_type: 'dine_in',
+=======
+        order_type: 'local',
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         table_id: selectedTable || null
       };
 

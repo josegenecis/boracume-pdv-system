@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+<<<<<<< HEAD
 dist-electron
 *.local
 
@@ -63,6 +64,10 @@ supabase/.temp
 electron/dist
 electron/build
 
+=======
+*.local
+
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -73,6 +78,7 @@ electron/build
 *.njsproj
 *.sln
 *.sw?
+<<<<<<< HEAD
 
 # OS generated files
 Thumbs.db
@@ -88,3 +94,5 @@ Orders-backup.tsx
 
 # Batch files
 *.bat
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44

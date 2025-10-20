@@ -34,7 +34,11 @@ export const useDigitalMenuCart = () => {
     });
 
     // Extrair opções selecionadas e calcular preço das variações
+<<<<<<< HEAD
     let selectedOptions: string[] = [];
+=======
+    const selectedOptions: string[] = [];
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     let variationPrice = 0;
 
     if (Array.isArray(selectedVariations)) {
@@ -52,8 +56,11 @@ export const useDigitalMenuCart = () => {
         }
       });
     }
+<<<<<<< HEAD
     // Remover duplicatas
     selectedOptions = Array.from(new Set(selectedOptions));
+=======
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     
     const basePrice = Number(product.price) || 0;
     const itemPrice = basePrice + variationPrice;

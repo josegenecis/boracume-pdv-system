@@ -165,6 +165,7 @@ const Orders = () => {
   };
 
   const openOrderDetails = (order: Order) => {
+<<<<<<< HEAD
     console.log('🔍 ORDERS - Abrindo detalhes do pedido:', {
       orderId: order.id,
       orderNumber: order.order_number,
@@ -192,6 +193,10 @@ const Orders = () => {
         variant: "destructive"
       });
     }
+=======
+    setSelectedOrder(order);
+    setIsDetailsModalOpen(true);
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   };
 
   const filterOrders = () => {
@@ -218,6 +223,7 @@ const Orders = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
+<<<<<<< HEAD
       console.log('🔄 Iniciando atualização do status do pedido:', { orderId, newStatus });
       
       // Validações iniciais
@@ -256,6 +262,9 @@ const Orders = () => {
       if (!validStatuses.includes(newStatus)) {
         throw new Error(`Status '${newStatus}' não é válido. Status válidos: ${validStatuses.join(', ')}`);
       }
+=======
+      console.log('🔄 Atualizando status do pedido:', { orderId, newStatus });
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       
       // Atualizar tanto status quanto acceptance_status
       const updateData = newStatus === 'preparing' 
@@ -266,6 +275,7 @@ const Orders = () => {
         
       console.log('📝 Dados para update:', updateData);
 
+<<<<<<< HEAD
       console.log('🔄 Executando update no Supabase...');
       
       // Verificar conexão com Supabase antes do update
@@ -325,6 +335,24 @@ const Orders = () => {
 
       console.log('✅ Status atualizado no banco de dados:', data);
       
+=======
+      const { error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      console.log('✅ Status atualizado no banco de dados');
+      
+      // Garantir que o estado local seja atualizado imediatamente
+      setOrders(prev => prev.map(order =>
+        order.id === orderId 
+          ? { ...order, ...updateData }
+          : order
+      ));
+
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);
       
@@ -336,8 +364,13 @@ const Orders = () => {
           const orderData = {
             user_id: order.user_id || user?.id || '',
             order_number: order.order_number,
+<<<<<<< HEAD
             customer_name: order.customer_name || 'Cliente não informado',
             customer_phone: order.customer_phone || '',
+=======
+            customer_name: order.customer_name,
+            customer_phone: order.customer_phone,
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
             items: order.items,
             total: order.total,
             payment_method: order.payment_method,
@@ -374,6 +407,7 @@ const Orders = () => {
       ));
 
     } catch (error) {
+<<<<<<< HEAD
       console.error('❌ Erro completo ao atualizar status:', {
         error,
         message: error?.message,
@@ -387,6 +421,12 @@ const Orders = () => {
       toast({
         title: "Erro ao atualizar pedido",
         description: `Não foi possível atualizar o status: ${errorMessage}`,
+=======
+      console.error('Erro ao atualizar status:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o status do pedido.",
+>>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         variant: "destructive"
       });
     }
