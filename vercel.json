@@ -9,18 +9,18 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/menu/([^/]+)",
-      "dest": "/index.html"
+      "source": "/menu/:path*",
+      "destination": "/index.html"
     },
     {
-      "src": "/menu-digital",
-      "dest": "/index.html"
+      "source": "/menu-digital",
+      "destination": "/index.html"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
