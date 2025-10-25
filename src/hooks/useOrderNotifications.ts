@@ -31,21 +31,14 @@ export const useOrderNotifications = () => {
         setVolume(parseFloat(data.volume) / 100);
         setSoundType(data.order_sound);
 
-<<<<<<< HEAD
+
         // Configurar URLs personalizadas no sistema de som (apenas URLs válidas)
         const customUrls = {
           custom_bell_url: data.custom_bell_url && data.custom_bell_url.trim() !== '' ? data.custom_bell_url : null,
           custom_chime_url: data.custom_chime_url && data.custom_chime_url.trim() !== '' ? data.custom_chime_url : null,
           custom_ding_url: data.custom_ding_url && data.custom_ding_url.trim() !== '' ? data.custom_ding_url : null,
           custom_notification_url: data.custom_notification_url && data.custom_notification_url.trim() !== '' ? data.custom_notification_url : null,
-=======
-        // Configurar URLs personalizadas no sistema de som
-        const customUrls = {
-          custom_bell_url: data.custom_bell_url,
-          custom_chime_url: data.custom_chime_url,
-          custom_ding_url: data.custom_ding_url,
-          custom_notification_url: data.custom_notification_url,
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         };
         
         console.log('🎵 useOrderNotifications - Configurando sons personalizados:', customUrls);

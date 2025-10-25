@@ -89,16 +89,14 @@ export class SoundNotifications {
         const customUrl = this.customSoundUrls.get(soundType);
         const audioPath = customUrl || `/sounds/${soundType}.mp3`;
         
-<<<<<<< HEAD
+
         // Verificar se a URL personalizada é válida antes de usar
         if (customUrl && !this.isValidUrl(customUrl)) {
           console.warn(`⚠️ URL personalizada inválida para ${soundType}: ${customUrl}`);
           // Usar som padrão em vez da URL inválida
           audio.src = `/sounds/${soundType}.mp3`;
         } else if (!audio.src) {
-=======
-        if (!audio.src) {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           audio.src = audioPath;
         }
         
@@ -106,24 +104,22 @@ export class SoundNotifications {
         audio.volume = this.volume;
         this.currentlyPlaying.add(audio);
         
-<<<<<<< HEAD
+
         // Adicionar tratamento de erro específico para carregamento
         audio.onerror = () => {
           console.warn(`⚠️ Erro ao carregar som ${soundType}, usando fallback`);
           this.createFallbackSound();
         };
         
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         await audio.play();
       } else {
         this.createFallbackSound();
       }
     } catch (error) {
-<<<<<<< HEAD
+
       console.warn(`⚠️ Erro ao reproduzir som ${soundType}:`, error);
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       // Fallback para Web Audio API em caso de erro
       this.createFallbackSound();
     }
@@ -132,11 +128,9 @@ export class SoundNotifications {
   private createFallbackSound() {
     try {
       // Fallback usando Web Audio API para sons sintéticos simples
-<<<<<<< HEAD
+
       const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-=======
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
@@ -174,7 +168,7 @@ export class SoundNotifications {
     });
   }
 
-<<<<<<< HEAD
+
   private isValidUrl(url: string): boolean {
     try {
       // Verificar se é uma URL válida
@@ -186,8 +180,7 @@ export class SoundNotifications {
     }
   }
 
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   stopSound(soundType: string) {
     console.log(`🔇 SOUND UTILS - Parando som: ${soundType}`);
     

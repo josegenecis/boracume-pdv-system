@@ -81,7 +81,7 @@ export class PrinterService {
     this.connectedPrinter = null;
   }
 
-<<<<<<< HEAD
+
   async printReceipt(orderData: {
     order_number: string;
     customer_name: string;
@@ -94,9 +94,7 @@ export class PrinterService {
     }>;
     total: number;
   }): Promise<boolean> {
-=======
-  async printReceipt(orderData: any): Promise<boolean> {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     if (!this.connectedPrinter) {
       throw new Error('Nenhuma impressora conectada');
     }
@@ -122,11 +120,9 @@ export class PrinterService {
       escposData += '--------------------------------\n';
 
       // Items
-<<<<<<< HEAD
+
       orderData.items.forEach((item) => {
-=======
-      orderData.items.forEach((item: any) => {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         escposData += `${item.quantity}x ${item.product_name}\n`;
         escposData += '\x1B\x61\x02'; // Right align
         escposData += `R$ ${item.subtotal.toFixed(2)}\n`;

@@ -3,7 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
-<<<<<<< HEAD
+
 import { 
   SessionCache, 
   UserCache, 
@@ -16,8 +16,7 @@ import { logOAuthSessionCreated, logOAuthSessionDestroyed, logOAuthUserSync } fr
 import { validateOAuthUser, validateProfileData } from '@/utils/oauth-validation';
 import { preloadByContext, backgroundPreload } from '@/utils/user-preloader';
 import { startTokenAutoRefresh, stopTokenAutoRefresh, checkAndRefreshToken } from '@/utils/token-refresh';
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 
 interface Profile {
   id: string;
@@ -60,11 +59,10 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, restaurantName: string) => Promise<void>;
   refreshSubscription: () => Promise<void>;
-<<<<<<< HEAD
+
   refreshUser: () => Promise<void>;
   syncGoogleUserData: (googleUser: any) => Promise<void>;
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -86,7 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { toast } = useToast();
 
   useEffect(() => {
-<<<<<<< HEAD
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔄 Auth state changed:', event, session?.user?.email);
       
@@ -159,51 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Limpar todos os caches
         clearAllCache();
-=======
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Log security events for auth state changes
-        if (event === 'SIGNED_IN' && session?.user) {
-          logSecurityEvent('login', `User signed in: ${session.user.email}`, 'low');
-        } else if (event === 'SIGNED_OUT') {
-          logSecurityEvent('logout', 'User signed out', 'low');
-        }
-        
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-            fetchSubscription(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-          setSubscription(null);
-        }
-        
-        setLoading(false);
-      }
-    );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session check:', session?.user?.email);
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        fetchSubscription(session.user.id);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       }
       
       setLoading(false);
     });
 
-<<<<<<< HEAD
+
     // Auto-autenticação com cache ou sessão atual
     const autoAuthWithCache = async () => {
       try {
@@ -305,10 +265,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       subscription.unsubscribe();
       stopTokenAutoRefresh(); // Limpar timer ao desmontar
-=======
-    return () => {
-      subscription.unsubscribe();
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     };
   }, []);
 
@@ -324,12 +281,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error fetching profile:', error);
       } else {
         setProfile(data);
-<<<<<<< HEAD
+
         if (data) {
           ProfileCache.setProfile(data); // Salvar no cache
         }
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -348,12 +304,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error fetching subscription:', error);
       } else {
         setSubscription(data);
-<<<<<<< HEAD
+
         if (data) {
           SubscriptionCache.setSubscription(data); // Salvar no cache
         }
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       }
     } catch (error) {
       console.error('Error fetching subscription:', error);
@@ -489,7 +444,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-<<<<<<< HEAD
+
   // Função para atualizar dados do usuário
   const refreshUser = async () => {
     try {
@@ -608,8 +563,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   const value = {
     user,
     session,
@@ -621,11 +575,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn,
     signUp,
     refreshSubscription,
-<<<<<<< HEAD
+
     refreshUser,
     syncGoogleUserData,
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

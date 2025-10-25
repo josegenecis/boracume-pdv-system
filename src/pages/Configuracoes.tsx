@@ -14,10 +14,9 @@ import DeviceManager from '@/components/devices/DeviceManager';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
-<<<<<<< HEAD
+
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 
 const Configuracoes: React.FC = () => {
   const { subscription } = useAuth();
@@ -49,10 +48,9 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-<<<<<<< HEAD
+
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
           )}
@@ -99,13 +97,11 @@ const Configuracoes: React.FC = () => {
         <TabsContent value="fiscal">
           <FiscalSettings />
         </TabsContent>
-<<<<<<< HEAD
+
         <TabsContent value="payment-methods">
           <PaymentMethodsSettings />
         </TabsContent>
-=======
-        
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         {hasMarketingFeature() && (
           <TabsContent value="marketing">
             <MarketingSettings />

@@ -28,29 +28,17 @@ export const useKitchenIntegration = () => {
 
   const sendToKitchen = async (orderData: OrderData) => {
     try {
-<<<<<<< HEAD
+
       console.log('🔄 KDS Integration: Iniciando envio do pedido para KDS');
       console.log('📋 Dados do pedido:', {
-=======
-      const kitchenItems = orderData.items.map(item => ({
-        id: item.product_id,
-        name: item.product_name,
-        quantity: item.quantity,
-        options: item.options || [],
-        notes: item.notes || '',
-        price: item.price,
-        subtotal: item.subtotal
-      }));
 
-      console.log('🔄 Enviando pedido para o KDS:', {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
         order_number: orderData.order_number,
         customer_name: orderData.customer_name,
         customer_phone: orderData.customer_phone,
         payment_method: orderData.payment_method,
         order_type: orderData.order_type,
         total: orderData.total,
-<<<<<<< HEAD
+
         items_count: orderData.items.length,
         user_id: orderData.user_id
       });
@@ -148,46 +136,7 @@ export const useKitchenIntegration = () => {
           user_id: orderData.user_id
         }
       });
-=======
-        items: kitchenItems
-      });
 
-      const kitchenOrder = {
-        user_id: orderData.user_id,
-        order_number: orderData.order_number,
-        customer_name: orderData.customer_name,
-        customer_phone: orderData.customer_phone || '',
-        items: kitchenItems,
-        priority: 'normal' as const,
-        status: 'pending' as const
-      };
-
-      const { error } = await supabase
-        .from('kitchen_orders')
-        .insert([kitchenOrder]);
-
-      if (error) {
-        console.error('❌ Erro ao enviar para o KDS:', error);
-        throw error;
-      }
-
-      console.log('✅ Pedido enviado para o KDS com sucesso');
-      
-      // Enviar notificação em tempo real
-      const channel = supabase.channel('kitchen-notifications');
-      channel.send({
-        type: 'broadcast',
-        event: 'new_order',
-        payload: { 
-          order_number: orderData.order_number,
-          customer_name: orderData.customer_name,
-          user_id: orderData.user_id
-        }
-      });
-
-    } catch (error) {
-      console.error('❌ Falha ao enviar pedido para o KDS:', error);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       throw error;
     }
   };

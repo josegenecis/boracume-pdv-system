@@ -28,7 +28,7 @@ export const useSimpleCart = () => {
     notes: string = '',
     variationPrice: number = 0
   ) => {
-<<<<<<< HEAD
+
     // Garantir que variations seja um array de strings únicas e sem strings agrupadas
     const uniqueVariations = Array.from(new Set(
       variations.filter(v => typeof v === 'string' && !v.includes(','))
@@ -40,63 +40,42 @@ export const useSimpleCart = () => {
     setCart(prev => {
       // Verificar se item já existe
       const existingIndex = prev.findIndex(item => item.uniqueId === uniqueId);
-=======
-    // Criar ID único baseado no produto + variações + notas
-    const uniqueId = `${product.id}-${variations.sort().join(',')}-${notes}`;
-    
-    // Calcular preço total
-    const totalPrice = (product.price + variationPrice) * quantity;
-    
-    setCart(prev => {
-      // Verificar se item já existe
-      const existingIndex = prev.findIndex(item => item.uniqueId === uniqueId);
-      
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       if (existingIndex >= 0) {
         // Atualizar quantidade do item existente
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
         updated[existingIndex].totalPrice = 
           (product.price + variationPrice) * updated[existingIndex].quantity;
-<<<<<<< HEAD
-=======
-        
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
         toast({
           title: "Produto atualizado",
           description: `${product.name} - quantidade: ${updated[existingIndex].quantity}`,
         });
-<<<<<<< HEAD
-=======
-        
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
         return updated;
       } else {
         // Adicionar novo item
         const newItem: CartItem = {
           product,
           quantity,
-<<<<<<< HEAD
+
           variations: uniqueVariations,
-=======
-          variations,
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           notes,
           totalPrice,
           uniqueId
         };
-<<<<<<< HEAD
-=======
-        
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
         toast({
           title: "Adicionado ao carrinho",
           description: `${product.name} - ${quantity}x`,
         });
-<<<<<<< HEAD
-=======
-        
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
         return [...prev, newItem];
       }
     });

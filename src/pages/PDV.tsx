@@ -179,11 +179,10 @@ const PDV = () => {
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
-<<<<<<< HEAD
+
       console.log('🔍 PDV - Iniciando carregamento de variações para produto:', productId);
       
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       // Buscar variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
@@ -191,7 +190,7 @@ const PDV = () => {
         .eq('product_id', productId);
 
       if (productError) {
-<<<<<<< HEAD
+
         console.error('❌ PDV - Erro ao carregar variações do produto:', productError);
       } else {
         console.log('📋 PDV - Variações específicas encontradas:', productVariations?.length || 0, productVariations);
@@ -208,29 +207,16 @@ const PDV = () => {
         console.error('❌ PDV - Erro ao carregar variações globais:', globalError);
       } else {
         console.log('🔗 PDV - Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
-=======
-        console.error('Erro ao carregar variações do produto:', productError);
-      }
 
-      // Buscar variações globais associadas ao produto
-      const { data: globalVariationLinks, error: globalError } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
-
-      if (globalError) {
-        console.error('Erro ao carregar variações globais:', globalError);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       }
 
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
-<<<<<<< HEAD
+
         console.log('🆔 PDV - IDs das variações globais a buscar:', globalVariationIds);
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         
         const { data: globalVars, error: globalVarError } = await supabase
           .from('global_variations')
@@ -238,7 +224,7 @@ const PDV = () => {
           .in('id', globalVariationIds);
 
         if (globalVarError) {
-<<<<<<< HEAD
+
           console.error('❌ PDV - Erro ao buscar variações globais:', globalVarError);
         } else if (globalVars) {
           console.log('🌐 PDV - Variações globais encontradas:', globalVars.length, globalVars);
@@ -258,12 +244,7 @@ const PDV = () => {
         }
       } else {
         console.log('⚠️ PDV - Nenhum link de variação global encontrado para o produto');
-=======
-          console.error('Erro ao buscar variações globais:', globalVarError);
-        } else {
-          globalVariations = globalVars || [];
-        }
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       }
 
       // Combinar todas as variações
@@ -272,16 +253,15 @@ const PDV = () => {
         ...globalVariations
       ];
       
-<<<<<<< HEAD
+
       console.log('📊 PDV - Total de variações combinadas:', allVariations.length, allVariations);
       
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       const formattedVariations: ProductVariation[] = allVariations
         .map(item => {
           try {
             let options: Array<{ name: string; price: number; }> = [];
-<<<<<<< HEAD
+
             if (typeof item.options === 'string') {
               try {
                 options = JSON.parse(item.options);
@@ -290,10 +270,7 @@ const PDV = () => {
                 options = [];
               }
             } else if (Array.isArray(item.options)) {
-=======
-            
-            if (item.options && Array.isArray(item.options)) {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
               options = item.options
                 .filter((opt: any) => {
                   return opt && 
@@ -308,50 +285,40 @@ const PDV = () => {
                   price: Number(opt.price)
                 }));
             }
-<<<<<<< HEAD
+
             
             const formattedVariation = {
-=======
 
-            return {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
               id: item.id,
               name: item.name || '',
               options,
               max_selections: Math.max(1, Number(item.max_selections) || 1),
               required: Boolean(item.required)
             };
-<<<<<<< HEAD
+
             
             console.log('✅ PDV - Variação formatada:', formattedVariation);
             return formattedVariation;
           } catch (itemError) {
             console.error('❌ PDV - Erro ao processar variação:', itemError, item);
-=======
-          } catch (itemError) {
-            console.error('Erro ao processar variação:', itemError, item);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
             return null;
           }
         })
         .filter((variation): variation is ProductVariation => variation !== null);
       
-<<<<<<< HEAD
+
       console.log('🎯 PDV - Variações finais formatadas:', formattedVariations.length, formattedVariations);
       return formattedVariations;
     } catch (error) {
       console.error('💥 PDV - Erro geral ao carregar variações:', error);
-=======
-      return formattedVariations;
-    } catch (error) {
-      console.error('Erro ao carregar variações:', error);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       return [];
     }
   };
 
   const handleProductClick = async (product: Product) => {
-<<<<<<< HEAD
+
     console.log('🔄 PDV - Produto clicado:', product.name, 'ID:', product.id);
     
     const variations = await fetchProductVariations(product.id);
@@ -362,12 +329,7 @@ const PDV = () => {
       variacoes: variations
     });
     
-=======
-    console.log('🔄 PDV - Produto clicado:', product.name);
-    
-    const variations = await fetchProductVariations(product.id);
-    
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     if (variations.length > 0) {
       console.log('🔄 PDV - Produto tem variações, abrindo modal');
       setSelectedProduct(product);

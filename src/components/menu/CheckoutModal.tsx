@@ -12,10 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation, CheckCircle } from 'lucide-react';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
-<<<<<<< HEAD
+
 import { supabase } from '@/integrations/supabase/client';
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 
 interface CartItem {
   id: string;
@@ -70,7 +69,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     error: null as string | null
   });
   const [paymentMethod, setPaymentMethod] = useState('pix');
-<<<<<<< HEAD
+
 const [changeAmount, setChangeAmount] = useState('');
 const [selectedZone, setSelectedZone] = useState<string>('');
 const [loading, setLoading] = useState(false);
@@ -607,8 +606,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     error: null as string | null
   });
   const [paymentMethod, setPaymentMethod] = useState('pix');
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   const [changeAmount, setChangeAmount] = useState('');
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -1004,7 +1002,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <h3 className="font-semibold">Forma de Pagamento</h3>
               
               <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-<<<<<<< HEAD
+
                 {paymentMethods.length > 0 ? paymentMethods.map((option) => (
                   <Label
                     key={option.id}
@@ -1018,9 +1016,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     )}
                   </Label>
                 )) : paymentOptions.map((option) => {
-=======
-                {paymentOptions.map((option) => {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
                   const IconComponent = option.icon;
                   return (
                     <Label
@@ -1079,7 +1075,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 };
 
 export default CheckoutModal;
-<<<<<<< HEAD
+
 
 const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
@@ -1811,5 +1807,4 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <Card>
             <CardContent className="p-4 space-y-4">
               <h3 className="font-semibold">
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+

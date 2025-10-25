@@ -165,7 +165,7 @@ const Subscription = () => {
 
   const getPlanFeatures = (planName: string) => {
     switch (planName) {
-<<<<<<< HEAD
+
       case 'Essencial':
         return [
           'Cardápio digital completo',
@@ -197,8 +197,7 @@ const Subscription = () => {
           'API para integrações',
           'Relatórios fiscais (NFCe)'
         ];
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       case 'Basic':
         return [
           'Cardápio digital',
@@ -228,11 +227,9 @@ const Subscription = () => {
   };
 
   const getPlanIcon = (planName: string) => {
-<<<<<<< HEAD
+
     return planName === 'Pro' || planName === 'Profissional' ? <Crown size={20} /> : <Zap size={20} />;
-=======
-    return planName === 'Pro' ? <Crown size={20} /> : <Zap size={20} />;
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   };
 
   return (
@@ -253,31 +250,25 @@ const Subscription = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {plans.map((plan) => {
             const isCurrentPlan = subscription?.plan_id === plan.id;
-<<<<<<< HEAD
+
             const isPro = plan.name === 'Pro' || plan.name === 'Profissional';
-=======
-            const isPro = plan.name === 'Pro';
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
             
             return (
               <Card 
                 key={plan.id} 
-<<<<<<< HEAD
+
                 className={`relative ${isCurrentPlan ? "border-2 border-boracume-green" : ""} ${isPro || plan.name === 'Profissional' ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50" : ""}`}
-=======
-                className={`relative ${isCurrentPlan ? "border-2 border-boracume-green" : ""} ${isPro ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50" : ""}`}
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
               >
                 {isCurrentPlan && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-boracume-green text-white px-4 py-1 rounded-full text-xs font-bold">
                     Plano Atual
                   </div>
                 )}
-<<<<<<< HEAD
+
                 {(isPro || plan.name === 'Profissional') && !isCurrentPlan && (
-=======
-                {isPro && !isCurrentPlan && (
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                     <Crown size={12} />
                     Mais Popular

@@ -12,10 +12,7 @@ import SoundPermissionHelper from '@/components/notifications/SoundPermissionHel
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
-<<<<<<< HEAD
 import Signup from '@/pages/Signup';
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 import Dashboard from '@/pages/Dashboard';
 import Products from '@/pages/Products';
 import Orders from '@/pages/Orders';
@@ -36,15 +33,11 @@ import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
-<<<<<<< HEAD
 import DesktopApp from '@/pages/DesktopApp';
 import { HardwareTestPage } from '@/pages/HardwareTestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import './App.css';
 import './styles/responsive.css';
-=======
-import './App.css';
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 
 const queryClient = new QueryClient();
 
@@ -55,7 +48,7 @@ function AppContent() {
       <Route path="/menu/:userId" element={<MenuDigital />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
       
-<<<<<<< HEAD
+
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
       
@@ -68,11 +61,7 @@ function AppContent() {
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route path="/desktop" element={<DesktopApp />} />
       </Route>
-=======
-      {/* Rotas que precisam de autenticação */}
-      <Route path="/" element={<Index />} />
-      <Route path="/login" element={<Login />} />
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
@@ -95,10 +84,9 @@ function AppContent() {
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/cardapio" element={<Menu />} />
-<<<<<<< HEAD
+
           <Route path="/hardware-test" element={<HardwareTestPage />} />
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         </Route>
       </Route>
       

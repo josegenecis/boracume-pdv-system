@@ -16,11 +16,8 @@ interface VariationOption {
 interface ProductVariation {
   id?: string;
   name: string;
-<<<<<<< HEAD
-=======
-  required: boolean;
-  max_selections: number;
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
   options: VariationOption[];
 }
 
@@ -37,11 +34,8 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<ProductVariation>({
     name: variation?.name || '',
-<<<<<<< HEAD
-=======
-    required: variation?.required || false,
-    max_selections: variation?.max_selections || 1,
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
     options: variation?.options || [{ name: '', price: 0 }],
     ...variation
   });
@@ -118,38 +112,9 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
               required
             />
           </div>
-<<<<<<< HEAD
+
           {/* Removido bloco de obrigatoriedade e máximo de seleções */}
-=======
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="required"
-                checked={formData.required}
-                onCheckedChange={(checked) => 
-                  setFormData(prev => ({ ...prev, required: checked as boolean }))
-                }
-              />
-              <Label htmlFor="required">Obrigatório</Label>
-            </div>
-
-            <div>
-              <Label htmlFor="max_selections">Máximo de Seleções</Label>
-              <Input
-                id="max_selections"
-                type="number"
-                min="1"
-                value={formData.max_selections}
-                onChange={(e) => setFormData(prev => ({ 
-                  ...prev, 
-                  max_selections: parseInt(e.target.value) || 1 
-                }))}
-              />
-            </div>
-          </div>
-
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
           <div>
             <div className="flex items-center justify-between mb-3">
               <Label>Opções</Label>
@@ -158,10 +123,8 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
                 Adicionar Opção
               </Button>
             </div>
-<<<<<<< HEAD
-=======
 
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
             <div className="space-y-3">
               {formData.options.map((option, index) => (
                 <div key={index} className="flex gap-2 items-end">
@@ -199,10 +162,8 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
               ))}
             </div>
           </div>
-<<<<<<< HEAD
-=======
 
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancelar

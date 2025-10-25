@@ -1,9 +1,7 @@
 
-<<<<<<< HEAD
+
 import React, { useState, useEffect, useCallback } from 'react';
-=======
-import React, { useState, useEffect } from 'react';
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
@@ -66,11 +64,9 @@ const Dashboard = () => {
     }
   }, [user]);
 
-<<<<<<< HEAD
+
   const fetchDashboardData = useCallback(async () => {
-=======
-  const fetchDashboardData = async () => {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     try {
       setLoading(true);
       await Promise.all([
@@ -83,11 +79,9 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
+
   }, [user]);
-=======
-  };
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 
   const fetchStats = async () => {
     const today = new Date();

@@ -137,7 +137,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
       console.log('❌ Não pode adicionar - validação falhou');
       return;
     }
-<<<<<<< HEAD
+
     // Transformar todas as opções selecionadas em um array plano de nomes de opções (strings) para onAddToCart, evitando duplicidade e problemas de exibição.
     const allSelectedOptions = Object.values(selectedVariations).flat().map(opt => opt.name);
     console.log('✅ Adicionando ao carrinho:', {
@@ -147,31 +147,14 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
       notes
     });
     onAddToCart(product, quantity, allSelectedOptions, notes);
-=======
-    
-    const formattedVariations = Object.entries(selectedVariations).map(([variationId, options]) => ({
-      variationId,
-      options: options || []
-    }));
-    
-    console.log('✅ Adicionando ao carrinho:', {
-      product: product.name,
-      quantity,
-      variations: formattedVariations,
-      notes
-    });
-    
-    onAddToCart(product, quantity, formattedVariations, notes);
-    
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     // Reset form
     setQuantity(1);
     setSelectedVariations({});
     setNotes('');
-<<<<<<< HEAD
+
     onClose();
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   };
 
   if (!variations || variations.length === 0) {

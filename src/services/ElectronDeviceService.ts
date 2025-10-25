@@ -73,7 +73,7 @@ export class ElectronDeviceService {
     }
   }
 
-<<<<<<< HEAD
+
   async printReceipt(orderData: {
     order_number: string;
     id: string;
@@ -89,9 +89,7 @@ export class ElectronDeviceService {
       address?: string;
     };
   }): Promise<boolean> {
-=======
-  async printReceipt(orderData: any): Promise<boolean> {
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     if (!window.electronAPI || !this.connectedPrinter) {
       throw new Error('Printer not connected');
     }

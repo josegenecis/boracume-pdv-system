@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-<<<<<<< HEAD
+
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,16 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Plus } from 'lucide-react';
-=======
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 import ProductImageUpload from './ProductImageUpload';
 
 // Defining the interface here to ensure consistency
@@ -43,11 +34,9 @@ interface ProductItem {
 
 interface ProductFormProps {
   product?: ProductItem;
-<<<<<<< HEAD
+
   onSave: (productId?: string) => void;
-=======
-  onSave: () => void;
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
   onCancel: () => void;
 }
 
@@ -68,7 +57,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [categories, setCategories] = useState([]);
   const [globalVariations, setGlobalVariations] = useState([]);
   const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
-<<<<<<< HEAD
+
   const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number }>>({});
   const [loading, setLoading] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -159,11 +148,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setCreatingCategory(false);
     }
   };
-=======
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
-  const { user } = useAuth();
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
 
   useEffect(() => {
     loadCategories();
@@ -173,20 +158,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   }, [product?.id]);
 
-<<<<<<< HEAD
 
 
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
   const loadCategories = async () => {
     try {
       const { data, error } = await supabase
         .from('product_categories')
         .select('*')
-<<<<<<< HEAD
-=======
-        .eq('user_id', user?.id)
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
         .eq('active', true);
 
       if (error) throw error;
@@ -201,7 +183,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       const { data, error } = await supabase
         .from('global_variations')
         .select('*')
-<<<<<<< HEAD
+
         .order('name');
 
       if (error) throw error;
@@ -209,20 +191,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         ...variation,
         options: typeof variation.options === 'string' ? JSON.parse(variation.options) : variation.options
       })));
-=======
-        .eq('user_id', user?.id)
-        .order('name');
 
-      if (error) throw error;
-      setGlobalVariations(data || []);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     } catch (error) {
       console.error('Erro ao carregar variações globais:', error);
     }
   };
 
   const loadProductVariations = async (productId: string) => {
-<<<<<<< HEAD
+
     console.log('🔍 Carregando variações do produto:', productId);
     try {
       const { data, error } = await supabase
@@ -253,27 +229,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       
     } catch (error) {
       console.error('❌ Erro ao carregar variações do produto:', error);
-=======
-    try {
-      const { data, error } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
 
-      if (error) throw error;
-      setSelectedVariations(data?.map(link => link.global_variation_id) || []);
-    } catch (error) {
-      console.error('Erro ao carregar variações do produto:', error);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-<<<<<<< HEAD
-=======
-    
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
+
     if (!formData.name || !formData.category || formData.price <= 0) {
       toast({
         title: "Erro",
@@ -285,32 +248,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     try {
       setLoading(true);
-<<<<<<< HEAD
+
       const productData = {
         ...formData,
         updated_at: new Date().toISOString()
       };
       let productId = product?.id;
-=======
-      
-      const productData = {
-        ...formData,
-        user_id: user?.id,
-        updated_at: new Date().toISOString()
-      };
 
-      let productId = product?.id;
-
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       if (product?.id) {
         const { error } = await supabase
           .from('products')
           .update(productData)
           .eq('id', product.id);
-<<<<<<< HEAD
-=======
 
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
         if (error) throw error;
       } else {
         const { data, error } = await supabase
@@ -318,7 +269,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           .insert([productData])
           .select('id')
           .single();
-<<<<<<< HEAD
+
         if (error) throw error;
         if (data && data.id) {
           productId = data.id;
@@ -328,26 +279,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (productId) {
         await saveProductVariations(productId);
       }
-=======
 
-        if (error) throw error;
-        productId = data.id;
-      }
-
-      // Salvar variações globais selecionadas
-      await saveProductVariations(productId!);
-
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
       toast({
         title: "Sucesso",
         description: `Produto ${product?.id ? 'atualizado' : 'criado'} com sucesso!`,
       });
-<<<<<<< HEAD
-      onSave(productId);
-=======
 
-      onSave(); // Call the simplified callback
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+      onSave(productId);
+
     } catch (error) {
       console.error('Erro ao salvar produto:', error);
       toast({
@@ -360,7 +299,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   };
 
-<<<<<<< HEAD
+
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations, settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = variationSettings) => {
     console.log('🔄 Iniciando saveProductVariations:', { 
       productId, 
@@ -434,36 +373,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         description: "Ocorreu um erro ao salvar as variações globais",
         variant: "destructive"
       });
-=======
-  const saveProductVariations = async (productId: string) => {
-    try {
-      // Remover vínculos existentes
-      await supabase
-        .from('product_global_variation_links')
-        .delete()
-        .eq('product_id', productId);
 
-      // Adicionar novos vínculos
-      if (selectedVariations.length > 0) {
-        const links = selectedVariations.map(variationId => ({
-          product_id: productId,
-          global_variation_id: variationId
-        }));
-
-        const { error } = await supabase
-          .from('product_global_variation_links')
-          .insert(links);
-
-        if (error) throw error;
-      }
-    } catch (error) {
-      console.error('Erro ao salvar variações do produto:', error);
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
     }
   };
 
   const handleVariationToggle = (variationId: string, checked: boolean) => {
-<<<<<<< HEAD
+
     setSelectedVariations(prev => {
       const updated = checked 
         ? [...prev, variationId]
@@ -496,15 +411,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
 
-=======
-    setSelectedVariations(prev => 
-      checked 
-        ? [...prev, variationId]
-        : prev.filter(id => id !== variationId)
-    );
-  };
 
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   return (
     <Card>
       <CardHeader>
@@ -525,7 +432,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
             <div className="space-y-2">
               <Label htmlFor="price">Preço *</Label>
-<<<<<<< HEAD
+
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
                   R$
@@ -540,23 +447,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   required
                 />
               </div>
-=======
-              <Input
-                id="price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.price}
-                onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                required
-              />
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="category">Categoria *</Label>
-<<<<<<< HEAD
+
             <div className="flex gap-2">
               <Select 
                 value={formData.category} 
@@ -630,30 +527,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 </DialogContent>
               </Dialog>
             </div>
-=======
-            <Select 
-              value={formData.category} 
-              onValueChange={(value) => {
-                const category = categories.find((cat: any) => cat.name === value);
-                setFormData(prev => ({ 
-                  ...prev, 
-                  category: value,
-                  category_id: category?.id
-                }));
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category: any) => (
-                  <SelectItem key={category.id} value={category.name}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           </div>
 
           <div className="space-y-2">
@@ -741,7 +615,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                       <Checkbox
                         id={`variation-${variation.id}`}
                         checked={selectedVariations.includes(variation.id)}
-<<<<<<< HEAD
+
                         onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
                       />
                       <div className="flex-1">
@@ -788,37 +662,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                             </div>
                           </div>
                         )}
-=======
-                        onCheckedChange={(checked) => 
-                          handleVariationToggle(variation.id, checked as boolean)
-                        }
-                      />
-                      <div className="flex-1">
-                        <Label 
-                          htmlFor={`variation-${variation.id}`}
-                          className="font-medium cursor-pointer"
-                        >
-                          {variation.name}
-                        </Label>
-                        {variation.description && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {variation.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            Máx: {variation.max_selections}
-                          </Badge>
-                          {variation.required && (
-                            <Badge variant="secondary" className="text-xs">
-                              Obrigatório
-                            </Badge>
-                          )}
-                          <span className="text-xs text-muted-foreground">
-                            {variation.options?.length || 0} opções
-                          </span>
-                        </div>
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
                       </div>
                     </div>
                   ))}
@@ -842,7 +686,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 };
 
 export default ProductForm;
-<<<<<<< HEAD
+
 
 // TODO: Removido temporariamente toda a lógica de variações globais para reimplementação.
 // O formulário de produto funcionará apenas com os campos básicos até a nova lógica ser implementada.
@@ -933,5 +777,4 @@ variant: "destructive"
 setCreatingCategory(false);
 }
 };
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+

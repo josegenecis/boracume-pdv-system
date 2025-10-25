@@ -50,13 +50,10 @@ const Downloads = () => {
     {
       name: 'Windows (Instalador)',
       icon: <Monitor className="w-6 h-6" />,
-<<<<<<< HEAD
+
       downloadUrl: '/dist-electron/BoraCumê Desktop Setup 0.0.0.exe',
       fileSize: '~120 MB',
-=======
-      downloadUrl: '/electron-dist/BoracumeHub-Setup-1.0.0.exe',
-      fileSize: '85 MB',
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       version: '1.0.0',
       type: 'installer',
       available: true
@@ -64,13 +61,10 @@ const Downloads = () => {
     {
       name: 'Windows (Portátil)',
       icon: <Monitor className="w-6 h-6" />,
-<<<<<<< HEAD
+
       downloadUrl: '/dist-electron/BoraCumê Desktop 0.0.0.exe',
       fileSize: '~115 MB',
-=======
-      downloadUrl: '/electron-dist/BoracumeHub-Portable-1.0.0.exe',
-      fileSize: '82 MB',
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       version: '1.0.0',
       type: 'portable',
       available: true
@@ -78,36 +72,24 @@ const Downloads = () => {
     {
       name: 'macOS',
       icon: <Monitor className="w-6 h-6" />,
-<<<<<<< HEAD
+
       downloadUrl: '/dist-electron/BoraCumê Desktop-0.0.0.dmg',
       fileSize: '~125 MB',
       version: '1.0.0',
       type: 'installer',
       available: false
-=======
-      downloadUrl: '/electron-dist/BoracumeHub-1.0.0.dmg',
-      fileSize: '90 MB',
-      version: '1.0.0',
-      type: 'installer',
-      available: true
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     },
     {
       name: 'Linux',
       icon: <Monitor className="w-6 h-6" />,
-<<<<<<< HEAD
+
       downloadUrl: '/dist-electron/BoraCumê Desktop-0.0.0.AppImage',
       fileSize: '~120 MB',
       version: '1.0.0',
       type: 'portable',
       available: false
-=======
-      downloadUrl: '/electron-dist/BoracumeHub-1.0.0.AppImage',
-      fileSize: '88 MB',
-      version: '1.0.0',
-      type: 'portable',
-      available: true
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
     }
   ];
 
@@ -221,7 +203,7 @@ const Downloads = () => {
         </AlertDescription>
       </Alert>
 
-<<<<<<< HEAD
+
       {/* Aplicativo Desktop - Para PDV */}
       <Card className="border-orange-200 bg-orange-50">
         <CardHeader>
@@ -282,19 +264,16 @@ const Downloads = () => {
         </CardContent>
       </Card>
 
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
       {/* Instalação PWA Recomendada */}
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Smartphone className="w-5 h-5 text-primary" />
             <CardTitle>Aplicativo Web Progressivo (PWA)</CardTitle>
-<<<<<<< HEAD
+
             <Badge variant="default">Recomendado para uso geral</Badge>
-=======
-            <Badge variant="default">Recomendado</Badge>
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
+
           </div>
           <CardDescription>
             Instale o BoraCumê como um app nativo - funciona em qualquer dispositivo
