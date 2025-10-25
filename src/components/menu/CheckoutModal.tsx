@@ -703,23 +703,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   );
 };
 
-export default CheckoutModal;
-
-
-const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItems, onOrderComplete }) => {
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
-    { id: 'pix', name: 'PIX', active: true },
-    { id: 'dinheiro', name: 'Dinheiro', active: true },
-    { id: 'cartao', name: 'Cartão', active: true }
-  ]);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
-  const isMobile = useIsMobile();
-
   // Detecção específica de Safari e WebKit
   const isSafari = () => {
     const ua = navigator.userAgent;
@@ -783,7 +766,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
   };
 
   // Função para salvar métodos no cache (com fallback para Safari)
-  const savePaymentMethodsToCache = (methods: PaymentMethod[]) => {
+  const savePaymentMethodsToCache = (methods: any[]) => {
     try {
       const storage = getAvailableStorage();
       if (!storage) {
@@ -800,7 +783,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
   };
 
   // Função para carregar métodos do cache (com fallback para Safari)
-  const loadPaymentMethodsFromCache = (): PaymentMethod[] | null => {
+  const loadPaymentMethodsFromCache = (): any[] | null => {
     try {
       const storage = getAvailableStorage();
       if (!storage) {
@@ -833,119 +816,209 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
     }
   };
 
-  // Função para buscar métodos de pagamento com otimizações específicas para Safari
-  const fetchPaymentMethods = async (retryCount = 0): Promise<void> => {
-    const safari = isSafari();
-    const maxRetries = safari ? 5 : 3; // Mais tentativas para Safari
-    const baseDelay = safari ? 2000 : 1000; // Delay maior para Safari
-    
-    try {
-      console.log(`🔄 [SAFARI DEBUG] Tentativa ${retryCount + 1}/${maxRetries + 1} - Buscando métodos de pagamento...`);
-      console.log('👤 [SAFARI DEBUG] User ID:', user?.id);
-      console.log('🌐 [SAFARI DEBUG] User Agent:', navigator.userAgent);
-      console.log('📱 [SAFARI DEBUG] Viewport:', `${window.innerWidth}x${window.innerHeight}`);
-      console.log('📲 [SAFARI DEBUG] useIsMobile hook:', isMobile);
-      console.log('🦁 [SAFARI DEBUG] É Safari:', safari);
-      
-      // Verificar Private Browsing
-      const privateBrowsing = await isPrivateBrowsing();
-      console.log('🔒 [SAFARI DEBUG] Private Browsing:', privateBrowsing);
-      
-      // Verificar detecção mobile via User-Agent
-      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      console.log('📱 [SAFARI DEBUG] Mobile via User-Agent:', isMobileUA);
-      console.log('🔄 [SAFARI DEBUG] Comparação detecção mobile - Hook:', isMobile, 'vs User-Agent:', isMobileUA);
+  const isMobile = useIsMobile();
 
-      if (!user?.id) {
-        console.warn('⚠️ [SAFARI DEBUG] User ID não disponível, usando métodos padrão');
-        return;
-      }
-
-      // Verificar status da conexão Supabase
-      console.log('🔗 [SAFARI DEBUG] Status Supabase:', supabase ? 'Conectado' : 'Desconectado');
-      
-      const startTime = Date.now();
-      
-      // Configurações específicas para Safari
-      const fetchOptions: any = {
-        signal: AbortSignal.timeout(safari ? 15000 : 10000), // Timeout maior para Safari
-      };
-
-      // Headers específicos para Safari/WebKit
-      if (safari) {
-        console.log('🦁 [SAFARI DEBUG] Aplicando configurações específicas para Safari');
-      }
-      
-      const { data, error } = await supabase
-        .from('payment_methods')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('active', true);
-
-      const responseTime = Date.now() - startTime;
-      console.log(`⏱️ [SAFARI DEBUG] Tempo de resposta: ${responseTime}ms`);
-
-      if (error) {
-        console.error('❌ [SAFARI DEBUG] Erro detalhado na busca:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          safari: safari
-        });
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const methods = data.map(method => ({
-          id: method.id,
-          name: method.name,
-          active: method.active
-        }));
+  useEffect(() => {
+    if (isOpen && userId) {
+      const fetchPaymentMethods = async () => {
+        let retryCount = 0;
+        const safari = isSafari();
+        const maxRetries = safari ? 5 : 3; // Mais tentativas para Safari
         
-        console.log('✅ [SAFARI DEBUG] Métodos encontrados:', methods);
-        setPaymentMethods(methods);
+        const attemptFetch = async (): Promise<void> => {
+          try {
+            console.log('🔄 [MOBILE DEBUG] === INÍCIO FETCH PAYMENT METHODS ===');
+            console.log('🔄 [MOBILE DEBUG] Tentativa:', retryCount + 1, 'de', maxRetries + 1);
+            console.log('🔄 [MOBILE DEBUG] Buscando métodos de pagamento para userId:', userId);
+            console.log('🔄 [MOBILE DEBUG] User Agent:', navigator.userAgent);
+            console.log('🔄 [MOBILE DEBUG] Viewport:', window.innerWidth, 'x', window.innerHeight);
+            console.log('🔄 [MOBILE DEBUG] useIsMobile hook:', isMobile);
+            console.log('🔄 [MOBILE DEBUG] isOpen:', isOpen);
+            console.log('🔄 [MOBILE DEBUG] Supabase client:', !!supabase);
+            console.log('🔄 [MOBILE DEBUG] Connection status:', navigator.onLine);
+            console.log('🦁 [SAFARI DEBUG] É Safari:', safari);
+            
+            // Verificar Private Browsing
+            const privateBrowsing = await isPrivateBrowsing();
+            console.log('🔒 [SAFARI DEBUG] Private Browsing:', privateBrowsing);
+            
+            // Testar se User-Agent mobile afeta requests
+            const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            console.log('🔄 [MOBILE DEBUG] User-Agent detectado como mobile:', isMobileUserAgent);
+            console.log('🔄 [MOBILE DEBUG] Hook useIsMobile:', isMobile);
+            console.log('🔄 [MOBILE DEBUG] Comparação User-Agent vs Hook:', isMobileUserAgent === isMobile);
+            
+            // Testar conexão com Supabase primeiro
+            console.log('🔄 [MOBILE DEBUG] Testando conexão com Supabase...');
+            const startTime = Date.now();
+            
+            // Configurações específicas para Safari
+            const timeout = safari ? 15000 : 10000; // Timeout maior para Safari
+            console.log('🦁 [SAFARI DEBUG] Timeout configurado:', timeout, 'ms');
+            
+            const { data, error } = await supabase
+              .from('payment_methods')
+              .select('*')
+              .eq('user_id', userId)
+              .order('name');
+            
+            const endTime = Date.now();
+            console.log('🔄 [MOBILE DEBUG] Tempo de resposta:', endTime - startTime, 'ms');
+            
+            if (error) {
+              console.error('❌ [MOBILE DEBUG] Erro ao buscar métodos de pagamento:', error);
+              console.error('❌ [MOBILE DEBUG] Detalhes do erro:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code,
+                safari: safari
+              });
+              console.error('❌ [MOBILE DEBUG] Stack trace:', error.stack);
+              
+              // Implementar retry automático
+              if (retryCount < maxRetries) {
+                retryCount++;
+                const baseDelay = safari ? 2000 : 1000; // Delay maior para Safari
+                const retryDelay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
+                console.log(`🔄 [MOBILE DEBUG] Tentando novamente em ${retryDelay}ms (tentativa ${retryCount + 1}/${maxRetries + 1})`);
+                
+                setTimeout(() => {
+                  attemptFetch();
+                }, retryDelay);
+                return;
+              } else {
+                console.log('🔄 [MOBILE DEBUG] Máximo de tentativas atingido, tentando carregar do cache...');
+                
+                // Tentar carregar do cache como último recurso
+                const cachedMethods = loadPaymentMethodsFromCache();
+                if (cachedMethods && cachedMethods.length > 0) {
+                  console.log('🔄 [SAFARI DEBUG] Usando métodos do cache como fallback');
+                  setPaymentMethods(cachedMethods);
+                  setSelectedPaymentMethod(cachedMethods[0] || null);
+                  if (cachedMethods.length > 0) {
+                    setPaymentMethod(cachedMethods[0].name);
+                  }
+                } else {
+                  console.log('🔄 [MOBILE DEBUG] Cache vazio, mantendo métodos padrão');
+                }
+                return;
+              }
+            }
+            
+            console.log('✅ [MOBILE DEBUG] Resposta recebida do Supabase');
+            console.log('✅ [MOBILE DEBUG] Data type:', typeof data);
+            console.log('✅ [MOBILE DEBUG] Data is array:', Array.isArray(data));
+            console.log('✅ [MOBILE DEBUG] Data length:', data?.length);
+            console.log('✅ [MOBILE DEBUG] Raw data:', JSON.stringify(data, null, 2));
+            
+            if (data && data.length > 0) {
+              console.log('✅ [MOBILE DEBUG] Métodos de pagamento encontrados:', data.length);
+              console.log('✅ [MOBILE DEBUG] Processando dados...');
+              
+              // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
+              const mapped = data.map((m: any, index: number) => {
+                console.log(`✅ [MOBILE DEBUG] Processando método ${index + 1}:`, m);
+                return {
+                  ...m,
+                  extra_fee_percent: m.extra_fee_percent ?? 0,
+                  is_card: m.is_card ?? false
+                };
+              });
+              
+              console.log('✅ [MOBILE DEBUG] Métodos mapeados:', JSON.stringify(mapped, null, 2));
+              
+              // Substituir métodos padrão pelos personalizados
+              setPaymentMethods(mapped);
+              setSelectedPaymentMethod(mapped[0] || null);
+              
+              console.log('✅ [MOBILE DEBUG] Estado atualizado - paymentMethods length:', mapped.length);
+              console.log('✅ [MOBILE DEBUG] Estado atualizado - selectedPaymentMethod:', mapped[0]);
+              
+              // Definir método de pagamento padrão se não estiver definido
+              if (mapped.length > 0) {
+                setPaymentMethod(mapped[0].name);
+                console.log('✅ [MOBILE DEBUG] PaymentMethod definido como:', mapped[0].name);
+              }
+              
+              // Salvar no cache (com fallback para Safari)
+              savePaymentMethodsToCache(mapped);
+              
+            } else {
+              console.log('⚠️ [MOBILE DEBUG] Nenhum método de pagamento encontrado no banco');
+              console.log('⚠️ [MOBILE DEBUG] Mantendo métodos padrão');
+              // Métodos padrão já estão definidos, não precisa fazer nada
+            }
+            
+            console.log('🔄 [MOBILE DEBUG] === FIM FETCH PAYMENT METHODS ===');
+            
+          } catch (error) {
+            console.error('💥 [MOBILE DEBUG] Erro crítico ao buscar métodos de pagamento:', error);
+            console.error('💥 [MOBILE DEBUG] Error type:', typeof error);
+            console.error('💥 [MOBILE DEBUG] Error constructor:', error?.constructor?.name);
+            console.error('💥 [MOBILE DEBUG] Error message:', error?.message);
+            console.error('💥 [MOBILE DEBUG] Error stack:', error?.stack);
+            
+            // Verificar se é erro específico do Safari
+            if (safari && error instanceof Error) {
+              console.error('🦁 [SAFARI DEBUG] Erro específico do Safari:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+              });
+            }
+            
+            // Implementar retry automático para erros críticos
+            if (retryCount < maxRetries) {
+              retryCount++;
+              const baseDelay = safari ? 2000 : 1000; // Delay maior para Safari
+              const retryDelay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
+              console.log(`🔄 [MOBILE DEBUG] Erro crítico - Tentando novamente em ${retryDelay}ms (tentativa ${retryCount + 1}/${maxRetries + 1})`);
+              
+              setTimeout(() => {
+                attemptFetch();
+              }, retryDelay);
+              return;
+            } else {
+              console.log('🔄 [MOBILE DEBUG] Máximo de tentativas atingido após erro crítico, tentando carregar do cache...');
+              
+              // Tentar carregar do cache como último recurso
+              const cachedMethods = loadPaymentMethodsFromCache();
+              if (cachedMethods && cachedMethods.length > 0) {
+                console.log('🔄 [SAFARI DEBUG] Usando métodos do cache como fallback');
+                setPaymentMethods(cachedMethods);
+                setSelectedPaymentMethod(cachedMethods[0] || null);
+                if (cachedMethods.length > 0) {
+                  setPaymentMethod(cachedMethods[0].name);
+                }
+              } else {
+                console.log('🔄 [MOBILE DEBUG] Cache vazio, mantendo métodos padrão');
+              }
+            }
+          }
+        };
         
-        // Salvar no cache (com fallback para Safari)
-        savePaymentMethodsToCache(methods);
-      } else {
-        console.log('📝 [SAFARI DEBUG] Nenhum método personalizado encontrado, mantendo padrões');
-      }
-
-    } catch (error) {
-      console.error(`❌ [SAFARI DEBUG] Erro na tentativa ${retryCount + 1}:`, error);
-      
-      // Verificar se é erro específico do Safari
-      if (safari && error instanceof Error) {
-        console.error('🦁 [SAFARI DEBUG] Erro específico do Safari:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        });
-      }
-      
-      if (retryCount < maxRetries) {
-        const delay = baseDelay * Math.pow(2, retryCount); // Backoff exponencial
-        console.log(`⏳ [SAFARI DEBUG] Aguardando ${delay}ms antes da próxima tentativa...`);
+        console.log('🔄 [MOBILE DEBUG] Verificando se é mobile para aplicar delay...');
+        console.log('🔄 [MOBILE DEBUG] isMobile:', isMobile);
+        console.log('🦁 [SAFARI DEBUG] É Safari:', safari);
         
-        setTimeout(() => {
-          fetchPaymentMethods(retryCount + 1);
-        }, delay);
-      } else {
-        console.error('💥 [SAFARI DEBUG] Erro crítico após todas as tentativas:', error);
-        
-        // Tentar carregar do cache como último recurso
-        const cachedMethods = loadPaymentMethodsFromCache();
-        if (cachedMethods && cachedMethods.length > 0) {
-          console.log('🔄 [SAFARI DEBUG] Usando métodos do cache como fallback');
-          setPaymentMethods(cachedMethods);
+        // Usar hook useIsMobile em vez de window.innerWidth
+        if (isMobile || safari) {
+          const delay = safari ? 200 : 100; // Delay maior para Safari
+          console.log(`📱 [MOBILE DEBUG] Detectado dispositivo móvel/Safari, adicionando delay de ${delay}ms`);
+          setTimeout(() => {
+            console.log('📱 [MOBILE DEBUG] Delay concluído, executando fetchPaymentMethods');
+            attemptFetch();
+          }, delay);
         } else {
-          console.log('🔧 [SAFARI DEBUG] Usando métodos padrão como fallback final');
-          // Métodos padrão já estão definidos no useState inicial
+          console.log('🖥️ [MOBILE DEBUG] Detectado desktop, executando fetchPaymentMethods imediatamente');
+          attemptFetch();
         }
-      }
+      };
+      
+      fetchPaymentMethods();
     }
-  };
+  }, [isOpen, userId, isMobile]);
 
-  // ... existing code ...
+export default CheckoutModal;
 

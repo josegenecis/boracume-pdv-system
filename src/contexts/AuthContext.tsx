@@ -101,8 +101,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         // Salvar no cache
-        SessionCache.set(session);
-        UserCache.set(session.user);
+        SessionCache.setSession(session);
+        UserCache.setUser(session.user);
         
         // Iniciar refresh automático de tokens
         startTokenAutoRefresh(session);
@@ -174,12 +174,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (validSession) {
           // Tentar recuperar do cache primeiro
-          const cachedSession = SessionCache.get();
-          const cachedUser = UserCache.get();
-          const cachedProfile = ProfileCache.get();
-          const cachedSubscription = SubscriptionCache.get();
+          const cachedSession = SessionCache.getSession();
+          const cachedUser = UserCache.getUser();
+          const cachedProfile = ProfileCache.getProfile();
+          const cachedSubscription = SubscriptionCache.getSubscription();
           
-          if (cachedSession && cachedUser && SessionCache.isValid()) {
+          if (cachedSession && cachedUser && SessionCache.isSessionCacheValid()) {
             console.log('📦 Restaurando sessão do cache');
             setSession(validSession); // Usar sessão válida/renovada
             setUser(validSession.user);
@@ -215,8 +215,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           
           // Se não há cache válido, usar sessão renovada
-          SessionCache.set(validSession);
-          UserCache.set(validSession.user);
+          SessionCache.setSession(validSession);
+          UserCache.setUser(validSession.user);
           
           setSession(validSession);
           setUser(validSession.user);
