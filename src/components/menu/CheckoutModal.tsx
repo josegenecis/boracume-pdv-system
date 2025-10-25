@@ -78,29 +78,75 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   useEffect(() => {
     if (isOpen && userId) {
       const fetchPaymentMethods = async () => {
-        console.log('Buscando métodos de pagamento para userId:', userId);
-        const { data, error } = await supabase
-          .from('payment_methods')
-          .select('*')
-          .eq('user_id', userId)
-          .order('name');
-        
-        if (!error && data) {
-          console.log('Métodos de pagamento encontrados:', data);
-          // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
-          const mapped = data.map((m: any) => ({
-            ...m,
-            extra_fee_percent: m.extra_fee_percent ?? 0,
-            is_card: m.is_card ?? false
-          }));
-          setPaymentMethods(mapped);
-          setSelectedPaymentMethod(mapped[0] || null);
-        } else {
-          console.log('Erro ao buscar métodos de pagamento ou nenhum encontrado:', error);
+        try {
+          console.log('🔄 [MOBILE DEBUG] Buscando métodos de pagamento para userId:', userId);
+          console.log('🔄 [MOBILE DEBUG] User Agent:', navigator.userAgent);
+          console.log('🔄 [MOBILE DEBUG] Viewport:', window.innerWidth, 'x', window.innerHeight);
+          
+          const { data, error } = await supabase
+            .from('payment_methods')
+            .select('*')
+            .eq('user_id', userId)
+            .order('name');
+          
+          if (error) {
+            console.error('❌ [MOBILE DEBUG] Erro ao buscar métodos de pagamento:', error);
+            console.error('❌ [MOBILE DEBUG] Detalhes do erro:', {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code
+            });
+            setPaymentMethods([]);
+            return;
+          }
+          
+          if (data && data.length > 0) {
+            console.log('✅ [MOBILE DEBUG] Métodos de pagamento encontrados:', data.length);
+            console.log('✅ [MOBILE DEBUG] Dados:', data);
+            
+            // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
+            const mapped = data.map((m: any) => ({
+              ...m,
+              extra_fee_percent: m.extra_fee_percent ?? 0,
+              is_card: m.is_card ?? false
+            }));
+            
+            setPaymentMethods(mapped);
+            setSelectedPaymentMethod(mapped[0] || null);
+            
+            // Definir método de pagamento padrão se não estiver definido
+            if (!paymentMethod && mapped.length > 0) {
+              setPaymentMethod(mapped[0].name);
+            }
+          } else {
+            console.log('⚠️ [MOBILE DEBUG] Nenhum método de pagamento encontrado, usando padrões');
+            setPaymentMethods([]);
+            setSelectedPaymentMethod(null);
+            // Definir PIX como padrão se não houver métodos personalizados
+            if (!paymentMethod) {
+              setPaymentMethod('pix');
+            }
+          }
+        } catch (error) {
+          console.error('💥 [MOBILE DEBUG] Erro crítico ao buscar métodos de pagamento:', error);
           setPaymentMethods([]);
+          setSelectedPaymentMethod(null);
+          // Fallback para PIX em caso de erro
+          if (!paymentMethod) {
+            setPaymentMethod('pix');
+          }
         }
       };
-      fetchPaymentMethods();
+      
+      // Adicionar delay para mobile para garantir que a UI esteja pronta
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        console.log('📱 [MOBILE DEBUG] Detectado dispositivo móvel, adicionando delay');
+        setTimeout(fetchPaymentMethods, 100);
+      } else {
+        fetchPaymentMethods();
+      }
     }
   }, [isOpen, userId]);
 
@@ -469,35 +515,50 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               
               <div className="space-y-3">
                 <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-                  {paymentMethods.length > 0 ? paymentMethods.map((option) => (
-                    <Label
-                      key={option.id}
-                      htmlFor={option.name}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
-                    >
-                      <RadioGroupItem value={option.name} id={option.name} />
-                      <span className="flex-1">{option.name}</span>
-                      {option.is_card && option.extra_fee_percent > 0 && (
-                        <Badge variant="secondary" className="text-xs">Taxa {option.extra_fee_percent}%</Badge>
-                      )}
-                    </Label>
-                  )) : paymentOptions.map((option) => {
-                    const IconComponent = option.icon;
-                    return (
-                      <Label
-                        key={option.value}
-                        htmlFor={option.value}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
-                      >
-                        <RadioGroupItem value={option.value} id={option.value} />
-                        <IconComponent className="h-5 w-5" />
-                        <span className="flex-1">{option.label}</span>
-                        {option.value === 'pix' && (
-                          <Badge variant="secondary" className="text-xs">Instantâneo</Badge>
-                        )}
-                      </Label>
-                    );
-                  })}
+                  {(() => {
+                    console.log('🎯 [MOBILE DEBUG] Renderizando RadioGroup');
+                    console.log('🎯 [MOBILE DEBUG] paymentMethods.length:', paymentMethods.length);
+                    console.log('🎯 [MOBILE DEBUG] paymentMethod atual:', paymentMethod);
+                    console.log('🎯 [MOBILE DEBUG] Viewport atual:', window.innerWidth, 'x', window.innerHeight);
+                    
+                    if (paymentMethods.length > 0) {
+                      console.log('🎯 [MOBILE DEBUG] Usando métodos personalizados:', paymentMethods);
+                      return paymentMethods.map((option) => (
+                        <Label
+                          key={option.id}
+                          htmlFor={option.name}
+                          className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
+                          style={{ minHeight: '48px' }} // Garantir altura mínima para mobile
+                        >
+                          <RadioGroupItem value={option.name} id={option.name} />
+                          <span className="flex-1">{option.name}</span>
+                          {option.is_card && option.extra_fee_percent > 0 && (
+                            <Badge variant="secondary" className="text-xs">Taxa {option.extra_fee_percent}%</Badge>
+                          )}
+                        </Label>
+                      ));
+                    } else {
+                      console.log('🎯 [MOBILE DEBUG] Usando métodos padrão:', paymentOptions);
+                      return paymentOptions.map((option) => {
+                        const IconComponent = option.icon;
+                        return (
+                          <Label
+                            key={option.value}
+                            htmlFor={option.value}
+                            className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
+                            style={{ minHeight: '48px' }} // Garantir altura mínima para mobile
+                          >
+                            <RadioGroupItem value={option.value} id={option.value} />
+                            <IconComponent className="h-5 w-5" />
+                            <span className="flex-1">{option.label}</span>
+                            {option.value === 'pix' && (
+                              <Badge variant="secondary" className="text-xs">Instantâneo</Badge>
+                            )}
+                          </Label>
+                        );
+                      });
+                    }
+                  })()}
                 </RadioGroup>
 
                 {paymentMethods.length === 0 && (
