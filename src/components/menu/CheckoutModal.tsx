@@ -720,76 +720,161 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
   const { user } = useAuth();
   const isMobile = useIsMobile();
 
-  // Cache key para localStorage
+  // Detecção específica de Safari e WebKit
+  const isSafari = () => {
+    const ua = navigator.userAgent;
+    const isSafariUA = /Safari/.test(ua) && !/Chrome/.test(ua) && !/Chromium/.test(ua);
+    const isWebKit = /WebKit/.test(ua) && !/Chrome/.test(ua);
+    const isIOSSafari = /iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua);
+    
+    console.log('🦁 [SAFARI DEBUG] User Agent:', ua);
+    console.log('🦁 [SAFARI DEBUG] Safari UA:', isSafariUA);
+    console.log('🦁 [SAFARI DEBUG] WebKit:', isWebKit);
+    console.log('🦁 [SAFARI DEBUG] iOS Safari:', isIOSSafari);
+    
+    return isSafariUA || isWebKit || isIOSSafari;
+  };
+
+  // Verificar se está em Private Browsing (Safari)
+  const isPrivateBrowsing = async (): Promise<boolean> => {
+    try {
+      // Método para detectar Private Browsing no Safari
+      if (isSafari()) {
+        // Tentar usar localStorage - falha em Private Browsing
+        const testKey = '__test_private_browsing__';
+        localStorage.setItem(testKey, 'test');
+        localStorage.removeItem(testKey);
+        return false;
+      }
+      return false;
+    } catch (error) {
+      console.log('🔒 [SAFARI DEBUG] Private Browsing detectado:', error);
+      return true;
+    }
+  };
+
+  // Cache keys para localStorage/sessionStorage
   const PAYMENT_METHODS_CACHE_KEY = 'boracume_payment_methods';
   const CACHE_EXPIRY_KEY = 'boracume_payment_methods_expiry';
   const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 horas em milliseconds
 
-  // Função para salvar métodos no cache
-  const savePaymentMethodsToCache = (methods: PaymentMethod[]) => {
+  // Função para obter storage disponível (localStorage ou sessionStorage)
+  const getAvailableStorage = () => {
     try {
-      localStorage.setItem(PAYMENT_METHODS_CACHE_KEY, JSON.stringify(methods));
-      localStorage.setItem(CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION).toString());
-      console.log('💾 Métodos de pagamento salvos no cache:', methods);
+      // Testar localStorage primeiro
+      const testKey = '__storage_test__';
+      localStorage.setItem(testKey, 'test');
+      localStorage.removeItem(testKey);
+      console.log('💾 [SAFARI DEBUG] localStorage disponível');
+      return localStorage;
     } catch (error) {
-      console.warn('⚠️ Erro ao salvar cache:', error);
+      console.warn('⚠️ [SAFARI DEBUG] localStorage não disponível, usando sessionStorage:', error);
+      try {
+        const testKey = '__storage_test__';
+        sessionStorage.setItem(testKey, 'test');
+        sessionStorage.removeItem(testKey);
+        console.log('💾 [SAFARI DEBUG] sessionStorage disponível');
+        return sessionStorage;
+      } catch (sessionError) {
+        console.error('❌ [SAFARI DEBUG] Nenhum storage disponível:', sessionError);
+        return null;
+      }
     }
   };
 
-  // Função para carregar métodos do cache
+  // Função para salvar métodos no cache (com fallback para Safari)
+  const savePaymentMethodsToCache = (methods: PaymentMethod[]) => {
+    try {
+      const storage = getAvailableStorage();
+      if (!storage) {
+        console.warn('⚠️ [SAFARI DEBUG] Storage não disponível, não salvando cache');
+        return;
+      }
+
+      storage.setItem(PAYMENT_METHODS_CACHE_KEY, JSON.stringify(methods));
+      storage.setItem(CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION).toString());
+      console.log('💾 [SAFARI DEBUG] Métodos salvos no cache:', methods);
+    } catch (error) {
+      console.warn('⚠️ [SAFARI DEBUG] Erro ao salvar cache:', error);
+    }
+  };
+
+  // Função para carregar métodos do cache (com fallback para Safari)
   const loadPaymentMethodsFromCache = (): PaymentMethod[] | null => {
     try {
-      const cachedMethods = localStorage.getItem(PAYMENT_METHODS_CACHE_KEY);
-      const cacheExpiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+      const storage = getAvailableStorage();
+      if (!storage) {
+        console.log('📭 [SAFARI DEBUG] Storage não disponível');
+        return null;
+      }
+
+      const cachedMethods = storage.getItem(PAYMENT_METHODS_CACHE_KEY);
+      const cacheExpiry = storage.getItem(CACHE_EXPIRY_KEY);
       
       if (!cachedMethods || !cacheExpiry) {
-        console.log('📭 Cache vazio ou expirado');
+        console.log('📭 [SAFARI DEBUG] Cache vazio ou expirado');
         return null;
       }
 
       const expiryTime = parseInt(cacheExpiry);
       if (Date.now() > expiryTime) {
-        console.log('⏰ Cache expirado, removendo...');
-        localStorage.removeItem(PAYMENT_METHODS_CACHE_KEY);
-        localStorage.removeItem(CACHE_EXPIRY_KEY);
+        console.log('⏰ [SAFARI DEBUG] Cache expirado, removendo...');
+        storage.removeItem(PAYMENT_METHODS_CACHE_KEY);
+        storage.removeItem(CACHE_EXPIRY_KEY);
         return null;
       }
 
       const methods = JSON.parse(cachedMethods);
-      console.log('📦 Métodos carregados do cache:', methods);
+      console.log('📦 [SAFARI DEBUG] Métodos carregados do cache:', methods);
       return methods;
     } catch (error) {
-      console.warn('⚠️ Erro ao carregar cache:', error);
+      console.warn('⚠️ [SAFARI DEBUG] Erro ao carregar cache:', error);
       return null;
     }
   };
 
-  // Função para buscar métodos de pagamento com retry e cache
+  // Função para buscar métodos de pagamento com otimizações específicas para Safari
   const fetchPaymentMethods = async (retryCount = 0): Promise<void> => {
-    const maxRetries = 3;
-    const baseDelay = 1000; // 1 segundo
+    const safari = isSafari();
+    const maxRetries = safari ? 5 : 3; // Mais tentativas para Safari
+    const baseDelay = safari ? 2000 : 1000; // Delay maior para Safari
     
     try {
-      console.log(`🔄 Tentativa ${retryCount + 1}/${maxRetries + 1} - Buscando métodos de pagamento...`);
-      console.log('👤 User ID:', user?.id);
-      console.log('🌐 User Agent:', navigator.userAgent);
-      console.log('📱 Viewport:', `${window.innerWidth}x${window.innerHeight}`);
-      console.log('📲 useIsMobile hook:', isMobile);
+      console.log(`🔄 [SAFARI DEBUG] Tentativa ${retryCount + 1}/${maxRetries + 1} - Buscando métodos de pagamento...`);
+      console.log('👤 [SAFARI DEBUG] User ID:', user?.id);
+      console.log('🌐 [SAFARI DEBUG] User Agent:', navigator.userAgent);
+      console.log('📱 [SAFARI DEBUG] Viewport:', `${window.innerWidth}x${window.innerHeight}`);
+      console.log('📲 [SAFARI DEBUG] useIsMobile hook:', isMobile);
+      console.log('🦁 [SAFARI DEBUG] É Safari:', safari);
+      
+      // Verificar Private Browsing
+      const privateBrowsing = await isPrivateBrowsing();
+      console.log('🔒 [SAFARI DEBUG] Private Browsing:', privateBrowsing);
       
       // Verificar detecção mobile via User-Agent
       const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      console.log('📱 Mobile via User-Agent:', isMobileUA);
-      console.log('🔄 Comparação detecção mobile - Hook:', isMobile, 'vs User-Agent:', isMobileUA);
+      console.log('📱 [SAFARI DEBUG] Mobile via User-Agent:', isMobileUA);
+      console.log('🔄 [SAFARI DEBUG] Comparação detecção mobile - Hook:', isMobile, 'vs User-Agent:', isMobileUA);
 
       if (!user?.id) {
-        console.warn('⚠️ User ID não disponível, usando métodos padrão');
+        console.warn('⚠️ [SAFARI DEBUG] User ID não disponível, usando métodos padrão');
         return;
       }
 
       // Verificar status da conexão Supabase
-      console.log('🔗 Status Supabase:', supabase ? 'Conectado' : 'Desconectado');
+      console.log('🔗 [SAFARI DEBUG] Status Supabase:', supabase ? 'Conectado' : 'Desconectado');
       
       const startTime = Date.now();
+      
+      // Configurações específicas para Safari
+      const fetchOptions: any = {
+        signal: AbortSignal.timeout(safari ? 15000 : 10000), // Timeout maior para Safari
+      };
+
+      // Headers específicos para Safari/WebKit
+      if (safari) {
+        console.log('🦁 [SAFARI DEBUG] Aplicando configurações específicas para Safari');
+      }
       
       const { data, error } = await supabase
         .from('payment_methods')
@@ -798,14 +883,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
         .eq('active', true);
 
       const responseTime = Date.now() - startTime;
-      console.log(`⏱️ Tempo de resposta: ${responseTime}ms`);
+      console.log(`⏱️ [SAFARI DEBUG] Tempo de resposta: ${responseTime}ms`);
 
       if (error) {
-        console.error('❌ Erro detalhado na busca:', {
+        console.error('❌ [SAFARI DEBUG] Erro detalhado na busca:', {
           message: error.message,
           details: error.details,
           hint: error.hint,
-          code: error.code
+          code: error.code,
+          safari: safari
         });
         throw error;
       }
@@ -817,35 +903,44 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItem
           active: method.active
         }));
         
-        console.log('✅ Métodos encontrados:', methods);
+        console.log('✅ [SAFARI DEBUG] Métodos encontrados:', methods);
         setPaymentMethods(methods);
         
-        // Salvar no cache
+        // Salvar no cache (com fallback para Safari)
         savePaymentMethodsToCache(methods);
       } else {
-        console.log('📝 Nenhum método personalizado encontrado, mantendo padrões');
+        console.log('📝 [SAFARI DEBUG] Nenhum método personalizado encontrado, mantendo padrões');
       }
 
     } catch (error) {
-      console.error(`❌ Erro na tentativa ${retryCount + 1}:`, error);
+      console.error(`❌ [SAFARI DEBUG] Erro na tentativa ${retryCount + 1}:`, error);
+      
+      // Verificar se é erro específico do Safari
+      if (safari && error instanceof Error) {
+        console.error('🦁 [SAFARI DEBUG] Erro específico do Safari:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       
       if (retryCount < maxRetries) {
         const delay = baseDelay * Math.pow(2, retryCount); // Backoff exponencial
-        console.log(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`);
+        console.log(`⏳ [SAFARI DEBUG] Aguardando ${delay}ms antes da próxima tentativa...`);
         
         setTimeout(() => {
           fetchPaymentMethods(retryCount + 1);
         }, delay);
       } else {
-        console.error('💥 Erro crítico após todas as tentativas:', error);
+        console.error('💥 [SAFARI DEBUG] Erro crítico após todas as tentativas:', error);
         
         // Tentar carregar do cache como último recurso
         const cachedMethods = loadPaymentMethodsFromCache();
         if (cachedMethods && cachedMethods.length > 0) {
-          console.log('🔄 Usando métodos do cache como fallback');
+          console.log('🔄 [SAFARI DEBUG] Usando métodos do cache como fallback');
           setPaymentMethods(cachedMethods);
         } else {
-          console.log('🔧 Usando métodos padrão como fallback final');
+          console.log('🔧 [SAFARI DEBUG] Usando métodos padrão como fallback final');
           // Métodos padrão já estão definidos no useState inicial
         }
       }
