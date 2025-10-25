@@ -76,78 +76,173 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<any>(null);
 
+  // Implementar fallback robusto sempre disponível
+  const getDefaultPaymentMethods = () => {
+    return [
+      { id: 'pix', name: 'PIX', extra_fee_percent: 0, is_card: false },
+      { id: 'dinheiro', name: 'Dinheiro', extra_fee_percent: 0, is_card: false },
+      { id: 'cartao', name: 'Cartão', extra_fee_percent: 3, is_card: true }
+    ];
+  };
+
+  // Inicializar com métodos padrão imediatamente
+  useEffect(() => {
+    console.log('🔄 [MOBILE DEBUG] Inicializando com métodos padrão...');
+    const defaultMethods = getDefaultPaymentMethods();
+    setPaymentMethods(defaultMethods);
+    setSelectedPaymentMethod(defaultMethods[0]);
+    setPaymentMethod('PIX');
+    console.log('✅ [MOBILE DEBUG] Métodos padrão definidos:', defaultMethods);
+  }, []);
+
   useEffect(() => {
     if (isOpen && userId) {
       const fetchPaymentMethods = async () => {
-        try {
-          console.log('🔄 [MOBILE DEBUG] Buscando métodos de pagamento para userId:', userId);
-          console.log('🔄 [MOBILE DEBUG] User Agent:', navigator.userAgent);
-          console.log('🔄 [MOBILE DEBUG] Viewport:', window.innerWidth, 'x', window.innerHeight);
-          console.log('🔄 [MOBILE DEBUG] useIsMobile hook:', isMobile);
-          
-          const { data, error } = await supabase
-            .from('payment_methods')
-            .select('*')
-            .eq('user_id', userId)
-            .order('name');
-          
-          if (error) {
-            console.error('❌ [MOBILE DEBUG] Erro ao buscar métodos de pagamento:', error);
-            console.error('❌ [MOBILE DEBUG] Detalhes do erro:', {
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-              code: error.code
-            });
-            setPaymentMethods([]);
-            return;
-          }
-          
-          if (data && data.length > 0) {
-            console.log('✅ [MOBILE DEBUG] Métodos de pagamento encontrados:', data.length);
-            console.log('✅ [MOBILE DEBUG] Dados:', data);
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        const attemptFetch = async (): Promise<void> => {
+          try {
+            console.log('🔄 [MOBILE DEBUG] === INÍCIO FETCH PAYMENT METHODS ===');
+            console.log('🔄 [MOBILE DEBUG] Tentativa:', retryCount + 1, 'de', maxRetries + 1);
+            console.log('🔄 [MOBILE DEBUG] Buscando métodos de pagamento para userId:', userId);
+            console.log('🔄 [MOBILE DEBUG] User Agent:', navigator.userAgent);
+            console.log('🔄 [MOBILE DEBUG] Viewport:', window.innerWidth, 'x', window.innerHeight);
+            console.log('🔄 [MOBILE DEBUG] useIsMobile hook:', isMobile);
+            console.log('🔄 [MOBILE DEBUG] isOpen:', isOpen);
+            console.log('🔄 [MOBILE DEBUG] Supabase client:', !!supabase);
+            console.log('🔄 [MOBILE DEBUG] Connection status:', navigator.onLine);
             
-            // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
-            const mapped = data.map((m: any) => ({
-              ...m,
-              extra_fee_percent: m.extra_fee_percent ?? 0,
-              is_card: m.is_card ?? false
-            }));
+            // Testar se User-Agent mobile afeta requests
+            const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            console.log('🔄 [MOBILE DEBUG] User-Agent detectado como mobile:', isMobileUserAgent);
+            console.log('🔄 [MOBILE DEBUG] Hook useIsMobile:', isMobile);
+            console.log('🔄 [MOBILE DEBUG] Comparação User-Agent vs Hook:', isMobileUserAgent === isMobile);
             
-            setPaymentMethods(mapped);
-            setSelectedPaymentMethod(mapped[0] || null);
+            // Testar conexão com Supabase primeiro
+            console.log('🔄 [MOBILE DEBUG] Testando conexão com Supabase...');
+            const startTime = Date.now();
             
-            // Definir método de pagamento padrão se não estiver definido
-            if (!paymentMethod && mapped.length > 0) {
-              setPaymentMethod(mapped[0].name);
+            // Adicionar headers específicos para testar se User-Agent afeta
+            const { data, error } = await supabase
+              .from('payment_methods')
+              .select('*')
+              .eq('user_id', userId)
+              .order('name');
+            
+            const endTime = Date.now();
+            console.log('🔄 [MOBILE DEBUG] Tempo de resposta:', endTime - startTime, 'ms');
+            
+            if (error) {
+              console.error('❌ [MOBILE DEBUG] Erro ao buscar métodos de pagamento:', error);
+              console.error('❌ [MOBILE DEBUG] Detalhes do erro:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+              });
+              console.error('❌ [MOBILE DEBUG] Stack trace:', error.stack);
+              
+              // Implementar retry automático
+              if (retryCount < maxRetries) {
+                retryCount++;
+                const retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+                console.log(`🔄 [MOBILE DEBUG] Tentando novamente em ${retryDelay}ms (tentativa ${retryCount + 1}/${maxRetries + 1})`);
+                
+                setTimeout(() => {
+                  attemptFetch();
+                }, retryDelay);
+                return;
+              } else {
+                console.log('🔄 [MOBILE DEBUG] Máximo de tentativas atingido, mantendo métodos padrão');
+                // Manter métodos padrão já definidos
+                return;
+              }
             }
-          } else {
-            console.log('⚠️ [MOBILE DEBUG] Nenhum método de pagamento encontrado, usando padrões');
-            setPaymentMethods([]);
-            setSelectedPaymentMethod(null);
-            // Definir PIX como padrão se não houver métodos personalizados
-            if (!paymentMethod) {
-              setPaymentMethod('pix');
+            
+            console.log('✅ [MOBILE DEBUG] Resposta recebida do Supabase');
+            console.log('✅ [MOBILE DEBUG] Data type:', typeof data);
+            console.log('✅ [MOBILE DEBUG] Data is array:', Array.isArray(data));
+            console.log('✅ [MOBILE DEBUG] Data length:', data?.length);
+            console.log('✅ [MOBILE DEBUG] Raw data:', JSON.stringify(data, null, 2));
+            
+            if (data && data.length > 0) {
+              console.log('✅ [MOBILE DEBUG] Métodos de pagamento encontrados:', data.length);
+              console.log('✅ [MOBILE DEBUG] Processando dados...');
+              
+              // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
+              const mapped = data.map((m: any, index: number) => {
+                console.log(`✅ [MOBILE DEBUG] Processando método ${index + 1}:`, m);
+                return {
+                  ...m,
+                  extra_fee_percent: m.extra_fee_percent ?? 0,
+                  is_card: m.is_card ?? false
+                };
+              });
+              
+              console.log('✅ [MOBILE DEBUG] Métodos mapeados:', JSON.stringify(mapped, null, 2));
+              
+              // Substituir métodos padrão pelos personalizados
+              setPaymentMethods(mapped);
+              setSelectedPaymentMethod(mapped[0] || null);
+              
+              console.log('✅ [MOBILE DEBUG] Estado atualizado - paymentMethods length:', mapped.length);
+              console.log('✅ [MOBILE DEBUG] Estado atualizado - selectedPaymentMethod:', mapped[0]);
+              
+              // Definir método de pagamento padrão se não estiver definido
+              if (mapped.length > 0) {
+                setPaymentMethod(mapped[0].name);
+                console.log('✅ [MOBILE DEBUG] PaymentMethod definido como:', mapped[0].name);
+              }
+            } else {
+              console.log('⚠️ [MOBILE DEBUG] Nenhum método de pagamento encontrado no banco');
+              console.log('⚠️ [MOBILE DEBUG] Mantendo métodos padrão');
+              // Métodos padrão já estão definidos, não precisa fazer nada
+            }
+            
+            console.log('🔄 [MOBILE DEBUG] === FIM FETCH PAYMENT METHODS ===');
+            
+          } catch (error) {
+            console.error('💥 [MOBILE DEBUG] Erro crítico ao buscar métodos de pagamento:', error);
+            console.error('💥 [MOBILE DEBUG] Error type:', typeof error);
+            console.error('💥 [MOBILE DEBUG] Error constructor:', error?.constructor?.name);
+            console.error('💥 [MOBILE DEBUG] Error message:', error?.message);
+            console.error('💥 [MOBILE DEBUG] Error stack:', error?.stack);
+            
+            // Implementar retry automático para erros críticos
+            if (retryCount < maxRetries) {
+              retryCount++;
+              const retryDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+              console.log(`🔄 [MOBILE DEBUG] Erro crítico - Tentando novamente em ${retryDelay}ms (tentativa ${retryCount + 1}/${maxRetries + 1})`);
+              
+              setTimeout(() => {
+                attemptFetch();
+              }, retryDelay);
+              return;
+            } else {
+              console.log('🔄 [MOBILE DEBUG] Máximo de tentativas atingido após erro crítico, mantendo métodos padrão');
+              // Manter métodos padrão já definidos
             }
           }
-        } catch (error) {
-          console.error('💥 [MOBILE DEBUG] Erro crítico ao buscar métodos de pagamento:', error);
-          setPaymentMethods([]);
-          setSelectedPaymentMethod(null);
-          // Fallback para PIX em caso de erro
-          if (!paymentMethod) {
-            setPaymentMethod('pix');
-          }
+        };
+        
+        console.log('🔄 [MOBILE DEBUG] Verificando se é mobile para aplicar delay...');
+        console.log('🔄 [MOBILE DEBUG] isMobile:', isMobile);
+        
+        // Usar hook useIsMobile em vez de window.innerWidth
+        if (isMobile) {
+          console.log('📱 [MOBILE DEBUG] Detectado dispositivo móvel via hook, adicionando delay de 100ms');
+          setTimeout(() => {
+            console.log('📱 [MOBILE DEBUG] Delay concluído, executando fetchPaymentMethods');
+            attemptFetch();
+          }, 100);
+        } else {
+          console.log('🖥️ [MOBILE DEBUG] Detectado desktop, executando fetchPaymentMethods imediatamente');
+          attemptFetch();
         }
       };
       
-      // Usar hook useIsMobile em vez de window.innerWidth
-      if (isMobile) {
-        console.log('📱 [MOBILE DEBUG] Detectado dispositivo móvel via hook, adicionando delay');
-        setTimeout(fetchPaymentMethods, 100);
-      } else {
-        fetchPaymentMethods();
-      }
+      fetchPaymentMethods();
     }
   }, [isOpen, userId, isMobile]);
 
@@ -609,4 +704,153 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 };
 
 export default CheckoutModal;
+
+
+const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cartItems, onOrderComplete }) => {
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
+    { id: 'pix', name: 'PIX', active: true },
+    { id: 'dinheiro', name: 'Dinheiro', active: true },
+    { id: 'cartao', name: 'Cartão', active: true }
+  ]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const isMobile = useIsMobile();
+
+  // Cache key para localStorage
+  const PAYMENT_METHODS_CACHE_KEY = 'boracume_payment_methods';
+  const CACHE_EXPIRY_KEY = 'boracume_payment_methods_expiry';
+  const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 horas em milliseconds
+
+  // Função para salvar métodos no cache
+  const savePaymentMethodsToCache = (methods: PaymentMethod[]) => {
+    try {
+      localStorage.setItem(PAYMENT_METHODS_CACHE_KEY, JSON.stringify(methods));
+      localStorage.setItem(CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION).toString());
+      console.log('💾 Métodos de pagamento salvos no cache:', methods);
+    } catch (error) {
+      console.warn('⚠️ Erro ao salvar cache:', error);
+    }
+  };
+
+  // Função para carregar métodos do cache
+  const loadPaymentMethodsFromCache = (): PaymentMethod[] | null => {
+    try {
+      const cachedMethods = localStorage.getItem(PAYMENT_METHODS_CACHE_KEY);
+      const cacheExpiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+      
+      if (!cachedMethods || !cacheExpiry) {
+        console.log('📭 Cache vazio ou expirado');
+        return null;
+      }
+
+      const expiryTime = parseInt(cacheExpiry);
+      if (Date.now() > expiryTime) {
+        console.log('⏰ Cache expirado, removendo...');
+        localStorage.removeItem(PAYMENT_METHODS_CACHE_KEY);
+        localStorage.removeItem(CACHE_EXPIRY_KEY);
+        return null;
+      }
+
+      const methods = JSON.parse(cachedMethods);
+      console.log('📦 Métodos carregados do cache:', methods);
+      return methods;
+    } catch (error) {
+      console.warn('⚠️ Erro ao carregar cache:', error);
+      return null;
+    }
+  };
+
+  // Função para buscar métodos de pagamento com retry e cache
+  const fetchPaymentMethods = async (retryCount = 0): Promise<void> => {
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 segundo
+    
+    try {
+      console.log(`🔄 Tentativa ${retryCount + 1}/${maxRetries + 1} - Buscando métodos de pagamento...`);
+      console.log('👤 User ID:', user?.id);
+      console.log('🌐 User Agent:', navigator.userAgent);
+      console.log('📱 Viewport:', `${window.innerWidth}x${window.innerHeight}`);
+      console.log('📲 useIsMobile hook:', isMobile);
+      
+      // Verificar detecção mobile via User-Agent
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log('📱 Mobile via User-Agent:', isMobileUA);
+      console.log('🔄 Comparação detecção mobile - Hook:', isMobile, 'vs User-Agent:', isMobileUA);
+
+      if (!user?.id) {
+        console.warn('⚠️ User ID não disponível, usando métodos padrão');
+        return;
+      }
+
+      // Verificar status da conexão Supabase
+      console.log('🔗 Status Supabase:', supabase ? 'Conectado' : 'Desconectado');
+      
+      const startTime = Date.now();
+      
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('active', true);
+
+      const responseTime = Date.now() - startTime;
+      console.log(`⏱️ Tempo de resposta: ${responseTime}ms`);
+
+      if (error) {
+        console.error('❌ Erro detalhado na busca:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const methods = data.map(method => ({
+          id: method.id,
+          name: method.name,
+          active: method.active
+        }));
+        
+        console.log('✅ Métodos encontrados:', methods);
+        setPaymentMethods(methods);
+        
+        // Salvar no cache
+        savePaymentMethodsToCache(methods);
+      } else {
+        console.log('📝 Nenhum método personalizado encontrado, mantendo padrões');
+      }
+
+    } catch (error) {
+      console.error(`❌ Erro na tentativa ${retryCount + 1}:`, error);
+      
+      if (retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount); // Backoff exponencial
+        console.log(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`);
+        
+        setTimeout(() => {
+          fetchPaymentMethods(retryCount + 1);
+        }, delay);
+      } else {
+        console.error('💥 Erro crítico após todas as tentativas:', error);
+        
+        // Tentar carregar do cache como último recurso
+        const cachedMethods = loadPaymentMethodsFromCache();
+        if (cachedMethods && cachedMethods.length > 0) {
+          console.log('🔄 Usando métodos do cache como fallback');
+          setPaymentMethods(cachedMethods);
+        } else {
+          console.log('🔧 Usando métodos padrão como fallback final');
+          // Métodos padrão já estão definidos no useState inicial
+        }
+      }
+    }
+  };
+
+  // ... existing code ...
 
