@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-<<<<<<< HEAD
   build: {
     target: 'esnext',
     sourcemap: false,
@@ -39,6 +38,4 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', '@supabase/supabase-js']
   }
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 }));
