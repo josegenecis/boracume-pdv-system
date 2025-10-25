@@ -2,17 +2,13 @@
   "name": "vite_react_shadcn_ts",
   "private": true,
   "version": "0.0.0",
-<<<<<<< HEAD
   "description": "BoraCumê - Sistema de gestão para estabelecimentos alimentícios",
   "author": "BoraCumê Team",
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-<<<<<<< HEAD
     "build:prod": "vite build --mode production",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -24,10 +20,6 @@
     "dist:electron": "npm run build && electron-builder --publish=never",
     "pack:electron": "electron-builder --dir",
     "build:desktop-portable": "node build-desktop-portable.cjs"
-=======
-    "lint": "eslint .",
-    "preview": "vite preview"
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^7.1.1",
