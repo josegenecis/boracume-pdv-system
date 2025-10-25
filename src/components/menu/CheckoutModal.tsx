@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation, CheckCircle } from 'lucide-react';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { supabase } from '@/integrations/supabase/client';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CartItem {
   id: string;
@@ -82,6 +83,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           console.log('🔄 [MOBILE DEBUG] Buscando métodos de pagamento para userId:', userId);
           console.log('🔄 [MOBILE DEBUG] User Agent:', navigator.userAgent);
           console.log('🔄 [MOBILE DEBUG] Viewport:', window.innerWidth, 'x', window.innerHeight);
+          console.log('🔄 [MOBILE DEBUG] useIsMobile hook:', isMobile);
           
           const { data, error } = await supabase
             .from('payment_methods')
@@ -139,16 +141,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }
       };
       
-      // Adicionar delay para mobile para garantir que a UI esteja pronta
-      const isMobile = window.innerWidth <= 768;
+      // Usar hook useIsMobile em vez de window.innerWidth
       if (isMobile) {
-        console.log('📱 [MOBILE DEBUG] Detectado dispositivo móvel, adicionando delay');
+        console.log('📱 [MOBILE DEBUG] Detectado dispositivo móvel via hook, adicionando delay');
         setTimeout(fetchPaymentMethods, 100);
       } else {
         fetchPaymentMethods();
       }
     }
-  }, [isOpen, userId]);
+  }, [isOpen, userId, isMobile]);
 
   useEffect(() => {
     if (paymentMethods.length > 0) {

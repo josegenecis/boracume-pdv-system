@@ -63,6 +63,75 @@
   min-width: 44px;
 }
 
+/* RadioGroup Mobile Fixes */
+@media (max-width: 768px) {
+  /* Garantir que RadioGroup seja visível em mobile */
+  [role="radiogroup"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Garantir que RadioGroupItem seja visível */
+  [role="radio"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    min-height: 20px !important;
+    min-width: 20px !important;
+    position: relative !important;
+  }
+  
+  /* Labels dos RadioGroup devem ser clicáveis e visíveis */
+  [role="radiogroup"] label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    padding: 0.75rem !important;
+    min-height: 48px !important;
+    cursor: pointer !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 0.5rem !important;
+    transition: all 0.2s ease !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Hover state para labels */
+  [role="radiogroup"] label:hover {
+    background-color: hsl(var(--accent)) !important;
+    border-color: hsl(var(--primary)) !important;
+  }
+  
+  /* Estado selecionado */
+  [role="radiogroup"] label:has([data-state="checked"]) {
+    background-color: hsl(var(--primary) / 0.05) !important;
+    border-color: hsl(var(--primary)) !important;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1) !important;
+  }
+  
+  /* Remover sr-only em mobile para garantir visibilidade */
+  [role="radiogroup"] .sr-only {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    white-space: normal !important;
+  }
+  
+  /* Garantir que o indicador do radio seja visível */
+  [role="radio"] [data-radix-radio-indicator] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
 /* Small Mobile (320px - 480px) */
 @media (max-width: 480px) {
   .order-card {
@@ -88,6 +157,18 @@
     min-height: 40px;
     font-size: 0.625rem;
     padding: 0.25rem 0.375rem;
+  }
+  
+  /* RadioGroup ainda mais específico para telas pequenas */
+  [role="radiogroup"] label {
+    min-height: 52px !important;
+    padding: 1rem !important;
+    font-size: 0.875rem !important;
+  }
+  
+  [role="radio"] {
+    min-height: 24px !important;
+    min-width: 24px !important;
   }
 }
 
