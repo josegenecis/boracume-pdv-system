@@ -2,18 +2,23 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@/components/ui/toaster';
+import { HelmetProvider } from 'react-helmet-async';
+import { Toaster } from '@/components/ui/sonner';
+import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
-import RouteGuard from '@/components/auth/RouteGuard';
+import { RouteGuard } from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
+import DebugPanel from '@/components/debug/DebugPanel';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
 import Signup from '@/pages/Signup';
+import LandingPage from '@/pages/LandingPage';
 import Dashboard from '@/pages/Dashboard';
+import DashboardSimple from '@/pages/DashboardSimple';
 import Products from '@/pages/Products';
 import Orders from '@/pages/Orders';
 import Kitchen from '@/pages/Kitchen';
@@ -35,6 +40,7 @@ import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
 import DesktopApp from '@/pages/DesktopApp';
 import { HardwareTestPage } from '@/pages/HardwareTestPage';
+import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import './App.css';
 import './styles/responsive.css';
@@ -52,6 +58,9 @@ function AppContent() {
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
       
+      {/* Landing Page - Rota pública */}
+      <Route path="/landing" element={<LandingPage />} />
+      
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
@@ -62,10 +71,11 @@ function AppContent() {
         <Route path="/desktop" element={<DesktopApp />} />
       </Route>
 
-      
+
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardSimple />} />
+          <Route path="/dashboard-full" element={<Dashboard />} />
           <Route path="/produtos" element={<Products />} />
           <Route path="/pedidos" element={<Orders />} />
           <Route path="/orders" element={<Navigate to="/pedidos" replace />} />
@@ -86,6 +96,7 @@ function AppContent() {
           <Route path="/cardapio" element={<Menu />} />
 
           <Route path="/hardware-test" element={<HardwareTestPage />} />
+          <Route path="/test" element={<TestPage />} />
 
         </Route>
       </Route>
@@ -113,18 +124,23 @@ function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <SubscriptionProvider>
-            <AppContent />
-            <GlobalNotificationSystem />
-            <SoundPermissionManager />
-            <Toaster />
+            <ThemeProvider defaultTheme="light" storageKey="boracume-ui-theme">
+              <Router>
+                <AppContent />
+                <GlobalNotificationSystem />
+                <SoundPermissionManager />
+                <DebugPanel />
+                <Toaster />
+              </Router>
+            </ThemeProvider>
           </SubscriptionProvider>
         </AuthProvider>
-      </Router>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 }
 

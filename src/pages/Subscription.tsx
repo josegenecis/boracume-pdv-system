@@ -19,7 +19,7 @@ const Subscription = () => {
 
   useEffect(() => {
     refreshSubscription();
-  }, [refreshSubscription]);
+  }, []); // Remove refreshSubscription from dependencies to avoid infinite loop
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';

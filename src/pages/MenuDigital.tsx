@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
@@ -12,73 +12,98 @@ import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
 
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  image?: string;
+}
+
 const MenuDigital = () => {
-  const { userId: paramUserId } = useParams();
-  const [searchParams] = useSearchParams();
-  const queryUserId = searchParams.get('u');
+  const { userId } = useParams();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const userIdFromQuery = queryParams.get('userId');
   
-  // Usar parâmetro da URL ou query parameter
-  const userId = paramUserId || queryUserId;
+  const finalUserId = userId || userIdFromQuery;
   
-  console.log('🚀 CARDÁPIO DIGITAL - INICIADO:', {
-    paramUserId,
-    queryUserId,
-    finalUserId: userId,
-    currentUrl: window.location.href,
-    expectedUrl: `${window.location.origin}/menu/{userId}`,
-    isCorrectUrl: window.location.pathname.includes('/menu/')
+  console.log('🔍 MenuDigital - Iniciando com userId:', finalUserId);
+  console.log('🔍 MenuDigital - URL atual:', window.location.href);
+  console.log('🔍 MenuDigital - Params:', { userId, userIdFromQuery });
+
+  const { 
+    products, 
+    categories, 
+    profile, 
+    deliveryZones, 
+    loading: menuLoading 
+  } = useMenuData(finalUserId);
+
+  console.log('🔍 MenuDigital - Estado do loading:', menuLoading);
+  console.log('🔍 MenuDigital - Dados carregados:', { 
+    products: products?.length, 
+    categories: categories?.length, 
+    profile: !!profile,
+    deliveryZones: deliveryZones?.length 
   });
 
-  if (!window.location.pathname.includes('/menu/')) {
-    console.warn('⚠️ CARDÁPIO DIGITAL - VOCÊ ESTÁ NA URL ERRADA!');
-    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
-    console.warn('⚠️ Não teste na área administrativa!');
-  }
-  
   const { toast } = useToast();
-  const [showCartModal, setShowCartModal] = useState(false);
-  const [showVariationModal, setShowVariationModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
-
-  // Custom hooks
-  const { products, categories, loading, profile, deliveryZones } = useMenuData(userId);
-  const { fetchVariations } = useSimpleVariations();
-  const {
-    cart,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    clearCart,
-    getCartTotal,
-    getCartItemCount
+  const { 
+    cart, 
+    addToCart, 
+    removeFromCart, 
+    updateQuantity, 
+    clearCart, 
+    getCartTotal, 
+    getCartItemCount 
   } = useSimpleCart();
-  
-  const handleProductClick = async (product: any) => {
-    console.log('🚀 CARDÁPIO DIGITAL - CLICK NO PRODUTO:', product.name, 'ID:', product.id);
+
+  const { fetchVariations } = useSimpleVariations();
+
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [showVariationModal, setShowVariationModal] = useState(false);
+  const [showCartModal, setShowCartModal] = useState(false);
+
+  const debugInfo = {
+    expectedUrl: `${window.location.origin}/menu/{userId}`,
+    isCorrectUrl: window.location.pathname.includes('/menu/')
+  };
+
+  if (!window.location.pathname.includes('/menu/')) {
+    console.log('⚠️ URL incorreta detectada:', debugInfo);
+    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
+  }
+
+  const handleProductClick = async (product: Product) => {
+    console.log('🔍 MenuDigital - Produto clicado:', product.name);
     
+    if (!finalUserId) {
+      console.error('❌ MenuDigital - userId não encontrado');
+      return;
+    }
+
     try {
-      console.log('🔄 CARDÁPIO DIGITAL - Buscando variações...');
+      console.log('🔄 MenuDigital - Buscando variações...');
       const variations = await fetchVariations(product.id);
       
-      console.log('📊 CARDÁPIO DIGITAL - Resultado busca variações:', {
+      console.log('📊 MenuDigital - Resultado busca variações:', {
         total: variations.length,
-        variações: variations.map(v => v.name)
+        variações: variations.map((v: any) => v.name)
       });
       
       // SEMPRE abrir modal de variações, mesmo se não houver variações
-      // Isso permite que o usuário ajuste quantidade e adicione observações
-      console.log('✅ CARDÁPIO DIGITAL - Abrindo modal de variações/detalhes...');
+      console.log('✅ MenuDigital - Abrindo modal de variações/detalhes...');
       
       setSelectedProduct(product);
       setShowVariationModal(true);
       
-      console.log('🔧 CARDÁPIO DIGITAL - Estados definidos:', {
+      console.log('🔧 MenuDigital - Estados definidos:', {
         selectedProduct: product.name,
         variationsCount: variations.length,
         modalAberto: true
       });
     } catch (error) {
-      console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações:', error);
+      console.error('❌ MenuDigital - Erro ao buscar variações:', error);
       // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
       setSelectedProduct(product);
       setShowVariationModal(true);
@@ -206,37 +231,47 @@ const MenuDigital = () => {
     }
   };
 
-  if (loading) {
+  if (menuLoading) {
+    console.log('🔄 MenuDigital - Ainda carregando dados...');
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-lg">Carregando cardápio...</p>
+          <p className="text-sm text-muted-foreground">userId: {finalUserId}</p>
+        </div>
       </div>
     );
   }
 
-  if (!userId) {
+  if (!finalUserId) {
+    console.log('❌ MenuDigital - userId não encontrado');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Link inválido</h1>
           <p className="text-muted-foreground">Verifique se o link está correto.</p>
+          <p className="text-sm text-gray-500 mt-2">URL: {window.location.href}</p>
         </div>
       </div>
     );
   }
 
   if (!profile) {
+    console.log('❌ MenuDigital - Profile não encontrado para userId:', finalUserId);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
           <p className="text-muted-foreground">Este restaurante pode não existir ou estar temporariamente indisponível.</p>
+          <p className="text-sm text-gray-500 mt-2">userId: {finalUserId}</p>
         </div>
       </div>
     );
   }
 
   if (products.length === 0) {
+    console.log('⚠️ MenuDigital - Nenhum produto encontrado para userId:', finalUserId);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -246,6 +281,8 @@ const MenuDigital = () => {
       </div>
     );
   }
+
+  console.log('✅ MenuDigital - Renderizando cardápio com sucesso');
 
   return (
     <div className="min-h-screen bg-white">
@@ -279,7 +316,7 @@ const MenuDigital = () => {
         onRemoveItem={removeFromCart}
         onPlaceOrder={handlePlaceOrder}
         deliveryZones={deliveryZones}
-        userId={userId}
+        userId={finalUserId}
       />
 
       {/* Carrinho Fixo */}

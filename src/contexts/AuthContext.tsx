@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
+import { debugLogger } from '@/utils/debugLogger';
+import { debugSystem, measurePerformance, debugLog } from '@/utils/debugSystem';
 
 import { 
   SessionCache, 
@@ -59,10 +61,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, restaurantName: string) => Promise<void>;
   refreshSubscription: () => Promise<void>;
-
   refreshUser: () => Promise<void>;
   syncGoogleUserData: (googleUser: any) => Promise<void>;
-
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,6 +75,10 @@ export const useAuth = () => {
   return context;
 };
 
+// Circuit breaker para evitar múltiplas inicializações
+let initializationInProgress = false;
+let initializationPromise: Promise<void> | null = null;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -83,210 +87,309 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // Refs para controle de debounce e cleanup
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const authSubscriptionRef = useRef<any>(null);
+  const isMountedRef = useRef(true);
+  const lastInitTimeRef = useRef<number>(0);
+
   useEffect(() => {
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Auth state changed:', event, session?.user?.email);
+    debugLogger.auth('provider_mounted', { timestamp: Date.now() });
+    
+    // Evitar múltiplas inicializações muito próximas - REDUZIDO para 100ms
+    const now = Date.now();
+    if (now - lastInitTimeRef.current < 100) {
+      debugLogger.auth('initialization_debounced', { 
+        timeSinceLastInit: now - lastInitTimeRef.current,
+        delay: 100 
+      }, 'warn');
       
-      if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-        setSession(session);
-        
-        // Log da criação de sessão OAuth
-        if (session.user.app_metadata?.provider === 'google') {
-          await logOAuthSessionCreated('google', session.user.id, session.user.email || '', {
-            sessionId: session.access_token.substring(0, 10) + '...',
-            expiresAt: session.expires_at
-          });
-        }
-        
-        // Salvar no cache
-        SessionCache.setSession(session);
-        UserCache.setUser(session.user);
-        
-        // Iniciar refresh automático de tokens
-        startTokenAutoRefresh(session);
-        
-        // Pré-carregar dados do usuário baseado no contexto
-        try {
-          const preloadedData = await preloadByContext(session.user, 'login');
-          
-          // Aplicar dados pré-carregados se disponíveis
-          if (preloadedData.profile) {
-            setProfile(preloadedData.profile);
-          } else {
-            await fetchProfile(session.user.id);
-          }
-          
-          if (preloadedData.subscription) {
-            setSubscription(preloadedData.subscription);
-          } else {
-            await fetchSubscription(session.user.id);
-          }
-          
-          // Iniciar pré-carregamento em background para próximas navegações
-          backgroundPreload(session.user.id);
-          
-        } catch (error) {
-          console.error('Erro no pré-carregamento:', error);
-          // Fallback para carregamento normal
-          await fetchProfile(session.user.id);
-          await fetchSubscription(session.user.id);
-        }
-        
-        // Limpar cache de sincronização se existir
-        SyncCache.clear();
-        
-      } else if (event === 'SIGNED_OUT') {
-        const currentUser = user;
-        
-        // Log da destruição de sessão OAuth
-        if (currentUser?.app_metadata?.provider === 'google') {
-          await logOAuthSessionDestroyed('google', currentUser.id, {
-            reason: 'user_signout'
-          });
-        }
-        
-        // Parar refresh automático de tokens
-        stopTokenAutoRefresh();
-        
-        setUser(null);
-        setSession(null);
-        setProfile(null);
-        setSubscription(null);
-        
-        // Limpar todos os caches
-        clearAllCache();
-
+      // Debounce REDUZIDO para 100ms
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
       }
       
-      setLoading(false);
-    });
-
-
-    // Auto-autenticação com cache ou sessão atual
-    const autoAuthWithCache = async () => {
-      try {
-        setLoading(true);
-        
-        // Verificar e renovar token se necessário
-        const validSession = await checkAndRefreshToken();
-        
-        if (validSession) {
-          // Tentar recuperar do cache primeiro
-          const cachedSession = SessionCache.getSession();
-          const cachedUser = UserCache.getUser();
-          const cachedProfile = ProfileCache.getProfile();
-          const cachedSubscription = SubscriptionCache.getSubscription();
-          
-          if (cachedSession && cachedUser && SessionCache.isSessionCacheValid()) {
-            console.log('📦 Restaurando sessão do cache');
-            setSession(validSession); // Usar sessão válida/renovada
-            setUser(validSession.user);
-            
-            if (cachedProfile) {
-              setProfile(cachedProfile);
-            }
-            
-            if (cachedSubscription) {
-              setSubscription(cachedSubscription);
-            }
-            
-            // Iniciar refresh automático
-            startTokenAutoRefresh(validSession);
-            
-            // Verificar se precisa sincronizar
-            if (SyncCache.shouldSync()) {
-              console.log('🔄 Sincronizando dados em background...');
-              try {
-                await fetchProfile(validSession.user.id);
-                await fetchSubscription(validSession.user.id);
-                SyncCache.setLastSync();
-              } catch (error) {
-                console.error('Erro na sincronização em background:', error);
-              }
-            }
-            
-            // Iniciar pré-carregamento em background
-            backgroundPreload(validSession.user.id);
-            
-            setLoading(false);
-            return;
-          }
-          
-          // Se não há cache válido, usar sessão renovada
-          SessionCache.setSession(validSession);
-          UserCache.setUser(validSession.user);
-          
-          setSession(validSession);
-          setUser(validSession.user);
-          
-          // Iniciar refresh automático
-          startTokenAutoRefresh(validSession);
-          
-          try {
-            // Usar pré-carregamento para dados iniciais
-            const preloadedData = await preloadByContext(validSession.user, 'login');
-            
-            if (preloadedData.profile) {
-              setProfile(preloadedData.profile);
-            } else {
-              await fetchProfile(validSession.user.id);
-            }
-            
-            if (preloadedData.subscription) {
-              setSubscription(preloadedData.subscription);
-            } else {
-              await fetchSubscription(validSession.user.id);
-            }
-            
-            SyncCache.setLastSync();
-            
-            // Iniciar pré-carregamento em background
-            backgroundPreload(validSession.user.id);
-            
-          } catch (error) {
-            console.error('Erro ao buscar dados do usuário:', error);
-            // Fallback para carregamento normal
-            await fetchProfile(validSession.user.id);
-            await fetchSubscription(validSession.user.id);
-          }
+      initTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !initializationInProgress) {
+          initializeAuth();
         }
-        
-        setLoading(false);
-      } catch (error) {
-        console.error('Erro na auto-autenticação:', error);
-        setLoading(false);
-      }
-    };
-
-    autoAuthWithCache();
+      }, 100);
+      return;
+    }
+    
+    lastInitTimeRef.current = now;
+    
+    // Inicialização imediata sem debounce desnecessário
+    if (isMountedRef.current && !initializationInProgress) {
+      initializeAuth();
+    }
 
     return () => {
-      subscription.unsubscribe();
-      stopTokenAutoRefresh(); // Limpar timer ao desmontar
-
+      debugLogger.auth('provider_cleanup', { timestamp: Date.now() });
+      isMountedRef.current = false;
+      
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+      
+      if (authSubscriptionRef.current) {
+        authSubscriptionRef.current.data.subscription.unsubscribe();
+      }
+      
+      stopTokenAutoRefresh();
     };
+  }, []); // Dependências vazias - executar apenas uma vez
+
+  const initializeAuth = async () => {
+    const performanceTracker = measurePerformance('AuthContext', 'initializeAuth');
+    
+    // Circuit breaker - evitar múltiplas inicializações simultâneas
+    if (initializationInProgress) {
+      debugLog('AuthContext', 'initialization_blocked', { 
+        hasPromise: !!initializationPromise,
+        reason: 'already_in_progress'
+      });
+      debugLogger.auth('initialization_already_in_progress', { 
+        hasPromise: !!initializationPromise 
+      }, 'warn');
+      if (initializationPromise) {
+        await initializationPromise;
+      }
+      performanceTracker.end({ status: 'blocked' });
+      return;
+    }
+
+    initializationInProgress = true;
+    debugLog('AuthContext', 'initializeAuth', { 
+      timestamp: Date.now(),
+      loading,
+      mounted: isMountedRef.current 
+    });
+    debugLogger.auth('initialization_started', { timestamp: Date.now() });
+
+    // Timeout de segurança REDUZIDO para 2 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (isMountedRef.current && loading) {
+        debugLogger.auth('safety_timeout_triggered', { 
+          timeout: 2000,
+          loading,
+          mounted: isMountedRef.current 
+        }, 'warn');
+        setLoading(false);
+        initializationInProgress = false;
+      }
+    }, 2000);
+
+    initializationPromise = (async () => {
+      try {
+        debugLogger.auth('checking_existing_session', { timestamp: Date.now() });
+        // Verificar e atualizar token se necessário antes de consultar a sessão
+        try {
+          await checkAndRefreshToken();
+        } catch (e: any) {
+          console.warn('⚠️ [AUTH] Falha ao verificar/atualizar token:', e?.message || e);
+        }
+        
+        // Verificação de sessão com timeout REDUZIDO para 1.5 segundos
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 1500)
+        );
+        
+        let sessionData: any = null;
+        
+        try {
+          sessionData = await Promise.race([sessionPromise, timeoutPromise]);
+        } catch (timeoutError) {
+          debugLogger.auth('session_check_timeout', { 
+            timeout: 2000,
+            error: timeoutError.message 
+          }, 'error');
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
+          return;
+        }
+        
+        const { data: { session }, error } = sessionData;
+        
+        if (error) {
+          debugLogger.auth('session_check_error', { error: error.message }, 'error');
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (session?.user && isMountedRef.current) {
+          debugLogger.auth('session_found', { 
+            userId: session.user.id,
+            email: session.user.email 
+          });
+          setUser(session.user);
+          setSession(session);
+          // Iniciar auto-refresh de token para evitar expiração silenciosa
+          try {
+            startTokenAutoRefresh(session);
+          } catch (e: any) {
+            console.warn('⚠️ [AUTH] Falha ao iniciar auto-refresh:', e?.message || e);
+          }
+          
+          // Carregar dados do usuário em background - NÃO BLOQUEAR
+          loadUserDataInBackground(session.user.id);
+        } else {
+          console.log('ℹ️ [AUTH] Nenhuma sessão encontrada');
+        }
+        
+        if (isMountedRef.current) {
+          setLoading(false);
+          clearTimeout(safetyTimeout);
+        }
+
+        // Configurar listener de mudanças de auth - APENAS UMA VEZ
+        if (!authSubscriptionRef.current) {
+          authSubscriptionRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (!isMountedRef.current) return;
+            
+            console.log('🔄 [AUTH] Auth state changed:', event, session?.user?.email);
+            
+            if (event === 'SIGNED_IN' && session?.user) {
+              console.log('✅ [AUTH] SIGNED_IN - Processando nova autenticação');
+              setUser(session.user);
+              setSession(session);
+              // Reiniciar auto-refresh quando um novo login ocorrer
+              try {
+                startTokenAutoRefresh(session);
+              } catch (e: any) {
+                console.warn('⚠️ [AUTH] Falha ao reiniciar auto-refresh:', e?.message || e);
+              }
+              loadUserDataInBackground(session.user.id);
+              
+            } else if (event === 'SIGNED_OUT') {
+              console.log('🚪 [AUTH] SIGNED_OUT - Limpando dados');
+              setUser(null);
+              setSession(null);
+              setProfile(null);
+              setSubscription(null);
+              stopTokenAutoRefresh();
+            }
+          });
+        }
+
+      } catch (error) {
+        console.error('❌ [AUTH] Erro na inicialização:', error);
+        debugLog('AuthContext', 'initialization_error', { 
+          error: error.message,
+          mounted: isMountedRef.current 
+        });
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
+      } finally {
+        initializationInProgress = false;
+        initializationPromise = null;
+        clearTimeout(safetyTimeout);
+        performanceTracker.end({ 
+          status: 'completed',
+          hasUser: !!user,
+          hasSession: !!session 
+        });
+        debugLog('AuthContext', 'initialization_completed', {
+          hasUser: !!user,
+          hasSession: !!session,
+          loading
+        });
+        console.log('🔍 [AUTH] === FIM INICIALIZAÇÃO AUTH ===');
+      }
+    })();
+
+    await initializationPromise;
+  };
+
+  // Função otimizada para carregar dados do usuário em background
+  const loadUserDataInBackground = useCallback(async (userId: string) => {
+    try {
+      console.log('📊 [AUTH] Carregando dados do usuário em background...');
+      
+      // Carregar em paralelo com timeout REDUZIDO para 1.5 segundos
+      const profilePromise = fetchProfileWithTimeout(userId, 1500);
+      const subscriptionPromise = fetchSubscriptionWithTimeout(userId, 1500);
+      
+      const [profileResult, subscriptionResult] = await Promise.allSettled([
+        profilePromise,
+        subscriptionPromise
+      ]);
+      
+      if (profileResult.status === 'fulfilled') {
+        console.log('✅ [AUTH] Perfil carregado');
+      } else {
+        console.error('❌ [AUTH] Erro ao carregar perfil:', profileResult.reason);
+      }
+      
+      if (subscriptionResult.status === 'fulfilled') {
+        console.log('✅ [AUTH] Assinatura carregada');
+      } else {
+        console.error('❌ [AUTH] Erro ao carregar assinatura:', subscriptionResult.reason);
+      }
+      
+    } catch (error) {
+      console.error('❌ [AUTH] Erro no carregamento em background:', error);
+    }
   }, []);
+
+  const fetchProfileWithTimeout = async (userId: string, timeout: number = 1500) => {
+    const profilePromise = supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento do perfil')), timeout)
+    );
+    
+    const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+    
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    
+    if (data && isMountedRef.current) {
+      setProfile(data);
+      ProfileCache.setProfile(data);
+    }
+    
+    return data;
+  };
+
+  const fetchSubscriptionWithTimeout = async (userId: string, timeout: number = 1500) => {
+    const subscriptionPromise = supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento da assinatura')), timeout)
+    );
+    
+    const { data, error } = await Promise.race([subscriptionPromise, timeoutPromise]) as any;
+    
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+    
+    if (data && isMountedRef.current) {
+      setSubscription(data);
+      SubscriptionCache.setSubscription(data);
+    }
+    
+    return data;
+  };
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
-      } else {
-        setProfile(data);
-
-        if (data) {
-          ProfileCache.setProfile(data); // Salvar no cache
-        }
-
-      }
+      await fetchProfileWithTimeout(userId);
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
@@ -294,22 +397,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchSubscription = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching subscription:', error);
-      } else {
-        setSubscription(data);
-
-        if (data) {
-          SubscriptionCache.setSubscription(data); // Salvar no cache
-        }
-
-      }
+      await fetchSubscriptionWithTimeout(userId);
     } catch (error) {
       console.error('Error fetching subscription:', error);
     }
@@ -369,24 +457,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             restaurant_name: restaurantName,
-          },
-          emailRedirectTo: redirectUrl
-        },
+          }
+        }
       });
 
       if (error) {
         let errorMessage = 'Erro ao criar conta. Tente novamente.';
         
         if (error.message.includes('User already registered')) {
-          errorMessage = 'Este email já está cadastrado. Tente fazer login ou use outro email.';
+          errorMessage = 'Este email já está cadastrado. Tente fazer login.';
         } else if (error.message.includes('Password should be at least')) {
           errorMessage = 'A senha deve ter pelo menos 6 caracteres.';
         } else if (error.message.includes('Invalid email')) {
-          errorMessage = 'Email inválido. Verifique o formato do email.';
-        } else if (error.message.includes('signup is disabled')) {
-          errorMessage = 'Cadastro temporariamente desabilitado. Tente novamente mais tarde.';
+          errorMessage = 'Email inválido. Verifique o formato.';
         }
 
         toast({
@@ -394,25 +480,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: errorMessage,
           variant: "destructive",
         });
+        
+        await logSecurityEvent('failed_signup', `Failed signup for ${email}: ${error.message}`, 'medium');
         throw error;
       }
 
-      // Verificar se o usuário foi criado com sucesso
-      if (data?.user) {
+      if (data.user && !data.user.email_confirmed_at) {
         toast({
           title: "Conta criada com sucesso!",
-          description: "Bem-vindo ao BoraCumê! Redirecionando...",
+          description: "Verifique seu email para confirmar a conta antes de fazer login.",
         });
         
-        // Usando a função específica para signup que evita o erro de tipo
-        await logSignupEvent(email);
-        
-        // Aguardar um pouco para permitir que o trigger seja executado
-        setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 1000);
-      } else {
-        throw new Error('Falha ao criar usuário');
+        await logSignupEvent(email, restaurantName, 'pending_confirmation');
       }
       
     } catch (error) {
@@ -426,143 +505,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setLoading(true);
-      const currentUser = user?.email;
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await supabase.auth.signOut();
       
+      // Limpar cache
+      clearAllCache();
+      
+      // Resetar estados
+      setUser(null);
+      setSession(null);
       setProfile(null);
       setSubscription(null);
       
-      // Log the logout event with the user email before clearing state
-      if (currentUser) {
-        await logSecurityEvent('logout', `User logged out: ${currentUser}`, 'low');
-      }
     } catch (error) {
       console.error('Error signing out:', error);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-
-  // Função para atualizar dados do usuário
   const refreshUser = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setSession(session);
-        setUser(session.user);
-        await fetchProfile(session.user.id);
-        await fetchSubscription(session.user.id);
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar dados do usuário:', error);
+    if (user) {
+      await loadUserDataInBackground(user.id);
     }
   };
 
-  // Função para sincronizar dados do usuário Google
-  const syncGoogleUserData = async (user: User): Promise<void> => {
+  const syncGoogleUserData = async (googleUser: any) => {
     try {
-      console.log('🔄 Sincronizando dados do usuário Google:', user.email);
+      console.log('🔄 Sincronizando dados do Google User...');
       
-      // Validar dados do usuário
-      const userValidation = validateOAuthUser(user);
-      if (!userValidation.isValid) {
-        console.error('❌ Dados do usuário inválidos:', userValidation.errors);
-        throw new Error(`Dados do usuário inválidos: ${userValidation.errors.join(', ')}`);
+      if (!validateOAuthUser(googleUser)) {
+        throw new Error('Dados do usuário Google inválidos');
       }
 
-      // Verificar se o perfil já existe
-      const { data: existingProfile, error: fetchError } = await supabase
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Verificar se já existe perfil
+      const { data: existingProfile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('❌ Erro ao buscar perfil existente:', fetchError);
-        throw fetchError;
-      }
+        .maybeSingle();
 
       const profileData = {
         id: user.id,
-        email: user.email || '',
-        name: user.user_metadata?.full_name || user.user_metadata?.name || '',
-        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        provider: 'google',
+        email: googleUser.email,
+        restaurant_name: existingProfile?.restaurant_name || googleUser.name || 'Meu Restaurante',
         updated_at: new Date().toISOString()
       };
 
-      // Validar dados do perfil
-      const profileValidation = validateProfileData(profileData);
-      if (!profileValidation.isValid) {
-        console.error('❌ Dados do perfil inválidos:', profileValidation.errors);
-        throw new Error(`Dados do perfil inválidos: ${profileValidation.errors.join(', ')}`);
+      if (!validateProfileData(profileData)) {
+        throw new Error('Dados do perfil inválidos');
       }
 
-      let result;
-      if (existingProfile) {
-        // Atualizar perfil existente
-        const { data, error } = await supabase
-          .from('profiles')
-          .update(profileData)
-          .eq('id', user.id)
-          .select()
-          .single();
-        
-        result = { data, error };
-        console.log('✅ Perfil atualizado:', data);
-      } else {
-        // Criar novo perfil
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert([profileData])
-          .select()
-          .single();
-        
-        result = { data, error };
-        console.log('✅ Novo perfil criado:', data);
-      }
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(profileData);
 
-      if (result.error) {
-        console.error('❌ Erro ao sincronizar perfil:', result.error);
-        
-        // Log da falha na sincronização
-        await logOAuthUserSync('google', user.id, user.email || '', false, {
-          error: result.error.message,
-          operation: existingProfile ? 'update' : 'create'
-        });
-        
-        throw result.error;
+      if (profileError) {
+        console.error('Erro ao sincronizar perfil:', profileError);
+        throw profileError;
       }
 
       // Atualizar estado local
-      setProfile(result.data);
-      
-      // Log do sucesso da sincronização
-      await logOAuthUserSync('google', user.id, user.email || '', true, {
-        operation: existingProfile ? 'update' : 'create',
-        profileData: {
-          name: profileData.name,
-          hasAvatar: !!profileData.avatar_url
-        }
-      });
+      setProfile(profileData as Profile);
+      ProfileCache.setProfile(profileData);
 
-      console.log('✅ Dados do usuário Google sincronizados com sucesso');
+      await logOAuthUserSync(user.id, 'google', 'success');
+      console.log('✅ Dados do Google User sincronizados com sucesso');
       
-    } catch (error: any) {
-      console.error('❌ Erro na sincronização de dados do Google:', error);
-      
-      // Log da falha na sincronização
-      await logOAuthUserSync('google', user.id, user.email || '', false, {
-        error: error.message,
-        stack: error.stack
-      });
-      
+    } catch (error) {
+      console.error('❌ Erro na sincronização do Google User:', error);
+      if (user) {
+        await logOAuthUserSync(user.id, 'google', 'error', error instanceof Error ? error.message : 'Unknown error');
+      }
       throw error;
     }
   };
-
 
   const value = {
     user,
@@ -575,11 +598,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn,
     signUp,
     refreshSubscription,
-
     refreshUser,
     syncGoogleUserData,
-
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

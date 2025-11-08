@@ -17,7 +17,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   const { isOpen, isMobile, closeSidebar } = useSidebar();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 w-full overflow-x-hidden">
       <FixedHeader />
       
       {/* Overlay para mobile */}
@@ -28,10 +28,10 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
         />
       )}
       
-      <div className="flex">
+      <div className="flex w-full">
         <CollapsibleSidebar />
         <main className={`
-          flex-1 pt-16 transition-all duration-300
+          flex-1 pt-16 transition-all duration-300 min-w-0 w-full
           ${isMobile 
             ? 'ml-0' 
             : isOpen 
@@ -39,9 +39,10 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
               : 'ml-16'
           }
         `}>
-          <div className="p-3 sm:p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto">
-
-            {children}
+          <div className="p-3 sm:p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto w-full">
+            <div className="w-full max-w-full">
+              {children}
+            </div>
           </div>
         </main>
       </div>

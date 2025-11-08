@@ -467,7 +467,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   const method = paymentMethods.find((m) => m.id === value);
                   setSelectedPaymentMethod(method);
                   // Remove or update: setExtraFee(method?.extra_fee || 0); // at line 461
-                  setPaymentMethod(method?.name || '');
+                  // Usar ID/slug consistente para lógica e envio
+                  setPaymentMethod(method?.id || '');
                 }}
                 className="space-y-2"
               >

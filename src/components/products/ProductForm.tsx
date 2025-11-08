@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Plus } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 import ProductImageUpload from './ProductImageUpload';
 
@@ -41,6 +42,7 @@ interface ProductFormProps {
 }
 
 const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<ProductItem>({
     name: '',
     description: '',
@@ -110,11 +112,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       return;
     }
 
+    if (!user?.id) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Usuário não autenticado",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setCreatingCategory(true);
     try {
       const { data, error } = await supabase
         .from('product_categories')
-        .insert([{ name: newCategoryName.trim() }])
+        .insert([{ 
+          name: newCategoryName.trim(),
+          user_id: user.id
+        }])
         .select()
         .single();
 
@@ -151,24 +165,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
 
   useEffect(() => {
-    loadCategories();
-    loadGlobalVariations();
-    if (product?.id) {
-      loadProductVariations(product.id);
+    if (user?.id) {
+      loadCategories();
+      loadGlobalVariations();
+      if (product?.id) {
+        loadProductVariations(product.id);
+      }
     }
-  }, [product?.id]);
+  }, [product?.id, user?.id]);
 
 
 
 
 
   const loadCategories = async () => {
+    if (!user?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('product_categories')
         .select('*')
-
-
+        .eq('user_id', user.id)
         .eq('active', true);
 
       if (error) throw error;
@@ -179,11 +196,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const loadGlobalVariations = async () => {
+    if (!user?.id) return;
+    
     try {
       const { data, error } = await supabase
         .from('global_variations')
         .select('*')
-
+        .eq('user_id', user.id)
         .order('name');
 
       if (error) throw error;
@@ -686,95 +705,4 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 };
 
 export default ProductForm;
-
-
-// TODO: Removido temporariamente toda a lógica de variações globais para reimplementação.
-// O formulário de produto funcionará apenas com os campos básicos até a nova lógica ser implementada.
-
-
-
-// Função para formatar preço em Real brasileiro
-const formatPrice = (value: string) => {
-// Remove tudo que não é número
-const numericValue = value.replace(/\D/g, '');
-
-if (!numericValue) return '';
-
-// Converte para número e divide por 100 para ter centavos
-const number = parseInt(numericValue) / 100;
-
-// Formata como moeda brasileira
-return number.toLocaleString('pt-BR', {
-minimumFractionDigits: 2,
-maximumFractionDigits: 2
-});
-};
-
-// Função para converter preço formatado para número
-const parsePrice = (formattedPrice: string): number => {
-if (!formattedPrice) return 0;
-
-// Remove pontos de milhares e substitui vírgula por ponto
-const numericString = formattedPrice
-.replace(/\./g, '')
-.replace(',', '.');
-
-return parseFloat(numericString) || 0;
-};
-
-const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-const inputValue = e.target.value;
-const formatted = formatPrice(inputValue);
-const numericValue = parsePrice(formatted);
-
-setFormData(prev => ({ ...prev, price: numericValue }));
-};
-
-const createCategory = async () => {
-if (!newCategoryName.trim()) {
-toast({
-title: "Nome da categoria é obrigatório",
-variant: "destructive"
-});
-return;
-}
-
-setCreatingCategory(true);
-try {
-const { data, error } = await supabase
-.from('categories')
-.insert([{ name: newCategoryName.trim() }])
-.select()
-.single();
-
-if (error) throw error;
-
-// Atualiza a lista de categorias
-setCategories(prev => [...prev, data]);
-
-// Seleciona a nova categoria
-setFormData(prev => ({ 
-...prev, 
-category: data.name,
-category_id: data.id 
-}));
-
-setNewCategoryName('');
-setShowCreateCategory(false);
-
-toast({
-title: "Categoria criada com sucesso!",
-description: `A categoria "${data.name}" foi adicionada.`
-});
-} catch (error: any) {
-console.error('Erro ao criar categoria:', error);
-toast({
-title: "Erro ao criar categoria",
-description: error.message,
-variant: "destructive"
-});
-} finally {
-setCreatingCategory(false);
-}
-};
 

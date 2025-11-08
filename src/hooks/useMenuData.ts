@@ -1,25 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import { debugLogger } from '@/utils/debugLogger';
+import { debugLog, measurePerformance } from '@/utils/debugSystem';
 
 interface Product {
   id: string;
   name: string;
+  description: string;
   price: number;
-  description?: string;
   image_url?: string;
-  category_id?: string;
-  category?: string;
-  user_id: string;
+  category_id: string;
+  is_available: boolean;
+  variations?: any[];
 }
 
-interface Profile {
-  restaurant_name?: string;
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  display_order: number;
+}
+
+interface RestaurantProfile {
+  id: string;
+  restaurant_name: string;
+  description?: string;
+  logo_url?: string;
   phone?: string;
   address?: string;
   opening_hours?: string;
-  description?: string;
-  logo_url?: string;
 }
 
 interface DeliveryZone {
@@ -28,132 +38,437 @@ interface DeliveryZone {
   delivery_fee: number;
   minimum_order: number;
   delivery_time: string;
-  active: boolean;
 }
 
-export const useMenuData = (userId: string | null) => {
-  const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-
-  const fetchRestaurantData = async () => {
-    try {
-      console.log('🔄 Carregando dados do restaurante para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('❌ Erro ao carregar perfil:', error);
-        throw error;
-      }
-
-      console.log('✅ Perfil carregado:', data);
-      setProfile(data);
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do restaurante:', error);
-      throw error;
-    }
+// Informações do navegador otimizadas
+const getBrowserInfo = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return {
+    isSafari: /safari/.test(userAgent) && !/chrome/.test(userAgent),
+    isMobile: /mobile|android|iphone|ipad/.test(userAgent)
   };
+};
 
-  const fetchProducts = async () => {
-    try {
-      console.log('🔄 Carregando produtos para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('available', true)
-        .eq('show_in_delivery', true)
-        .order('name');
+// Cache keys
+const MENU_CACHE_KEYS = {
+  PRODUCTS: 'boracume_menu_products',
+  CATEGORIES: 'boracume_menu_categories', 
+  PROFILE: 'boracume_menu_profile',
+  DELIVERY_ZONES: 'boracume_menu_delivery_zones',
+  EXPIRY: 'boracume_menu_cache_expiry'
+};
 
-      if (error) {
-        console.error('❌ Erro ao carregar produtos:', error);
-        throw error;
-      }
+const CACHE_DURATION = 5 * 60 * 1000; // REDUZIDO para 5 minutos
 
-      console.log('✅ Produtos carregados:', data?.length || 0);
-      setProducts(data || []);
-      
-      const uniqueCategories = [...new Set(data?.map(p => p.category).filter(Boolean) || [])];
-      setCategories(uniqueCategories);
-      
-    } catch (error) {
-      console.error('❌ Erro ao carregar produtos:', error);
-      throw error;
-    }
-  };
-
-  const fetchDeliveryZones = async () => {
-    try {
-      console.log('🔄 Carregando zonas de entrega para userId:', userId);
-      
-      const { data, error } = await supabase
-        .from('delivery_zones')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('name');
-
-      if (error) {
-        console.error('❌ Erro ao carregar zonas de entrega:', error);
-        throw error;
-      }
-
-      console.log('✅ Zonas de entrega carregadas:', data?.length || 0);
-      setDeliveryZones(data || []);
-    } catch (error) {
-      console.error('❌ Erro ao carregar zonas de entrega:', error);
-    }
-  };
-
-  const fetchAllData = async () => {
-    if (!userId) return;
+// Função otimizada para verificar storage
+const getAvailableStorage = () => {
+  try {
+    if (typeof localStorage === 'undefined') return 0;
     
-    setLoading(true);
-    try {
-      await Promise.all([
-        fetchRestaurantData(),
-        fetchProducts(),
-        fetchDeliveryZones()
-      ]);
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar o cardápio. Verifique se o link está correto.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    const testKey = '__storage_test__';
+    localStorage.setItem(testKey, 'test');
+    localStorage.removeItem(testKey);
+    
+    let used = 0;
+    for (let key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        used += localStorage[key].length + key.length;
+      }
     }
+    
+    // Estimar storage disponível (5MB típico)
+    const total = 5 * 1024 * 1024;
+    return Math.max(0, total - used);
+  } catch {
+    return 0;
+  }
+};
+
+// Cache otimizado com verificação de espaço
+const saveToCache = (key: string, data: any) => {
+  try {
+    const serialized = JSON.stringify(data);
+    const available = getAvailableStorage();
+    
+    if (serialized.length > available) {
+      console.warn('⚠️ [CACHE] Espaço insuficiente - limpando cache antigo');
+      clearMenuCache();
+    }
+    
+    localStorage.setItem(key, serialized);
+    localStorage.setItem(MENU_CACHE_KEYS.EXPIRY, Date.now().toString());
+  } catch (error) {
+    console.warn('⚠️ [CACHE] Erro ao salvar cache:', error);
+  }
+};
+
+// Load otimizado do cache
+const loadFromCache = (key: string): any | null => {
+  try {
+    const expiry = localStorage.getItem(MENU_CACHE_KEYS.EXPIRY);
+    if (!expiry || Date.now() - parseInt(expiry) > CACHE_DURATION) {
+      console.log('🗑️ [CACHE] Cache expirado - limpando');
+      clearMenuCache();
+      return null;
+    }
+    
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    
+    return JSON.parse(cached);
+  } catch (error) {
+    console.warn('⚠️ [CACHE] Erro ao carregar cache:', error);
+    return null;
+  }
+};
+
+// Clear cache otimizado
+const clearMenuCache = () => {
+  try {
+    Object.values(MENU_CACHE_KEYS).forEach(key => {
+      localStorage.removeItem(key);
+    });
+    console.log('🗑️ [CACHE] Cache limpo');
+  } catch (error) {
+    console.warn('⚠️ [CACHE] Erro ao limpar cache:', error);
+  }
+};
+
+export const useMenuData = (userId: string) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [profile, setProfile] = useState<RestaurantProfile | null>(null);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Refs para controle de debounce e cleanup
+  const isMountedRef = useRef(true);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
+
+  const browserInfo = getBrowserInfo();
+
+  // Função otimizada para buscar dados do restaurante
+  const fetchRestaurantData = async (): Promise<RestaurantProfile | null> => {
+    const performanceTracker = measurePerformance('useMenuData', 'fetchRestaurantData');
+    debugLog('useMenuData', 'fetchRestaurantData_start', { userId });
+    debugLogger.menu('fetching_restaurant_profile', { userId });
+    
+    // Cache primeiro
+    const cachedProfile = loadFromCache(MENU_CACHE_KEYS.PROFILE);
+    if (cachedProfile) {
+      debugLog('useMenuData', 'profile_cache_hit', { profileId: cachedProfile.id });
+      debugLogger.menu('profile_loaded_from_cache', { profileId: cachedProfile.id });
+      performanceTracker.end({ source: 'cache' });
+      return cachedProfile;
+    }
+    
+    // Timeout REDUZIDO para 2 segundos para perfil
+    const profilePromise = supabase
+      .from('restaurant_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento do perfil')), 2000)
+    );
+    
+    const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
+    if (error) {
+      debugLogger.menu('profile_fetch_error', { error: error.message }, 'error');
+      throw error;
+    }
+
+    if (data) {
+      console.log('✅ [MENU] Perfil carregado:', data.restaurant_name);
+      saveToCache(MENU_CACHE_KEYS.PROFILE, data);
+      return data;
+    }
+
+    return null;
   };
 
-  useEffect(() => {
+  // Função otimizada para buscar produtos
+  const fetchProducts = async (): Promise<Product[]> => {
+    console.log('🔄 [MENU] Buscando produtos...');
+    
+    // Cache primeiro
+    const cachedProducts = loadFromCache(MENU_CACHE_KEYS.PRODUCTS);
+    if (cachedProducts) {
+      console.log('✅ [MENU] Produtos do cache:', cachedProducts.length);
+      return cachedProducts;
+    }
+    
+    // Timeout REDUZIDO para 2.5 segundos para produtos
+    const productsPromise = supabase
+      .from('products')
+      .select(`
+        *,
+        product_variations (
+          id,
+          name,
+          price_adjustment,
+          is_default
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('is_available', true)
+      .order('name');
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento dos produtos')), 2500)
+    );
+
+    const { data, error } = await Promise.race([productsPromise, timeoutPromise]) as any;
+
+    if (error) {
+      console.error('❌ [MENU] Erro nos produtos:', error);
+      throw error;
+    }
+
+    const products = data || [];
+    console.log('✅ [MENU] Produtos carregados:', products.length);
+    
+    // Processar variações
+    const processedProducts = products.map(product => ({
+      ...product,
+      variations: product.product_variations || []
+    }));
+    
+    saveToCache(MENU_CACHE_KEYS.PRODUCTS, processedProducts);
+    return processedProducts;
+  };
+
+  // Função otimizada para buscar categorias
+  const fetchCategories = async (): Promise<Category[]> => {
+    console.log('🔄 [MENU] Buscando categorias...');
+    
+    // Cache primeiro
+    const cachedCategories = loadFromCache(MENU_CACHE_KEYS.CATEGORIES);
+    if (cachedCategories) {
+      console.log('✅ [MENU] Categorias do cache:', cachedCategories.length);
+      return cachedCategories;
+    }
+    
+    // Timeout REDUZIDO para 2 segundos para categorias
+    const categoriesPromise = supabase
+      .from('product_categories')
+      .select('*')
+      .eq('user_id', userId)
+      .order('display_order', { ascending: true });
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento das categorias')), 2000)
+    );
+
+    const { data, error } = await Promise.race([categoriesPromise, timeoutPromise]) as any;
+
+    if (error) {
+      console.error('❌ [MENU] Erro nas categorias:', error);
+      throw error;
+    }
+
+    const categories = data || [];
+    console.log('✅ [MENU] Categorias carregadas:', categories.length);
+    
+    saveToCache(MENU_CACHE_KEYS.CATEGORIES, categories);
+    return categories;
+  };
+
+  // Função otimizada para buscar zonas de entrega
+  const fetchDeliveryZones = async (): Promise<DeliveryZone[]> => {
+    console.log('🔄 [MENU] Buscando zonas de entrega...');
+    
+    // Cache primeiro
+    const cachedZones = loadFromCache(MENU_CACHE_KEYS.DELIVERY_ZONES);
+    if (cachedZones) {
+      console.log('✅ [MENU] Zonas do cache:', cachedZones.length);
+      return cachedZones;
+    }
+    
+    // Timeout REDUZIDO para 2 segundos para zonas
+    const zonesPromise = supabase
+      .from('delivery_zones')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('name');
+      
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout no carregamento das zonas')), 2000)
+    );
+
+    const { data, error } = await Promise.race([zonesPromise, timeoutPromise]) as any;
+
+    if (error) {
+      console.error('❌ [MENU] Erro nas zonas:', error);
+      throw error;
+    }
+
+    const zones = data || [];
+    console.log('✅ [MENU] Zonas carregadas:', zones.length);
+    
+    saveToCache(MENU_CACHE_KEYS.DELIVERY_ZONES, zones);
+    return zones;
+  };
+
+  // Função principal otimizada - SEM RETRY AGRESSIVO
+  const fetchAllData = useCallback(async (forceRefresh: boolean = false) => {
     if (!userId) {
-      toast({
-        title: "Erro",
-        description: "Link inválido. ID do usuário não encontrado.",
-        variant: "destructive",
-      });
+      console.log('⚠️ [MENU] Sem userId - pulando fetch');
+      setIsLoading(false);
       return;
     }
 
-    fetchAllData();
+    // Evitar múltiplas chamadas muito próximas - REDUZIDO para 1 segundo
+    const now = Date.now();
+    if (!forceRefresh && now - lastFetchTimeRef.current < 1000) {
+      console.log('⚠️ [MENU] Fetch muito recente - ignorando');
+      return;
+    }
+    
+    lastFetchTimeRef.current = now;
+    
+    console.log('🔄 [MENU] === INÍCIO FETCH DADOS ===');
+    setIsLoading(true);
+    setError(null);
+
+    // Timeout global REDUZIDO para 3 segundos
+    const globalTimeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        console.log('⏰ [MENU] Timeout global (3s) - finalizando');
+        setIsLoading(false);
+        setError('Timeout no carregamento dos dados');
+      }
+    }, 3000);
+
+    try {
+      if (forceRefresh) {
+        clearMenuCache();
+      }
+
+      // Buscar dados em paralelo com Promise.allSettled
+      const [profileResult, productsResult, categoriesResult, zonesResult] = await Promise.allSettled([
+        fetchRestaurantData(),
+        fetchProducts(),
+        fetchCategories(),
+        fetchDeliveryZones()
+      ]);
+
+      if (!isMountedRef.current) return;
+
+      // Processar resultados
+      if (profileResult.status === 'fulfilled' && profileResult.value) {
+        setProfile(profileResult.value);
+      } else {
+        console.error('❌ [MENU] Falha no perfil:', profileResult.status === 'rejected' ? profileResult.reason : 'Sem dados');
+      }
+
+      if (productsResult.status === 'fulfilled') {
+        setProducts(productsResult.value);
+      } else {
+        console.error('❌ [MENU] Falha nos produtos:', productsResult.reason);
+      }
+
+      if (categoriesResult.status === 'fulfilled') {
+        setCategories(categoriesResult.value);
+      } else {
+        console.error('❌ [MENU] Falha nas categorias:', categoriesResult.reason);
+      }
+
+      if (zonesResult.status === 'fulfilled') {
+        setDeliveryZones(zonesResult.value);
+      } else {
+        console.error('❌ [MENU] Falha nas zonas:', zonesResult.reason);
+      }
+
+      // Verificar se pelo menos alguns dados foram carregados
+      const hasData = profileResult.status === 'fulfilled' || 
+                     productsResult.status === 'fulfilled' || 
+                     categoriesResult.status === 'fulfilled';
+
+      if (hasData) {
+        console.log('✅ [MENU] Dados carregados com sucesso');
+        toast.success('Cardápio carregado com sucesso!');
+      } else {
+        console.error('❌ [MENU] Falha total no carregamento');
+        setError('Erro ao carregar dados do cardápio');
+        toast.error('Erro ao carregar cardápio. Tente novamente.');
+      }
+
+    } catch (error) {
+      console.error('💥 [MENU] Erro crítico:', error);
+      if (isMountedRef.current) {
+        setError('Erro ao carregar dados do cardápio');
+        toast.error('Erro ao carregar cardápio. Verifique sua conexão.');
+      }
+    } finally {
+      clearTimeout(globalTimeout);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
+      console.log('🔄 [MENU] === FIM FETCH DADOS ===');
+    }
   }, [userId]);
+
+  // Função para refresh manual
+  const refreshData = useCallback(() => {
+    console.log('🔄 [MENU] Refresh manual solicitado');
+    fetchAllData(true);
+  }, [fetchAllData]);
+
+  // Effect otimizado com debounce
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    debugLog('useMenuData', 'useEffect_triggered', { 
+      userId,
+      hasUserId: !!userId,
+      browserInfo 
+    });
+    
+    if (!userId) {
+      debugLog('useMenuData', 'no_userId', { userId });
+      setIsLoading(false);
+      return;
+    }
+
+    // Debounce para evitar múltiplas chamadas
+    if (fetchTimeoutRef.current) {
+      debugLog('useMenuData', 'clearing_previous_timeout', {});
+      clearTimeout(fetchTimeoutRef.current);
+    }
+
+    // Delay mínimo para Safari/Mobile
+    const delay = browserInfo.isSafari ? 200 : (browserInfo.isMobile ? 100 : 0);
+    
+    debugLog('useMenuData', 'scheduling_fetch', { delay, browserInfo });
+    
+    fetchTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        debugLog('useMenuData', 'loadData', { userId });
+        fetchAllData();
+      }
+    }, delay);
+
+    return () => {
+      isMountedRef.current = false;
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
+  }, [userId, fetchAllData]);
 
   return {
     products,
     categories,
-    loading,
     profile,
-    deliveryZones
+    deliveryZones,
+    isLoading,
+    error,
+    refreshData
   };
 };

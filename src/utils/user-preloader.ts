@@ -42,6 +42,8 @@ class UserPreloader {
     userId: string, 
     options: PreloadOptions = {}
   ): Promise<PreloadedData> {
+    console.log('🔍 [PRELOAD] Iniciando preloadUserData para userId:', userId, 'options:', options);
+    
     const {
       includeProfile = true,
       includeSubscription = true,
@@ -51,20 +53,26 @@ class UserPreloader {
     } = options;
 
     const cacheKey = `${userId}-${JSON.stringify(options)}`;
+    console.log('🔍 [PRELOAD] Cache key gerada:', cacheKey);
 
     // Verificar se já existe uma operação em andamento
     if (this.preloadQueue.has(cacheKey)) {
+      console.log('🔍 [PRELOAD] Operação já em andamento, aguardando...');
       return this.preloadQueue.get(cacheKey)!;
     }
 
     // Verificar cache local
     if (useCache) {
+      console.log('🔍 [PRELOAD] Verificando cache local...');
       const cached = this.getCachedData(cacheKey);
       if (cached) {
+        console.log('✅ [PRELOAD] Dados encontrados no cache:', cached);
         return cached;
       }
+      console.log('🔍 [PRELOAD] Nenhum dado válido no cache');
     }
 
+    console.log('🔍 [PRELOAD] Criando nova operação de pré-carregamento...');
     // Criar nova operação de pré-carregamento
     const preloadPromise = this.performPreload(userId, {
       includeProfile,
@@ -74,17 +82,25 @@ class UserPreloader {
     });
 
     this.preloadQueue.set(cacheKey, preloadPromise);
+    console.log('🔍 [PRELOAD] Operação adicionada à fila');
 
     try {
+      console.log('🔍 [PRELOAD] Aguardando resultado da operação...');
       const result = await preloadPromise;
+      console.log('✅ [PRELOAD] Operação concluída com sucesso:', result);
       
       // Salvar no cache local
       this.setCachedData(cacheKey, result);
+      console.log('💾 [PRELOAD] Dados salvos no cache local');
       
       return result;
+    } catch (error) {
+      console.error('❌ [PRELOAD] Erro na operação:', error);
+      throw error;
     } finally {
       // Remover da fila
       this.preloadQueue.delete(cacheKey);
+      console.log('🔍 [PRELOAD] Operação removida da fila');
     }
   }
 
@@ -92,6 +108,10 @@ class UserPreloader {
    * Pré-carrega dados baseado no contexto do usuário
    */
   async preloadByContext(user: User, context: 'login' | 'dashboard' | 'profile'): Promise<PreloadedData> {
+    console.log('🔍 [PRELOAD_BY_CONTEXT] Iniciando preloadByContext');
+    console.log('🔍 [PRELOAD_BY_CONTEXT] User ID:', user.id);
+    console.log('🔍 [PRELOAD_BY_CONTEXT] Context:', context);
+    
     const contextOptions: Record<string, PreloadOptions> = {
       login: {
         includeProfile: true,
@@ -113,7 +133,16 @@ class UserPreloader {
       }
     };
 
-    return this.preloadUserData(user.id, contextOptions[context]);
+    console.log('🔍 [PRELOAD_BY_CONTEXT] Options para contexto:', contextOptions[context]);
+    
+    try {
+      const result = await this.preloadUserData(user.id, contextOptions[context]);
+      console.log('✅ [PRELOAD_BY_CONTEXT] Resultado obtido:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ [PRELOAD_BY_CONTEXT] Erro:', error);
+      throw error;
+    }
   }
 
   /**
@@ -123,16 +152,20 @@ class UserPreloader {
     userId: string,
     options: Required<Omit<PreloadOptions, 'useCache'>>
   ): Promise<PreloadedData> {
+    console.log('🔍 [PERFORM] Iniciando performPreload para userId:', userId, 'options:', options);
+    
     const promises: Promise<any>[] = [];
     const result: PreloadedData = {};
 
     // Pré-carregar perfil
     if (options.includeProfile) {
+      console.log('🔍 [PERFORM] Adicionando preload de profile...');
       promises.push(
         this.preloadProfile(userId).then(profile => {
+          console.log('✅ [PERFORM] Profile carregado:', profile);
           result.profile = profile;
         }).catch(error => {
-          console.warn('Erro ao pré-carregar perfil:', error);
+          console.warn('❌ [PERFORM] Erro ao pré-carregar perfil:', error);
           result.profile = null;
         })
       );
@@ -140,11 +173,13 @@ class UserPreloader {
 
     // Pré-carregar assinatura
     if (options.includeSubscription) {
+      console.log('🔍 [PERFORM] Adicionando preload de subscription...');
       promises.push(
         this.preloadSubscription(userId).then(subscription => {
+          console.log('✅ [PERFORM] Subscription carregada:', subscription);
           result.subscription = subscription;
         }).catch(error => {
-          console.warn('Erro ao pré-carregar assinatura:', error);
+          console.warn('❌ [PERFORM] Erro ao pré-carregar assinatura:', error);
           result.subscription = null;
         })
       );
@@ -152,11 +187,13 @@ class UserPreloader {
 
     // Pré-carregar preferências
     if (options.includePreferences) {
+      console.log('🔍 [PERFORM] Adicionando preload de preferences...');
       promises.push(
         this.preloadPreferences(userId).then(preferences => {
+          console.log('✅ [PERFORM] Preferences carregadas:', preferences);
           result.preferences = preferences;
         }).catch(error => {
-          console.warn('Erro ao pré-carregar preferências:', error);
+          console.warn('❌ [PERFORM] Erro ao pré-carregar preferências:', error);
           result.preferences = null;
         })
       );
@@ -164,19 +201,25 @@ class UserPreloader {
 
     // Pré-carregar notificações
     if (options.includeNotifications) {
+      console.log('🔍 [PERFORM] Adicionando preload de notifications...');
       promises.push(
         this.preloadNotifications(userId).then(notifications => {
+          console.log('✅ [PERFORM] Notifications carregadas:', notifications);
           result.notifications = notifications;
         }).catch(error => {
-          console.warn('Erro ao pré-carregar notificações:', error);
+          console.warn('❌ [PERFORM] Erro ao pré-carregar notificações:', error);
           result.notifications = null;
         })
       );
     }
 
+    console.log('🔍 [PERFORM] Total de promises criadas:', promises.length);
+    console.log('🔍 [PERFORM] Aguardando todas as operações...');
+    
     // Aguardar todas as operações
     await Promise.allSettled(promises);
-
+    
+    console.log('✅ [PERFORM] Todas as operações concluídas. Resultado final:', result);
     return result;
   }
 
@@ -184,56 +227,89 @@ class UserPreloader {
    * Pré-carrega dados do perfil
    */
   private async preloadProfile(userId: string): Promise<any> {
-    // Verificar cache primeiro
-    const cached = ProfileCache.get();
-    if (cached && ProfileCache.isValid()) {
-      return cached;
+    console.log('🔍 [PROFILE] Iniciando preload do profile para userId:', userId);
+    
+    try {
+      // Verificar cache primeiro
+      console.log('🔍 [PROFILE] Verificando cache do profile...');
+      const cached = ProfileCache.getProfile();
+      if (cached && ProfileCache.isValid()) {
+        console.log('✅ [PROFILE] Profile encontrado no cache:', cached);
+        return cached;
+      }
+      console.log('🔍 [PROFILE] Cache inválido ou vazio, buscando no banco...');
+
+      console.log('🔍 [PROFILE] Executando query no Supabase...');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      console.log('🔍 [PROFILE] Resultado da query - data:', data, 'error:', error);
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ [PROFILE] Erro na query:', error);
+        throw error;
+      }
+
+      if (data) {
+        console.log('✅ [PROFILE] Profile encontrado, salvando no cache:', data);
+        ProfileCache.setProfile(data);
+      } else {
+        console.log('⚠️ [PROFILE] Nenhum profile encontrado');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('❌ [PROFILE] Erro ao pré-carregar perfil:', error);
+      return null;
     }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    // Salvar no cache
-    if (data) {
-      ProfileCache.set(data);
-    }
-
-    return data;
   }
 
   /**
    * Pré-carrega dados da assinatura
    */
   private async preloadSubscription(userId: string): Promise<any> {
-    // Verificar cache primeiro
-    const cached = SubscriptionCache.get();
-    if (cached && SubscriptionCache.isValid()) {
-      return cached;
+    console.log('🔍 [SUBSCRIPTION] Iniciando preload da subscription para userId:', userId);
+    
+    try {
+      // Verificar cache primeiro
+      console.log('🔍 [SUBSCRIPTION] Verificando cache da subscription...');
+      const cached = SubscriptionCache.getSubscription();
+      if (cached && SubscriptionCache.isValid()) {
+        console.log('✅ [SUBSCRIPTION] Subscription encontrada no cache:', cached);
+        return cached;
+      }
+      console.log('🔍 [SUBSCRIPTION] Cache inválido ou vazio, buscando no banco...');
+
+      console.log('🔍 [SUBSCRIPTION] Executando query no Supabase...');
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      console.log('🔍 [SUBSCRIPTION] Resultado da query - data:', data, 'error:', error);
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ [SUBSCRIPTION] Erro na query:', error);
+        throw error;
+      }
+
+      // Salvar no cache
+      if (data) {
+        console.log('✅ [SUBSCRIPTION] Subscription encontrada, salvando no cache:', data);
+        SubscriptionCache.setSubscription(data);
+      } else {
+        console.log('⚠️ [SUBSCRIPTION] Nenhuma subscription encontrada');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('❌ [SUBSCRIPTION] Erro ao pré-carregar assinatura:', error);
+      return null;
     }
-
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    // Salvar no cache
-    if (data) {
-      SubscriptionCache.set(data);
-    }
-
-    return data;
   }
 
   /**

@@ -59,35 +59,52 @@ const Dashboard = () => {
   useOrderNotifications();
 
   useEffect(() => {
+    console.log('🔍 [DASHBOARD] useEffect executado, user:', user?.id);
     if (user) {
+      console.log('🔍 [DASHBOARD] Iniciando fetchDashboardData...');
       fetchDashboardData();
+    } else {
+      console.log('🔍 [DASHBOARD] Usuário não encontrado, não carregando dados');
     }
   }, [user]);
 
 
   const fetchDashboardData = useCallback(async () => {
-
+    console.log('🔍 [DASHBOARD] fetchDashboardData iniciado');
     try {
       setLoading(true);
-      await Promise.all([
+      console.log('🔍 [DASHBOARD] Executando Promise.all para carregar dados...');
+      
+      // Implementar timeout para as queries do dashboard
+      const dataPromise = Promise.all([
         fetchStats(),
         fetchRevenueData(),
         fetchRecentOrders()
       ]);
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout no carregamento dos dados do dashboard')), 10000)
+      );
+      
+      await Promise.race([dataPromise, timeoutPromise]);
+      console.log('✅ [DASHBOARD] Dados carregados com sucesso');
     } catch (error) {
-      console.error('Erro ao carregar dados do dashboard:', error);
+      console.error('❌ [DASHBOARD] Erro ao carregar dados do dashboard:', error);
+      console.error('❌ [DASHBOARD] Stack trace:', error.stack);
     } finally {
+      console.log('🔍 [DASHBOARD] Finalizando loading...');
       setLoading(false);
     }
-
   }, [user]);
 
 
   const fetchStats = async () => {
+    console.log('🔍 [DASHBOARD] fetchStats iniciado');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
 
+    console.log('🔍 [DASHBOARD] Buscando vendas de hoje...');
     // Vendas de hoje
     const { data: todayOrders, error: todayError } = await supabase
       .from('orders')
@@ -238,7 +255,7 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard 
           title="Vendas de Hoje" 
           value={formatCurrency(stats.todaySales)} 
@@ -268,11 +285,13 @@ const Dashboard = () => {
         />
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <RevenueChart data={revenueData} />
+      <div className="grid grid-cols-1 gap-6">
+        <div className="w-full overflow-x-auto">
+          <RevenueChart data={revenueData} />
+        </div>
       </div>
       
-      <div>
+      <div className="w-full overflow-x-auto">
         <h2 className="text-xl font-semibold mb-4">Pedidos Recentes</h2>
         <RecentOrdersTable orders={recentOrders} />
       </div>
