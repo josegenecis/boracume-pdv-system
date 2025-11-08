@@ -1,0 +1,14 @@
+# Ignore Electron build artifacts and large binaries
+# These files exceed Vercel's 100MB file size limit
+
+dist-electron/
+win-unpacked/
+**/*.asar
+**/*.exe
+**/*.zip
+node_modules/electron/
+
+# Common local folders
+.vscode/
+coverage/
+*.log
