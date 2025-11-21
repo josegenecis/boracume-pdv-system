@@ -164,15 +164,15 @@ export const useMenuData = (userId: string) => {
       return cachedProfile;
     }
     
-    // Timeout REDUZIDO para 2 segundos para perfil
+    // Timeout ajustado para 6 segundos para perfil
     const profilePromise = supabase
       .from('restaurant_profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
       
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento do perfil')), 2000)
+      setTimeout(() => reject(new Error('Timeout no carregamento do perfil')), 6000)
     );
     
     const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
@@ -202,7 +202,7 @@ export const useMenuData = (userId: string) => {
       return cachedProducts;
     }
     
-    // Timeout REDUZIDO para 2.5 segundos para produtos
+    // Timeout ajustado para 6 segundos para produtos
     const productsPromise = supabase
       .from('products')
       .select(`
@@ -210,8 +210,9 @@ export const useMenuData = (userId: string) => {
         product_variations (
           id,
           name,
-          price_adjustment,
-          is_default
+          price,
+          required,
+          max_selections
         )
       `)
       .eq('user_id', userId)
@@ -219,7 +220,7 @@ export const useMenuData = (userId: string) => {
       .order('name');
       
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento dos produtos')), 2500)
+      setTimeout(() => reject(new Error('Timeout no carregamento dos produtos')), 6000)
     );
 
     const { data, error } = await Promise.race([productsPromise, timeoutPromise]) as any;
@@ -253,7 +254,7 @@ export const useMenuData = (userId: string) => {
       return cachedCategories;
     }
     
-    // Timeout REDUZIDO para 2 segundos para categorias
+    // Timeout ajustado para 6 segundos para categorias
     const categoriesPromise = supabase
       .from('product_categories')
       .select('*')
@@ -261,7 +262,7 @@ export const useMenuData = (userId: string) => {
       .order('display_order', { ascending: true });
       
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento das categorias')), 2000)
+      setTimeout(() => reject(new Error('Timeout no carregamento das categorias')), 6000)
     );
 
     const { data, error } = await Promise.race([categoriesPromise, timeoutPromise]) as any;
@@ -289,7 +290,7 @@ export const useMenuData = (userId: string) => {
       return cachedZones;
     }
     
-    // Timeout REDUZIDO para 2 segundos para zonas
+    // Timeout ajustado para 6 segundos para zonas
     const zonesPromise = supabase
       .from('delivery_zones')
       .select('*')
@@ -298,7 +299,7 @@ export const useMenuData = (userId: string) => {
       .order('name');
       
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento das zonas')), 2000)
+      setTimeout(() => reject(new Error('Timeout no carregamento das zonas')), 6000)
     );
 
     const { data, error } = await Promise.race([zonesPromise, timeoutPromise]) as any;
@@ -336,14 +337,14 @@ export const useMenuData = (userId: string) => {
     setIsLoading(true);
     setError(null);
 
-    // Timeout global REDUZIDO para 3 segundos
+    // Timeout global ajustado para 8 segundos
     const globalTimeout = setTimeout(() => {
       if (isMountedRef.current) {
-        console.log('⏰ [MENU] Timeout global (3s) - finalizando');
+        console.log('⏰ [MENU] Timeout global (8s) - finalizando');
         setIsLoading(false);
         setError('Timeout no carregamento dos dados');
       }
-    }, 3000);
+    }, 8000);
 
     try {
       if (forceRefresh) {

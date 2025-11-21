@@ -74,8 +74,7 @@ function AppContent() {
 
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
-          <Route path="/dashboard" element={<DashboardSimple />} />
-          <Route path="/dashboard-full" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/produtos" element={<Products />} />
           <Route path="/pedidos" element={<Orders />} />
           <Route path="/orders" element={<Navigate to="/pedidos" replace />} />
