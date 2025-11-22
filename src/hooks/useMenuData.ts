@@ -166,9 +166,9 @@ export const useMenuData = (userId: string) => {
     
     // Timeout ajustado para 6 segundos para perfil
     const profilePromise = supabase
-      .from('restaurant_profiles')
+      .from('profiles')
       .select('*')
-      .eq('user_id', userId)
+      .eq('id', userId)
       .maybeSingle();
       
     const timeoutPromise = new Promise((_, reject) => 
