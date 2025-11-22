@@ -587,10 +587,10 @@ const Orders = () => {
                   <Card key={order.id} className="border-l-4 border-l-yellow-500 cursor-pointer hover:shadow-md transition-shadow">
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                           <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
                               {getOrderTypeLabel(order.order_type)}
@@ -616,7 +616,7 @@ const Orders = () => {
                               <span>{order.customer_address}</span>
                             </div>
                             
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -624,7 +624,7 @@ const Orders = () => {
                                   e.stopPropagation();
                                   copyLocation(order);
                                 }}
-                                className="h-7 text-xs flex-1"
+                                className="h-7 text-xs w-full sm:flex-1"
                               >
                                 <Copy className="h-3 w-3 mr-1" />
                                 Copiar
@@ -638,7 +638,7 @@ const Orders = () => {
                                     e.stopPropagation();
                                     window.open(order.google_maps_link, '_blank');
                                   }}
-                                  className="h-7 text-xs flex-1"
+                                  className="h-7 text-xs w-full sm:flex-1"
                                 >
                                   <ExternalLink className="h-3 w-3 mr-1" />
                                   Maps
@@ -653,14 +653,14 @@ const Orders = () => {
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'preparing');
                             }}
-                            className="flex-1 bg-green-600 hover:bg-green-700"
+                            className="w-full sm:flex-1 bg-green-600 hover:bg-green-700"
                           >
                             Aceitar
                           </Button>
@@ -671,7 +671,7 @@ const Orders = () => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'cancelled');
                             }}
-                            className="flex-1"
+                            className="w-full sm:flex-1"
                           >
                             Cancelar
                           </Button>
@@ -708,10 +708,10 @@ const Orders = () => {
                   <Card key={order.id} className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                           <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
                               {getOrderTypeLabel(order.order_type)}
@@ -737,7 +737,7 @@ const Orders = () => {
                               <span>{order.customer_address}</span>
                             </div>
                             
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -745,7 +745,7 @@ const Orders = () => {
                                   e.stopPropagation();
                                   copyLocation(order);
                                 }}
-                                className="h-7 text-xs flex-1"
+                                className="h-7 text-xs w-full sm:flex-1"
                               >
                                 <Copy className="h-3 w-3 mr-1" />
                                 Copiar
@@ -759,7 +759,7 @@ const Orders = () => {
                                     e.stopPropagation();
                                     window.open(order.google_maps_link, '_blank');
                                   }}
-                                  className="h-7 text-xs flex-1"
+                                  className="h-7 text-xs w-full sm:flex-1"
                                 >
                                   <ExternalLink className="h-3 w-3 mr-1" />
                                   Maps
@@ -774,14 +774,14 @@ const Orders = () => {
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'ready');
                             }}
-                            className="flex-1"
+                            className="w-full sm:flex-1"
                           >
                             Marcar Pronto
                           </Button>
@@ -792,7 +792,7 @@ const Orders = () => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'delivered');
                             }}
-                            className="flex-1"
+                            className="w-full sm:flex-1"
                           >
                             Finalizar
                           </Button>
@@ -829,10 +829,10 @@ const Orders = () => {
                   <Card key={order.id} className="border-l-4 border-l-green-500 cursor-pointer hover:shadow-md transition-shadow">
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">Pedido {order.order_number}</h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
                             <span className="text-sm text-gray-600">
                               {getOrderTypeLabel(order.order_type)}
@@ -856,14 +856,14 @@ const Orders = () => {
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
-                        <div className="flex gap-2 mt-3">
+                        <div className="flex flex-wrap gap-2 mt-3">
                           <Button
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               updateOrderStatus(order.id, 'delivered');
                             }}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700"
+                            className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700"
                           >
                             Saiu para Entrega
                           </Button>
