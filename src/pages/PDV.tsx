@@ -789,7 +789,7 @@ const PDV = () => {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
                       {filteredProducts.map((product) => (
                         <Card key={product.id} className="hover:shadow-lg transition-shadow">
                           <div className="aspect-square relative overflow-hidden rounded-t-lg">
@@ -805,9 +805,9 @@ const PDV = () => {
                               </div>
                             )}
                           </div>
-                          <CardContent className="p-3">
-                            <h3 className="font-medium text-sm mb-1 line-clamp-2">{product.name}</h3>
-                            <p className="text-lg font-bold text-primary mb-2">
+                          <CardContent className="p-2">
+                            <h3 className="font-medium text-xs mb-1 line-clamp-2">{product.name}</h3>
+                            <p className="text-base font-bold text-primary mb-2">
                               {formatCurrency(product.price)}
                               {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
                             </p>
@@ -817,7 +817,7 @@ const PDV = () => {
                                 handleProductClick(product);
                               }}
                               className="w-full"
-                              size="sm"
+                              size="xs"
                             >
                               <Plus size={16} className="mr-1" />
                               Adicionar
