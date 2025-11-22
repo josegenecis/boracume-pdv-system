@@ -216,7 +216,8 @@ export const useMenuData = (userId: string) => {
         )
       `)
       .eq('user_id', userId)
-      .eq('is_available', true)
+      .eq('available', true)
+      .eq('show_in_delivery', true)
       .order('name');
       
     const timeoutPromise = new Promise((_, reject) => 
@@ -295,7 +296,7 @@ export const useMenuData = (userId: string) => {
       .from('delivery_zones')
       .select('*')
       .eq('user_id', userId)
-      .eq('is_active', true)
+      .eq('active', true)
       .order('name');
       
     const timeoutPromise = new Promise((_, reject) => 

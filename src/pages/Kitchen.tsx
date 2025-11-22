@@ -59,15 +59,17 @@ const Kitchen = () => {
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-2">
                 <h2 className="text-xl font-semibold text-yellow-600">
                   Pendentes ({pendingOrders.length})
                 </h2>
-                <BulkActionButton
-                  orderIds={pendingOrders.map(o => o.id)}
-                  action="preparing"
-                  onBulkAction={updateMultipleOrdersStatus}
-                />
+                <div className="w-full sm:w-auto">
+                  <BulkActionButton
+                    orderIds={pendingOrders.map(o => o.id)}
+                    action="preparing"
+                    onBulkAction={updateMultipleOrdersStatus}
+                  />
+                </div>
               </div>
               <Droppable droppableId="pending">
                 {(provided) => (
@@ -104,15 +106,17 @@ const Kitchen = () => {
             </div>
 
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-2">
                 <h2 className="text-xl font-semibold text-blue-600">
                   Preparando ({preparingOrders.length})
                 </h2>
-                <BulkActionButton
-                  orderIds={preparingOrders.map(o => o.id)}
-                  action="ready"
-                  onBulkAction={updateMultipleOrdersStatus}
-                />
+                <div className="w-full sm:w-auto">
+                  <BulkActionButton
+                    orderIds={preparingOrders.map(o => o.id)}
+                    action="ready"
+                    onBulkAction={updateMultipleOrdersStatus}
+                  />
+                </div>
               </div>
               <Droppable droppableId="preparing">
                 {(provided) => (
@@ -149,15 +153,17 @@ const Kitchen = () => {
             </div>
 
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-2">
                 <h2 className="text-xl font-semibold text-green-600">
                   Prontos ({readyOrders.length})
                 </h2>
-                <BulkActionButton
-                  orderIds={readyOrders.map(o => o.id)}
-                  action="completed"
-                  onBulkAction={updateMultipleOrdersStatus}
-                />
+                <div className="w-full sm:w-auto">
+                  <BulkActionButton
+                    orderIds={readyOrders.map(o => o.id)}
+                    action="completed"
+                    onBulkAction={updateMultipleOrdersStatus}
+                  />
+                </div>
               </div>
               <Droppable droppableId="ready">
                 {(provided) => (
