@@ -302,7 +302,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         delivery_instructions: customerData.notes.trim() || null,
         estimated_time: selectedZoneData?.delivery_time || '30-45 min',
         status: 'pending',
-        acceptance_status: 'pending_acceptance',
+        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'pending_acceptance',
         customer_latitude: location.latitude,
         customer_longitude: location.longitude,
         customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
@@ -602,4 +602,3 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 // Removido uso inválido de hook fora do componente
 
 export default CheckoutModal;
-

@@ -19,7 +19,8 @@ import {
   Truck,
   CheckCircle,
   XCircle,
-  Check
+  Check,
+  MessageCircle
 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -221,6 +222,40 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <Badge className={getStatusColor(order?.status || 'pending')}>
                   {getStatusLabel(order?.status || 'pending')}
                 </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={async () => {
+                    try {
+                      const link = `${window.location.origin}/track/${order?.id}`;
+                      await navigator.clipboard.writeText(link);
+                      toast({ title: 'Link copiado', description: 'Link de acompanhamento copiado.' });
+                    } catch (e) {
+                      toast({ title: 'Erro', description: 'Não foi possível copiar o link.', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copiar tracking
+                </Button>
+                {order?.customer_phone && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const digits = (order.customer_phone || '').replace(/\D/g, '');
+                      const wa = digits.startsWith('55') ? digits : `55${digits}`;
+                      const link = `${window.location.origin}/track/${order?.id}`;
+                      const msg = `Olá! Aqui está o link para acompanhar seu pedido ${order?.order_number || ''}: ${link}`;
+                      window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
+                    }}
+                  >
+                    <MessageCircle className="h-3 w-3 mr-1" />
+                    WhatsApp
+                  </Button>
+                )}
               </div>
             </DialogTitle>
           </DialogHeader>

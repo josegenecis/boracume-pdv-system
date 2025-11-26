@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
+import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 
 interface Product {
@@ -75,6 +76,9 @@ const PDV = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
   const [activeTab, setActiveTab] = useState('products');
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
+  const [pixAmount, setPixAmount] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
   const { sendToKitchen } = useKitchenIntegration();
@@ -651,7 +655,7 @@ const PDV = () => {
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
         status: 'pending',
-        acceptance_status: 'pending_acceptance',
+        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'pending_acceptance',
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min'
@@ -691,20 +695,29 @@ const PDV = () => {
 
       console.log('Pedido criado com sucesso:', data);
 
-      toast({
-        title: "Venda finalizada!",
-        description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
-      });
-
-      setCart([]);
-      setCustomerName('');
-      setCustomerPhone('');
-      setCustomerAddress('');
-      setSelectedDeliveryZone('');
-      setSelectedTable('');
-      setChangeAmount('');
-      setPaymentMethod('pix');
-      setOrderType('delivery');
+      if (paymentMethod === 'pix') {
+        setPixAmount(getFinalTotal());
+        setPixOrderId(data?.[0]?.id || data?.id);
+        setIsPixModalOpen(true);
+        toast({
+          title: "Pedido criado!",
+          description: "Aguardando pagamento do PIX para enviar ao restaurante.",
+        });
+      } else {
+        toast({
+          title: "Venda finalizada!",
+          description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
+        });
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        setCustomerAddress('');
+        setSelectedDeliveryZone('');
+        setSelectedTable('');
+        setChangeAmount('');
+        setPaymentMethod('pix');
+        setOrderType('delivery');
+      }
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
       toast({
@@ -1128,6 +1141,39 @@ const PDV = () => {
           }}
         />
       )}
+
+      <PixPaymentModal
+        isOpen={isPixModalOpen}
+        onClose={() => setIsPixModalOpen(false)}
+        amount={pixAmount}
+        orderId={pixOrderId}
+        onPaymentConfirmed={async () => {
+          if (!pixOrderId) return;
+          try {
+            const { error: updateError } = await supabase
+              .from('orders')
+              .update({ acceptance_status: 'pending_acceptance' })
+              .eq('id', pixOrderId);
+            if (!updateError) {
+              toast({
+                title: "Pagamento confirmado!",
+                description: "Pedido enviado ao restaurante.",
+              });
+              setCart([]);
+              setCustomerName('');
+              setCustomerPhone('');
+              setCustomerAddress('');
+              setSelectedDeliveryZone('');
+              setSelectedTable('');
+              setChangeAmount('');
+              setPaymentMethod('pix');
+              setOrderType('delivery');
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+      />
     </div>
   );
 };

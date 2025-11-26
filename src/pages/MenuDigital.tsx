@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
@@ -11,6 +12,7 @@ import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
+import PixPaymentModal from '@/components/payment/PixPaymentModal';
 
 interface Product {
   id: string;
@@ -63,6 +65,10 @@ const MenuDigital = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
+  const navigate = useNavigate();
+  const [showPixModal, setShowPixModal] = useState(false);
+  const [pixAmount, setPixAmount] = useState(0);
+  const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
 
   const debugInfo = {
     expectedUrl: `${window.location.origin}/menu/{userId}`,
@@ -205,13 +211,25 @@ const MenuDigital = () => {
         }
       }
 
+      if (orderData.payment_method === 'pix') {
+        setPixAmount(orderData.total);
+        setPixOrderId(data?.id);
+        setShowPixModal(true);
+        toast({
+          title: "Pedido criado!",
+          description: "Aguardando pagamento do PIX para enviar ao restaurante.",
+        });
+      } else {
       toast({
-        title: "Pedido realizado com sucesso!",
-        description: `Seu pedido ${orderData.order_number} foi recebido e está sendo preparado.`,
+        title: "Pedido realizado!",
+        description: `Acompanhe o andamento do pedido ${orderData.order_number}.`,
       });
-
       clearCart();
       setShowCartModal(false);
+      if (data?.id) {
+        navigate(`/track/${data.id}`);
+      }
+      }
     } catch (error) {
       console.error('Erro completo ao finalizar pedido:', error);
       
@@ -317,6 +335,33 @@ const MenuDigital = () => {
         onPlaceOrder={handlePlaceOrder}
         deliveryZones={deliveryZones}
         userId={finalUserId}
+      />
+
+      <PixPaymentModal
+        isOpen={showPixModal}
+        onClose={() => setShowPixModal(false)}
+        amount={pixAmount}
+        orderId={pixOrderId}
+        onPaymentConfirmed={async () => {
+          if (!pixOrderId) return;
+          try {
+            const { error: updateError } = await supabase
+              .from('orders')
+              .update({ acceptance_status: 'pending_acceptance' })
+              .eq('id', pixOrderId);
+            if (!updateError) {
+              toast({
+                title: "Pagamento confirmado!",
+                description: "Seu pedido foi enviado para o restaurante.",
+              });
+              clearCart();
+              setShowCartModal(false);
+              navigate(`/track/${pixOrderId}`);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }}
       />
 
       {/* Carrinho Fixo */}

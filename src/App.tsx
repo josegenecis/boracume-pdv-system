@@ -42,6 +42,7 @@ import DesktopApp from '@/pages/DesktopApp';
 import { HardwareTestPage } from '@/pages/HardwareTestPage';
 import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
+import OrderTracking from '@/pages/OrderTracking';
 import './App.css';
 import './styles/responsive.css';
 
@@ -53,6 +54,7 @@ function AppContent() {
       {/* Rotas públicas para o menu digital - aceita ambos os formatos */}
       <Route path="/menu/:userId" element={<MenuDigital />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
+      <Route path="/track/:orderId" element={<OrderTracking />} />
       
 
       {/* Rota de callback OAuth */}

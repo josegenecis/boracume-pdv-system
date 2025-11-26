@@ -77,25 +77,18 @@ const GlobalNotificationSystem: React.FC = () => {
           console.log('🔔 GlobalNotification - Novo pedido:', payload);
           
           const newOrder = payload.new as PendingOrder;
-          
-          // Adicionar à lista de pendentes
+          if (newOrder.acceptance_status !== 'pending_acceptance') {
+            return;
+          }
           setPendingOrders(prev => [newOrder, ...prev]);
-          
-          // Mostrar notificação se não estiver na página de pedidos
           if (!isOnOrdersPage) {
             setIsVisible(true);
-            
-            // Som de notificação usando Web Audio API
             if (soundEnabled) {
               soundNotifications.playSound('bell').catch(console.error);
             }
-            
-            // Vibração (se suportado)
             if (navigator.vibrate) {
               navigator.vibrate([200, 100, 200]);
             }
-            
-            // Toast notification
             toast({
               title: "🔔 Novo Pedido Recebido!",
               description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
@@ -114,20 +107,30 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         (payload) => {
           const updatedOrder = payload.new as PendingOrder;
-          
-          // Se o pedido foi aceito ou cancelado, remover da lista e adicionar aos dispensados
-          if (updatedOrder.acceptance_status !== 'pending_acceptance') {
-            // Parar todos os sons imediatamente
+          if (updatedOrder.acceptance_status === 'pending_acceptance') {
+            setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
+            if (!isOnOrdersPage) {
+              setIsVisible(true);
+              if (soundEnabled) {
+                soundNotifications.playSound('bell').catch(console.error);
+              }
+              if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200]);
+              }
+              toast({
+                title: "🔔 Novo Pedido Recebido!",
+                description: `Pedido ${updatedOrder.order_number} - ${updatedOrder.customer_name || 'Cliente'}`,
+                duration: 5000,
+              });
+            }
+          } else {
             soundNotifications.stopAllSounds();
-            
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
             setDismissedOrders(prev => {
               const newDismissed = new Set([...prev, updatedOrder.id]);
               localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
               return newDismissed;
             });
-            
-            // Forçar ocultação da notificação se não houver mais pedidos pendentes
             setTimeout(() => {
               setPendingOrders(current => {
                 if (current.length === 0) {
