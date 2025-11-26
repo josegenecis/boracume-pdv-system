@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Receipt, Search, Download, Eye, X, RotateCcw } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +37,7 @@ const NFCeManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -92,10 +95,10 @@ const NFCeManager: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'autorizado': return 'bg-green-500';
-      case 'pendente': return 'bg-yellow-500';
-      case 'rejeitado': return 'bg-red-500';
-      case 'cancelado': return 'bg-gray-500';
+      case 'autorizado': return 'bg-green-500 hover:bg-green-600';
+      case 'pendente': return 'bg-yellow-500 hover:bg-yellow-600';
+      case 'rejeitado': return 'bg-red-500 hover:bg-red-600';
+      case 'cancelado': return 'bg-gray-500 hover:bg-gray-600';
       default: return 'bg-gray-400';
     }
   };
@@ -117,10 +120,52 @@ const NFCeManager: React.FC = () => {
     }).format(value);
   };
 
+  const handleSimulateEmission = async () => {
+    setLoading(true);
+
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const randomStatus = Math.random() > 0.3 ? 'autorizado' : 'rejeitado';
+    const newCupom: NFCeCupom = {
+      id: Math.random().toString(36).substr(2, 9),
+      numero: Math.floor(Math.random() * 10000),
+      serie: '1',
+      data_hora_emissao: new Date().toISOString(),
+      data_hora_autorizacao: randomStatus === 'autorizado' ? new Date().toISOString() : undefined,
+      valor_total: Math.floor(Math.random() * 200) + 50,
+      status: randomStatus,
+      chave_acesso: randomStatus === 'autorizado' ? Array(44).fill('0').map(() => Math.floor(Math.random() * 10)).join('') : undefined,
+      protocolo_autorizacao: randomStatus === 'autorizado' ? Math.floor(Math.random() * 1000000000).toString() : undefined,
+      motivo_rejeicao: randomStatus === 'rejeitado' ? 'Erro na validação do schema XML' : undefined,
+      contingencia: false,
+      consumidor_nome: 'Consumidor Simulado'
+    };
+
+    setCupons(prev => [newCupom, ...prev]);
+    setLoading(false);
+
+    toast({
+      title: randomStatus === 'autorizado' ? "NFC-e Emitida (Simulação)" : "Erro na Emissão (Simulação)",
+      description: randomStatus === 'autorizado' ? "A nota foi autorizada com sucesso." : "A nota foi rejeitada pela SEFAZ.",
+      variant: randomStatus === 'autorizado' ? "default" : "destructive"
+    });
+  };
+
   const handleConsultarCupom = async (cupomId: string) => {
     try {
       setLoading(true);
-      
+
+      if (isSimulationMode) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        toast({
+          title: "Consulta Simulada",
+          description: "Status do cupom verificado com sucesso.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
           operation: 'consultar',
@@ -153,7 +198,18 @@ const NFCeManager: React.FC = () => {
 
     try {
       setLoading(true);
-      
+
+      if (isSimulationMode) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setCupons(prev => prev.map(c => c.id === cupomId ? { ...c, status: 'cancelado' } : c));
+        toast({
+          title: "Cancelamento Simulado",
+          description: "O cupom foi cancelado com sucesso.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
           operation: 'cancelar',
@@ -184,6 +240,14 @@ const NFCeManager: React.FC = () => {
 
   const handleDownloadXML = async (cupomId: string, numero: number) => {
     try {
+      if (isSimulationMode) {
+        toast({
+          title: "Download Simulado",
+          description: "Em modo de simulação não é possível baixar o XML real.",
+        });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('nfce-operations', {
         body: {
           operation: 'download_xml',
@@ -228,12 +292,46 @@ const NFCeManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Receipt className="w-6 h-6" />
           Gerenciar NFC-e
         </h1>
+
+        <div className="flex items-center gap-4 bg-secondary/20 p-2 rounded-lg border">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="simulation-mode"
+              checked={isSimulationMode}
+              onCheckedChange={setIsSimulationMode}
+            />
+            <Label htmlFor="simulation-mode" className="cursor-pointer font-medium">
+              Modo Simulação
+            </Label>
+          </div>
+
+          {isSimulationMode && (
+            <Button size="sm" onClick={handleSimulateEmission} disabled={loading}>
+              <PlayCircle className="w-4 h-4 mr-2" />
+              Simular Emissão
+            </Button>
+          )}
+        </div>
       </div>
+
+      {isSimulationMode && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
+          <div className="flex items-start">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3" />
+            <div>
+              <h3 className="text-sm font-medium text-yellow-800">Ambiente de Simulação Ativo</h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                As ações realizadas aqui não serão enviadas para a SEFAZ. Use para testar o fluxo de emissão e cancelamento.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <Card>
@@ -284,28 +382,27 @@ const NFCeManager: React.FC = () => {
       ) : (
         <div className="grid gap-4">
           {filteredCupons.map((cupom) => (
-            <Card key={cupom.id}>
-              <CardHeader className="pb-3">
+            <Card key={cupom.id} className="overflow-hidden transition-all hover:shadow-md">
+              <div className={`h-1 w-full ${getStatusColor(cupom.status)}`} />
+              <CardHeader className="pb-3 pt-4">
                 <div className="flex justify-between items-start">
                   <div>
-                    <CardTitle className="text-lg">
-                      NFC-e #{cupom.numero} - Série {cupom.serie}
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      NFC-e #{cupom.numero}
+                      <Badge variant="outline" className="font-normal text-xs">
+                        Série {cupom.serie}
+                      </Badge>
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Emitida em {format(new Date(cupom.data_hora_emissao), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                     </p>
-                    {cupom.data_hora_autorizacao && (
-                      <p className="text-sm text-muted-foreground">
-                        Autorizada em {format(new Date(cupom.data_hora_autorizacao), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                      </p>
-                    )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <Badge className={`${getStatusColor(cupom.status)} text-white`}>
+                    <Badge className={`${getStatusColor(cupom.status)} text-white border-0`}>
                       {getStatusLabel(cupom.status)}
                     </Badge>
                     {cupom.contingencia && (
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600 bg-yellow-50">
                         Contingência
                       </Badge>
                     )}
@@ -314,49 +411,55 @@ const NFCeManager: React.FC = () => {
               </CardHeader>
 
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-secondary/10 p-4 rounded-lg">
                   <div>
-                    <p className="font-medium text-lg">{formatCurrency(cupom.valor_total)}</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Valor Total</p>
+                    <p className="font-bold text-xl text-primary">{formatCurrency(cupom.valor_total)}</p>
+
                     {cupom.consumidor_nome && (
-                      <p className="text-sm text-muted-foreground">
-                        Consumidor: {cupom.consumidor_nome}
-                      </p>
-                    )}
-                    {cupom.consumidor_cpf_cnpj && (
-                      <p className="text-sm text-muted-foreground">
-                        CPF/CNPJ: {cupom.consumidor_cpf_cnpj}
-                      </p>
+                      <div className="mt-2">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Consumidor</p>
+                        <p className="text-sm font-medium">{cupom.consumidor_nome}</p>
+                        {cupom.consumidor_cpf_cnpj && (
+                          <p className="text-xs text-muted-foreground">{cupom.consumidor_cpf_cnpj}</p>
+                        )}
+                      </div>
                     )}
                   </div>
-                  
+
                   <div>
                     {cupom.chave_acesso && (
-                      <p className="text-sm text-muted-foreground">
-                        Chave: {cupom.chave_acesso}
-                      </p>
+                      <div className="mb-2">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Chave de Acesso</p>
+                        <p className="text-xs font-mono break-all bg-background p-1 rounded border">{cupom.chave_acesso}</p>
+                      </div>
                     )}
+
                     {cupom.protocolo_autorizacao && (
-                      <p className="text-sm text-muted-foreground">
-                        Protocolo: {cupom.protocolo_autorizacao}
-                      </p>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">Protocolo</p>
+                        <p className="text-sm">{cupom.protocolo_autorizacao}</p>
+                      </div>
                     )}
+
                     {cupom.motivo_rejeicao && (
-                      <p className="text-sm text-red-600">
-                        Motivo: {cupom.motivo_rejeicao}
-                      </p>
+                      <div className="bg-red-50 p-2 rounded border border-red-100 mt-2">
+                        <p className="text-xs text-red-800 font-semibold mb-1">Motivo da Rejeição</p>
+                        <p className="text-sm text-red-600">{cupom.motivo_rejeicao}</p>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap justify-end">
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => handleConsultarCupom(cupom.id)}
                     disabled={loading}
                   >
                     <RotateCcw className="w-4 h-4 mr-1" />
-                    Consultar
+                    Atualizar Status
                   </Button>
 
                   {cupom.status === 'autorizado' && (
@@ -371,11 +474,10 @@ const NFCeManager: React.FC = () => {
                       </Button>
 
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         onClick={() => handleCancelarCupom(cupom.id)}
                         disabled={loading}
-                        className="text-red-600 hover:text-red-700"
                       >
                         <X className="w-4 h-4 mr-1" />
                         Cancelar

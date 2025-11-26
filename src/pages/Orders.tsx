@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink } from 'lucide-react';
+import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +13,8 @@ import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
+import PixPaymentModal from '@/components/payment/PixPaymentModal';
+import { WhatsAppService } from '@/services/WhatsAppService';
 
 interface Order {
   id: string;
@@ -45,17 +47,22 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // PIX Modal State
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [pixOrder, setPixOrder] = useState<Order | null>(null);
+
   const { user } = useAuth();
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
-  
+
   // Ativar notificações de pedidos
   useOrderNotifications();
 
   useEffect(() => {
     if (user) {
       fetchOrders();
-      
+
       // Setup real-time subscription for new orders
       const channel = supabase
         .channel('orders-changes')
@@ -69,15 +76,15 @@ const Orders = () => {
           },
           (payload) => {
             console.log('🔔 Novo pedido em tempo real:', payload);
-            
+
             // Add new order to the list
             const newOrder = {
               ...payload.new,
               items: Array.isArray(payload.new.items) ? payload.new.items : []
             } as Order;
-            
+
             setOrders(prev => [newOrder, ...prev]);
-            
+
             // Play notification sound (handled by useOrderNotifications)
           }
         )
@@ -91,10 +98,10 @@ const Orders = () => {
           },
           (payload) => {
             console.log('🔄 Pedido atualizado em tempo real:', payload);
-            
+
             // Update order in the list
-            setOrders(prev => prev.map(order => 
-              order.id === payload.new.id 
+            setOrders(prev => prev.map(order =>
+              order.id === payload.new.id
                 ? { ...payload.new, items: Array.isArray(payload.new.items) ? payload.new.items : [] } as Order
                 : order
             ));
@@ -122,13 +129,13 @@ const Orders = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       // Transform the data to ensure items is always an array
       const transformedData = (data || []).map(order => ({
         ...order,
         items: Array.isArray(order.items) ? order.items : []
       }));
-      
+
       setOrders(transformedData);
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
@@ -142,7 +149,7 @@ const Orders = () => {
     }
   };
 
-  
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -174,13 +181,13 @@ const Orders = () => {
       items: order.items?.length || 0,
       timestamp: new Date().toISOString()
     });
-    
+
     try {
       console.log('🔍 ORDERS - Dados completos do pedido:', JSON.stringify(order, null, 2));
-      
+
       setSelectedOrder(order);
       setIsDetailsModalOpen(true);
-      
+
       console.log('✅ ORDERS - Modal configurado para abrir:', {
         selectedOrderSet: !!order,
         modalOpen: true
@@ -222,70 +229,70 @@ const Orders = () => {
     try {
 
       console.log('🔄 Iniciando atualização do status do pedido:', { orderId, newStatus });
-      
+
       // Validações iniciais
       if (!orderId || typeof orderId !== 'string') {
         throw new Error('ID do pedido é obrigatório e deve ser uma string válida');
       }
-      
+
       if (!newStatus || typeof newStatus !== 'string') {
         throw new Error('Novo status é obrigatório e deve ser uma string válida');
       }
-      
+
       // Verificar se o usuário está logado
       if (!user?.id) {
         console.error('❌ Usuário não está logado');
         throw new Error('Usuário não está logado. Faça login novamente.');
       }
-      
+
       console.log('✅ Usuário autenticado:', { userId: user.id, email: user.email });
-      
+
       // Verificar se o pedido existe no estado local
       const existingOrder = orders.find(o => o.id === orderId);
       if (!existingOrder) {
         console.error('❌ Pedido não encontrado no estado local:', orderId);
         throw new Error(`Pedido com ID ${orderId} não encontrado`);
       }
-      
+
       console.log('📋 Pedido encontrado:', {
         id: existingOrder.id,
         order_number: existingOrder.order_number,
         current_status: existingOrder.status,
         current_acceptance_status: existingOrder.acceptance_status
       });
-      
+
       // Verificar se a mudança de status é válida
       const validStatuses = ['pending', 'preparing', 'ready', 'delivered', 'cancelled'];
       if (!validStatuses.includes(newStatus)) {
         throw new Error(`Status '${newStatus}' não é válido. Status válidos: ${validStatuses.join(', ')}`);
       }
 
-      
+
       // Atualizar tanto status quanto acceptance_status
-      const updateData = newStatus === 'preparing' 
+      const updateData = newStatus === 'preparing'
         ? { status: newStatus, acceptance_status: 'accepted' }
         : newStatus === 'cancelled'
-        ? { status: newStatus, acceptance_status: 'rejected' }
-        : { status: newStatus };
-        
+          ? { status: newStatus, acceptance_status: 'rejected' }
+          : { status: newStatus };
+
       console.log('📝 Dados para update:', updateData);
 
 
       console.log('🔄 Executando update no Supabase...');
-      
+
       // Verificar conexão com Supabase antes do update
       const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-      
+
       if (authError) {
         console.error('❌ Erro de autenticação no Supabase:', authError);
         throw new Error(`Erro de autenticação: ${authError.message}`);
       }
-      
+
       if (!currentUser) {
         console.error('❌ Usuário não autenticado no Supabase');
         throw new Error('Sessão expirada. Faça login novamente.');
       }
-      
+
       const { data, error } = await supabase
         .from('orders')
         .update(updateData)
@@ -304,10 +311,10 @@ const Orders = () => {
           userId: user?.id,
           updateData
         });
-        
+
         // Mensagens de erro mais específicas
         let errorMessage = 'Erro desconhecido ao atualizar pedido';
-        
+
         if (error.code === 'PGRST116') {
           errorMessage = 'Pedido não encontrado ou você não tem permissão para atualizá-lo';
         } else if (error.code === '42501') {
@@ -319,7 +326,7 @@ const Orders = () => {
         } else {
           errorMessage = `Erro do banco: ${error.message}`;
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -329,16 +336,16 @@ const Orders = () => {
       }
 
       console.log('✅ Status atualizado no banco de dados:', data);
-      
+
 
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);
-      
+
       // Se status mudou para 'preparing', enviar para KDS
       if (newStatus === 'preparing' && order) {
         try {
           console.log('🔄 Enviando pedido aceito para KDS:', order.order_number);
-          
+
           const orderData = {
             user_id: order.user_id || user?.id || '',
             order_number: order.order_number,
@@ -351,10 +358,10 @@ const Orders = () => {
             payment_method: order.payment_method,
             order_type: order.order_type
           };
-          
+
           await sendToKitchen(orderData);
           console.log('✅ Pedido enviado para KDS com sucesso');
-          
+
           toast({
             title: "Pedido aceito!",
             description: "Pedido enviado para a cozinha com sucesso",
@@ -376,12 +383,12 @@ const Orders = () => {
 
       // Atualizar estado local com todos os campos atualizados
       setOrders(prev => prev.map(order =>
-        order.id === orderId 
+        order.id === orderId
           ? { ...order, ...updateData }
           : order
       ));
 
-    } catch (error) {
+    } catch (error: any) {
 
       console.error('❌ Erro completo ao atualizar status:', {
         error,
@@ -390,9 +397,9 @@ const Orders = () => {
         orderId,
         newStatus
       });
-      
+
       const errorMessage = error?.message || 'Erro desconhecido';
-      
+
       toast({
         title: "Erro ao atualizar pedido",
         description: `Não foi possível atualizar o status: ${errorMessage}`,
@@ -405,9 +412,9 @@ const Orders = () => {
   const handleBulkAction = async (orderIds: string[], action: string) => {
     try {
       console.log(`🔄 Executando ação em massa: ${action} para ${orderIds.length} pedidos`);
-      
+
       let updatePromises = [];
-      
+
       switch (action) {
         case 'accept_all':
           // Aceitar todos os pedidos e enviar para KDS
@@ -415,14 +422,14 @@ const Orders = () => {
             await updateOrderStatus(orderId, 'preparing');
           });
           break;
-          
+
         case 'ready_all':
           // Marcar todos como prontos
           updatePromises = orderIds.map(async (orderId) => {
             await updateOrderStatus(orderId, 'ready');
           });
           break;
-          
+
         case 'deliver_all':
           // Finalizar todos
           updatePromises = orderIds.map(async (orderId) => {
@@ -430,14 +437,23 @@ const Orders = () => {
           });
           break;
       }
-      
+
       await Promise.all(updatePromises);
       console.log(`✅ Ação em massa ${action} concluída com sucesso`);
-      
+
     } catch (error) {
       console.error('❌ Erro na ação em massa:', error);
       throw error;
     }
+  };
+
+  const handlePixPayment = (order: Order) => {
+    setPixOrder(order);
+    setIsPixModalOpen(true);
+  };
+
+  const handleWhatsAppShare = (order: Order) => {
+    WhatsAppService.shareOrder(order);
   };
 
   const getStatusBadge = (status: string) => {
@@ -451,7 +467,7 @@ const Orders = () => {
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
-    
+
     return (
       <Badge variant="outline" className={config.className}>
         {config.label}
@@ -531,7 +547,7 @@ const Orders = () => {
                   className="pl-10"
                 />
               </div>
-              
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full md:w-48">
                   <SelectValue placeholder="Status" />
@@ -590,7 +606,7 @@ const Orders = () => {
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
-                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
@@ -599,7 +615,7 @@ const Orders = () => {
                             </span>
                           </div>
                         </div>
-                        
+
                         <div className="text-sm text-gray-600">
                           <div className="font-medium">{order.customer_name}</div>
                           {order.customer_phone && (
@@ -617,7 +633,7 @@ const Orders = () => {
                               <MapPin className="h-4 w-4" />
                               <span>{order.customer_address}</span>
                             </div>
-                            
+
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 variant="outline"
@@ -631,7 +647,7 @@ const Orders = () => {
                                 <Copy className="h-3 w-3 mr-1" />
                                 Copiar
                               </Button>
-                              
+
                               {order.google_maps_link && (
                                 <Button
                                   variant="outline"
@@ -651,8 +667,35 @@ const Orders = () => {
                         )}
 
                         <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          {order.items.length} item(s) • {formatCurrency(order.total)} •
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                        </div>
+
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePixPayment(order);
+                            }}
+                          >
+                            <QrCode className="h-3 w-3 mr-1" />
+                            PIX
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleWhatsAppShare(order);
+                            }}
+                          >
+                            <MessageCircle className="h-3 w-3 mr-1" />
+                            WhatsApp
+                          </Button>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -713,7 +756,7 @@ const Orders = () => {
                     <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
-                           <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
                           {getStatusBadge(order.status)}
                           <div className="flex items-center gap-1 min-w-0">
                             {getOrderTypeIcon(order.order_type)}
@@ -722,7 +765,7 @@ const Orders = () => {
                             </span>
                           </div>
                         </div>
-                        
+
                         <div className="text-sm text-gray-600">
                           <div className="font-medium">{order.customer_name}</div>
                           {order.customer_phone && (
@@ -740,7 +783,7 @@ const Orders = () => {
                               <MapPin className="h-4 w-4" />
                               <span>{order.customer_address}</span>
                             </div>
-                            
+
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 variant="outline"
@@ -754,7 +797,7 @@ const Orders = () => {
                                 <Copy className="h-3 w-3 mr-1" />
                                 Copiar
                               </Button>
-                              
+
                               {order.google_maps_link && (
                                 <Button
                                   variant="outline"
@@ -774,8 +817,35 @@ const Orders = () => {
                         )}
 
                         <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          {order.items.length} item(s) • {formatCurrency(order.total)} •
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                        </div>
+
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePixPayment(order);
+                            }}
+                          >
+                            <QrCode className="h-3 w-3 mr-1" />
+                            PIX
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleWhatsAppShare(order);
+                            }}
+                          >
+                            <MessageCircle className="h-3 w-3 mr-1" />
+                            WhatsApp
+                          </Button>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -845,7 +915,7 @@ const Orders = () => {
                             </span>
                           </div>
                         </div>
-                        
+
                         <div className="text-sm text-gray-600">
                           <div className="font-medium">{order.customer_name}</div>
                           {order.customer_phone && (
@@ -858,7 +928,7 @@ const Orders = () => {
                         </div>
 
                         <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)} • 
+                          {order.items.length} item(s) • {formatCurrency(order.total)} •
                           <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
 
