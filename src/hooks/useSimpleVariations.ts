@@ -130,11 +130,30 @@ export function useSimpleVariations() {
               processedOptions = JSON.parse(item.options);
               console.log('✅ CARDÁPIO DIGITAL - Conversão de string bem sucedida:', processedOptions);
             } catch (parseError) {
-              console.log('❌ CARDÁPIO DIGITAL - Erro ao converter string:', parseError);
-              continue;
+              console.log('❌ CARDÁPIO DIGITAL - Erro ao converter string JSON. Tentando sanitizar...');
+              try {
+                const sanitized = String(item.options)
+                  .replace(/\s+/g, ' ')
+                  .replace(/'/g, '"')
+                  .replace(/,\s*]/g, ']')
+                  .trim();
+                processedOptions = JSON.parse(sanitized);
+                console.log('✅ CARDÁPIO DIGITAL - Conversão após sanitização bem sucedida:', processedOptions);
+              } catch (sanError) {
+                console.log('❌ CARDÁPIO DIGITAL - Falha na sanitização. Aplicando fallback por vírgulas.');
+                const names = String(item.options).split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+                processedOptions = names.map((name: string) => ({ name, price: 0 }));
+                console.log('✅ CARDÁPIO DIGITAL - Fallback por vírgulas aplicado:', processedOptions);
+              }
             }
           } else if (Array.isArray(item.options)) {
             processedOptions = item.options;
+          } else if (typeof item.options === 'object' && item.options !== null) {
+            // Suportar formato { "Bacon": 2.5, "Queijo": 1 }
+            processedOptions = Object.entries(item.options).map(([name, price]) => ({
+              name,
+              price: Number(price) || 0
+            }));
           } else {
             console.log('⚠️ CARDÁPIO DIGITAL - Options em formato desconhecido:', typeof item.options, item.options);
             continue;
@@ -269,4 +288,3 @@ export function useSimpleVariations() {
   };
 
 }
-

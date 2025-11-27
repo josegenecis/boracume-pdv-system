@@ -75,20 +75,42 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
-      const { data, error } = await supabase
-        .from('payment_methods')
-        .select('*')
-        .eq('user_id', userId)
-        .order('name');
-      if (!error && data) {
-        // Corrigir o mapeamento dos campos do banco para garantir que extra_fee_percent e is_card existam
-        const mapped = data.map((m: any) => ({
-          ...m,
-          extra_fee_percent: m.extra_fee_percent ?? 0,
-          is_card: m.is_card ?? false
-        }));
-        setPaymentMethods(mapped);
-        setSelectedPaymentMethod(mapped[0] || null);
+      try {
+        const { data, error } = await supabase
+          .from('payment_methods')
+          .select('*')
+          .eq('user_id', userId)
+          .order('name');
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((m: any) => ({
+            ...m,
+            extra_fee_percent: m.extra_fee_percent ?? 0,
+            is_card: m.is_card ?? false,
+            icon: m.icon || (m.id === 'pix' ? 'pix' : m.is_card ? 'cartao_credito' : 'dinheiro')
+          }));
+          setPaymentMethods(mapped);
+          setSelectedPaymentMethod(mapped[0] || null);
+        } else {
+          // Fallback para ambientes onde o fetch falha ou não há métodos cadastrados
+          const fallback = [
+            { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
+            { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
+            { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
+            { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
+          ];
+          setPaymentMethods(fallback as any);
+          setSelectedPaymentMethod(fallback[0] as any);
+        }
+      } catch (e) {
+        const fallback = [
+          { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
+          { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
+          { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
+          { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
+        ];
+        setPaymentMethods(fallback as any);
+        setSelectedPaymentMethod(fallback[0] as any);
       }
     };
     if (isOpen) fetchPaymentMethods();
