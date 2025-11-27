@@ -13,6 +13,7 @@ import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { supabase } from '@/integrations/supabase/client';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Product {
   id: string;
@@ -26,8 +27,9 @@ const MenuDigital = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const userIdFromQuery = queryParams.get('userId');
+  const { user } = useAuth();
   
-  const finalUserId = userId || userIdFromQuery;
+  const finalUserId = userId || userIdFromQuery || user?.id || '';
   
   console.log('🔍 MenuDigital - Iniciando com userId:', finalUserId);
   console.log('🔍 MenuDigital - URL atual:', window.location.href);
@@ -275,12 +277,12 @@ const MenuDigital = () => {
     );
   }
 
-  if (!profile) {
-    console.log('❌ MenuDigital - Profile não encontrado para userId:', finalUserId);
+  if (!profile && products.length === 0) {
+    console.log('❌ MenuDigital - Profile não encontrado e sem produtos para userId:', finalUserId);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Restaurante não encontrado</h1>
+          <h1 className="text-2xl font-bold mb-4">Cardápio não encontrado</h1>
           <p className="text-muted-foreground">Este restaurante pode não existir ou estar temporariamente indisponível.</p>
           <p className="text-sm text-gray-500 mt-2">userId: {finalUserId}</p>
         </div>
@@ -304,7 +306,7 @@ const MenuDigital = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <MenuHeader profile={profile} />
+      <MenuHeader profile={profile || { restaurant_name: 'Restaurante' }} />
       
       <div className="max-w-4xl mx-auto p-4 pb-24">
         <MenuContent 
