@@ -212,7 +212,7 @@ export function useSimpleVariations() {
           const processedVariation: ProductVariation = {
             id: String(item.id),
             name: String(item.name).trim(),
-            required: Boolean(item.required),
+            required: Boolean(item.required ?? item.is_required ?? false),
             max_selections: maxSelections,
             options: validOptions
           };

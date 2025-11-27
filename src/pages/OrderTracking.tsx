@@ -165,7 +165,7 @@ const OrderTracking: React.FC = () => {
               <span className="text-lg font-bold">{formatCurrency(order.total)}</span>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button variant="outline" onClick={() => navigator.clipboard.writeText(window.location.href)}>
                 Copiar link
               </Button>
@@ -181,8 +181,9 @@ const OrderTracking: React.FC = () => {
                   Pagar PIX
                 </Button>
               )}
-              <Link to="/menu-digital" className="ml-auto">
-                <Button variant="ghost">Voltar ao Cardápio</Button>
+              <div className="ml-auto"></div>
+              <Link to={order.user_id ? `/menu/${order.user_id}` : `/menu-digital?userId=${order.user_id || ''}` }>
+                <Button variant="ghost" className="w-full sm:w-auto">Voltar ao Cardápio</Button>
               </Link>
             </div>
           </CardContent>
