@@ -213,6 +213,21 @@ const MenuDigital = () => {
         }
       }
 
+      // Notificar cliente via WhatsApp (pedido recebido)
+      try {
+        if (orderData.customer_phone && data?.id) {
+          const trackUrl = `${window.location.origin}/track/${data.id}`;
+          await supabase.functions.invoke('whatsapp-notify', {
+            body: {
+              to: orderData.customer_phone,
+              text: `Recebemos seu pedido ${orderData.order_number}. Acompanhe aqui: ${trackUrl}`
+            }
+          });
+        }
+      } catch (waErr) {
+        console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
+      }
+
       if (orderData.payment_method === 'pix') {
         setPixAmount(orderData.total);
         setPixOrderId(data?.id);

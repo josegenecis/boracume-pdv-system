@@ -359,8 +359,23 @@ const Orders = () => {
             order_type: order.order_type
           };
 
-          await sendToKitchen(orderData);
-          console.log('✅ Pedido enviado para KDS com sucesso');
+        await sendToKitchen(orderData);
+        console.log('✅ Pedido enviado para KDS com sucesso');
+
+        // Notificar cliente via WhatsApp (se configurado)
+        try {
+          if (order.customer_phone) {
+            const trackUrl = `${window.location.origin}/track/${order.id}`;
+            await supabase.functions.invoke('whatsapp-notify', {
+              body: {
+                to: order.customer_phone,
+                text: `Seu pedido ${order.order_number} foi aceito e está sendo preparado. Acompanhe: ${trackUrl}`
+              }
+            });
+          }
+        } catch (waErr) {
+          console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
+        }
 
           toast({
             title: "Pedido aceito!",
@@ -375,6 +390,25 @@ const Orders = () => {
           });
         }
       } else {
+        // Notificar mudanças relevantes
+        try {
+          if (order?.customer_phone) {
+            const trackUrl = `${window.location.origin}/track/${order.id}`;
+            const msgByStatus: Record<string, string> = {
+              ready: `Seu pedido ${order?.order_number} está pronto! Acompanhe: ${trackUrl}`,
+              delivered: `Seu pedido ${order?.order_number} saiu para entrega. Acompanhe: ${trackUrl}`,
+              cancelled: `Seu pedido ${order?.order_number} foi cancelado. Se for engano, entre em contato.`
+            };
+            const text = msgByStatus[newStatus];
+            if (text) {
+              await supabase.functions.invoke('whatsapp-notify', {
+                body: { to: order.customer_phone, text }
+              });
+            }
+          }
+        } catch (waErr) {
+          console.warn('⚠️ Falha ao notificar via WhatsApp:', waErr);
+        }
         toast({
           title: "Status atualizado",
           description: `Status do pedido atualizado com sucesso.`,
