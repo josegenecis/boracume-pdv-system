@@ -365,10 +365,12 @@ const Orders = () => {
         // Notificar cliente via WhatsApp (se configurado)
         try {
           if (order.customer_phone) {
+            const digits = String(order.customer_phone).replace(/\D/g, '');
+            const to = digits.startsWith('55') ? digits : `55${digits}`;
             const trackUrl = `${window.location.origin}/track/${order.id}`;
             await supabase.functions.invoke('whatsapp-notify', {
               body: {
-                to: order.customer_phone,
+                to,
                 text: `Seu pedido ${order.order_number} foi aceito e está sendo preparado. Acompanhe: ${trackUrl}`
               }
             });
@@ -393,6 +395,8 @@ const Orders = () => {
         // Notificar mudanças relevantes
         try {
           if (order?.customer_phone) {
+            const digits = String(order.customer_phone).replace(/\D/g, '');
+            const to = digits.startsWith('55') ? digits : `55${digits}`;
             const trackUrl = `${window.location.origin}/track/${order.id}`;
             const msgByStatus: Record<string, string> = {
               ready: `Seu pedido ${order?.order_number} está pronto! Acompanhe: ${trackUrl}`,
@@ -402,7 +406,7 @@ const Orders = () => {
             const text = msgByStatus[newStatus];
             if (text) {
               await supabase.functions.invoke('whatsapp-notify', {
-                body: { to: order.customer_phone, text }
+                body: { to, text }
               });
             }
           }

@@ -216,10 +216,12 @@ const MenuDigital = () => {
       // Notificar cliente via WhatsApp (pedido recebido)
       try {
         if (orderData.customer_phone && data?.id) {
+          const digits = String(orderData.customer_phone).replace(/\D/g, '');
+          const to = digits.startsWith('55') ? digits : `55${digits}`;
           const trackUrl = `${window.location.origin}/track/${data.id}`;
           await supabase.functions.invoke('whatsapp-notify', {
             body: {
-              to: orderData.customer_phone,
+              to,
               text: `Recebemos seu pedido ${orderData.order_number}. Acompanhe aqui: ${trackUrl}`
             }
           });
