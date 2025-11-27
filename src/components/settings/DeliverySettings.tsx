@@ -31,7 +31,13 @@ const DeliverySettings = () => {
     name: '', 
     delivery_fee: '', 
     minimum_order: '',
-    delivery_time: '30-45 min'
+    delivery_time: '30-45 min',
+    zone_type: 'neighborhood',
+    center_lat: '',
+    center_lng: '',
+    radius_km: '',
+    max_distance_km: '',
+    polygon_geojson: ''
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -118,7 +124,13 @@ const DeliverySettings = () => {
         delivery_fee: parseFloat(newZone.delivery_fee),
         minimum_order: parseFloat(newZone.minimum_order),
         delivery_time: newZone.delivery_time,
-        active: true
+        active: true,
+        zone_type: newZone.zone_type,
+        center_lat: newZone.center_lat ? parseFloat(newZone.center_lat) : null,
+        center_lng: newZone.center_lng ? parseFloat(newZone.center_lng) : null,
+        radius_km: newZone.radius_km ? parseFloat(newZone.radius_km) : null,
+        max_distance_km: newZone.max_distance_km ? parseFloat(newZone.max_distance_km) : null,
+        polygon_geojson: newZone.polygon_geojson && newZone.polygon_geojson.trim() !== '' ? newZone.polygon_geojson : null
       };
 
       const { data, error } = await supabase
@@ -130,7 +142,10 @@ const DeliverySettings = () => {
       if (error) throw error;
 
       setDeliveryZones(prev => [...prev, data]);
-      setNewZone({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
+      setNewZone({ 
+        name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min',
+        zone_type: 'neighborhood', center_lat: '', center_lng: '', radius_km: '', max_distance_km: '', polygon_geojson: ''
+      });
 
       toast({
         title: "Bairro adicionado",
@@ -140,7 +155,7 @@ const DeliverySettings = () => {
       console.error('Erro ao adicionar bairro:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível adicionar o bairro. Tente novamente.",
+        description: "Não foi possível adicionar o bairro. Verifique se sua base tem os campos de área de entrega habilitados.",
         variant: "destructive"
       });
     }
@@ -358,7 +373,22 @@ const DeliverySettings = () => {
                 onChange={(e) => setNewZone(prev => ({ ...prev, delivery_time: e.target.value }))}
               />
             </div>
-            
+
+            <div className="space-y-2">
+              <Label htmlFor="zone-type">Tipo de Área</Label>
+              <select
+                id="zone-type"
+                className="border rounded h-10 px-3"
+                value={newZone.zone_type}
+                onChange={(e) => setNewZone(prev => ({ ...prev, zone_type: e.target.value }))}
+              >
+                <option value="neighborhood">Por bairro</option>
+                <option value="radius">Raio a partir da loja</option>
+                <option value="distance_km">Por distância (km)</option>
+                <option value="polygon">Seleção no mapa (GeoJSON)</option>
+              </select>
+            </div>
+          
             <div className="space-y-2">
               <Label>&nbsp;</Label>
               <Button onClick={addDeliveryZone} className="w-full">
@@ -367,6 +397,72 @@ const DeliverySettings = () => {
               </Button>
             </div>
           </div>
+
+          {/* Campos avançados conforme tipo */}
+          {newZone.zone_type !== 'neighborhood' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(newZone.zone_type === 'radius' || newZone.zone_type === 'distance_km') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="center-lat">Latitude da Loja</Label>
+                    <Input
+                      id="center-lat"
+                      placeholder="-23.5505"
+                      value={newZone.center_lat}
+                      onChange={(e) => setNewZone(prev => ({ ...prev, center_lat: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="center-lng">Longitude da Loja</Label>
+                    <Input
+                      id="center-lng"
+                      placeholder="-46.6333"
+                      value={newZone.center_lng}
+                      onChange={(e) => setNewZone(prev => ({ ...prev, center_lng: e.target.value }))}
+                    />
+                  </div>
+                </>
+              )}
+              {newZone.zone_type === 'radius' && (
+                <div className="space-y-2">
+                  <Label htmlFor="radius-km">Raio (km)</Label>
+                  <Input
+                    id="radius-km"
+                    type="number"
+                    step="0.1"
+                    placeholder="3.0"
+                    value={newZone.radius_km}
+                    onChange={(e) => setNewZone(prev => ({ ...prev, radius_km: e.target.value }))}
+                  />
+                </div>
+              )}
+              {newZone.zone_type === 'distance_km' && (
+                <div className="space-y-2">
+                  <Label htmlFor="max-distance-km">Distância Máxima (km)</Label>
+                  <Input
+                    id="max-distance-km"
+                    type="number"
+                    step="0.1"
+                    placeholder="5.0"
+                    value={newZone.max_distance_km}
+                    onChange={(e) => setNewZone(prev => ({ ...prev, max_distance_km: e.target.value }))}
+                  />
+                </div>
+              )}
+              {newZone.zone_type === 'polygon' && (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="polygon-geojson">GeoJSON (Polígono)</Label>
+                  <Textarea
+                    id="polygon-geojson"
+                    placeholder='{"type":"Polygon","coordinates":[[[-46.63,-23.55],...]]}'
+                    value={newZone.polygon_geojson}
+                    onChange={(e) => setNewZone(prev => ({ ...prev, polygon_geojson: e.target.value }))}
+                    rows={4}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-3">
             <h4 className="font-medium">Bairros Cadastrados</h4>
