@@ -16,6 +16,7 @@ import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
+import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
 
 
 const Configuracoes: React.FC = () => {
@@ -50,6 +51,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
 
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
+          <TabsTrigger value="pix">PIX</TabsTrigger>
 
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
@@ -100,6 +102,10 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="payment-methods">
           <PaymentMethodsSettings />
+        </TabsContent>
+
+        <TabsContent value="pix">
+          <PixIntegrationSettings />
         </TabsContent>
 
         {hasMarketingFeature() && (

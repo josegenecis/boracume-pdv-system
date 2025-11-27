@@ -13,14 +13,40 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('BORACUME_SUPABASE_URL') ?? '',
+      Deno.env.get('BORACUME_SERVICE_ROLE_KEY') ?? ''
     )
 
     const providedSecret = req.headers.get('x-pix-secret') ?? ''
-    const expectedSecret = Deno.env.get('PIX_WEBHOOK_SECRET') ?? ''
-    if (!expectedSecret || providedSecret !== expectedSecret) {
+    if (!providedSecret) {
       return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    let userIdFromSecret: string | null = null
+    let secretValidated = false
+
+    // Try multi-tenant secret from DB first
+    try {
+      const { data: pix, error: pixErr } = await supabase
+        .from('pix_settings')
+        .select('user_id, webhook_secret, enabled')
+        .eq('webhook_secret', providedSecret)
+        .eq('enabled', true)
+        .maybeSingle()
+      if (!pixErr && pix) {
+        userIdFromSecret = pix.user_id as string
+        secretValidated = true
+      }
+    } catch (_) {
+      // Table may not exist yet; ignore and fallback to env secret
+    }
+
+    if (!secretValidated) {
+      const expectedSecret = Deno.env.get('PIX_WEBHOOK_SECRET') ?? ''
+      if (!expectedSecret || providedSecret !== expectedSecret) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      secretValidated = true
     }
 
     const body = await req.json()
@@ -32,7 +58,7 @@ serve(async (req) => {
 
     const { data: order, error: getError } = await supabase
       .from('orders')
-      .select('id, acceptance_status')
+      .select('id, acceptance_status, user_id')
       .eq('id', orderId)
       .maybeSingle()
 
@@ -49,6 +75,10 @@ serve(async (req) => {
 
     if (!isPaid) {
       return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    if (userIdFromSecret && order.user_id !== userIdFromSecret) {
+      return new Response(JSON.stringify({ error: 'order_mismatch' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     if (order.acceptance_status === 'pending_acceptance' || order.acceptance_status === 'accepted') {
@@ -69,4 +99,3 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
-
