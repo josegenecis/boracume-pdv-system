@@ -40,7 +40,7 @@ const MenuDigital = () => {
     categories, 
     profile, 
     deliveryZones, 
-    loading: menuLoading 
+    isLoading: menuLoading 
   } = useMenuData(finalUserId);
 
   console.log('🔍 MenuDigital - Estado do loading:', menuLoading);
