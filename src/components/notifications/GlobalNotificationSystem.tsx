@@ -47,9 +47,10 @@ const GlobalNotificationSystem: React.FC = () => {
     const loadPendingOrders = async () => {
       const { data } = await supabase
         .from('orders')
-        .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status')
+        .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status')
         .eq('user_id', user.id)
-        .eq('acceptance_status', 'pending_acceptance')
+        .in('acceptance_status', ['pending_acceptance', 'awaiting_pix_payment'])
+        .or('status.eq.pending')
         .order('created_at', { ascending: false });
 
       if (data && data.length > 0) {
@@ -77,9 +78,11 @@ const GlobalNotificationSystem: React.FC = () => {
           console.log('🔔 GlobalNotification - Novo pedido:', payload);
           
           const newOrder = payload.new as PendingOrder;
-          if (newOrder.acceptance_status !== 'pending_acceptance') {
-            return;
-          }
+          const showForInsert = 
+            newOrder.acceptance_status === 'pending_acceptance' ||
+            newOrder.acceptance_status === 'awaiting_pix_payment' ||
+            (newOrder as any).status === 'pending';
+          if (!showForInsert) return;
           setPendingOrders(prev => [newOrder, ...prev]);
           if (!isOnOrdersPage) {
             setIsVisible(true);
@@ -107,7 +110,10 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         (payload) => {
           const updatedOrder = payload.new as PendingOrder;
-          if (updatedOrder.acceptance_status === 'pending_acceptance') {
+          const isPendingLike = updatedOrder.acceptance_status === 'pending_acceptance' 
+            || updatedOrder.acceptance_status === 'awaiting_pix_payment'
+            || (updatedOrder as any).status === 'pending';
+          if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
             if (!isOnOrdersPage) {
               setIsVisible(true);
