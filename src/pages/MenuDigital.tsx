@@ -11,6 +11,7 @@ import { MenuContent } from '@/components/menu/MenuContent';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,6 +72,7 @@ const MenuDigital = () => {
   const [showPixModal, setShowPixModal] = useState(false);
   const [pixAmount, setPixAmount] = useState(0);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const debugInfo = {
     expectedUrl: `${window.location.origin}/menu/{userId}`,
@@ -326,6 +328,13 @@ const MenuDigital = () => {
       <MenuHeader profile={profile || { restaurant_name: 'Restaurante' }} />
       
       <div className="max-w-4xl mx-auto p-4 pb-24">
+        <div className="mb-6">
+          <Input
+            placeholder="Buscar no cardápio..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
         {(() => {
           const categoryNames = categories.map((c: any) => c.name);
           const productsWithCategory = products.map((p: any) => ({
@@ -333,9 +342,18 @@ const MenuDigital = () => {
             category: (categories.find((c: any) => c.id === p.category_id)?.name) || 'Outros'
           }));
 
+          const normalizedQuery = searchQuery.trim().toLowerCase();
+          const filteredProducts = normalizedQuery
+            ? productsWithCategory.filter((p: any) => {
+                const name = String(p.name || '').toLowerCase();
+                const desc = String(p.description || '').toLowerCase();
+                return name.includes(normalizedQuery) || desc.includes(normalizedQuery);
+              })
+            : productsWithCategory;
+
           return (
             <MenuContent 
-              products={productsWithCategory}
+              products={filteredProducts}
               categories={categoryNames}
               onProductClick={handleProductClick}
             />
@@ -392,6 +410,22 @@ const MenuDigital = () => {
           }
         }}
       />
+
+      {/* Banner de Cupom */}
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="mt-6 rounded-xl border bg-gradient-to-r from-amber-50 to-amber-100 p-4 flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-amber-900">Tem cupom? 🎟️</p>
+            <p className="text-sm text-amber-800">Insira o código no checkout para aplicar o desconto.</p>
+          </div>
+          <button
+            className="rounded-md bg-amber-600 text-white px-3 py-2 text-sm hover:bg-amber-700"
+            onClick={() => setShowCartModal(true)}
+          >
+            Abrir checkout
+          </button>
+        </div>
+      </div>
 
       {/* Carrinho Fixo */}
       <CartBottomBar
