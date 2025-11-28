@@ -89,12 +89,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             is_card: m.is_card ?? false,
             icon: m.icon || (m.id === 'pix' ? 'pix' : m.is_card ? 'cartao_credito' : 'dinheiro')
           }));
-          setPaymentMethods(mapped);
-          setSelectedPaymentMethod(mapped[0] || null);
+          const filtered = mapped.filter((m: any) => m.id !== 'pix');
+          setPaymentMethods(filtered);
+          setSelectedPaymentMethod(filtered[0] || null);
         } else {
           // Fallback para ambientes onde o fetch falha ou não há métodos cadastrados
           const fallback = [
-            { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
             { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
             { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
             { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
@@ -104,7 +104,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         }
       } catch (e) {
         const fallback = [
-          { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
           { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
           { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
           { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
@@ -125,7 +124,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
 
   const paymentOptions = [
-    { value: 'pix', label: 'PIX', icon: Smartphone },
     { value: 'cartao_credito', label: 'Cartão de Crédito', icon: CreditCard },
     { value: 'cartao_debito', label: 'Cartão de Débito', icon: CreditCard },
     { value: 'dinheiro', label: 'Dinheiro', icon: Banknote }
@@ -488,53 +486,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 onValueChange={(value) => {
                   const method = paymentMethods.find((m) => m.id === value);
                   setSelectedPaymentMethod(method);
-                  // Remove or update: setExtraFee(method?.extra_fee || 0); // at line 461
-                  // Usar ID/slug consistente para lógica e envio
                   setPaymentMethod(method?.id || '');
                 }}
                 className="space-y-2"
               >
                 {paymentMethods.length > 0 ? paymentMethods.map((option) => {
-                  const IconComponent = option.icon === 'pix' ? Smartphone : option.icon === 'cartao_credito' || option.icon === 'cartao_debito' ? CreditCard : Banknote;
+                  const IconComponent = option.icon === 'cartao_credito' || option.icon === 'cartao_debito' ? CreditCard : Banknote;
                   const isSelected = selectedPaymentMethod?.id === option.id;
                   return (
-                    <div key={option.id} className="relative">
-                      <RadioGroupItem 
-                        value={option.id} 
-                        id={option.id}
-                        className="sr-only"
-                      />
-                      <Label
-                        htmlFor={option.id}
-
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                          isSelected 
-                            ? 'border-primary bg-primary/5 shadow-sm' 
-                            : 'border-gray-200 hover:border-primary/50 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          isSelected ? 'border-primary bg-primary' : 'border-gray-300'
-                        }`}>
-                          {isSelected && (
-                            <div className="w-2 h-2 rounded-full bg-white" />
-                          )}
-                        </div>
-                        <IconComponent className={`h-5 w-5 transition-colors ${
-                          isSelected ? 'text-primary' : 'text-gray-600'
-                        }`} />
-                        <span className={`flex-1 font-medium transition-colors ${
-                          isSelected ? 'text-primary' : 'text-gray-900'
-
-                        }`}>{option.name}</span>
-                        {option.is_card && option.extra_fee_percent > 0 && (
-                          <span className="ml-2 text-xs text-orange-600 font-bold">+{option.extra_fee_percent}%</span>
-                        )}
-                      </Label>
-                      {isSelected && option.is_card && option.extra_fee_percent > 0 && (
-                        <div className="ml-12 mt-1 text-xs text-orange-700 font-semibold">
-                          {option.extra_fee_message || "Este método possui taxa extra já inclusa no total."}
-                        </div>
+                    <div key={option.id} className="flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200">
+                      <RadioGroupItem value={option.id} id={option.id} />
+                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-primary' : 'text-gray-600'}`} />
+                      <Label htmlFor={option.id} className={`flex-1 font-medium ${isSelected ? 'text-primary' : 'text-gray-900'}`}>{option.name}</Label>
+                      {option.is_card && option.extra_fee_percent > 0 && (
+                        <span className="ml-2 text-xs text-orange-600 font-bold">+{option.extra_fee_percent}%</span>
                       )}
                     </div>
                   );

@@ -34,6 +34,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
           <RadioGroupItem 
             value={option.name} 
             id={inputId} 
+            className="h-5 w-5"
           />
         ) : (
           <Checkbox
@@ -42,9 +43,10 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             onCheckedChange={(checked) => 
               onSelectionChange(option.name, checked as boolean)
             }
+            className="h-5 w-5"
           />
         )}
-        <Label htmlFor={inputId}>
+        <Label htmlFor={inputId} className="text-sm">
           {option.name}
         </Label>
       </div>

@@ -21,21 +21,23 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-      <div className="flex">
-        {product.image_url && (
-          <img 
-            src={product.image_url} 
-            alt={product.name}
-            className="w-24 h-24 object-cover"
-          />
-        )}
+    <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
+      <div className="flex items-stretch">
+        <div className="w-24 h-24 bg-gray-100">
+          {product.image_url ? (
+            <img 
+              src={product.image_url} 
+              alt={product.name}
+              className="w-24 h-24 object-cover"
+            />
+          ) : null}
+        </div>
         <div className="flex-1 p-4">
-          <div className="flex justify-between items-start">
+          <div className="flex justify-between">
             <div className="flex-1">
-              <h3 className="font-semibold text-lg">{product.name}</h3>
+              <h3 className="font-semibold text-lg line-clamp-2">{product.name}</h3>
               {product.description && (
-                <p className="text-muted-foreground text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1 line-clamp-3">
                   {product.description}
                 </p>
               )}
@@ -44,12 +46,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClic
               </p>
             </div>
             <Button 
-              onClick={() => {
-                console.log('🔘 CLICK NO BOTÃO DO PRODUTO:', product.name);
-                onProductClick(product);
-              }}
+              onClick={() => onProductClick(product)}
               size="sm"
-              className="ml-4"
+              className="ml-4 self-start"
             >
               <Plus className="h-4 w-4 mr-1" />
               Adicionar

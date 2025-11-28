@@ -13,7 +13,6 @@ import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface Product {
@@ -69,9 +68,7 @@ const MenuDigital = () => {
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
   const navigate = useNavigate();
-  const [showPixModal, setShowPixModal] = useState(false);
-  const [pixAmount, setPixAmount] = useState(0);
-  const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
+  // PIX desativado enquanto não houver integração
   const [searchQuery, setSearchQuery] = useState('');
 
   const debugInfo = {
@@ -233,13 +230,7 @@ const MenuDigital = () => {
       }
 
       if (orderData.payment_method === 'pix') {
-        setPixAmount(orderData.total);
-        setPixOrderId(data?.id);
-        setShowPixModal(true);
-        toast({
-          title: "Pedido criado!",
-          description: "Aguardando pagamento do PIX para enviar ao restaurante.",
-        });
+        throw new Error('PIX indisponível no momento. Escolha outra forma de pagamento.');
       } else {
       toast({
         title: "Pedido realizado!",
@@ -384,32 +375,7 @@ const MenuDigital = () => {
         userId={finalUserId}
       />
 
-      <PixPaymentModal
-        isOpen={showPixModal}
-        onClose={() => setShowPixModal(false)}
-        amount={pixAmount}
-        orderId={pixOrderId}
-        onPaymentConfirmed={async () => {
-          if (!pixOrderId) return;
-          try {
-            const { error: updateError } = await supabase
-              .from('orders')
-              .update({ acceptance_status: 'pending_acceptance' })
-              .eq('id', pixOrderId);
-            if (!updateError) {
-              toast({
-                title: "Pagamento confirmado!",
-                description: "Seu pedido foi enviado para o restaurante.",
-              });
-              clearCart();
-              setShowCartModal(false);
-              navigate(`/track/${pixOrderId}`);
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }}
-      />
+      {/* PIX desativado enquanto não houver integração */}
 
       {/* Banner de Cupom */}
       <div className="max-w-4xl mx-auto px-4">

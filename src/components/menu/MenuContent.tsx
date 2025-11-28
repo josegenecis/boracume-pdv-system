@@ -33,12 +33,12 @@ export const MenuContent: React.FC<MenuContentProps> = ({ products, categories, 
 
   return (
     <Tabs defaultValue={categories[0]} className="w-full">
-      <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 mb-8 h-12 bg-gray-50 rounded-xl p-1 border shadow-sm">
+      <TabsList className="flex w-full items-center gap-2 mb-6 h-12 bg-gray-50 rounded-xl p-2 border shadow-sm overflow-x-auto whitespace-nowrap">
         {categories.map(category => (
           <TabsTrigger 
             key={category} 
             value={category}
-            className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
+            className="flex-shrink-0 rounded-lg px-3 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
           >
             {category}
           </TabsTrigger>
@@ -47,7 +47,7 @@ export const MenuContent: React.FC<MenuContentProps> = ({ products, categories, 
       
       {categories.map(category => (
         <TabsContent key={category} value={category}>
-          <div className="grid gap-6">
+          <div className="grid gap-4 sm:grid-cols-2">
             {productsByCategory(category).map(product => (
               <ProductCard 
                 key={product.id} 
