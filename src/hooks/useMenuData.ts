@@ -338,14 +338,14 @@ export const useMenuData = (userId: string) => {
     setIsLoading(true);
     setError(null);
 
-    // Timeout global ajustado para 8 segundos
+    // Timeout global ajustado para 15 segundos
     const globalTimeout = setTimeout(() => {
       if (isMountedRef.current) {
-        console.log('⏰ [MENU] Timeout global (8s) - finalizando');
+        console.log('⏰ [MENU] Timeout global (15s) - finalizando');
         setIsLoading(false);
         setError('Timeout no carregamento dos dados');
       }
-    }, 8000);
+    }, 15000);
 
     try {
       if (forceRefresh) {
@@ -367,6 +367,11 @@ export const useMenuData = (userId: string) => {
         setProfile(profileResult.value);
       } else {
         console.error('❌ [MENU] Falha no perfil:', profileResult.status === 'rejected' ? profileResult.reason : 'Sem dados');
+        const cachedProfile = loadFromCache(MENU_CACHE_KEYS.PROFILE);
+        if (cachedProfile) {
+          setProfile(cachedProfile);
+          console.log('✅ [MENU] Perfil recuperado do cache após falha de fetch');
+        }
       }
 
       if (productsResult.status === 'fulfilled') {
