@@ -546,7 +546,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       htmlFor={option.id}
                       className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
                     >
-                      <RadioGroupItem value={option.id} id={option.id} />
+                      <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
                       <span className="flex-1 font-medium">{option.name}</span>
                       {option.is_card && option.extra_fee_percent > 0 && (
                         <Badge variant="secondary" className="text-xs">
@@ -557,6 +557,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   ))}
                 </RadioGroup>
 
+                {paymentMethod === 'pix' && (
+                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                    PIX disponível, mas o pedido só será criado após confirmação via integração. Selecione outra forma para finalizar.
+                  </div>
+                )}
 
               </div>
 
@@ -587,7 +592,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder} 
-              disabled={!isFormValid() || loading}
+              disabled={!isFormValid() || loading || paymentMethod === 'pix'}
               className="flex-1"
             >
               {loading ? 'Processando...' : 'Finalizar Pedido'}

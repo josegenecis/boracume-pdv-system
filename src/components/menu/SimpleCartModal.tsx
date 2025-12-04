@@ -89,12 +89,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             is_card: m.is_card ?? false,
             icon: m.icon || (m.id === 'pix' ? 'pix' : m.is_card ? 'cartao_credito' : 'dinheiro')
           }));
-          const filtered = mapped.filter((m: any) => m.id !== 'pix');
-          setPaymentMethods(filtered);
-          setSelectedPaymentMethod(filtered[0] || null);
+          setPaymentMethods(mapped);
+          setSelectedPaymentMethod(mapped[0] || null);
         } else {
           // Fallback para ambientes onde o fetch falha ou não há métodos cadastrados
           const fallback = [
+            { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
             { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
             { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
             { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
@@ -104,6 +104,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         }
       } catch (e) {
         const fallback = [
+          { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix' },
           { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito' },
           { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
           { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
@@ -124,6 +125,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
 
   const paymentOptions = [
+    { value: 'pix', label: 'PIX', icon: Smartphone },
     { value: 'cartao_credito', label: 'Cartão de Crédito', icon: CreditCard },
     { value: 'cartao_debito', label: 'Cartão de Débito', icon: CreditCard },
     { value: 'dinheiro', label: 'Dinheiro', icon: Banknote }
@@ -495,7 +497,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   const isSelected = selectedPaymentMethod?.id === option.id;
                   return (
                     <div key={option.id} className="flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200">
-                      <RadioGroupItem value={option.id} id={option.id} />
+                      <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
                       <IconComponent className={`h-5 w-5 ${isSelected ? 'text-primary' : 'text-gray-600'}`} />
                       <Label htmlFor={option.id} className={`flex-1 font-medium ${isSelected ? 'text-primary' : 'text-gray-900'}`}>{option.name}</Label>
                       {option.is_card && option.extra_fee_percent > 0 && (
@@ -505,6 +507,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   );
                 }) : <span className="text-muted-foreground">Nenhuma forma de pagamento cadastrada</span>}
               </RadioGroup>
+
+              {isPixSelected && (
+                <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                  PIX disponível, mas o pedido só será criado após confirmação via integração. Selecione outra forma para finalizar.
+                </div>
+              )}
 
             </div>
 
@@ -545,7 +553,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder}
-              disabled={!isFormValid() || isLoading}
+              disabled={!isFormValid() || isLoading || isPixSelected}
               className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold"
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
@@ -556,3 +564,4 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     </Dialog>
   );
 };
+  const isPixSelected = selectedPaymentMethod?.id === 'pix';

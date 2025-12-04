@@ -23,6 +23,8 @@ export const MenuContent: React.FC<MenuContentProps> = ({ products, categories, 
   const productsByCategory = (category: string) => 
     products.filter(product => product.category === category);
 
+  const categoriesToShow = categories.filter((c) => productsByCategory(c).length > 0);
+
   if (categories.length === 0) {
     return (
       <div className="text-center py-12">
@@ -32,20 +34,20 @@ export const MenuContent: React.FC<MenuContentProps> = ({ products, categories, 
   }
 
   return (
-    <Tabs defaultValue={categories[0]} className="w-full">
-      <TabsList className="flex w-full items-center gap-2 mb-6 h-12 bg-gray-50 rounded-xl p-2 border shadow-sm overflow-x-auto whitespace-nowrap">
-        {categories.map(category => (
+    <Tabs defaultValue={categoriesToShow[0]} className="w-full">
+      <TabsList className="sticky top-0 z-20 flex w-full items-center gap-2 mb-6 h-12 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/60 rounded-none px-2 border-b shadow-sm overflow-x-auto whitespace-nowrap">
+        {categoriesToShow.map(category => (
           <TabsTrigger 
             key={category} 
             value={category}
-            className="flex-shrink-0 rounded-lg px-3 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
+            className="flex-shrink-0 rounded-md min-w-[120px] h-10 px-4 text-sm font-medium data-[state=active]:bg-primary/5 data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
           >
             {category}
           </TabsTrigger>
         ))}
       </TabsList>
       
-      {categories.map(category => (
+      {categoriesToShow.map(category => (
         <TabsContent key={category} value={category}>
           <div className="grid gap-4 sm:grid-cols-2">
             {productsByCategory(category).map(product => (
