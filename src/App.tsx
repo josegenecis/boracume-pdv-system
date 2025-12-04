@@ -43,6 +43,7 @@ import { HardwareTestPage } from '@/pages/HardwareTestPage';
 import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
+import AgentDashboard from '@/pages/AgentDashboard';
 import './App.css';
 import './styles/responsive.css';
 
@@ -95,6 +96,7 @@ function AppContent() {
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/cardapio" element={<Menu />} />
+          <Route path="/agente" element={<AgentDashboard />} />
 
           <Route path="/hardware-test" element={<HardwareTestPage />} />
           <Route path="/test" element={<TestPage />} />
