@@ -40,6 +40,19 @@ export const useAppearanceSettings = () => {
     applySettings(settings);
   }, [settings]);
 
+  // Carregar fallback do localStorage quando não houver dados no Supabase
+  useEffect(() => {
+    if (!user) {
+      try {
+        const raw = localStorage.getItem('appearance_settings');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        }
+      } catch {}
+    }
+  }, [user]);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -65,6 +78,16 @@ export const useAppearanceSettings = () => {
           reduced_motion: data.reduced_motion || false,
         };
         setSettings(newSettings);
+        try { localStorage.setItem('appearance_settings', JSON.stringify(newSettings)); } catch {}
+      } else {
+        // Fallback localStorage
+        try {
+          const raw = localStorage.getItem('appearance_settings');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            setSettings((prev) => ({ ...prev, ...parsed }));
+          }
+        } catch {}
       }
     } catch (error) {
       console.error('Erro ao carregar configurações de aparência:', error);
@@ -77,25 +100,26 @@ export const useAppearanceSettings = () => {
     try {
       const updatedSettings = { ...settings, ...newSettings };
       
-      const { error } = await supabase
-        .from('appearance_settings')
-        .upsert({
-          user_id: user?.id,
-          theme: updatedSettings.theme,
-          primary_color: updatedSettings.primary_color,
-          font_size: updatedSettings.font_size,
-          compact_mode: updatedSettings.compact_mode,
-          show_animations: updatedSettings.show_animations,
-          high_contrast: updatedSettings.high_contrast,
-          reduced_motion: updatedSettings.reduced_motion,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
+    const { error } = await supabase
+      .from('appearance_settings')
+      .upsert({
+        user_id: user?.id,
+        theme: updatedSettings.theme,
+        primary_color: updatedSettings.primary_color,
+        font_size: updatedSettings.font_size,
+        compact_mode: updatedSettings.compact_mode,
+        show_animations: updatedSettings.show_animations,
+        high_contrast: updatedSettings.high_contrast,
+        reduced_motion: updatedSettings.reduced_motion,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id'
+      });
 
       if (error) throw error;
 
-      setSettings(updatedSettings);
+    setSettings(updatedSettings);
+    try { localStorage.setItem('appearance_settings', JSON.stringify(updatedSettings)); } catch {}
 
       toast({
         title: "Configurações salvas",
@@ -117,6 +141,9 @@ export const useAppearanceSettings = () => {
     // Apply theme
     if (settings.theme === 'dark') {
       root.classList.add('dark');
+    } else if (settings.theme === 'auto') {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.toggle('dark', !!prefersDark);
     } else {
       root.classList.remove('dark');
     }
@@ -134,6 +161,9 @@ export const useAppearanceSettings = () => {
     if (colors) {
       root.style.setProperty('--primary', colors.primary);
       root.style.setProperty('--accent', colors.accent);
+      // Garantir contraste adequado para textos sobre primary/accent
+      root.style.setProperty('--primary-foreground', '0 0% 100%');
+      root.style.setProperty('--accent-foreground', '0 0% 100%');
     }
 
     // Apply font size

@@ -36,6 +36,7 @@ const NotificationSettings = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -95,6 +96,7 @@ const NotificationSettings = () => {
       ...prev,
       [field]: !prev[field as keyof typeof prev]
     }));
+    scheduleAutoSave();
   };
 
   const handleSelectChange = (field: string, value: string) => {
@@ -102,6 +104,7 @@ const NotificationSettings = () => {
       ...prev,
       [field]: value
     }));
+    scheduleAutoSave();
   };
 
   const playTestSound = async () => {
@@ -152,7 +155,7 @@ const NotificationSettings = () => {
         push_notifications: notifications.pushNotifications,
         sound_enabled: notifications.soundEnabled,
         order_sound: notifications.orderSound,
-        volume: notifications.volume,
+        volume: typeof notifications.volume === 'string' ? parseInt(notifications.volume, 10) : notifications.volume,
         custom_bell_url: customSoundUrls.custom_bell_url,
         custom_chime_url: customSoundUrls.custom_chime_url,
         custom_ding_url: customSoundUrls.custom_ding_url,
@@ -195,6 +198,17 @@ const NotificationSettings = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const scheduleAutoSave = () => {
+    if (!user) return;
+    if (saveTimeout) {
+      window.clearTimeout(saveTimeout);
+    }
+    const id = window.setTimeout(() => {
+      handleSave().catch(console.error);
+    }, 600);
+    setSaveTimeout(id);
   };
 
   const handleSoundUploaded = (soundType: string, url: string | null) => {
