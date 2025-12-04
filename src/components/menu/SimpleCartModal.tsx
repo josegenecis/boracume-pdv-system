@@ -120,6 +120,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
   const finalTotal = total + deliveryFee + computedExtraFee;
+  const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
 
 
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
@@ -564,4 +565,3 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     </Dialog>
   );
 };
-  const isPixSelected = selectedPaymentMethod?.id === 'pix';
