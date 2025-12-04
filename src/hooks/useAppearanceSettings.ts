@@ -164,6 +164,8 @@ export const useAppearanceSettings = () => {
       // Garantir contraste adequado para textos sobre primary/accent
       root.style.setProperty('--primary-foreground', '0 0% 100%');
       root.style.setProperty('--accent-foreground', '0 0% 100%');
+      // Atualizar ring para acompanhar a cor principal
+      root.style.setProperty('--ring', colors.primary);
     }
 
     // Apply font size

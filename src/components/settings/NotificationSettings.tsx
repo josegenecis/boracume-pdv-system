@@ -118,6 +118,8 @@ const NotificationSettings = () => {
     }
 
     try {
+      // Evitar sobreposição: parar sons antes de testar
+      soundNotifications.stopAllSounds();
       await soundNotifications.playSound(notifications.orderSound);
       toast({
         title: "Som reproduzido",

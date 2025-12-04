@@ -50,6 +50,7 @@ export class SoundNotifications {
         const audio = new Audio();
         audio.volume = this.volume;
         audio.preload = 'none'; // Changed to 'none' to avoid loading issues
+        audio.loop = false;
         
         // Only set src when we need to play
         this.audioFiles.set(sound.name, audio);
