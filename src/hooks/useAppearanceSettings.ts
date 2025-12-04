@@ -99,7 +99,10 @@ export const useAppearanceSettings = () => {
   const updateSettings = async (newSettings: Partial<AppearanceSettings>) => {
     try {
       const updatedSettings = { ...settings, ...newSettings };
-      
+      // Atualizar UI imediatamente (optimistic update)
+      setSettings(updatedSettings);
+      try { localStorage.setItem('appearance_settings', JSON.stringify(updatedSettings)); } catch {}
+
     const { error } = await supabase
       .from('appearance_settings')
       .upsert({
@@ -117,9 +120,6 @@ export const useAppearanceSettings = () => {
       });
 
       if (error) throw error;
-
-    setSettings(updatedSettings);
-    try { localStorage.setItem('appearance_settings', JSON.stringify(updatedSettings)); } catch {}
 
       toast({
         title: "Configurações salvas",
