@@ -1,17 +1,16 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { Diamond } from 'lucide-react';
+import DiscountBadge from './DiscountBadge';
 
 interface Product {
   id: string;
   name: string;
+  description: string;
   price: number;
-  description?: string;
+  original_price?: number;
+  discount_percentage?: number;
   image_url?: string;
-  category_id?: string;
-  category?: string;
-  user_id: string;
+  order_count: number;
 }
 
 interface ProductCardProps {
@@ -19,43 +18,62 @@ interface ProductCardProps {
   onProductClick: (product: Product) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
-      <div className="flex items-stretch">
-        <div className="w-24 h-24 bg-gray-100">
-          {product.image_url ? (
-            <img 
-              src={product.image_url} 
-              alt={product.name}
-              className="w-24 h-24 object-cover"
+    <div
+      onClick={() => onProductClick(product)}
+      className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+    >
+      <div className="flex gap-4">
+        {/* Conteúdo do lado esquerdo */}
+        <div className="flex-1 min-w-0">
+          {/* Nome do produto */}
+          <h3 className="font-bold text-gray-900 mb-2 text-lg">
+            {product.name}
+          </h3>
+
+          {/* Descrição */}
+          <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+            {product.description}
+          </p>
+
+          {/* Preço com desconto ou preço normal */}
+          {product.original_price && product.discount_percentage ? (
+            <DiscountBadge
+              originalPrice={product.original_price}
+              discountedPrice={product.price}
+              discountPercentage={product.discount_percentage}
             />
-          ) : null}
-        </div>
-        <div className="flex-1 p-4">
-          <div className="flex justify-between">
-            <div className="flex-1">
-              <h3 className="font-semibold text-lg line-clamp-2">{product.name}</h3>
-              {product.description && (
-                <p className="text-muted-foreground text-sm mt-1 line-clamp-3">
-                  {product.description}
-                </p>
-              )}
-              <p className="text-primary font-bold text-lg mt-2">
+          ) : (
+            <div className="flex items-center gap-1">
+              <Diamond className="h-4 w-4 text-purple-600" />
+              <span className="font-bold text-black text-lg">
                 R$ {product.price.toFixed(2)}
-              </p>
+              </span>
             </div>
-            <Button 
-              onClick={() => onProductClick(product)}
-              size="sm"
-              className="ml-4 self-start"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Adicionar
-            </Button>
+          )}
+        </div>
+
+        {/* Imagem do lado direito */}
+        <div className="flex-shrink-0">
+          <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100">
+            {product.image_url ? (
+              <img
+                src={product.image_url}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                <span className="text-xs">Sem imagem</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
+
+export default ProductCard;

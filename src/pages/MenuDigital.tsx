@@ -1,25 +1,43 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
-import { MenuHeader } from '@/components/menu/MenuHeader';
-import { MenuContent } from '@/components/menu/MenuContent';
+import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import HighlightsSection from '@/components/menu/HighlightsSection';
+import CategoryTabs from '@/components/menu/CategoryTabs';
+import ProductCard from '@/components/menu/ProductCard';
+import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
   id: string;
   name: string;
+  description: string;
   price: number;
-  image?: string;
+  original_price?: number;
+  discount_percentage?: number;
+  image_url?: string;
+  is_available: boolean;
+  show_in_delivery: boolean;
+  is_highlight: boolean;
+  order_count: number;
+  category_id: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  display_order: number;
 }
 
 const MenuDigital = () => {
@@ -31,26 +49,6 @@ const MenuDigital = () => {
   
   const finalUserId = userId || userIdFromQuery || user?.id || '';
   
-  console.log('🔍 MenuDigital - Iniciando com userId:', finalUserId);
-  console.log('🔍 MenuDigital - URL atual:', window.location.href);
-  console.log('🔍 MenuDigital - Params:', { userId, userIdFromQuery });
-
-  const { 
-    products, 
-    categories, 
-    profile, 
-    deliveryZones, 
-    isLoading: menuLoading 
-  } = useMenuData(finalUserId);
-
-  console.log('🔍 MenuDigital - Estado do loading:', menuLoading);
-  console.log('🔍 MenuDigital - Dados carregados:', { 
-    products: products?.length, 
-    categories: categories?.length, 
-    profile: !!profile,
-    deliveryZones: deliveryZones?.length 
-  });
-
   const { toast } = useToast();
   const { 
     cart, 
@@ -67,57 +65,59 @@ const MenuDigital = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
-  const navigate = useNavigate();
-  // PIX desativado enquanto não houver integração
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string>('');
+  const navigate = useNavigate();
 
-  const debugInfo = {
-    expectedUrl: `${window.location.origin}/menu/{userId}`,
-    isCorrectUrl: window.location.pathname.includes('/menu/')
-  };
+  // Buscar dados do menu
+  const { 
+    products, 
+    categories, 
+    highlights, 
+    profile, 
+    deliveryZones, 
+    isLoading: menuLoading,
+    error: menuError 
+  } = useMenuData({ userId: finalUserId });
 
-  if (!window.location.pathname.includes('/menu/')) {
-    console.log('⚠️ URL incorreta detectada:', debugInfo);
-    console.warn('⚠️ Para testar variações, acesse: /menu/{userId}');
-  }
+  // Configurar scroll spy para tabs
+  const categoryIds = categories.map(cat => `category-${cat.id}`);
+  const { activeSection, registerSection } = useScrollSpy(categoryIds);
+
+  // Atualizar categoria ativa baseada no scroll
+  useEffect(() => {
+    if (activeSection) {
+      const categoryId = activeSection.replace('category-', '');
+      setActiveCategory(categoryId);
+    }
+  }, [activeSection]);
+
+  // Definir categoria inicial
+  useEffect(() => {
+    if (categories.length > 0 && !activeCategory) {
+      setActiveCategory(categories[0].id);
+    }
+  }, [categories, activeCategory]);
 
   const handleProductClick = async (product: Product) => {
-    console.log('🔍 MenuDigital - Produto clicado:', product.name);
-    
     if (!finalUserId) {
       console.error('❌ MenuDigital - userId não encontrado');
       return;
     }
 
     try {
-      console.log('🔄 MenuDigital - Buscando variações...');
       const variations = await fetchVariations(product.id);
-      
-      console.log('📊 MenuDigital - Resultado busca variações:', {
-        total: variations.length,
-        variações: variations.map((v: any) => v.name)
-      });
-      
-      // SEMPRE abrir modal de variações, mesmo se não houver variações
-      console.log('✅ MenuDigital - Abrindo modal de variações/detalhes...');
-      
       setSelectedProduct(product);
       setShowVariationModal(true);
-      
-      console.log('🔧 MenuDigital - Estados definidos:', {
-        selectedProduct: product.name,
-        variationsCount: variations.length,
-        modalAberto: true
-      });
     } catch (error) {
-      console.error('❌ MenuDigital - Erro ao buscar variações:', error);
+      console.error('❌ Erro ao buscar variações:', error);
       // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
       setSelectedProduct(product);
       setShowVariationModal(true);
     }
   };
 
-  const handleAddToCartFromModal = (product: any, quantity: number, variations: string[], notes: string, variationPrice: number) => {
+  const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => {
     addToCart(product, quantity, variations, notes, variationPrice);
     setShowVariationModal(false);
     setSelectedProduct(null);
@@ -177,7 +177,6 @@ const MenuDigital = () => {
 
           if (customerError) {
             console.error('Erro ao criar cliente:', customerError);
-            // Continuar sem cliente se falhar - não é crítico
           } else {
             customerId = newCustomer.id;
           }
@@ -232,15 +231,15 @@ const MenuDigital = () => {
       if (orderData.payment_method === 'pix') {
         throw new Error('PIX indisponível no momento. Escolha outra forma de pagamento.');
       } else {
-      toast({
-        title: "Pedido realizado!",
-        description: `Acompanhe o andamento do pedido ${orderData.order_number}.`,
-      });
-      clearCart();
-      setShowCartModal(false);
-      if (data?.id) {
-        navigate(`/track/${data.id}`);
-      }
+        toast({
+          title: "Pedido realizado!",
+          description: `Acompanhe o andamento do pedido ${orderData.order_number}.`,
+        });
+        clearCart();
+        setShowCartModal(false);
+        if (data?.id) {
+          navigate(`/track/${data.id}`);
+        }
       }
     } catch (error) {
       console.error('Erro completo ao finalizar pedido:', error);
@@ -261,95 +260,132 @@ const MenuDigital = () => {
     }
   };
 
-  if (menuLoading) {
-    console.log('🔄 MenuDigital - Ainda carregando dados...');
+  // Filtrar produtos por busca
+  const filteredProducts = products.filter(product => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      product.name.toLowerCase().includes(query) ||
+      product.description.toLowerCase().includes(query)
+    );
+  });
+
+  // Agrupar produtos por categoria
+  const productsByCategory = categories.map(category => ({
+    ...category,
+    products: filteredProducts.filter(product => product.category_id === category.id)
+  })).filter(category => category.products.length > 0);
+
+  if (menuLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-lg">Carregando cardápio...</p>
-          <p className="text-sm text-muted-foreground">userId: {finalUserId}</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Carregando cardápio...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (menuError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Erro ao carregar cardápio</h1>
+          <p className="text-gray-600">{menuError}</p>
         </div>
       </div>
     );
   }
 
   if (!finalUserId) {
-    console.log('❌ MenuDigital - userId não encontrado');
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Link inválido</h1>
-          <p className="text-muted-foreground">Verifique se o link está correto.</p>
-          <p className="text-sm text-gray-500 mt-2">URL: {window.location.href}</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Link inválido</h1>
+          <p className="text-gray-600">Verifique se o link está correto.</p>
         </div>
       </div>
     );
   }
 
-  if (!profile && products.length === 0) {
-    console.log('❌ MenuDigital - Profile não encontrado e sem produtos para userId:', finalUserId);
+  if (!profile || products.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Cardápio não encontrado</h1>
-          <p className="text-muted-foreground">Este restaurante pode não existir ou estar temporariamente indisponível.</p>
-          <p className="text-sm text-gray-500 mt-2">userId: {finalUserId}</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            {profile?.restaurant_name || 'Restaurante'}
+          </h1>
+          <p className="text-gray-600">Este restaurante ainda não possui produtos disponíveis.</p>
         </div>
       </div>
     );
   }
-
-  if (products.length === 0) {
-    console.log('⚠️ MenuDigital - Nenhum produto encontrado para userId:', finalUserId);
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">{profile?.restaurant_name || 'Restaurante'}</h1>
-          <p className="text-muted-foreground">Este restaurante ainda não possui produtos disponíveis para delivery.</p>
-        </div>
-      </div>
-    );
-  }
-
-  console.log('✅ MenuDigital - Renderizando cardápio com sucesso');
 
   return (
-    <div className="min-h-screen bg-white">
-      <MenuHeader profile={profile || { restaurant_name: 'Restaurante' }} />
-      
-      <div className="max-w-4xl mx-auto p-4 pb-24">
-        <div className="mb-6">
-          <Input
-            placeholder="Buscar no cardápio..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        {(() => {
-          const categoryNames = categories.map((c: any) => c.name);
-          const productsWithCategory = products.map((p: any) => ({
-            ...p,
-            category: (categories.find((c: any) => c.id === p.category_id)?.name) || 'Outros'
-          }));
-
-          const normalizedQuery = searchQuery.trim().toLowerCase();
-          const filteredProducts = normalizedQuery
-            ? productsWithCategory.filter((p: any) => {
-                const name = String(p.name || '').toLowerCase();
-                const desc = String(p.description || '').toLowerCase();
-                return name.includes(normalizedQuery) || desc.includes(normalizedQuery);
-              })
-            : productsWithCategory;
-
-          return (
-            <MenuContent 
-              products={filteredProducts}
-              categories={categoryNames}
-              onProductClick={handleProductClick}
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {/* Header com busca */}
+      <div className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            {profile.restaurant_name}
+          </h1>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder={`Buscar em ${profile.restaurant_name}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
-          );
-        })()}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Seção de Destaques */}
+        {highlights.length > 0 && (
+          <HighlightsSection
+            products={highlights}
+            onProductClick={handleProductClick}
+          />
+        )}
+
+        {/* Tabs de Categorias */}
+        {categories.length > 0 && (
+          <CategoryTabs
+            categories={categories}
+            activeCategory={activeCategory}
+            onCategoryChange={setActiveCategory}
+          />
+        )}
+
+        {/* Produtos por Categoria */}
+        <div className="space-y-8">
+          {productsByCategory.map((category) => (
+            <section
+              key={category.id}
+              id={`category-${category.id}`}
+              ref={(el) => {
+                if (el) registerSection(`category-${category.id}`, el);
+              }}
+              className="scroll-mt-32"
+            >
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                {category.name}
+              </h2>
+              <div className="space-y-3">
+                {category.products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onProductClick={handleProductClick}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
 
       {/* Modals */}
@@ -375,23 +411,16 @@ const MenuDigital = () => {
         userId={finalUserId}
       />
 
-      {/* PIX desativado enquanto não houver integração */}
-
-      {/* Banner de Cupom */}
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="mt-6 rounded-xl border bg-gradient-to-r from-amber-50 to-amber-100 p-4 flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-amber-900">Tem cupom? 🎟️</p>
-            <p className="text-sm text-amber-800">Insira o código no checkout para aplicar o desconto.</p>
-          </div>
-          <button
-            className="rounded-md bg-amber-600 text-white px-3 py-2 text-sm hover:bg-amber-700"
-            onClick={() => setShowCartModal(true)}
-          >
-            Abrir checkout
-          </button>
-        </div>
-      </div>
+      {/* Banner de Desconto do Clube */}
+      <ClubDiscountBanner
+        discountPercentage={10}
+        onClick={() => {
+          toast({
+            title: "Clube de Vantagens",
+            description: "Cadastre-se para ganhar 10% de desconto em todos os produtos!",
+          });
+        }}
+      />
 
       {/* Carrinho Fixo */}
       <CartBottomBar

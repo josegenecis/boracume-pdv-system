@@ -1,18 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { debugLogger } from '@/utils/debugLogger';
-import { debugLog, measurePerformance } from '@/utils/debugSystem';
 
 interface Product {
   id: string;
   name: string;
   description: string;
   price: number;
+  original_price?: number;
+  discount_percentage?: number;
   image_url?: string;
-  category_id: string;
   is_available: boolean;
-  variations?: any[];
+  show_in_delivery: boolean;
+  is_highlight: boolean;
+  order_count: number;
+  category_id: string;
 }
 
 interface Category {
@@ -38,444 +39,172 @@ interface DeliveryZone {
   delivery_fee: number;
   minimum_order: number;
   delivery_time: string;
+  active: boolean;
 }
 
-// Informações do navegador otimizadas
-const getBrowserInfo = () => {
-  const userAgent = navigator.userAgent.toLowerCase();
-  return {
-    isSafari: /safari/.test(userAgent) && !/chrome/.test(userAgent),
-    isMobile: /mobile|android|iphone|ipad/.test(userAgent)
-  };
-};
+interface MenuData {
+  products: Product[];
+  categories: Category[];
+  highlights: Product[];
+  profile: RestaurantProfile | null;
+  deliveryZones: DeliveryZone[];
+  isLoading: boolean;
+  error: string | null;
+}
 
-// Cache keys
-const MENU_CACHE_KEYS = {
-  PRODUCTS: 'boracume_menu_products',
-  CATEGORIES: 'boracume_menu_categories', 
-  PROFILE: 'boracume_menu_profile',
-  DELIVERY_ZONES: 'boracume_menu_delivery_zones',
-  EXPIRY: 'boracume_menu_cache_expiry'
-};
+interface UseMenuDataOptions {
+  userId: string;
+  enableCache?: boolean;
+  cacheTTL?: number; // em minutos
+}
 
-const CACHE_DURATION = 5 * 60 * 1000; // REDUZIDO para 5 minutos
+// Cache simples com localStorage
+const CACHE_KEY = 'boracume_menu_data';
+const DEFAULT_CACHE_TTL = 5; // 5 minutos
 
-// Função otimizada para verificar storage
-const getAvailableStorage = () => {
+const getCachedData = (userId: string): MenuData | null => {
   try {
-    if (typeof localStorage === 'undefined') return 0;
+    const cached = localStorage.getItem(`${CACHE_KEY}_${userId}`);
+    if (!cached) return null;
     
-    const testKey = '__storage_test__';
-    localStorage.setItem(testKey, 'test');
-    localStorage.removeItem(testKey);
+    const { data, timestamp } = JSON.parse(cached);
+    const now = Date.now();
+    const ttl = DEFAULT_CACHE_TTL * 60 * 1000; // converter para milissegundos
     
-    let used = 0;
-    for (let key in localStorage) {
-      if (localStorage.hasOwnProperty(key)) {
-        used += localStorage[key].length + key.length;
-      }
-    }
-    
-    // Estimar storage disponível (5MB típico)
-    const total = 5 * 1024 * 1024;
-    return Math.max(0, total - used);
-  } catch {
-    return 0;
-  }
-};
-
-// Cache otimizado com verificação de espaço
-const saveToCache = (key: string, data: any) => {
-  try {
-    const serialized = JSON.stringify(data);
-    const available = getAvailableStorage();
-    
-    if (serialized.length > available) {
-      console.warn('⚠️ [CACHE] Espaço insuficiente - limpando cache antigo');
-      clearMenuCache();
-    }
-    
-    localStorage.setItem(key, serialized);
-    localStorage.setItem(MENU_CACHE_KEYS.EXPIRY, Date.now().toString());
-  } catch (error) {
-    console.warn('⚠️ [CACHE] Erro ao salvar cache:', error);
-  }
-};
-
-// Load otimizado do cache
-const loadFromCache = (key: string): any | null => {
-  try {
-    const expiry = localStorage.getItem(MENU_CACHE_KEYS.EXPIRY);
-    if (!expiry || Date.now() - parseInt(expiry) > CACHE_DURATION) {
-      console.log('🗑️ [CACHE] Cache expirado - limpando');
-      clearMenuCache();
+    if (now - timestamp > ttl) {
+      localStorage.removeItem(`${CACHE_KEY}_${userId}`);
       return null;
     }
     
-    const cached = localStorage.getItem(key);
-    if (!cached) return null;
-    
-    return JSON.parse(cached);
+    return data;
   } catch (error) {
-    console.warn('⚠️ [CACHE] Erro ao carregar cache:', error);
+    console.error('Erro ao buscar cache:', error);
     return null;
   }
 };
 
-// Clear cache otimizado
-const clearMenuCache = () => {
+const setCachedData = (userId: string, data: MenuData) => {
   try {
-    Object.values(MENU_CACHE_KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
-    console.log('🗑️ [CACHE] Cache limpo');
+    const cacheData = {
+      data,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`${CACHE_KEY}_${userId}`, JSON.stringify(cacheData));
   } catch (error) {
-    console.warn('⚠️ [CACHE] Erro ao limpar cache:', error);
+    console.error('Erro ao salvar cache:', error);
   }
 };
 
-export const useMenuData = (userId: string) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [profile, setProfile] = useState<RestaurantProfile | null>(null);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions): MenuData => {
+  const [data, setData] = useState<MenuData>({
+    products: [],
+    categories: [],
+    highlights: [],
+    profile: null,
+    deliveryZones: [],
+    isLoading: true,
+    error: null
+  });
 
-  // Refs para controle de debounce e cleanup
-  const isMountedRef = useRef(true);
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastFetchTimeRef = useRef<number>(0);
-
-  const browserInfo = getBrowserInfo();
-
-  // Função otimizada para buscar dados do restaurante
-  const fetchRestaurantData = async (): Promise<RestaurantProfile | null> => {
-    const performanceTracker = measurePerformance('useMenuData', 'fetchRestaurantData');
-    debugLog('useMenuData', 'fetchRestaurantData_start', { userId });
-    debugLogger.menu('fetching_restaurant_profile', { userId });
-    
-    // Cache primeiro
-    const cachedProfile = loadFromCache(MENU_CACHE_KEYS.PROFILE);
-    if (cachedProfile) {
-      debugLog('useMenuData', 'profile_cache_hit', { profileId: cachedProfile.id });
-      debugLogger.menu('profile_loaded_from_cache', { profileId: cachedProfile.id });
-      performanceTracker.end({ source: 'cache' });
-      return cachedProfile;
-    }
-    
-    // Timeout ajustado para 6 segundos para perfil
-    const profilePromise = supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-      
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento do perfil')), 6000)
-    );
-    
-    const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
-
-    if (error) {
-      debugLogger.menu('profile_fetch_error', { error: error.message }, 'error');
-      throw error;
-    }
-
-    if (data) {
-      console.log('✅ [MENU] Perfil carregado:', data.restaurant_name);
-      saveToCache(MENU_CACHE_KEYS.PROFILE, data);
-      return data;
-    }
-
-    return null;
-  };
-
-  // Função otimizada para buscar produtos
-  const fetchProducts = async (): Promise<Product[]> => {
-    console.log('🔄 [MENU] Buscando produtos...');
-    
-    // Cache primeiro
-    const cachedProducts = loadFromCache(MENU_CACHE_KEYS.PRODUCTS);
-    if (cachedProducts) {
-      console.log('✅ [MENU] Produtos do cache:', cachedProducts.length);
-      return cachedProducts;
-    }
-    
-    // Timeout ajustado para 6 segundos para produtos
-    const productsPromise = supabase
-      .from('products')
-      .select(`
-        *,
-        product_variations (
-          id,
-          name,
-          price,
-          required,
-          max_selections
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('available', true)
-      .eq('show_in_delivery', true)
-      .order('name');
-      
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento dos produtos')), 6000)
-    );
-
-    const { data, error } = await Promise.race([productsPromise, timeoutPromise]) as any;
-
-    if (error) {
-      console.error('❌ [MENU] Erro nos produtos:', error);
-      throw error;
-    }
-
-    const products = data || [];
-    console.log('✅ [MENU] Produtos carregados:', products.length);
-    
-    // Processar variações
-    const processedProducts = products.map(product => ({
-      ...product,
-      variations: product.product_variations || []
-    }));
-    
-    saveToCache(MENU_CACHE_KEYS.PRODUCTS, processedProducts);
-    return processedProducts;
-  };
-
-  // Função otimizada para buscar categorias
-  const fetchCategories = async (): Promise<Category[]> => {
-    console.log('🔄 [MENU] Buscando categorias...');
-    
-    // Cache primeiro
-    const cachedCategories = loadFromCache(MENU_CACHE_KEYS.CATEGORIES);
-    if (cachedCategories) {
-      console.log('✅ [MENU] Categorias do cache:', cachedCategories.length);
-      return cachedCategories;
-    }
-    
-    // Timeout ajustado para 6 segundos para categorias
-    const categoriesPromise = supabase
-      .from('product_categories')
-      .select('*')
-      .eq('user_id', userId)
-      .order('display_order', { ascending: true });
-      
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento das categorias')), 6000)
-    );
-
-    const { data, error } = await Promise.race([categoriesPromise, timeoutPromise]) as any;
-
-    if (error) {
-      console.error('❌ [MENU] Erro nas categorias:', error);
-      throw error;
-    }
-
-    const categories = data || [];
-    console.log('✅ [MENU] Categorias carregadas:', categories.length);
-    
-    saveToCache(MENU_CACHE_KEYS.CATEGORIES, categories);
-    return categories;
-  };
-
-  // Função otimizada para buscar zonas de entrega
-  const fetchDeliveryZones = async (): Promise<DeliveryZone[]> => {
-    console.log('🔄 [MENU] Buscando zonas de entrega...');
-    
-    // Cache primeiro
-    const cachedZones = loadFromCache(MENU_CACHE_KEYS.DELIVERY_ZONES);
-    if (cachedZones) {
-      console.log('✅ [MENU] Zonas do cache:', cachedZones.length);
-      return cachedZones;
-    }
-    
-    // Timeout ajustado para 6 segundos para zonas
-    const zonesPromise = supabase
-      .from('delivery_zones')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('active', true)
-      .order('name');
-      
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout no carregamento das zonas')), 6000)
-    );
-
-    const { data, error } = await Promise.race([zonesPromise, timeoutPromise]) as any;
-
-    if (error) {
-      console.error('❌ [MENU] Erro nas zonas:', error);
-      throw error;
-    }
-
-    const zones = data || [];
-    console.log('✅ [MENU] Zonas carregadas:', zones.length);
-    
-    saveToCache(MENU_CACHE_KEYS.DELIVERY_ZONES, zones);
-    return zones;
-  };
-
-  // Função principal otimizada - SEM RETRY AGRESSIVO
-  const fetchAllData = useCallback(async (forceRefresh: boolean = false) => {
-    if (!userId) {
-      console.log('⚠️ [MENU] Sem userId - pulando fetch');
-      setIsLoading(false);
-      return;
-    }
-
-    // Evitar múltiplas chamadas muito próximas - REDUZIDO para 1 segundo
-    const now = Date.now();
-    if (!forceRefresh && now - lastFetchTimeRef.current < 1000) {
-      console.log('⚠️ [MENU] Fetch muito recente - ignorando');
-      return;
-    }
-    
-    lastFetchTimeRef.current = now;
-    
-    console.log('🔄 [MENU] === INÍCIO FETCH DADOS ===');
-    setIsLoading(true);
-    setError(null);
-
-    // Timeout global ajustado para 15 segundos
-    const globalTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
-        console.log('⏰ [MENU] Timeout global (15s) - finalizando');
-        setIsLoading(false);
-        setError('Timeout no carregamento dos dados');
-      }
-    }, 15000);
-
-    try {
-      if (forceRefresh) {
-        clearMenuCache();
-      }
-
-      // Buscar dados em paralelo com Promise.allSettled
-      const [profileResult, productsResult, categoriesResult, zonesResult] = await Promise.allSettled([
-        fetchRestaurantData(),
-        fetchProducts(),
-        fetchCategories(),
-        fetchDeliveryZones()
-      ]);
-
-      if (!isMountedRef.current) return;
-
-      // Processar resultados
-      if (profileResult.status === 'fulfilled' && profileResult.value) {
-        setProfile(profileResult.value);
-      } else {
-        console.error('❌ [MENU] Falha no perfil:', profileResult.status === 'rejected' ? profileResult.reason : 'Sem dados');
-        const cachedProfile = loadFromCache(MENU_CACHE_KEYS.PROFILE);
-        if (cachedProfile) {
-          setProfile(cachedProfile);
-          console.log('✅ [MENU] Perfil recuperado do cache após falha de fetch');
-        }
-      }
-
-      if (productsResult.status === 'fulfilled') {
-        setProducts(productsResult.value);
-      } else {
-        console.error('❌ [MENU] Falha nos produtos:', productsResult.reason);
-      }
-
-      if (categoriesResult.status === 'fulfilled') {
-        setCategories(categoriesResult.value);
-      } else {
-        console.error('❌ [MENU] Falha nas categorias:', categoriesResult.reason);
-      }
-
-      if (zonesResult.status === 'fulfilled') {
-        setDeliveryZones(zonesResult.value);
-      } else {
-        console.error('❌ [MENU] Falha nas zonas:', zonesResult.reason);
-      }
-
-      // Verificar se pelo menos alguns dados foram carregados
-      const hasData = profileResult.status === 'fulfilled' || 
-                     productsResult.status === 'fulfilled' || 
-                     categoriesResult.status === 'fulfilled';
-
-      if (hasData) {
-        console.log('✅ [MENU] Dados carregados com sucesso');
-        toast.success('Cardápio carregado com sucesso!');
-      } else {
-        console.error('❌ [MENU] Falha total no carregamento');
-        setError('Erro ao carregar dados do cardápio');
-        toast.error('Erro ao carregar cardápio. Tente novamente.');
-      }
-
-    } catch (error) {
-      console.error('💥 [MENU] Erro crítico:', error);
-      if (isMountedRef.current) {
-        setError('Erro ao carregar dados do cardápio');
-        toast.error('Erro ao carregar cardápio. Verifique sua conexão.');
-      }
-    } finally {
-      clearTimeout(globalTimeout);
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
-      console.log('🔄 [MENU] === FIM FETCH DADOS ===');
-    }
-  }, [userId]);
-
-  // Função para refresh manual
-  const refreshData = useCallback(() => {
-    console.log('🔄 [MENU] Refresh manual solicitado');
-    fetchAllData(true);
-  }, [fetchAllData]);
-
-  // Effect otimizado com debounce
   useEffect(() => {
-    isMountedRef.current = true;
-    
-    debugLog('useMenuData', 'useEffect_triggered', { 
-      userId,
-      hasUserId: !!userId,
-      browserInfo 
-    });
-    
-    if (!userId) {
-      debugLog('useMenuData', 'no_userId', { userId });
-      setIsLoading(false);
-      return;
-    }
+    const fetchData = async () => {
+      try {
+        setData(prev => ({ ...prev, isLoading: true, error: null }));
 
-    // Debounce para evitar múltiplas chamadas
-    if (fetchTimeoutRef.current) {
-      debugLog('useMenuData', 'clearing_previous_timeout', {});
-      clearTimeout(fetchTimeoutRef.current);
-    }
+        // Verificar cache primeiro
+        if (enableCache) {
+          const cachedData = getCachedData(userId);
+          if (cachedData) {
+            setData(cachedData);
+            return;
+          }
+        }
 
-    // Delay mínimo para Safari/Mobile
-    const delay = browserInfo.isSafari ? 200 : (browserInfo.isMobile ? 100 : 0);
-    
-    debugLog('useMenuData', 'scheduling_fetch', { delay, browserInfo });
-    
-    fetchTimeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
-        debugLog('useMenuData', 'loadData', { userId });
-        fetchAllData();
-      }
-    }, delay);
+        // Buscar perfil do restaurante
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+          .eq('id', userId)
+          .single();
 
-    return () => {
-      isMountedRef.current = false;
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
+        if (profileError) throw profileError;
+
+        // Buscar categorias
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('product_categories')
+          .select('id, name, description, display_order')
+          .eq('user_id', userId)
+          .order('display_order', { ascending: true });
+
+        if (categoriesError) throw categoriesError;
+
+        // Buscar produtos disponíveis
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select(`
+            *,
+            product_categories!inner(name)
+          `)
+          .eq('user_id', userId)
+          .eq('is_available', true)
+          .eq('show_in_delivery', true)
+          .order('name', { ascending: true });
+
+        if (productsError) throw productsError;
+
+        // Buscar zonas de entrega
+        const { data: deliveryZonesData, error: deliveryZonesError } = await supabase
+          .from('delivery_zones')
+          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+          .eq('user_id', userId)
+          .eq('active', true)
+          .order('name', { ascending: true });
+
+        if (deliveryZonesError) throw deliveryZonesError;
+
+        // Processar produtos
+        const processedProducts = (productsData || []).map(product => ({
+          ...product,
+          category_name: product.product_categories?.name
+        }));
+
+        // Separar destaques
+        const highlights = processedProducts
+          .filter(product => product.is_highlight)
+          .sort((a, b) => b.order_count - a.order_count)
+          .slice(0, 6); // Limitar a 6 destaques
+
+        const menuData: MenuData = {
+          products: processedProducts,
+          categories: categoriesData || [],
+          highlights,
+          profile: profileData,
+          deliveryZones: deliveryZonesData || [],
+          isLoading: false,
+          error: null
+        };
+
+        setData(menuData);
+
+        // Salvar no cache
+        if (enableCache) {
+          setCachedData(userId, menuData);
+        }
+
+      } catch (error) {
+        console.error('Erro ao buscar dados do menu:', error);
+        setData(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Erro ao carregar o cardápio. Tente novamente.'
+        }));
       }
     };
-  }, [userId, fetchAllData]);
 
-  return {
-    products,
-    categories,
-    profile,
-    deliveryZones,
-    isLoading,
-    error,
-    refreshData
-  };
+    if (userId) {
+      fetchData();
+    }
+  }, [userId, enableCache]);
+
+  return data;
 };
