@@ -20,6 +20,7 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  Bot,
 
   Download,
   X
@@ -37,6 +38,7 @@ const CollapsibleSidebar = () => {
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
+    { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },
     { to: '/entregadores', icon: Users, label: 'Entregadores' },
     { to: '/bairros-entrega', icon: MapPin, label: 'Bairros de Entrega' },
     { to: '/loyalty', icon: Crown, label: 'Programa de Fidelidade' },
