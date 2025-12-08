@@ -38,10 +38,12 @@ const GlobalNotificationSystem: React.FC = () => {
   });
 
   // Verifica se está na página de pedidos para não mostrar notificação
-  const isOnOrdersPage = location.pathname === '/orders' || location.pathname === '/kitchen';
+  const isOnOrdersPage = ['/orders', '/pedidos', '/kitchen', '/cozinha'].includes(location.pathname);
+  const isDigitalMenu = location.pathname.includes('/menu');
 
   useEffect(() => {
     if (!user) return;
+    if (isDigitalMenu) return; // não mostrar para clientes no cardápio digital
 
     // Carregar pedidos pendentes iniciais
     const loadPendingOrders = async () => {
@@ -155,7 +157,7 @@ const GlobalNotificationSystem: React.FC = () => {
       // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
     };
-  }, [user, isOnOrdersPage, soundEnabled, toast]);
+  }, [user, isOnOrdersPage, isDigitalMenu, soundEnabled, toast]);
 
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
@@ -180,7 +182,7 @@ const GlobalNotificationSystem: React.FC = () => {
       return newDismissed;
     });
     setIsVisible(false);
-    navigate('/orders');
+    navigate('/pedidos');
   };
 
   const handleDismiss = () => {
@@ -227,7 +229,7 @@ const GlobalNotificationSystem: React.FC = () => {
   // Filtrar pedidos que não foram dispensados
   const visibleOrders = pendingOrders.filter(order => !dismissedOrders.has(order.id));
 
-  if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage) {
+  if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage || isDigitalMenu) {
     return null;
   }
 

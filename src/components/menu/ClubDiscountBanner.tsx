@@ -17,8 +17,8 @@ const ClubDiscountBanner: React.FC<ClubDiscountBannerProps> = ({
         onClick={onClick}
       >
         <div className="flex items-center gap-3">
-          <div className="bg-purple-100 p-2 rounded-full">
-            <Diamond className="h-6 w-6 text-purple-600" />
+          <div className="bg-orange-100 p-2 rounded-full">
+            <Diamond className="h-6 w-6 text-orange-600" />
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">Clube de Vantagens</h3>
@@ -28,7 +28,7 @@ const ClubDiscountBanner: React.FC<ClubDiscountBannerProps> = ({
           </div>
         </div>
         <div className="text-right">
-          <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+          <span className="bg-orange-600 text-white px-3 py-1 rounded-full text-sm font-medium">
             -{discountPercentage}%
           </span>
         </div>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Diamond } from 'lucide-react';
+import { Diamond, MessageCircle, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import DiscountBadge from './DiscountBadge';
 
 interface Product {
@@ -19,6 +20,19 @@ interface ProductCardProps {
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onProductClick(product);
+  };
+
+  const handleWhatsAppShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const message = encodeURIComponent(
+      `*Produto*\n${product.name}\n\nDescrição: ${product.description}\nPreço: R$ ${product.price.toFixed(2)}`
+    );
+    window.open(`https://wa.me/?text=${message}`, '_blank');
+  };
+
   return (
     <div
       onClick={() => onProductClick(product)}
@@ -46,12 +60,21 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
             />
           ) : (
             <div className="flex items-center gap-1">
-              <Diamond className="h-4 w-4 text-purple-600" />
+              <Diamond className="h-4 w-4 text-orange-600" />
               <span className="font-bold text-black text-lg">
                 R$ {product.price.toFixed(2)}
               </span>
             </div>
           )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleAddClick}>
+              <Plus className="h-4 w-4 mr-1" /> Adicionar
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleWhatsAppShare}>
+              <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
+            </Button>
+          </div>
         </div>
 
         {/* Imagem do lado direito */}

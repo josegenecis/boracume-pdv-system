@@ -26,18 +26,17 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({
   };
 
   return (
-    <div className="sticky top-0 z-40 bg-white border-b border-gray-200 mb-6">
-      <div className="flex overflow-x-auto scrollbar-hide py-4 px-4 space-x-6">
+    <div className="sticky top-0 z-40 bg-white mb-6">
+      <div className="flex overflow-x-auto scrollbar-hide py-3 px-4 space-x-6">
         {categories.map((category) => (
           <button
             key={category.id}
             onClick={() => scrollToCategory(category.id)}
             className={cn(
-              "flex-shrink-0 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 whitespace-nowrap",
-              "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2",
+              "flex-shrink-0 px-0 py-2 text-sm font-medium transition-colors whitespace-nowrap border-b-2",
               activeCategory === category.id
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
+                ? "text-gray-900 border-gray-900"
+                : "text-gray-600 border-transparent hover:text-gray-900"
             )}
           >
             {category.name}

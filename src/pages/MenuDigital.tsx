@@ -280,7 +280,7 @@ const MenuDigital = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
           <p className="text-lg text-gray-600">Carregando cardápio...</p>
         </div>
       </div>
@@ -336,7 +336,7 @@ const MenuDigital = () => {
               placeholder={`Buscar em ${profile.restaurant_name}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
             />
           </div>
         </div>
