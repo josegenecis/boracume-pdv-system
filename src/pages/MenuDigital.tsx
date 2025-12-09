@@ -339,6 +339,14 @@ const MenuDigital = () => {
               className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
             />
           </div>
+          {/* Tabs de Categorias dentro do cabeçalho sticky */}
+          {categories.length > 0 && (
+            <CategoryTabs
+              categories={categories}
+              activeCategory={activeCategory}
+              onCategoryChange={setActiveCategory}
+            />
+          )}
         </div>
       </div>
 
@@ -351,17 +359,8 @@ const MenuDigital = () => {
           />
         )}
 
-        {/* Tabs de Categorias */}
-        {categories.length > 0 && (
-          <>
-            <CategoryTabs
-              categories={categories}
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
-            />
-            <div className="h-14 md:h-20" />
-          </>
-        )}
+        {/* Espaço após header sticky para conteúdo não ficar oculto */}
+        <div className="h-4" />
 
         {/* Produtos por Categoria */}
         <div className="space-y-8">
