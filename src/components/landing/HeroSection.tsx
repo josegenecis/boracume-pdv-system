@@ -139,8 +139,8 @@ const HeroSection = () => {
                 <div className="relative">
                   {/* Thumbnail do vídeo */}
                   <img
-                    src="https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20restaurant%20management%20dashboard%20interface%20on%20computer%20screen%20showing%20sales%20analytics%20order%20management%20and%20kitchen%20display%20professional%20clean%20design%20orange%20and%20green%20color%20scheme&image_size=landscape_16_9"
-                    alt="Dashboard do BoraCumê"
+                    src="https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=restaurant%20attendant%20operating%20a%20modern%20POS%20system%20at%20the%20counter%2C%20screen%20showing%20the%20BoraCum%C3%AA%20dashboard%20with%20order%20management%2C%20sales%20analytics%20and%20kitchen%20display%3B%20professional%20ambiance%2C%20warm%20lighting%2C%20clean%20UI%2C%20brand%20colors%20orange%20and%20green%2C%20sharp%20focus%2C%20cinematic%20composition%2C%204k&image_size=landscape_16_9"
+                    alt="Atendente operando o sistema BoraCumê"
                     className="w-full h-64 md:h-80 object-cover"
                   />
                   
