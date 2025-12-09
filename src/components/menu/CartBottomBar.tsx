@@ -22,7 +22,7 @@ const CartBottomBar: React.FC<CartBottomBarProps> = ({
       <div className="max-w-4xl mx-auto">
         <Button 
           onClick={onOpenCart}
-          className="w-full flex items-center justify-between h-14 text-lg bg-orange-600 hover:bg-orange-700 text-white"
+          className="w-full flex items-center justify-between h-14 text-lg bg-boracume-orange hover:bg-boracume-orange/90 text-white"
           size="lg"
         >
           <div className="flex items-center gap-2">

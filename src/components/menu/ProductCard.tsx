@@ -65,7 +65,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
           )}
 
           <div className="mt-3 flex items-center gap-2">
-            <Button size="sm" onClick={handleAddClick} className="bg-orange-600 hover:bg-orange-700 text-white">
+            <Button size="sm" onClick={handleAddClick} className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
               <Plus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
             <Button size="sm" onClick={handleWhatsAppShare} className="text-white" style={{ backgroundColor: '#25D366' }}>

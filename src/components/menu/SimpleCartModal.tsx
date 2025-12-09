@@ -322,7 +322,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         Obs: {item.notes}
                       </p>
                     )}
-                    <p className="text-sm font-bold text-orange-600 mt-2">
+                    <p className="text-sm font-bold text-boracume-orange mt-2">
                       R$ {item.totalPrice.toFixed(2)}
                     </p>
                   </div>
@@ -407,7 +407,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 />
                 {isLookingUp && (
                   <div className="absolute right-3 top-3">
-                    <div className="animate-spin h-4 w-4 border-2 border-orange-600 border-t-transparent rounded-full" />
+                    <div className="animate-spin h-4 w-4 border-2 border-boracume-orange border-t-transparent rounded-full" />
                   </div>
                 )}
               </div>
@@ -499,8 +499,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   return (
                     <div key={option.id} className="flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200">
                       <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
-                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-orange-600' : 'text-gray-600'}`} />
-                      <Label htmlFor={option.id} className={`flex-1 font-medium ${isSelected ? 'text-orange-600' : 'text-gray-900'}`}>{option.name}</Label>
+                      <IconComponent className={`h-5 w-5 ${isSelected ? 'text-boracume-orange' : 'text-gray-600'}`} />
+                      <Label htmlFor={option.id} className={`flex-1 font-medium ${isSelected ? 'text-boracume-orange' : 'text-gray-900'}`}>{option.name}</Label>
                       {option.is_card && option.extra_fee_percent > 0 && (
                         <span className="ml-2 text-xs text-orange-600 font-bold">+{option.extra_fee_percent}%</span>
                       )}
@@ -542,7 +542,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               </div>
               <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
                 <span className="text-gray-900">Total:</span>
-                <span className="text-orange-600">R$ {finalTotal.toFixed(2)}</span>
+                <span className="text-boracume-orange">R$ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -555,7 +555,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <Button 
               onClick={handlePlaceOrder}
               disabled={!isFormValid() || isLoading || isPixSelected}
-              className="flex-1 bg-orange-600 hover:bg-orange-700 rounded-xl font-bold"
+              className="flex-1 bg-boracume-orange hover:bg-boracume-orange/90 rounded-xl font-bold"
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
             </Button>

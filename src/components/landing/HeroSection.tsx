@@ -14,8 +14,8 @@ const HeroSection = () => {
 
   return (
     <section className="relative bg-boracume-light py-20 lg:py-32 overflow-hidden">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-10">
+      {/* Background Pattern - oculto no mobile para evitar bagunça */}
+      <div className="absolute inset-0 opacity-10 hidden md:block">
         <div className="absolute top-20 left-10 w-72 h-72 bg-boracume-orange rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>
         <div className="absolute top-40 right-10 w-72 h-72 bg-boracume-green rounded-full mix-blend-multiply filter blur-xl animate-pulse delay-1000"></div>
         <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-boracume-blue rounded-full mix-blend-multiply filter blur-xl animate-pulse delay-2000"></div>

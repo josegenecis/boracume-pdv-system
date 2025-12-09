@@ -10,7 +10,7 @@ import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
 import { RouteGuard } from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
-import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
+import { soundNotifications } from '@/utils/soundUtils';
 import { useAuth } from '@/contexts/AuthContext';
 
 import Index from '@/pages/Index';
@@ -109,21 +109,20 @@ function AppContent() {
   );
 }
 
-const SoundPermissionManager = () => {
-  const location = useLocation();
-  const isDigitalMenu = location.pathname.includes('/menu');
-  
-  // Não mostrar no cardápio digital
-  if (isDigitalMenu) return null;
-  
-  return <SoundPermissionHelper />;
-};
+// Removido helper de permissão de som; habilitar automaticamente
 
 function App() {
   useEffect(() => {
     // Temporarily disable service worker to avoid conflicts
     // Will re-enable after fixing core loading issues
     console.log('App loaded successfully');
+    try {
+      soundNotifications.enableSound().then(() => {
+        localStorage.setItem('sound_enabled', 'true');
+      }).catch(() => {
+        // silencioso
+      });
+    } catch {}
   }, []);
 
   return (
@@ -135,7 +134,6 @@ function App() {
               <Router>
                 <AppContent />
                 <GlobalNotificationSystem />
-                <SoundPermissionManager />
                 <Toaster />
               </Router>
             </ThemeProvider>
