@@ -353,11 +353,14 @@ const MenuDigital = () => {
 
         {/* Tabs de Categorias */}
         {categories.length > 0 && (
-          <CategoryTabs
-            categories={categories}
-            activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
-          />
+          <>
+            <CategoryTabs
+              categories={categories}
+              activeCategory={activeCategory}
+              onCategoryChange={setActiveCategory}
+            />
+            <div className="h-12" />
+          </>
         )}
 
         {/* Produtos por Categoria */}

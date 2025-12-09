@@ -1,5 +1,5 @@
 import React from 'react';
-import { Diamond, MessageCircle, Plus } from 'lucide-react';
+import { MessageCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DiscountBadge from './DiscountBadge';
 
@@ -59,12 +59,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
               discountPercentage={product.discount_percentage}
             />
           ) : (
-            <div className="flex items-center gap-1">
-              <Diamond className="h-4 w-4 text-orange-600" />
-              <span className="font-bold text-black text-lg">
-                R$ {product.price.toFixed(2)}
-              </span>
-            </div>
+            <span className="font-bold text-black text-lg">
+              R$ {product.price.toFixed(2)}
+            </span>
           )}
 
           <div className="mt-3 flex items-center gap-2">

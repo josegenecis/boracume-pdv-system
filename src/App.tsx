@@ -11,7 +11,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
-import DebugPanel from '@/components/debug/DebugPanel';
+import { useAuth } from '@/contexts/AuthContext';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -136,7 +136,6 @@ function App() {
                 <AppContent />
                 <GlobalNotificationSystem />
                 <SoundPermissionManager />
-                <DebugPanel />
                 <Toaster />
               </Router>
             </ThemeProvider>
@@ -146,5 +145,7 @@ function App() {
     </HelmetProvider>
   );
 }
+
+// DebugPanel removido para não aparecer em produção nem para clientes
 
 export default App;
