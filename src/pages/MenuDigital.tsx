@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import HighlightsSection from '@/components/menu/HighlightsSection';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import ProductCard from '@/components/menu/ProductCard';
-import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
+// import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
   id: string;
@@ -411,16 +411,7 @@ const MenuDigital = () => {
         userId={finalUserId}
       />
 
-      {/* Banner de Desconto do Clube */}
-      <ClubDiscountBanner
-        discountPercentage={10}
-        onClick={() => {
-          toast({
-            title: "Clube de Vantagens",
-            description: "Cadastre-se para ganhar 10% de desconto em todos os produtos!",
-          });
-        }}
-      />
+      {/* Clube de Vantagens removido conforme solicitação */}
 
       {/* Carrinho Fixo */}
       <CartBottomBar

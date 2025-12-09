@@ -26,7 +26,7 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({
   };
 
   return (
-    <div className="sticky top-0 z-40 bg-white mb-6">
+    <div className="sticky top-16 md:top-20 z-40 bg-white mb-6">
       <div className="flex overflow-x-auto scrollbar-hide py-3 px-4 space-x-6">
         {categories.map((category) => (
           <button

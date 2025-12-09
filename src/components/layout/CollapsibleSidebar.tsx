@@ -59,7 +59,7 @@ const CollapsibleSidebar = () => {
 
   return (
     <aside className={`
-      bg-white shadow-md h-screen fixed left-0 top-16 z-50 transition-all duration-300
+      bg-white shadow-md fixed left-0 top-16 bottom-0 z-50 transition-all duration-300
       ${isMobile 
         ? `${isOpen ? 'translate-x-0' : '-translate-x-full'} w-64` 
         : `${isOpen ? 'w-64' : 'w-16'}`
@@ -83,7 +83,7 @@ const CollapsibleSidebar = () => {
         </Button>
       </div>
       
-      <nav className="mt-4 px-2 h-full overflow-y-auto pb-20">
+      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20">
         <ul className="space-y-1">
           {links.map((link) => {
             const Icon = link.icon;
@@ -98,10 +98,9 @@ const CollapsibleSidebar = () => {
 
                   className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-orange-600 text-white'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
-
                   title={(!isOpen && !isMobile) ? link.label : undefined}
                 >
                   <Icon size={18} className={`${(!isOpen && !isMobile) ? '' : 'mr-3'} flex-shrink-0`} />

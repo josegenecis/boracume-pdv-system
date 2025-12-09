@@ -17,7 +17,7 @@ interface MenuHeaderProps {
 export const MenuHeader: React.FC<MenuHeaderProps> = ({ profile }) => {
   return (
     <div className="relative">
-      <div className="h-40 w-full bg-gradient-to-r from-primary/20 to-primary/5" />
+      <div className="h-40 w-full bg-gradient-to-r from-orange-100 to-orange-50" />
       <div className="max-w-4xl mx-auto px-4">
         <div className="relative -mt-10">
           <div className="flex items-center gap-4">
@@ -42,19 +42,19 @@ export const MenuHeader: React.FC<MenuHeaderProps> = ({ profile }) => {
               <div className="mt-4 flex flex-wrap gap-4 text-sm">
                 {profile?.phone && (
                   <div className="flex items-center gap-2 text-gray-700">
-                    <Phone className="h-4 w-4 text-primary" />
+                    <Phone className="h-4 w-4 text-orange-600" />
                     <span className="font-medium">{profile.phone}</span>
                   </div>
                 )}
                 {profile?.opening_hours && (
                   <div className="flex items-center gap-2 text-gray-700">
-                    <Clock className="h-4 w-4 text-primary" />
+                    <Clock className="h-4 w-4 text-orange-600" />
                     <span className="font-medium">{profile.opening_hours}</span>
                   </div>
                 )}
                 {profile?.address && (
                   <div className="flex items-center gap-2 text-gray-700">
-                    <MapPin className="h-4 w-4 text-primary" />
+                    <MapPin className="h-4 w-4 text-orange-600" />
                     <span className="font-medium">{profile.address}</span>
                   </div>
                 )}
