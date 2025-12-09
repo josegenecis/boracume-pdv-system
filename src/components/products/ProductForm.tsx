@@ -263,13 +263,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           ...baseData,
           updated_at: new Date().toISOString()
         } as const;
+        console.log('Atualizando produto:', product.id, productData);
         const { error } = await supabase
           .from('products')
           .update(productData)
           .eq('id', product.id);
 
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao atualizar produto:', error);
+          throw error;
+        }
       } else {
         // Tentativa mínima: apenas campos essenciais
         const minimalData = {
@@ -277,16 +281,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           name: formData.name.trim(),
           price: formData.price,
           category_id: formData.category_id,
+          is_available: formData.available,
+          show_in_delivery: formData.show_in_delivery,
         } as const;
 
         let insertResultId: string | null = null;
+        console.log('Inserindo produto (mínimo):', minimalData);
         const { data: minimalInsert, error: minimalError } = await supabase
           .from('products')
           .insert([minimalData])
           .select('id')
           .single();
 
-        if (minimalError) throw minimalError;
+        if (minimalError) {
+          console.error('Erro na inserção mínima:', minimalError);
+          throw minimalError;
+        }
         insertResultId = minimalInsert?.id || null;
 
         // Atualizar campos adicionais se inserção mínima funcionou
@@ -295,11 +305,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             ...baseData,
             updated_at: new Date().toISOString()
           } as const;
+          console.log('Atualizando campos adicionais do produto:', insertResultId, productData);
           const { error: updateError } = await supabase
             .from('products')
             .update(productData)
             .eq('id', insertResultId);
-          if (updateError) throw updateError;
+          if (updateError) {
+            console.error('Erro ao atualizar campos adicionais:', updateError);
+            throw updateError;
+          }
         }
 
         if (insertResultId) {
@@ -319,10 +333,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       onSave(productId);
 
     } catch (error: any) {
-      console.error('Erro ao salvar produto:', error);
+      console.error('Erro ao salvar produto:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
       toast({
         title: "Erro",
-        description: error?.message || "Erro ao salvar produto.",
+        description: error?.message || error?.details || error?.hint || "Erro ao salvar produto.",
         variant: "destructive"
       });
     } finally {
