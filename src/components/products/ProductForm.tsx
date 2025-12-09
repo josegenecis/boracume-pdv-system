@@ -246,23 +246,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     try {
       setLoading(true);
 
-      const productData = {
+      const baseData = {
         user_id: user.id,
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
         price: formData.price,
         category_id: formData.category_id,
         is_available: formData.available,
-        show_in_pdv: formData.show_in_pdv,
         show_in_delivery: formData.show_in_delivery,
-        send_to_kds: formData.send_to_kds,
-        weight_based: formData.weight_based,
         image_url: formData.image_url || null,
-        updated_at: new Date().toISOString()
       } as const;
       let productId = product?.id;
 
       if (product?.id) {
+        const productData = {
+          ...baseData,
+          updated_at: new Date().toISOString()
+        } as const;
         const { error } = await supabase
           .from('products')
           .update(productData)
@@ -271,6 +271,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         if (error) throw error;
       } else {
+        const productData = {
+          ...baseData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        } as const;
         const { data, error } = await supabase
           .from('products')
           .insert([productData])
@@ -294,11 +299,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
       onSave(productId);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar produto.",
+        description: error?.message || "Erro ao salvar produto.",
         variant: "destructive"
       });
     } finally {
