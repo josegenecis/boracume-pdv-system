@@ -76,9 +76,9 @@ const Login = () => {
   if (isLoading || redirecting) {
     console.log('⏳ [LOGIN] Exibindo spinner:', { isLoading, redirecting });
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-orange-600 mx-auto mb-4" />
+          <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
           <p className="text-gray-600 text-sm">
             {redirecting ? 'Redirecionando...' : 'Verificando autenticação...'}
           </p>
@@ -96,7 +96,7 @@ const Login = () => {
   // Renderizar formulário de login
   console.log('📝 [LOGIN] Renderizando formulário de login');
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">

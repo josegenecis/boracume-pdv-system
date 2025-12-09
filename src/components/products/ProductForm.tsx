@@ -65,42 +65,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
 
-  // Função para formatar preço em Real brasileiro
-  const formatPrice = (value: string) => {
-    // Remove tudo que não é número
-    const numericValue = value.replace(/\D/g, '');
-    
-    if (!numericValue) return '';
-    
-    // Converte para número e divide por 100 para ter centavos
-    const number = parseInt(numericValue) / 100;
-    
-    // Formata como moeda brasileira
-    return number.toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
-
-  // Função para converter preço formatado para número
-  const parsePrice = (formattedPrice: string): number => {
-    if (!formattedPrice) return 0;
-    
-    // Remove pontos de milhares e substitui vírgula por ponto
-    const numericString = formattedPrice
-      .replace(/\./g, '')
-      .replace(',', '.');
-    
-    return parseFloat(numericString) || 0;
+  // Formata a string de centavos (somente dígitos) para BRL
+  const formatFromRaw = (raw: string) => {
+    const cents = parseInt(raw || '0', 10) || 0;
+    const value = cents / 100;
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
-    const formatted = formatPrice(inputValue);
-    const numericValue = parsePrice(formatted);
-    
-    setFormData(prev => ({ ...prev, price: numericValue }));
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    const raw = digitsOnly === '' ? '0' : digitsOnly;
+    setPriceRaw(raw);
+    setFormData(prev => ({ ...prev, price: (parseInt(raw, 10) || 0) / 100 }));
   };
 
   const createCategory = async () => {
@@ -256,10 +234,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     e.preventDefault();
 
 
-    if (!formData.name || !formData.category || formData.price <= 0) {
+    if (!user?.id || !formData.name || !formData.category_id || formData.price <= 0) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios.",
+        description: "Preencha todos os campos obrigatórios (nome, categoria e preço).",
         variant: "destructive"
       });
       return;
@@ -269,9 +247,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setLoading(true);
 
       const productData = {
-        ...formData,
+        user_id: user.id,
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        price: formData.price,
+        category_id: formData.category_id,
+        is_available: formData.available,
+        show_in_pdv: formData.show_in_pdv,
+        show_in_delivery: formData.show_in_delivery,
+        send_to_kds: formData.send_to_kds,
+        weight_based: formData.weight_based,
+        image_url: formData.image_url || null,
         updated_at: new Date().toISOString()
-      };
+      } as const;
       let productId = product?.id;
 
       if (product?.id) {
@@ -459,7 +447,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 <Input
                   id="price"
                   type="text"
-                  value={formatPrice((formData.price * 100).toString())}
+                  value={formatFromRaw(priceRaw)}
                   onChange={handlePriceChange}
                   className="pl-10"
                   placeholder="0,00"
@@ -705,4 +693,3 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 };
 
 export default ProductForm;
-
