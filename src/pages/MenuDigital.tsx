@@ -359,7 +359,7 @@ const MenuDigital = () => {
               activeCategory={activeCategory}
               onCategoryChange={setActiveCategory}
             />
-            <div className="h-12" />
+            <div className="h-14 md:h-20" />
           </>
         )}
 
