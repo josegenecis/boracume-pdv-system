@@ -252,6 +252,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         description: formData.description?.trim() || null,
         price: formData.price,
         category_id: formData.category_id,
+        category: formData.category,
         is_available: formData.available,
         show_in_delivery: formData.show_in_delivery,
         image_url: formData.image_url || null,
@@ -281,6 +282,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           name: formData.name.trim(),
           price: formData.price,
           category_id: formData.category_id,
+          category: formData.category,
           is_available: formData.available,
           show_in_delivery: formData.show_in_delivery,
         } as const;
