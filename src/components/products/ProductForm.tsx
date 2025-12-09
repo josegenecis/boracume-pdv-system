@@ -271,20 +271,39 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         if (error) throw error;
       } else {
-        const productData = {
-          ...baseData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+        // Tentativa mínima: apenas campos essenciais
+        const minimalData = {
+          user_id: user.id,
+          name: formData.name.trim(),
+          price: formData.price,
+          category_id: formData.category_id,
         } as const;
-        const { data, error } = await supabase
+
+        let insertResultId: string | null = null;
+        const { data: minimalInsert, error: minimalError } = await supabase
           .from('products')
-          .insert([productData])
+          .insert([minimalData])
           .select('id')
           .single();
 
-        if (error) throw error;
-        if (data && data.id) {
-          productId = data.id;
+        if (minimalError) throw minimalError;
+        insertResultId = minimalInsert?.id || null;
+
+        // Atualizar campos adicionais se inserção mínima funcionou
+        if (insertResultId) {
+          const productData = {
+            ...baseData,
+            updated_at: new Date().toISOString()
+          } as const;
+          const { error: updateError } = await supabase
+            .from('products')
+            .update(productData)
+            .eq('id', insertResultId);
+          if (updateError) throw updateError;
+        }
+
+        if (insertResultId) {
+          productId = insertResultId;
         }
       }
       // Salvar vínculos de variações globais após salvar produto
