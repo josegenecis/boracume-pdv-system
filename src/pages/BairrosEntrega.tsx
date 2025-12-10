@@ -20,6 +20,7 @@ const BairrosEntrega = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: 0 });
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -60,6 +61,7 @@ const BairrosEntrega = () => {
           .update({
             name: newZone.name,
             delivery_fee: newZone.delivery_fee,
+            active: true,
             updated_at: new Date().toISOString()
           })
           .eq('id', editingZone.id);
@@ -76,7 +78,8 @@ const BairrosEntrega = () => {
           .insert({
             user_id: user.id,
             name: newZone.name,
-            delivery_fee: newZone.delivery_fee
+            delivery_fee: newZone.delivery_fee,
+            active: true
           });
         
         if (error) throw error;
@@ -100,6 +103,40 @@ const BairrosEntrega = () => {
       setIsLoading(false);
     }
   };
+
+  // Autosave: cria ou atualiza automaticamente ao editar campos
+  useEffect(() => {
+    if (!user) return;
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+    const timer = setTimeout(async () => {
+      if (editingZone) {
+        await handleSaveZone();
+      } else if (newZone.name.trim()) {
+        // cria e entra em modo edição
+        try {
+          const { data, error } = await (supabase as any)
+            .from('delivery_zones')
+            .insert({
+              user_id: user.id,
+              name: newZone.name,
+              delivery_fee: newZone.delivery_fee,
+              active: true
+            })
+            .select('*')
+            .single();
+          if (!error && data) {
+            setEditingZone({ id: data.id, name: data.name, delivery_fee: data.delivery_fee });
+            toast({ title: 'Bairro salvo automaticamente' });
+            fetchZones();
+          }
+        } catch {}
+      }
+    }, 700);
+    setAutoSaveTimer(timer);
+    return () => { clearTimeout(timer); };
+  }, [newZone.name, newZone.delivery_fee, editingZone?.id]);
 
   const handleEditZone = (zone: DeliveryZone) => {
     setEditingZone(zone);

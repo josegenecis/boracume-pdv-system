@@ -13,7 +13,7 @@ const HeroSection = () => {
   };
 
   return (
-    <section className="relative bg-boracume-light py-20 lg:py-32 overflow-hidden">
+    <section className="relative bg-white py-20 lg:py-32 overflow-hidden">
       {/* Background Pattern - oculto no mobile para evitar bagunça */}
       <div className="absolute inset-0 opacity-10 hidden md:block">
         <div className="absolute top-20 left-10 w-72 h-72 bg-boracume-orange rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>

@@ -39,9 +39,19 @@
 :root {
   --primary: 234 88 12;
   --accent: 251 146 60;
+  --background: 0 0% 100%;
+  --foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --input: 214.3 31.8% 91.4%;
+  --border: 214.3 31.8% 91.4%;
+  --ring: 215 20.2% 65.1%;
 }
 
 .dark {
-  --background: 224 71 13;
-  --foreground: 250 250 250;
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }

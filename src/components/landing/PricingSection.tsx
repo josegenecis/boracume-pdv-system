@@ -343,7 +343,7 @@ const PricingSection = () => {
             </div>
 
             {/* Resultados */}
-            <div className="bg-boracume-light rounded-2xl p-6">
+            <div className="bg-white rounded-2xl p-6 border border-gray-200">
               <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
                 <TrendingUp className="w-6 h-6 text-boracume-green mr-2" />
                 Seus Resultados Projetados

@@ -128,7 +128,12 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
           .limit(1);
 
         if (profileError) {
-          console.warn('Perfil não encontrado ou erro ao carregar perfil:', profileError);
+          const code = (profileError as any)?.code;
+          if (code === 'PGRST116') {
+            console.warn('Perfil ausente (PGRST116) — seguindo com fallback');
+          } else {
+            console.warn('Erro ao carregar perfil:', profileError);
+          }
         }
 
         // Buscar categorias
@@ -218,6 +223,55 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
       fetchData();
     }
   }, [userId, enableCache]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`menu-realtime-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones', filter: `user_id=eq.${userId}` }, () => {
+        // refetch delivery zones
+        supabase
+          .from('delivery_zones')
+          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+          .eq('user_id', userId)
+          .eq('active', true)
+          .order('name', { ascending: true })
+          .then(({ data: dz }) => {
+            setData(prev => ({ ...prev, deliveryZones: dz || [] }));
+          });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `user_id=eq.${userId}` }, () => {
+        supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_available', true)
+          .eq('show_in_delivery', true)
+          .order('name', { ascending: true })
+          .then(({ data: productsData }) => {
+            const processedProducts = (productsData || []).map(product => ({
+              ...product,
+              category_name: (product as any).product_categories?.name
+            }));
+            setData(prev => ({ ...prev, products: processedProducts }));
+          });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_categories', filter: `user_id=eq.${userId}` }, () => {
+        supabase
+          .from('product_categories')
+          .select('id, name, description, display_order')
+          .eq('user_id', userId)
+          .order('display_order', { ascending: true })
+          .then(({ data: categoriesData }) => {
+            setData(prev => ({ ...prev, categories: categoriesData || [] }));
+          });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   return data;
 };
