@@ -98,11 +98,16 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
         title: "Variação adicionada",
         description: `${variationData.name} foi adicionada com sucesso.`,
       });
-    } catch (error) {
-      console.error('Erro ao adicionar variação:', error);
+    } catch (error: any) {
+      console.error('Erro ao adicionar variação:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
       toast({
         title: "Erro",
-        description: "Não foi possível adicionar a variação.",
+        description: error?.message || error?.details || error?.hint || "Não foi possível adicionar a variação.",
         variant: "destructive"
       });
     } finally {

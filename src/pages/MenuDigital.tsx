@@ -328,12 +328,12 @@ const MenuDigital = () => {
       <div className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            {profile.restaurant_name}
+            {profile?.restaurant_name || 'Cardápio'}
           </h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder={`Buscar em ${profile.restaurant_name}...`}
+              placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"

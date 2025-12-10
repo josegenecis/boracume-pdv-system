@@ -121,13 +121,15 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
         }
 
         // Buscar perfil do restaurante
-        const { data: profileData, error: profileError } = await supabase
+        const { data: profilesArr, error: profileError } = await supabase
           .from('profiles')
           .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
           .eq('id', userId)
-          .single();
+          .limit(1);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.warn('Perfil não encontrado ou erro ao carregar perfil:', profileError);
+        }
 
         // Buscar categorias
         const { data: categoriesData, error: categoriesError } = await supabase
@@ -174,11 +176,22 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
           .sort((a, b) => b.order_count - a.order_count)
           .slice(0, 6); // Limitar a 6 destaques
 
+        const profileData = Array.isArray(profilesArr) && profilesArr.length > 0 ? profilesArr[0] : null;
+        const fallbackProfile = profileData ? profileData : {
+          id: userId,
+          restaurant_name: 'Cardápio',
+          description: '',
+          logo_url: '',
+          phone: '',
+          address: '',
+          opening_hours: ''
+        } as RestaurantProfile;
+
         const menuData: MenuData = {
           products: processedProducts,
           categories: categoriesData || [],
           highlights,
-          profile: profileData,
+          profile: fallbackProfile,
           deliveryZones: deliveryZonesData || [],
           isLoading: false,
           error: null
