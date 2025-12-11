@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff } from 'lucide-react';
+import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff, Link as LinkIcon } from 'lucide-react';
 import { useDeviceIntegration, Device } from '@/hooks/useDeviceIntegration';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const DeviceManager = () => {
   const { 
@@ -14,7 +16,10 @@ const DeviceManager = () => {
     scanForDevices, 
     connectDevice, 
     disconnectDevice,
-    printReceipt 
+    printReceipt,
+    bridgeConfig,
+    setBridgeConfig,
+    connectBridgePrinter
   } = useDeviceIntegration();
 
   const getDeviceIcon = (type: Device['type']) => {
@@ -64,6 +69,10 @@ const DeviceManager = () => {
           {isScanning ? 'Escaneando...' : 'Escanear Dispositivos'}
         </Button>
       </div>
+
+      {isScanning && (
+        <div className="text-sm text-muted-foreground">Procurando dispositivos…</div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Balanças */}
@@ -135,6 +144,31 @@ const DeviceManager = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {/* Configuração da Bridge */}
+              <div className="p-3 border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <LinkIcon size={18} />
+                  <span className="text-sm">Bridge local (ws://localhost:8766)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <Select value={bridgeConfig.transport} onValueChange={(v) => setBridgeConfig(prev => ({ ...prev, transport: v as any }))}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Transporte" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="network">Rede (IP)</SelectItem>
+                        <SelectItem value="usb">USB</SelectItem>
+                        <SelectItem value="bluetooth">Bluetooth</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input placeholder="Endereço/IP (ex.: 192.168.0.50)" value={bridgeConfig.address || ''} onChange={(e) => setBridgeConfig(prev => ({ ...prev, address: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-2">
+                  <Button size="sm" variant="outline" onClick={() => connectBridgePrinter()}>Conectar Bridge</Button>
+                </div>
+              </div>
               {printers.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">
                   Nenhuma impressora encontrada
@@ -180,13 +214,13 @@ const DeviceManager = () => {
                   </div>
                 ))
               )}
-              {connectedPrinter && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={() => printReceipt({ order_number: 'TESTE', customer_name: 'Teste', items: [{ quantity: 1, product_name: 'Item', subtotal: 0 }], total: 0 })}
+             {connectedPrinter && (
+               <div className="flex justify-end">
+                 <Button
+                   variant="default"
+                   size="sm"
+                   className="flex items-center gap-2"
+                    onClick={() => printReceipt({ order_number: 'TESTE', customer_name: 'Teste', items: [{ quantity: 1, product_name: 'Item', subtotal: 0 }], total: 0 }, { transport: bridgeConfig.transport, address: bridgeConfig.address })}
                   >
                     Imprimir teste
                   </Button>

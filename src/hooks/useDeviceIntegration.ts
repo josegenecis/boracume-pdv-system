@@ -25,6 +25,7 @@ export const useDeviceIntegration = () => {
   const scaleService = new ScaleService();
   const fallback = new HardwareFallbackManager();
   const bridgePrinter = fallback.createWebSocketPrinter();
+  const [bridgeConfig, setBridgeConfig] = useState<{ transport: 'network' | 'usb' | 'bluetooth'; address?: string }>({ transport: 'network' });
   const electronService = new ElectronDeviceService();
   const isElectron = electronService.isElectronEnvironment();
 
@@ -48,20 +49,24 @@ export const useDeviceIntegration = () => {
         }));
       } else {
         // Fallback to web simulation
-        const [printers, scales] = await Promise.all([
-          printerService.scanForPrinters(),
-          scaleService.scanForScales()
-        ]);
-
+        // Prepopulate bridge printer so usuário sempre veja algo
         deviceList = [
-          // Bridge devices exposed via Native Bridge
           {
             id: 'bridge_printer',
             name: 'Bridge Printer (Local)',
             type: 'printer',
             connectionType: 'wifi',
             status: 'disconnected'
-          },
+          }
+        ];
+
+        const [printers, scales] = await Promise.all([
+          printerService.scanForPrinters(),
+          scaleService.scanForScales()
+        ]);
+
+        deviceList = [
+          ...deviceList,
           ...printers.map((printer: PrinterDevice) => ({
             id: printer.id,
             name: printer.name,
@@ -99,6 +104,18 @@ export const useDeviceIntegration = () => {
     }
   }, [toast, isElectron]);
 
+  const connectBridgePrinter = useCallback(async (cfg?: { transport?: 'network' | 'usb' | 'bluetooth'; address?: string }) => {
+    const config = { ...bridgeConfig, ...(cfg || {}) };
+    const ok = await bridgePrinter.connect(config.transport, config.address);
+    if (ok) {
+      setDevices(prev => prev.map(d => d.id === 'bridge_printer' ? { ...d, status: 'connected' } : d));
+      toast({ title: 'Bridge conectada', description: `Transporte: ${config.transport}${config.address ? `, endereço: ${config.address}` : ''}` });
+    } else {
+      toast({ title: 'Falha ao conectar bridge', description: 'Verifique se o servidor local está rodando (ws://localhost:8766)', variant: 'destructive' });
+    }
+    return ok;
+  }, [bridgeConfig, bridgePrinter, toast]);
+
   const connectDevice = useCallback(async (deviceId: string) => {
     const device = devices.find(d => d.id === deviceId);
     if (!device) return;
@@ -128,8 +145,7 @@ export const useDeviceIntegration = () => {
         // Fallback to web simulation
         if (device.type === 'printer') {
           if (deviceId === 'bridge_printer') {
-            // Try connect bridge with default transport; user can set IP later in UI
-            success = await bridgePrinter.connect('network');
+            success = await connectBridgePrinter();
           } else {
             const printers = await printerService.scanForPrinters();
             const printer = printers.find(p => p.id === deviceId);
@@ -243,7 +259,7 @@ export const useDeviceIntegration = () => {
       } else {
         if (connectedPrinter?.id === 'bridge_printer') {
           if (opts?.transport || opts?.address) {
-            await bridgePrinter.connect(opts?.transport || 'network', opts?.address);
+            await connectBridgePrinter({ transport: opts?.transport, address: opts?.address });
           }
           success = await bridgePrinter.printReceipt(orderData);
         } else {
@@ -283,6 +299,9 @@ export const useDeviceIntegration = () => {
     connectDevice,
     disconnectDevice,
     getWeight,
-    printReceipt
+    printReceipt,
+    bridgeConfig,
+    setBridgeConfig,
+    connectBridgePrinter
   };
 };
