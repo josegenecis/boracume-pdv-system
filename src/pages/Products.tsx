@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Package, Search, Edit, Trash2 } from 'lucide-react';
@@ -244,10 +245,25 @@ const Products = () => {
                         />
                       </div>
                     </div>
-                    <div className="flex gap-2 flex-wrap">
+                    {/* Filtros de categoria: Select no mobile, chips com scroll no desktop */}
+                    <div className="sm:hidden w-full">
+                      <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Filtrar por categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos</SelectItem>
+                          {categories.map(category => (
+                            <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="hidden sm:flex gap-2 flex-nowrap overflow-x-auto scrollbar-hide py-1">
                       <Button
                         variant={selectedCategory === 'all' ? "default" : "outline"}
                         size="sm"
+                        className="shrink-0"
                         onClick={() => setSelectedCategory('all')}
                       >
                         Todos
@@ -257,6 +273,7 @@ const Products = () => {
                           key={category.id}
                           variant={selectedCategory === category.id ? "default" : "outline"}
                           size="sm"
+                          className="shrink-0"
                           onClick={() => setSelectedCategory(category.id)}
                         >
                           {category.name}

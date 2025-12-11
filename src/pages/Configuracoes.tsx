@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
 import ProfileSettings from '@/components/settings/ProfileSettings';
@@ -34,12 +34,40 @@ const Configuracoes: React.FC = () => {
     return false;
   };
 
+  const [tab, setTab] = useState('general');
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
       
-      <Tabs defaultValue="general" className="w-full">
-        <TabsList className="mb-4 flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
+      {/* Seletor mobile */}
+      <div className="sm:hidden">
+        <Tabs value={tab} onValueChange={setTab} className="w-full">
+          <div className="mb-3">
+            <select
+              className="w-full h-10 rounded-md border border-input bg-white px-3 text-sm"
+              value={tab}
+              onChange={(e) => setTab(e.target.value)}
+            >
+              <option value="general">Geral</option>
+              <option value="menu">Cardápio</option>
+              <option value="devices">Dispositivos</option>
+              <option value="profile">Perfil</option>
+              <option value="notifications">Notificações</option>
+              <option value="appearance">Aparência</option>
+              <option value="delivery">Delivery</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="fiscal">Fiscal</option>
+              <option value="payment-methods">Formas de Pagamento</option>
+              <option value="pix">PIX</option>
+              {hasMarketingFeature() && (<option value="marketing">Marketing</option>)}
+            </select>
+          </div>
+        </Tabs>
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList className="mb-4 hidden sm:flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="menu">Cardápio</TabsTrigger>
           <TabsTrigger value="devices">Dispositivos</TabsTrigger>

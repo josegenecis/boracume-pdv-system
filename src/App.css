@@ -83,3 +83,12 @@ input[type='number'] {
 .container, .w-full, .max-w-full {
   max-width: 100%;
 }
+
+/* Esconder scrollbars onde necessário sem bloquear a rolagem */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
