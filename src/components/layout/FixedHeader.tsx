@@ -39,15 +39,13 @@ const FixedHeader = () => {
           <Logo size="sm" />
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <Button variant="ghost" size="sm" className="p-2">
-
+          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
-          <div className="flex items-center space-x-2 text-sm">
+          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/configuracoes')}>
             <User size={16} />
-
-            <span className="hidden md:inline truncate max-w-32">{user?.email}</span>
-          </div>
+            <span className="hidden md:inline truncate max-w-32 ml-2">{user?.email}</span>
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleSignOut} className="p-2">
 
             <LogOut size={18} />

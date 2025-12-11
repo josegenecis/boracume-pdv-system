@@ -744,7 +744,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                           <span className="text-xs text-muted-foreground">{variation.options?.length || 0} opções</span>
                         </div>
                         {selectedVariations.includes(variation.id) && (
-                          <div className="flex gap-4 mt-2">
+                          <div className="flex gap-4 mt-2 flex-wrap sm:flex-nowrap">
                             <div className="flex items-center gap-2">
                               <Checkbox
                                 id={`required-${variation.id}`}
@@ -761,7 +761,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 min="0"
                                 value={variationSettings[variation.id]?.min_selections ?? 0}
                                 onChange={e => handleVariationSettingChange(variation.id, 'min_selections', parseInt(e.target.value) || 0)}
-                                className="w-16"
+                                className="w-14 min-w-[56px] text-center appearance-none"
                               />
                             </div>
                             <div className="flex items-center gap-2">
@@ -772,7 +772,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 min="1"
                                 value={variationSettings[variation.id]?.max_selections ?? 1}
                                 onChange={e => handleVariationSettingChange(variation.id, 'max_selections', parseInt(e.target.value) || 1)}
-                                className="w-16"
+                                className="w-14 min-w-[56px] text-center appearance-none"
                               />
                             </div>
                           </div>

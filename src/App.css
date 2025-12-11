@@ -68,6 +68,17 @@ html, body {
   background-color: hsl(var(--background));
 }
 
+/* Remover setas dos inputs numéricos (mobile/desktop) */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .container, .w-full, .max-w-full {
   max-width: 100%;
 }
