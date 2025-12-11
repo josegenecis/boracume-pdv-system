@@ -363,7 +363,7 @@ const Products = () => {
                           </div>
 
                           {/* Botões de ação */}
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                          <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
                             <Button
                               variant="outline"
                               size="sm"
@@ -373,9 +373,7 @@ const Products = () => {
                               <Edit className="h-3 w-3 mr-1" />
                               <span className="hidden sm:inline">Editar</span>
                             </Button>
-                            <div className="w-full sm:w-auto">
-                              <ProductVariationsButton productId={product.id} />
-                            </div>
+                            <ProductVariationsButton productId={product.id} compact />
                             
                             <Button
                               variant="outline"
