@@ -832,8 +832,8 @@ const PDV = () => {
                               className="w-full"
                               size="xs"
                             >
-                              <Plus size={16} className="mr-1" />
-                              Adicionar
+                              <Plus size={16} />
+                              <span className="hidden sm:inline ml-1">Adicionar</span>
                             </Button>
                           </CardContent>
                         </Card>

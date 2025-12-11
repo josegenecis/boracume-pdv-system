@@ -32,6 +32,7 @@ import NotFound from '@/pages/NotFound';
 import Loyalty from '@/pages/Loyalty';
 import BairrosEntrega from '@/pages/BairrosEntrega';
 import Entregadores from '@/pages/Entregadores';
+import Garcons from '@/pages/Garcons';
 import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
 import SecurityDashboard from '@/pages/SecurityDashboard';
@@ -90,6 +91,7 @@ function AppContent() {
           <Route path="/loyalty" element={<Loyalty />} />
           <Route path="/bairros-entrega" element={<BairrosEntrega />} />
           <Route path="/entregadores" element={<Entregadores />} />
+          <Route path="/garcons" element={<Garcons />} />
           <Route path="/nfce" element={<NFCe />} />
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/security" element={<SecurityDashboard />} />

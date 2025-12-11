@@ -211,9 +211,8 @@ const Products = () => {
       <Tabs defaultValue="products" className="w-full">
         <TabsList>
           <TabsTrigger value="products">Produtos</TabsTrigger>
-
+          <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="global-variations">Variações Globais</TabsTrigger>
-
           <TabsTrigger value="banners">Banners</TabsTrigger>
         </TabsList>
         
@@ -290,7 +289,7 @@ const Products = () => {
                   {filteredProducts.map((product) => (
                     <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
                       <CardContent className="p-3">
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                           {/* Imagem do produto */}
                           {product.image_url ? (
                             <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
@@ -363,7 +362,7 @@ const Products = () => {
                           </div>
 
                           {/* Botões de ação */}
-                          <div className="flex items-center gap-1 flex-shrink-0">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-shrink-0 w-full sm:w-auto">
                             <Button
                               variant="outline"
                               size="sm"
@@ -371,10 +370,11 @@ const Products = () => {
                               onClick={() => handleEditProduct(product)}
                             >
                               <Edit className="h-3 w-3 mr-1" />
-                              Editar
+                              <span className="hidden sm:inline">Editar</span>
                             </Button>
-                            
-                            <ProductVariationsButton productId={product.id} />
+                            <div className="w-full sm:w-auto">
+                              <ProductVariationsButton productId={product.id} />
+                            </div>
                             
                             <Button
                               variant="outline"
@@ -397,10 +397,13 @@ const Products = () => {
         </TabsContent>
         
 
-        <TabsContent value="global-variations">
-          <GlobalVariationManager />
+      <TabsContent value="global-variations">
+        <GlobalVariationManager />
 
-        </TabsContent>
+      </TabsContent>
+      <TabsContent value="categories">
+        <CategoryManager />
+      </TabsContent>
         
         <TabsContent value="banners">
           <BannerManager />

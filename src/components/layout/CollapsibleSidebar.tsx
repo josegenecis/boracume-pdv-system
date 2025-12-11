@@ -40,6 +40,7 @@ const CollapsibleSidebar = () => {
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
     { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },
     { to: '/entregadores', icon: Users, label: 'Entregadores' },
+    { to: '/garcons', icon: Users, label: 'Garçons' },
     { to: '/bairros-entrega', icon: MapPin, label: 'Bairros de Entrega' },
     { to: '/loyalty', icon: Crown, label: 'Programa de Fidelidade' },
     { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },

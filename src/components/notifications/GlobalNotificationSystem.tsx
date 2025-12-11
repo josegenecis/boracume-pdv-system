@@ -235,7 +235,7 @@ const GlobalNotificationSystem: React.FC = () => {
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-sm">
-      <Card className="border-2 border-orange-300 bg-orange-50 shadow-lg animate-pulse">
+      <Card className="border border-gray-200 bg-white shadow-lg">
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -248,13 +248,13 @@ const GlobalNotificationSystem: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={handleDismiss}
-              className="h-6 w-6 p-0 text-orange-600 hover:bg-orange-100"
+              className="h-6 w-6 p-0 text-gray-600 hover:bg-gray-100"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="space-y-2 mb-4">
+          <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
             {visibleOrders.slice(0, 3).map((order) => (
               <div key={order.id} className="bg-white p-2 rounded border flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -283,7 +283,7 @@ const GlobalNotificationSystem: React.FC = () => {
           <div className="flex gap-2">
             <Button 
               onClick={handleGoToOrders}
-              className="flex-1 bg-orange-600 hover:bg-orange-700"
+              className="flex-1 bg-boracume-orange hover:bg-boracume-orange/90"
               size="sm"
             >
               Ver Pedidos

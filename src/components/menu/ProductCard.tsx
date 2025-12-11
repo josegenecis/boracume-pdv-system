@@ -66,7 +66,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
 
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" onClick={handleAddClick} className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
-              <Plus className="h-4 w-4 mr-1" /> Adicionar
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Adicionar</span>
             </Button>
             <Button size="sm" onClick={handleWhatsAppShare} className="text-white" style={{ backgroundColor: '#25D366' }}>
               <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp

@@ -67,6 +67,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
 
   // Formata a string de centavos (somente dígitos) para BRL
   const formatFromRaw = (raw: string) => {
@@ -361,48 +362,49 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (canCreate) {
         try {
           // se não há product.id, cria mín e atualiza
-          if (!product?.id) {
-            const minimalData = {
-              user_id: user!.id,
-              name: formData.name.trim(),
-              price: formData.price,
-              category_id: formData.category_id,
-              category: formData.category,
-              is_available: formData.available,
-              show_in_delivery: formData.show_in_delivery,
-            } as const;
-            const { data: insertData, error: insertErr } = await supabase
-              .from('products')
-              .insert([minimalData])
-              .select('id')
-              .single();
-            if (!insertErr && insertData?.id) {
-              // atualiza com campos adicionais
-              await supabase
-                .from('products')
-                .update({
-                  description: formData.description?.trim() || null,
-                  image_url: formData.image_url || null,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', insertData.id);
-            }
-          } else {
+      if (!createdProductId) {
+        const minimalData = {
+          user_id: user!.id,
+          name: formData.name.trim(),
+          price: formData.price,
+          category_id: formData.category_id,
+          category: formData.category,
+          is_available: formData.available,
+          show_in_delivery: formData.show_in_delivery,
+        } as const;
+        const { data: insertData, error: insertErr } = await supabase
+          .from('products')
+          .insert([minimalData])
+          .select('id')
+          .single();
+        if (!insertErr && insertData?.id) {
+            setCreatedProductId(insertData.id);
+            // atualiza com campos adicionais
             await supabase
               .from('products')
               .update({
-                name: formData.name.trim(),
-                price: formData.price,
-                category_id: formData.category_id,
-                category: formData.category,
                 description: formData.description?.trim() || null,
                 image_url: formData.image_url || null,
-                is_available: formData.available,
-                show_in_delivery: formData.show_in_delivery,
                 updated_at: new Date().toISOString()
               })
-              .eq('id', product.id);
-          }
+              .eq('id', insertData.id);
+        }
+      } else {
+        await supabase
+          .from('products')
+          .update({
+            name: formData.name.trim(),
+            price: formData.price,
+            category_id: formData.category_id,
+            category: formData.category,
+            description: formData.description?.trim() || null,
+            image_url: formData.image_url || null,
+            is_available: formData.available,
+            show_in_delivery: formData.show_in_delivery,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', createdProductId);
+      }
         } catch (err) {
           console.warn('Autosave produto falhou', err);
         }
