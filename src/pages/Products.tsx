@@ -14,6 +14,7 @@ import ProductForm from '@/components/products/ProductForm';
 import BannerManager from '@/components/banners/BannerManager';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
+import CategoryManager from '@/components/products/CategoryManager';
 
 
 // Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
