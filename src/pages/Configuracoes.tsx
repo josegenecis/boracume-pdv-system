@@ -17,10 +17,12 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 
 const Configuracoes: React.FC = () => {
   const { subscription } = useAuth();
+  const { ensureSubscribed } = usePushNotifications();
   
   const hasMarketingFeature = () => {
     if (subscription?.status === 'trial') {
@@ -109,7 +111,15 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
         
         <TabsContent value="notifications">
-          <NotificationSettings />
+          <div className="space-y-4">
+            <NotificationSettings />
+            <div className="p-3 border rounded-lg">
+              <p className="text-sm text-muted-foreground">Ative notificações push para receber alertas mesmo com o app fechado.</p>
+              <div className="flex justify-end mt-2">
+                <button className="h-9 px-3 rounded-md border" onClick={() => ensureSubscribed()}>Ativar Push</button>
+              </div>
+            </div>
+          </div>
         </TabsContent>
         
         <TabsContent value="appearance">
