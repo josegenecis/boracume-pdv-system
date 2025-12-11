@@ -65,6 +65,28 @@ export class NativeAppPrinterFallback {
   async disconnect() {}
 }
 
+export class WebSocketPrinterFallback {
+  private url: string;
+  private ws: WebSocket | null = null;
+  constructor(url: string) { this.url = url; }
+  async connect(transport: 'network' | 'usb' | 'bluetooth' = 'network', address?: string): Promise<boolean> {
+    try {
+      this.ws = new WebSocket(this.url);
+      const ok = await new Promise<boolean>((resolve) => {
+        const t = setTimeout(() => resolve(false), 3000);
+        this.ws!.onopen = () => { clearTimeout(t); resolve(true); };
+        this.ws!.onerror = () => { clearTimeout(t); resolve(false); };
+      });
+      if (!ok) return false;
+      this.ws!.send(JSON.stringify({ action: 'connect_printer', payload: { transport, address } }));
+      return true;
+    } catch { return false; }
+  }
+  async testPrint(): Promise<boolean> { if (!this.ws) return false; this.ws.send(JSON.stringify({ action: 'test_print' })); return true; }
+  async printReceipt(data: any): Promise<boolean> { if (!this.ws) return false; this.ws.send(JSON.stringify({ action: 'print_receipt', payload: data })); return true; }
+  async disconnect() { try { if (this.ws) this.ws.close(); } catch {} }
+}
+
 export class HardwareFallbackManager {
   private config: FallbackConfig = { websocketUrl: 'ws://localhost:8766', nativeAppPort: 8765, simulationEnabled: true, pollingInterval: 1000 };
   updateConfig(cfg: Partial<FallbackConfig>) { this.config = { ...this.config, ...cfg }; }
@@ -72,7 +94,7 @@ export class HardwareFallbackManager {
   createWebSocketScale(id: string) { return new WebSocketScaleFallback(id, this.config.websocketUrl); }
   createScaleSimulator(id: string) { return new ScaleSimulator(); }
   createNativeAppPrinter(id: string) { return new NativeAppPrinterFallback(this.config.nativeAppPort); }
+  createWebSocketPrinter() { return new WebSocketPrinterFallback(this.config.websocketUrl); }
   async removeScaleService(id: string) {}
   async removePrinterService(id: string) {}
 }
-

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService, PrinterDevice } from '@/services/PrinterService';
 import { ScaleService, ScaleDevice } from '@/services/ScaleService';
+import { HardwareFallbackManager } from '@/services/hardwareFallback';
 import { ElectronDeviceService, ElectronDevice } from '@/services/ElectronDeviceService';
 
 export interface Device {
@@ -22,6 +23,8 @@ export const useDeviceIntegration = () => {
   // Initialize services
   const printerService = new PrinterService();
   const scaleService = new ScaleService();
+  const fallback = new HardwareFallbackManager();
+  const bridgePrinter = fallback.createWebSocketPrinter();
   const electronService = new ElectronDeviceService();
   const isElectron = electronService.isElectronEnvironment();
 
@@ -51,6 +54,14 @@ export const useDeviceIntegration = () => {
         ]);
 
         deviceList = [
+          // Bridge devices exposed via Native Bridge
+          {
+            id: 'bridge_printer',
+            name: 'Bridge Printer (Local)',
+            type: 'printer',
+            connectionType: 'wifi',
+            status: 'disconnected'
+          },
           ...printers.map((printer: PrinterDevice) => ({
             id: printer.id,
             name: printer.name,
@@ -116,10 +127,15 @@ export const useDeviceIntegration = () => {
       } else {
         // Fallback to web simulation
         if (device.type === 'printer') {
-          const printers = await printerService.scanForPrinters();
-          const printer = printers.find(p => p.id === deviceId);
-          if (printer) {
-            success = await printerService.connectToPrinter(printer);
+          if (deviceId === 'bridge_printer') {
+            // Try connect bridge with default transport; user can set IP later in UI
+            success = await bridgePrinter.connect('network');
+          } else {
+            const printers = await printerService.scanForPrinters();
+            const printer = printers.find(p => p.id === deviceId);
+            if (printer) {
+              success = await printerService.connectToPrinter(printer);
+            }
           }
         } else if (device.type === 'scale') {
           const scales = await scaleService.scanForScales();
@@ -212,7 +228,7 @@ export const useDeviceIntegration = () => {
     }
   }, [devices, isElectron]);
 
-  const printReceipt = useCallback(async (orderData: any): Promise<void> => {
+  const printReceipt = useCallback(async (orderData: any, opts?: { transport?: 'network' | 'usb' | 'bluetooth', address?: string }): Promise<void> => {
     const connectedPrinter = devices.find(d => d.type === 'printer' && d.status === 'connected');
     
     if (!connectedPrinter) {
@@ -225,7 +241,14 @@ export const useDeviceIntegration = () => {
       if (isElectron) {
         success = await electronService.printReceipt(orderData);
       } else {
-        success = await printerService.printReceipt(orderData);
+        if (connectedPrinter?.id === 'bridge_printer') {
+          if (opts?.transport || opts?.address) {
+            await bridgePrinter.connect(opts?.transport || 'network', opts?.address);
+          }
+          success = await bridgePrinter.printReceipt(orderData);
+        } else {
+          success = await printerService.printReceipt(orderData);
+        }
       }
       
       if (success) {

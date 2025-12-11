@@ -13,7 +13,8 @@ const DeviceManager = () => {
     isScanning, 
     scanForDevices, 
     connectDevice, 
-    disconnectDevice 
+    disconnectDevice,
+    printReceipt 
   } = useDeviceIntegration();
 
   const getDeviceIcon = (type: Device['type']) => {
@@ -48,6 +49,7 @@ const DeviceManager = () => {
 
   const scales = devices.filter(d => d.type === 'scale');
   const printers = devices.filter(d => d.type === 'printer');
+  const connectedPrinter = printers.find(d => d.status === 'connected');
 
   return (
     <div className="space-y-6">
@@ -177,6 +179,18 @@ const DeviceManager = () => {
                     </div>
                   </div>
                 ))
+              )}
+              {connectedPrinter && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={() => printReceipt({ order_number: 'TESTE', customer_name: 'Teste', items: [{ quantity: 1, product_name: 'Item', subtotal: 0 }], total: 0 })}
+                  >
+                    Imprimir teste
+                  </Button>
+                </div>
               )}
             </div>
           </CardContent>
