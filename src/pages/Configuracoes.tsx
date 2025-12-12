@@ -11,6 +11,7 @@ import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 import MenuLinkGenerator from '@/components/menu/MenuLinkGenerator';
 import DeviceManager from '@/components/devices/DeviceManager';
+import { ErrorBoundary } from '@/components/utils/ErrorBoundary';
 import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
@@ -103,7 +104,9 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
         
         <TabsContent value="devices">
-          <DeviceManager />
+          <ErrorBoundary fallback={<div className="p-4 text-sm">Erro ao carregar Dispositivos. Tente atualizar a página.</div>}>
+            <DeviceManager />
+          </ErrorBoundary>
         </TabsContent>
         
         <TabsContent value="profile">
