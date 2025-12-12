@@ -84,6 +84,14 @@ export const useDeviceIntegration = () => {
             address: scale.address
           }))
         ];
+
+        try {
+          await connectBridgePrinter()
+          const found = await bridgePrinter.scanNetwork()
+          for (const p of found) {
+            deviceList.push({ id: `bridge_net_${p.ip}`, name: `Impressora ${p.ip}`, type: 'printer', connectionType: 'wifi', status: 'disconnected', address: p.ip })
+          }
+        } catch {}
       }
 
       setDevices(deviceList);
@@ -102,7 +110,7 @@ export const useDeviceIntegration = () => {
     } finally {
       setIsScanning(false);
     }
-  }, [toast, isElectron]);
+  }, [toast, isElectron, connectBridgePrinter]);
 
   const connectBridgePrinter = useCallback(async (cfg?: { transport?: 'network' | 'usb' | 'bluetooth'; address?: string }) => {
     const config = { ...bridgeConfig, ...(cfg || {}) };
@@ -147,10 +155,15 @@ export const useDeviceIntegration = () => {
           if (deviceId === 'bridge_printer') {
             success = await connectBridgePrinter();
           } else {
-            const printers = await printerService.scanForPrinters();
-            const printer = printers.find(p => p.id === deviceId);
-            if (printer) {
-              success = await printerService.connectToPrinter(printer);
+            if (deviceId.startsWith('bridge_net_')) {
+              const ip = device.address || deviceId.replace('bridge_net_', '')
+              success = await connectBridgePrinter({ transport: 'network', address: ip })
+            } else {
+              const printers = await printerService.scanForPrinters();
+              const printer = printers.find(p => p.id === deviceId);
+              if (printer) {
+                success = await printerService.connectToPrinter(printer);
+              }
             }
           }
         } else if (device.type === 'scale') {

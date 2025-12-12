@@ -85,6 +85,22 @@ export class WebSocketPrinterFallback {
   async testPrint(): Promise<boolean> { if (!this.ws) return false; this.ws.send(JSON.stringify({ action: 'test_print' })); return true; }
   async printReceipt(data: any): Promise<boolean> { if (!this.ws) return false; this.ws.send(JSON.stringify({ action: 'print_receipt', payload: data })); return true; }
   async disconnect() { try { if (this.ws) this.ws.close(); } catch {} }
+  async scanNetwork(subnets?: string[]): Promise<Array<{ ip: string }>> {
+    if (!this.ws) return [] as any
+    return await new Promise((resolve) => {
+      const handler = (ev: MessageEvent) => {
+        try {
+          const resp = JSON.parse(ev.data)
+          if (resp?.event === 'scan_network_done') {
+            this.ws?.removeEventListener('message', handler)
+            resolve((resp.printers || []).map((p: any) => ({ ip: p.ip })))
+          }
+        } catch {}
+      }
+      this.ws!.addEventListener('message', handler)
+      this.ws!.send(JSON.stringify({ action: 'scan_network_printers', payload: { subnets } }))
+    })
+  }
 }
 
 export class HardwareFallbackManager {

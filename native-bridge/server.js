@@ -3,6 +3,8 @@ import escpos from 'escpos'
 import usb from 'escpos-usb'
 import Bluetooth from 'escpos-bluetooth'
 import Network from 'escpos-network'
+import os from 'os'
+import net from 'net'
 
 escpos.USB = usb
 escpos.Bluetooth = Bluetooth
@@ -80,6 +82,41 @@ async function printReceipt(data) {
   })
 }
 
+function getLocalSubnets() {
+  const ifaces = os.networkInterfaces()
+  const subnets = []
+  for (const name of Object.keys(ifaces)) {
+    for (const info of ifaces[name] || []) {
+      if (!info || info.internal || info.family !== 'IPv4') continue
+      const ip = info.address.split('.')
+      const subnet = `${ip[0]}.${ip[1]}.${ip[2]}.`
+      subnets.push(subnet)
+    }
+  }
+  return [...new Set(subnets)]
+}
+
+async function scanNetwork9100(subnet) {
+  const ips = []
+  const testIp = (ip) => new Promise((resolve) => {
+    const socket = new net.Socket()
+    let resolved = false
+    const done = (ok) => { if (!resolved) { resolved = true; try { socket.destroy() } catch {} ; resolve(ok) } }
+    socket.setTimeout(800)
+    socket.once('connect', () => done(true))
+    socket.once('error', () => done(false))
+    socket.once('timeout', () => done(false))
+    try { socket.connect(9100, ip) } catch { done(false) }
+  })
+  const tasks = []
+  for (let i = 1; i <= 254; i++) {
+    const ip = `${subnet}${i}`
+    tasks.push((async () => { const ok = await testIp(ip); if (ok) ips.push(ip) })())
+  }
+  await Promise.all(tasks)
+  return ips
+}
+
 wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
     let msg
@@ -102,6 +139,25 @@ wss.on('connection', (ws) => {
           ws.send(JSON.stringify({ ok, event: 'printed_receipt' }))
           break
         }
+        case 'scan_network_printers': {
+          const subnets = payload?.subnets && Array.isArray(payload.subnets) && payload.subnets.length > 0 ? payload.subnets : getLocalSubnets()
+          const results = []
+          for (const subnet of subnets) {
+            const found = await scanNetwork9100(subnet)
+            for (const ip of found) results.push({ ip, transport: 'network' })
+          }
+          ws.send(JSON.stringify({ ok: true, event: 'scan_network_done', printers: results }))
+          break
+        }
+        case 'scan_usb_printers': {
+          let ok = false
+          try {
+            const dev = new escpos.USB()
+            if (dev) ok = true
+          } catch {}
+          ws.send(JSON.stringify({ ok, event: 'scan_usb_done', printers: ok ? [{ transport: 'usb' }] : [] }))
+          break
+        }
         default:
           ws.send(JSON.stringify({ ok: false, error: 'unknown_action' }))
       }
@@ -113,4 +169,3 @@ wss.on('connection', (ws) => {
 })
 
 console.log('Native Bridge listening on ws://localhost:8766')
-
