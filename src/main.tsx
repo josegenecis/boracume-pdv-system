@@ -5,8 +5,8 @@ import App from './App.tsx'
 // import AuthOnlyApp from './App.auth-only.tsx'
 import './index.css'
 
-// Service Worker para Push Notifications
-if ('serviceWorker' in navigator) {
+// Service Worker para Push Notifications (desativado por padrão)
+if (import.meta.env.VITE_ENABLE_SW === 'true' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
