@@ -23,6 +23,24 @@ if ('serviceWorker' in navigator) {
   }
 }
 
+// Link de força para limpar SW/caches e recarregar automaticamente
+(function() {
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('clear_sw') === '1') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister())).catch(() => {})
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {})
+      }
+      url.searchParams.delete('clear_sw')
+      url.searchParams.set('v', String(Date.now()))
+      window.location.replace(url.toString())
+    }
+  } catch {}
+})();
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
