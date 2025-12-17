@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Package, Search, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,6 +49,7 @@ const Products = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -163,6 +165,7 @@ const Products = () => {
 
   const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
+    setIsSheetOpen(true);
     setShowForm(true);
   };
 
@@ -182,6 +185,7 @@ const Products = () => {
 
     setShowForm(false);
     setEditingProduct(null);
+    setIsSheetOpen(false);
   };
 
   const formatCurrency = (value: number) => {
@@ -219,19 +223,9 @@ const Products = () => {
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
-          {showForm ? (
-            <ProductForm
-              product={editingProduct}
-              onSave={handleFormSubmit}
-              onCancel={() => {
-                setShowForm(false);
-                setEditingProduct(null);
-              }}
-            />
-          ) : (
-            <>
-              {/* Filtros */}
-              <Card>
+          <>
+            {/* Filtros */}
+            <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1">
@@ -302,11 +296,10 @@ const Products = () => {
                   </CardContent>
                 </Card>
               ) : (
-
                 <div className="space-y-2">
                   {filteredProducts.map((product) => (
                     <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
-                      <CardContent className="p-3">
+                      <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                           {/* Imagem do produto */}
                           {product.image_url ? (
@@ -380,27 +373,29 @@ const Products = () => {
                           </div>
 
                           {/* Botões de ação */}
-                          <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-3 text-xs"
-                              onClick={() => handleEditProduct(product)}
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              <span className="hidden sm:inline">Editar</span>
-                            </Button>
-                            <ProductVariationsButton productId={product.id} compact />
-                            
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-2"
-                              onClick={() => handleDeleteProduct(product.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
+                           <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               className="h-8 px-3 text-xs"
+                               onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}
+                             >
+                               <Edit className="h-3 w-3 mr-1" />
+                               <span className="hidden sm:inline">Editar</span>
+                             </Button>
+                             <div onClick={(e) => e.stopPropagation()}>
+                               <ProductVariationsButton productId={product.id} compact />
+                             </div>
+                             
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               className="h-8 px-2"
+                               onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                             >
+                               <Trash2 className="h-3 w-3" />
+                             </Button>
+                           </div>
 
                         </div>
                       </CardContent>
@@ -409,7 +404,6 @@ const Products = () => {
                 </div>
               )}
             </>
-          )}
         </TabsContent>
         
 
@@ -425,6 +419,24 @@ const Products = () => {
           <BannerManager />
         </TabsContent>
       </Tabs>
+
+      {/* Editor lateral (Sheet) */}
+      <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
+        <SheetContent side="right" className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Editar Produto</SheetTitle>
+          </SheetHeader>
+          {showForm && (
+            <div className="mt-4">
+              <ProductForm
+                product={editingProduct || undefined}
+                onSave={handleFormSubmit}
+                onCancel={() => { setIsSheetOpen(false); setShowForm(false); setEditingProduct(null); }}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
