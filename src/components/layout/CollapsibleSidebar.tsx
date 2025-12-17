@@ -73,7 +73,7 @@ const CollapsibleSidebar = () => {
           size="sm"
 
           onClick={toggleSidebar}
-          className="w-full flex justify-center hover:bg-gray-50 text-gray-400 hover:text-gray-600"
+          className="w-full flex justify-center hover:bg-white text-gray-400 hover:text-gray-600"
         >
           {isMobile ? (
             <X size={16} />
@@ -100,7 +100,7 @@ const CollapsibleSidebar = () => {
                   className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                     isActive
                       ? 'bg-orange-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      : 'text-gray-700 hover:bg-white'
                   }`}
                   title={(!isOpen && !isMobile) ? link.label : undefined}
                 >
