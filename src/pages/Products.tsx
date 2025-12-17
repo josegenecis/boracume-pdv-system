@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
 
-import BannerManager from '@/components/banners/BannerManager';
+// Banners removidos desta página; serão movidos para Marketing
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
@@ -50,6 +50,25 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
+
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia('(max-width: 639px)');
+      const handler = (e: MediaQueryListEvent | MediaQueryList) => {
+        // @ts-ignore
+        const matches = 'matches' in e ? e.matches : e.currentTarget?.matches;
+        setIsMobile(!!matches);
+      };
+      setIsMobile(mq.matches);
+      // @ts-ignore
+      mq.addEventListener ? mq.addEventListener('change', handler) : mq.addListener(handler);
+      return () => {
+        // @ts-ignore
+        mq.removeEventListener ? mq.removeEventListener('change', handler) : mq.removeListener(handler);
+      };
+    } catch {}
+  }, []);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -165,8 +184,13 @@ const Products = () => {
 
   const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
-    setIsSheetOpen(true);
-    setShowForm(true);
+    if (isMobile) {
+      setShowForm(true);
+      setIsSheetOpen(false);
+    } else {
+      setIsSheetOpen(true);
+      setShowForm(true);
+    }
   };
 
 
@@ -215,11 +239,10 @@ const Products = () => {
       </div>
 
       <Tabs defaultValue="products" className="w-full">
-        <TabsList>
+        <TabsList className="mb-2 flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide">
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="global-variations">Variações Globais</TabsTrigger>
-          <TabsTrigger value="banners">Banners</TabsTrigger>
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
@@ -297,6 +320,17 @@ const Products = () => {
                 </Card>
               ) : (
                 <div className="space-y-2">
+                  {isMobile && showForm && (
+                    <Card>
+                      <CardContent className="p-4">
+                        <ProductForm
+                          product={editingProduct || undefined}
+                          onSave={handleFormSubmit}
+                          onCancel={() => { setShowForm(false); setEditingProduct(null); }}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
                   {filteredProducts.map((product) => (
                     <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
                       <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
@@ -415,12 +449,11 @@ const Products = () => {
         <CategoryManager />
       </TabsContent>
         
-        <TabsContent value="banners">
-          <BannerManager />
-        </TabsContent>
+        {/* Banners removidos desta página */}
       </Tabs>
 
       {/* Editor lateral (Sheet) */}
+      {!isMobile && (
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
         <SheetContent side="right" className="sm:max-w-md p-0">
           <div className="sticky top-0 z-10 bg-white border-b p-4">
@@ -439,6 +472,7 @@ const Products = () => {
           )}
         </SheetContent>
       </Sheet>
+      )}
     </div>
   );
 };
