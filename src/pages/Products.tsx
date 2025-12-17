@@ -422,12 +422,14 @@ const Products = () => {
 
       {/* Editor lateral (Sheet) */}
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="right" className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Editar Produto</SheetTitle>
-          </SheetHeader>
+        <SheetContent side="right" className="sm:max-w-md p-0">
+          <div className="sticky top-0 z-10 bg-white border-b p-4">
+            <SheetHeader>
+              <SheetTitle>Editar Produto</SheetTitle>
+            </SheetHeader>
+          </div>
           {showForm && (
-            <div className="mt-4">
+            <div className="px-4 pb-6 overflow-y-auto max-h-[calc(100vh-64px)]">
               <ProductForm
                 product={editingProduct || undefined}
                 onSave={handleFormSubmit}
