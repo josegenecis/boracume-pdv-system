@@ -7,7 +7,22 @@ const url = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!
 const supabase = createClient(url, serviceKey)
 
+// In-memory cache for edge function (hot instances will serve faster)
+const cache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 60 * 1000; // 1 minute server-side cache
+
 export default async function handler(req: Request): Promise<Response> {
+  // Add CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Content-Type': 'application/json'
+  };
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers });
+  }
+
   const { searchParams } = new URL(req.url)
   let userId = searchParams.get('userId')
 
@@ -19,7 +34,13 @@ export default async function handler(req: Request): Promise<Response> {
     } catch {}
   }
 
-  if (!userId) return Response.json({ ok: false, error: 'missing_userId' }, { status: 400 })
+  if (!userId) return new Response(JSON.stringify({ ok: false, error: 'missing_userId' }), { status: 400, headers })
+
+  // Check cache
+  const cached = cache.get(userId);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    return new Response(JSON.stringify({ ...cached.data, cached: true }), { headers });
+  }
 
   try {
     const [profileResult, categoriesResult, productsResult, deliveryZonesResult] = await Promise.all([
@@ -27,7 +48,8 @@ export default async function handler(req: Request): Promise<Response> {
         .from('profiles')
         .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
         .eq('id', userId)
-        .limit(1),
+        .limit(1)
+        .maybeSingle(),
       supabase
         .from('product_categories')
         .select('id, name, description, display_order')
@@ -48,14 +70,19 @@ export default async function handler(req: Request): Promise<Response> {
         .order('name', { ascending: true })
     ])
 
-    return Response.json({
+    const responseData = {
       ok: true,
-      profile: Array.isArray(profileResult.data) && profileResult.data.length ? profileResult.data[0] : null,
+      profile: profileResult.data || null,
       categories: categoriesResult.data || [],
       products: productsResult.data || [],
       deliveryZones: deliveryZonesResult.data || []
-    })
+    };
+
+    // Update cache
+    cache.set(userId, { data: responseData, timestamp: Date.now() });
+
+    return new Response(JSON.stringify(responseData), { headers })
   } catch (e: any) {
-    return Response.json({ ok: false, error: String(e?.message || e) }, { status: 500 })
+    return new Response(JSON.stringify({ ok: false, error: String(e?.message || e) }), { status: 500, headers })
   }
 }

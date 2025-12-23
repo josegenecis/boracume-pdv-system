@@ -80,6 +80,18 @@ const MenuDigital = () => {
     error: menuError 
   } = useMenuData({ userId: finalUserId });
 
+  // Pré-carregar imagens dos destaques para exibição instantânea
+  useEffect(() => {
+    if (highlights.length > 0) {
+      highlights.forEach(product => {
+        if (product.image_url) {
+          const img = new Image();
+          img.src = product.image_url;
+        }
+      });
+    }
+  }, [highlights]);
+
   // Configurar scroll spy para tabs
   const categoryIds = categories.map(cat => `category-${cat.id}`);
   const { activeSection, registerSection } = useScrollSpy(categoryIds);
