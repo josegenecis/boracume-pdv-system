@@ -31,6 +31,9 @@ interface ProductItem {
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
+  is_highlight?: boolean;
+  original_price?: number;
+  discount_percentage?: number;
 }
 
 interface ProductFormProps {
@@ -54,6 +57,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     send_to_kds: false,
     show_in_pdv: true,
     show_in_delivery: true,
+    is_highlight: false,
+    original_price: 0,
+    discount_percentage: 0,
     ...product
   });
   const [categories, setCategories] = useState([]);
@@ -66,6 +72,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
+  const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
 
@@ -81,6 +88,25 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const raw = digitsOnly === '' ? '0' : digitsOnly;
     setPriceRaw(raw);
     setFormData(prev => ({ ...prev, price: (parseInt(raw, 10) || 0) / 100 }));
+  };
+
+  const handleOriginalPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '');
+    const raw = digitsOnly === '' ? '0' : digitsOnly;
+    setOriginalPriceRaw(raw);
+    const originalPrice = (parseInt(raw, 10) || 0) / 100;
+    
+    // Auto calculate discount percentage if price is set
+    let discount = 0;
+    if (originalPrice > 0 && formData.price > 0 && originalPrice > formData.price) {
+      discount = Math.round(((originalPrice - formData.price) / originalPrice) * 100);
+    }
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      original_price: originalPrice,
+      discount_percentage: discount
+    }));
   };
 
   const createCategory = async () => {
@@ -258,6 +284,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         is_available: formData.available,
         show_in_delivery: formData.show_in_delivery,
         image_url: formData.image_url || null,
+        is_highlight: formData.is_highlight,
+        original_price: formData.original_price,
+        discount_percentage: formData.discount_percentage,
       } as const;
       let productId = product?.id;
 
@@ -385,6 +414,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               .update({
                 description: formData.description?.trim() || null,
                 image_url: formData.image_url || null,
+                is_highlight: formData.is_highlight,
+                original_price: formData.original_price,
+                discount_percentage: formData.discount_percentage,
                 updated_at: new Date().toISOString()
               })
               .eq('id', insertData.id);
@@ -401,6 +433,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             image_url: formData.image_url || null,
             is_available: formData.available,
             show_in_delivery: formData.show_in_delivery,
+            is_highlight: formData.is_highlight,
+            original_price: formData.original_price,
+            discount_percentage: formData.discount_percentage,
             updated_at: new Date().toISOString()
           })
           .eq('id', createdProductId);
@@ -412,7 +447,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery]);
+  }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price]);
 
 
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations, settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = variationSettings) => {
@@ -566,6 +601,36 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="original_price">Preço Original (opcional)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
+                  R$
+                </span>
+                <Input
+                  id="original_price"
+                  type="text"
+                  value={formatFromRaw(originalPriceRaw)}
+                  onChange={handleOriginalPriceChange}
+                  className="pl-10"
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="discount_percentage">Desconto Calculado (%)</Label>
+              <Input
+                id="discount_percentage"
+                type="number"
+                value={formData.discount_percentage}
+                readOnly
+                className="bg-gray-50"
+                placeholder="0"
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="category">Categoria *</Label>
 
@@ -704,6 +769,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
               />
               <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_highlight"
+                checked={formData.is_highlight}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
+              />
+              <Label htmlFor="is_highlight">Destaque</Label>
             </div>
           </div>
 

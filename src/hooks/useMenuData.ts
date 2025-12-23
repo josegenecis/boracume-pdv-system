@@ -192,8 +192,11 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
         // Processar produtos
         const processedProducts = (productsData || []) as any[];
 
-        // Destaques desativados por compatibilidade de tipos
-        const highlights: any[] = [];
+        // Filtrar destaques
+        const highlights = processedProducts
+          .filter(p => p.is_highlight)
+          .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))
+          .slice(0, 6);
 
         const profileData = Array.isArray(profilesArr) && profilesArr.length > 0 ? profilesArr[0] : null;
         const fallbackProfile = profileData ? profileData : {
