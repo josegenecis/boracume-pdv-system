@@ -110,15 +110,15 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
     let mounted = true;
 
     async function fetchData() {
-      // Verificar cache primeiro
+      // 1. Verificar cache primeiro (Instantâneo)
       const cacheKey = `menu_data_${userId}`;
       const cachedData = localStorage.getItem(cacheKey);
       
       if (cachedData) {
         try {
           const { timestamp, data } = JSON.parse(cachedData);
-          // Cache válido por 5 minutos
-          if (Date.now() - timestamp < 5 * 60 * 1000) {
+          // Cache válido por 15 minutos (aumentado para melhor UX)
+          if (Date.now() - timestamp < 15 * 60 * 1000) {
             console.log('📦 Usando dados do cache local');
             if (mounted) {
               const highlightsData = (data.products || [])
@@ -136,155 +136,107 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
                 error: null
               });
             }
-            // Não retorna aqui, faz fetch em background para atualizar (stale-while-revalidate)
           }
         } catch (e) {
           console.warn('Erro ao ler cache', e);
         }
       }
 
+      // 2. Buscar dados atualizados diretamente do Supabase (Mais rápido que Edge Function fria)
+      // Disparamos isso em paralelo, sem esperar (mas atualiza o estado quando chegar)
       try {
-        // Tenta usar a Edge Function primeiro (mais rápido)
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/menu-public?userId=${userId}`, {
-          method: 'POST',
-          headers: {
-             'Content-Type': 'application/json',
-             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({ userId })
-        });
+        const [
+          { data: profilesArr, error: profileError },
+          { data: categoriesData, error: categoriesError },
+          { data: productsData, error: productsError },
+          { data: deliveryZonesData, error: deliveryZonesError }
+        ] = await Promise.all([
+          // Buscar perfil do restaurante
+          supabase
+            .from('profiles')
+            .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+            .eq('id', userId)
+            .limit(1) as any,
+          // Buscar categorias
+          supabase
+            .from('product_categories')
+            .select('id, name, description, display_order')
+            .eq('user_id', userId)
+            .order('display_order', { ascending: true }) as any,
+          // Buscar produtos disponíveis
+          (supabase
+            .from('products') as any)
+            .select(`
+              *,
+              product_categories!inner(name)
+            `)
+            .eq('user_id', userId)
+            .eq('is_available', true)
+            .order('name', { ascending: true }),
+          // Buscar zonas de entrega
+          supabase
+            .from('delivery_zones')
+            .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+            .eq('user_id', userId)
+            .eq('active', true)
+            .order('name', { ascending: true }) as any
+        ]);
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.ok && mounted) {
-            // Process highlights
-            const highlightsData = (data.products || [])
-              .filter((p: any) => p.is_highlight)
-              .sort((a: any, b: any) => (b.order_count || 0) - (a.order_count || 0))
-              .slice(0, 6);
-
-            const menuData: MenuData = {
-              products: data.products,
-              categories: data.categories,
-              profile: data.profile,
-              deliveryZones: data.deliveryZones,
-              highlights: highlightsData,
-              isLoading: false,
-              error: null
-            };
-            
-            setData(menuData);
-            
-            // Atualizar cache
-            localStorage.setItem(cacheKey, JSON.stringify({
-              timestamp: Date.now(),
-              data: { ...data, highlights: highlightsData }
-            }));
-
-            return;
-          }
+        if (profileError) {
+           if ((profileError as any)?.code !== 'PGRST116') console.warn('Erro perfil:', profileError);
         }
+        if (categoriesError) throw categoriesError;
+        if (productsError) throw productsError;
+        if (deliveryZonesError) throw deliveryZonesError;
+
+        // Processar dados
+        const processedProducts = (productsData || []) as any[];
+        const highlights = processedProducts
+          .filter(p => p.is_highlight)
+          .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))
+          .slice(0, 6);
+
+        const profileData = Array.isArray(profilesArr) && profilesArr.length > 0 ? profilesArr[0] : null;
+        const fallbackProfile = profileData ? profileData : {
+          id: userId,
+          restaurant_name: 'Cardápio',
+          description: '',
+          logo_url: '',
+          phone: '',
+          address: '',
+          opening_hours: ''
+        } as RestaurantProfile;
+
+        const menuData: MenuData = {
+          products: processedProducts as any,
+          categories: categoriesData || [],
+          highlights,
+          profile: fallbackProfile,
+          deliveryZones: deliveryZonesData || [],
+          isLoading: false,
+          error: null
+        };
+
+        if(mounted) {
+          setData(menuData);
+          // Atualizar cache com dados frescos
+          localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: { 
+              products: processedProducts,
+              categories: categoriesData,
+              profile: fallbackProfile,
+              deliveryZones: deliveryZonesData
+             }
+          }));
+        }
+
       } catch (err) {
-        console.warn('Edge Function falhou, usando fallback client-side', err);
-      }
-
-      // Fallback para client-side fetch (se Edge falhar)
-      // Fallback direto no client
-      const [
-        { data: profilesArr, error: profileError },
-        { data: categoriesData, error: categoriesError },
-        { data: productsData, error: productsError },
-        { data: deliveryZonesData, error: deliveryZonesError }
-      ] = await Promise.all([
-        // Buscar perfil do restaurante
-        supabase
-          .from('profiles')
-          .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
-          .eq('id', userId)
-          .limit(1),
-        // Buscar categorias
-        supabase
-          .from('product_categories')
-          .select('id, name, description, display_order')
-          .eq('user_id', userId)
-          .order('display_order', { ascending: true }),
-        // Buscar produtos disponíveis
-        supabase
-          .from('products')
-          .select(`
-            *,
-            product_categories!inner(name)
-          `)
-          .eq('user_id', userId)
-          .eq('is_available', true)
-          .eq('show_in_delivery', true)
-          .order('name', { ascending: true }),
-        // Buscar zonas de entrega
-        supabase
-          .from('delivery_zones')
-          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-          .eq('user_id', userId)
-          .eq('active', true)
-          .order('name', { ascending: true })
-      ]);
-
-      if (profileError) {
-        const code = (profileError as any)?.code;
-        if (code === 'PGRST116') {
-          console.warn('Perfil ausente (PGRST116) — seguindo com fallback');
-        } else {
-          console.warn('Erro ao carregar perfil:', profileError);
+        console.error('Erro ao buscar dados atualizados:', err);
+        if (mounted && !cachedData) {
+          setData(prev => ({ ...prev, isLoading: false, error: 'Erro ao carregar cardápio.' }));
         }
       }
-
-      if (categoriesError) throw categoriesError;
-      if (productsError) throw productsError;
-      if (deliveryZonesError) throw deliveryZonesError;
-
-      // Processar produtos
-      const processedProducts = (productsData || []) as any[];
-
-      // Filtrar destaques
-      const highlights = processedProducts
-        .filter(p => p.is_highlight)
-        .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))
-        .slice(0, 6);
-
-      const profileData = Array.isArray(profilesArr) && profilesArr.length > 0 ? profilesArr[0] : null;
-      const fallbackProfile = profileData ? profileData : {
-        id: userId,
-        restaurant_name: 'Cardápio',
-        description: '',
-        logo_url: '',
-        phone: '',
-        address: '',
-        opening_hours: ''
-      } as RestaurantProfile;
-
-      const menuData: MenuData = {
-        products: processedProducts as any,
-        categories: categoriesData || [],
-        highlights,
-        profile: fallbackProfile,
-        deliveryZones: deliveryZonesData || [],
-        isLoading: false,
-        error: null
-      };
-
-      if(mounted) {
-        setData(menuData);
-         // Atualizar cache
-         localStorage.setItem(cacheKey, JSON.stringify({
-          timestamp: Date.now(),
-          data: { 
-            products: processedProducts,
-            categories: categoriesData,
-            profile: fallbackProfile,
-            deliveryZones: deliveryZonesData
-           }
-        }));
-      }
-
     };
 
     if (userId) {
@@ -311,14 +263,14 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
           });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `user_id=eq.${userId}` }, () => {
-        supabase
-          .from('products')
+        (supabase
+          .from('products') as any)
           .select('*')
           .eq('user_id', userId)
           .eq('is_available', true)
           .eq('show_in_delivery', true)
           .order('name', { ascending: true })
-          .then(({ data: productsData }) => {
+          .then(({ data: productsData }: any) => {
             const processedProducts = (productsData || []) as any[];
             setData(prev => ({ ...prev, products: processedProducts as any } as any));
           });
