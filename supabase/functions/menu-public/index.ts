@@ -9,45 +9,53 @@ const supabase = createClient(url, serviceKey)
 
 export default async function handler(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url)
-  const userId = searchParams.get('userId')
+  let userId = searchParams.get('userId')
+
+  // Try to get userId from body if not in query params
+  if (!userId && req.method === 'POST') {
+    try {
+      const body = await req.json()
+      userId = body.userId
+    } catch {}
+  }
+
   if (!userId) return Response.json({ ok: false, error: 'missing_userId' }, { status: 400 })
 
   try {
-    const { data: profileArr } = await supabase
-      .from('profiles')
-      .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
-      .eq('id', userId)
-      .limit(1)
-
-    const { data: categories } = await supabase
-      .from('product_categories')
-      .select('id, name, description, display_order')
-      .eq('user_id', userId)
-      .order('display_order', { ascending: true })
-
-    const { data: products } = await supabase
-      .from('products')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_available', true)
-      .eq('show_in_delivery', true)
-      .order('name', { ascending: true })
-
-    const { data: deliveryZones } = await supabase
-      .from('delivery_zones')
-      .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-      .eq('user_id', userId)
-      .eq('active', true)
-      .order('name', { ascending: true })
+    const [profileResult, categoriesResult, productsResult, deliveryZonesResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+        .eq('id', userId)
+        .limit(1),
+      supabase
+        .from('product_categories')
+        .select('id, name, description, display_order')
+        .eq('user_id', userId)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('products')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_available', true)
+        .eq('show_in_delivery', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('delivery_zones')
+        .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('name', { ascending: true })
+    ])
 
     return Response.json({
       ok: true,
-      profile: Array.isArray(profileArr) && profileArr.length ? profileArr[0] : null,
-      categories: categories || [],
-      products: products || [],
-      deliveryZones: deliveryZones || []
+      profile: Array.isArray(profileResult.data) && profileResult.data.length ? profileResult.data[0] : null,
+      categories: categoriesResult.data || [],
+      products: productsResult.data || [],
+      deliveryZones: deliveryZonesResult.data || []
     })
-  } catch (e) {
+  } catch (e: any) {
     return Response.json({ ok: false, error: String(e?.message || e) }, { status: 500 })
   }
 }

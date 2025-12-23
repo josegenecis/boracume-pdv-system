@@ -140,12 +140,43 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
         } catch {}
 
         // Fallback direto no client
-        // Buscar perfil do restaurante
-        const { data: profilesArr, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
-          .eq('id', userId)
-          .limit(1);
+        const [
+          { data: profilesArr, error: profileError },
+          { data: categoriesData, error: categoriesError },
+          { data: productsData, error: productsError },
+          { data: deliveryZonesData, error: deliveryZonesError }
+        ] = await Promise.all([
+          // Buscar perfil do restaurante
+          supabase
+            .from('profiles')
+            .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+            .eq('id', userId)
+            .limit(1),
+          // Buscar categorias
+          supabase
+            .from('product_categories')
+            .select('id, name, description, display_order')
+            .eq('user_id', userId)
+            .order('display_order', { ascending: true }),
+          // Buscar produtos disponíveis
+          supabase
+            .from('products')
+            .select(`
+              *,
+              product_categories!inner(name)
+            `)
+            .eq('user_id', userId)
+            .eq('is_available', true)
+            .eq('show_in_delivery', true)
+            .order('name', { ascending: true }),
+          // Buscar zonas de entrega
+          supabase
+            .from('delivery_zones')
+            .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+            .eq('user_id', userId)
+            .eq('active', true)
+            .order('name', { ascending: true })
+        ]);
 
         if (profileError) {
           const code = (profileError as any)?.code;
@@ -156,37 +187,8 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
           }
         }
 
-        // Buscar categorias
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from('product_categories')
-          .select('id, name, description, display_order')
-          .eq('user_id', userId)
-          .order('display_order', { ascending: true });
-
         if (categoriesError) throw categoriesError;
-
-        // Buscar produtos disponíveis
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select(`
-            *,
-            product_categories!inner(name)
-          `)
-          .eq('user_id', userId)
-          .eq('is_available', true)
-          .eq('show_in_delivery', true)
-          .order('name', { ascending: true });
-
         if (productsError) throw productsError;
-
-        // Buscar zonas de entrega
-        const { data: deliveryZonesData, error: deliveryZonesError } = await supabase
-          .from('delivery_zones')
-          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-          .eq('user_id', userId)
-          .eq('active', true)
-          .order('name', { ascending: true });
-
         if (deliveryZonesError) throw deliveryZonesError;
 
         // Processar produtos

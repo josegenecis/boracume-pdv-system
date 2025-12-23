@@ -515,6 +515,38 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 </div>
               )}
 
+              {/* Campo de Troco */}
+              {selectedPaymentMethod?.id === 'dinheiro' && (
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <Label htmlFor="change" className="text-sm font-medium mb-1 block">
+                    Precisa de troco para quanto?
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">R$</span>
+                    <Input
+                      id="change"
+                      type="number"
+                      step="0.01"
+                      min={finalTotal}
+                      placeholder={finalTotal.toFixed(2)}
+                      value={changeAmount}
+                      onChange={(e) => setChangeAmount(e.target.value)}
+                      className="pl-9 bg-white"
+                    />
+                  </div>
+                  {changeAmount && parseFloat(changeAmount) < finalTotal && (
+                    <p className="text-xs text-red-600 mt-1">
+                      O valor deve ser maior ou igual ao total do pedido (R$ {finalTotal.toFixed(2)})
+                    </p>
+                  )}
+                  {changeAmount && parseFloat(changeAmount) >= finalTotal && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Troco: R$ {(parseFloat(changeAmount) - finalTotal).toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              )}
+
             </div>
 
             <div>

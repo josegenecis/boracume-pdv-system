@@ -4,7 +4,8 @@ import {
   CardContent, 
   CardDescription, 
   CardHeader, 
-  CardTitle 
+  CardTitle,
+  CardFooter
 } from '@/components/ui/card';
 import { 
   Table, 
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   CreditCard, 
@@ -32,13 +34,26 @@ import {
   ArrowDown, 
   Download, 
   Filter,
-  Percent
+  Percent,
+  Plus,
+  Trash2,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
 
@@ -49,7 +64,16 @@ interface Transaction {
   amount: number;
   type: 'entrada' | 'saida';
   category: string;
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod;
+}
+
+interface CashSession {
+  id: string;
+  opened_at: string;
+  closed_at: string | null;
+  initial_amount: number;
+  final_amount: number | null;
+  status: 'open' | 'closed';
 }
 
 const Financeiro = () => {
@@ -58,6 +82,18 @@ const Financeiro = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
+  
+  // States for new expense
+  const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
+  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
+
+  // States for Cash Register
+  const [cashAmount, setCashAmount] = useState('');
+  const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
+  const [cashOperation, setCashOperation] = useState<'open' | 'close' | 'in' | 'out'>('open');
+  const [cashDescription, setCashDescription] = useState('');
+
   const [filters, setFilters] = useState({
     paymentMethod: '' as '' | PaymentMethod,
     type: '' as '' | 'entrada' | 'saida',
@@ -66,52 +102,145 @@ const Financeiro = () => {
     searchTerm: ''
   });
   
-  // Fetch transactions from Supabase
+  // Fetch transactions and session
   useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!user) return;
+    if (user) {
+      fetchData();
+      checkOpenSession();
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+      // 1. Fetch Orders (Income)
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', user.id);
       
-      try {
-        setIsLoading(true);
-        
-        // Fetch orders as income transactions
-        const { data: orders, error: ordersError } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('user_id', user.id);
-        
-        if (ordersError) throw ordersError;
-        
-        // Transform orders to transactions format
-        const orderTransactions = (orders || []).map(order => ({
-          id: order.id,
-          date: new Date(order.created_at),
-          description: `Pedido #${order.id.substring(0, 8)}`,
-          amount: order.total,
-          type: 'entrada' as 'entrada',
-          category: 'Vendas',
-          paymentMethod: order.payment_method as PaymentMethod
-        }));
-        
-        // In a real app, you'd also fetch expense transactions
-        // For now, we'll use just the income from orders
-        const allTransactions = [...orderTransactions];
-        
-        setTransactions(allTransactions);
-        setFilteredTransactions(allTransactions);
-      } catch (error: any) {
-        toast({
-          title: 'Erro ao carregar transações',
-          description: error.message,
-          variant: 'destructive'
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      const incomeTx = (orders || []).map(order => ({
+        id: order.id,
+        date: new Date(order.created_at),
+        description: `Pedido #${order.id.substring(0, 8)}`,
+        amount: order.total,
+        type: 'entrada' as 'entrada',
+        category: 'Vendas',
+        paymentMethod: order.payment_method as PaymentMethod
+      }));
+
+      // 2. Fetch Expenses (Outcome)
+      const { data: expenses } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const expenseTx = (expenses || []).map(exp => ({
+        id: exp.id,
+        date: new Date(exp.date),
+        description: exp.description,
+        amount: exp.amount,
+        type: 'saida' as 'saida',
+        category: exp.category || 'Geral',
+        paymentMethod: 'dinheiro' as PaymentMethod // Assuming expenses are paid in cash for simplicity or add field later
+      }));
+
+      const all = [...incomeTx, ...expenseTx].sort((a, b) => b.date.getTime() - a.date.getTime());
+      setTransactions(all);
+      setFilteredTransactions(all);
+
+    } catch (error: any) {
+      console.error(error);
+      toast({ title: 'Erro ao carregar dados', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkOpenSession = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('cash_register_sessions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'open')
+      .maybeSingle();
     
-    fetchTransactions();
-  }, [user, toast]);
+    setCurrentSession(data);
+  };
+
+  const handleAddExpense = async () => {
+    if (!newExpense.description || !newExpense.amount) return;
+    try {
+      const { error } = await supabase.from('expenses').insert({
+        user_id: user?.id,
+        description: newExpense.description,
+        amount: parseFloat(newExpense.amount),
+        category: newExpense.category,
+        date: new Date().toISOString()
+      });
+      if (error) throw error;
+      
+      toast({ title: 'Despesa registrada' });
+      setIsExpenseDialogOpen(false);
+      setNewExpense({ description: '', amount: '', category: 'Geral' });
+      fetchData();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleCashOperation = async () => {
+    if (!user) return;
+    const amount = parseFloat(cashAmount);
+    if (isNaN(amount)) return;
+
+    try {
+      if (cashOperation === 'open') {
+        const { error } = await supabase.from('cash_register_sessions').insert({
+          user_id: user.id,
+          initial_amount: amount,
+          status: 'open',
+          opened_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        toast({ title: 'Caixa aberto com sucesso' });
+      } else if (cashOperation === 'close') {
+        if (!currentSession) return;
+        const { error } = await supabase.from('cash_register_sessions').update({
+          status: 'closed',
+          closed_at: new Date().toISOString(),
+          final_amount: amount,
+          notes: cashDescription
+        }).eq('id', currentSession.id);
+        if (error) throw error;
+        toast({ title: 'Caixa fechado com sucesso' });
+      } else {
+        // Suprimento ou Sangria
+        if (!currentSession) {
+          toast({ title: 'Caixa fechado', description: 'Abra o caixa primeiro', variant: 'destructive' });
+          return;
+        }
+        const { error } = await supabase.from('cash_movements').insert({
+          session_id: currentSession.id,
+          user_id: user.id,
+          type: cashOperation,
+          amount: amount,
+          description: cashDescription
+        });
+        if (error) throw error;
+        toast({ title: cashOperation === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
+      }
+      
+      setIsCashDialogOpen(false);
+      setCashAmount('');
+      setCashDescription('');
+      checkOpenSession();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+  };
   
   // Calculate financial summaries
   const totalIncome = filteredTransactions
@@ -203,18 +332,116 @@ const Financeiro = () => {
     }).format(amount);
   };
   
-  const getPaymentMethodLabel = (method: PaymentMethod) => {
+  const getPaymentMethodLabel = (method?: PaymentMethod) => {
     switch (method) {
       case 'pix': return 'PIX';
       case 'dinheiro': return 'DINHEIRO';
       case 'cartao': return 'CARTÃO';
-      default: return method;
+      default: return method || '-';
     }
   };
   
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Gestão Financeira</h1>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <h1 className="text-2xl font-bold tracking-tight">Gestão Financeira</h1>
+        <div className="flex gap-2">
+           <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant={currentSession ? "secondary" : "default"} onClick={() => {
+                setCashOperation(currentSession ? 'close' : 'open');
+                setCashAmount('');
+              }}>
+                {currentSession ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                {currentSession ? 'Gerenciar Caixa' : 'Abrir Caixa'}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {cashOperation === 'open' && 'Abertura de Caixa'}
+                  {cashOperation === 'close' && 'Fechamento de Caixa'}
+                  {cashOperation === 'in' && 'Suprimento (Entrada)'}
+                  {cashOperation === 'out' && 'Sangria (Saída)'}
+                </DialogTitle>
+                <DialogDescription>
+                  {currentSession && (
+                    <div className="flex gap-2 mb-4">
+                      <Button variant={cashOperation === 'close' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('close')}>Fechar</Button>
+                      <Button variant={cashOperation === 'in' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('in')}>Suprimento</Button>
+                      <Button variant={cashOperation === 'out' ? 'default' : 'outline'} size="sm" onClick={() => setCashOperation('out')}>Sangria</Button>
+                    </div>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Valor</Label>
+                  <Input 
+                    type="number" 
+                    value={cashAmount} 
+                    onChange={(e) => setCashAmount(e.target.value)} 
+                    placeholder="0.00"
+                  />
+                </div>
+                {cashOperation !== 'open' && (
+                   <div>
+                   <Label>Observação / Descrição</Label>
+                   <Input 
+                     value={cashDescription} 
+                     onChange={(e) => setCashDescription(e.target.value)} 
+                     placeholder="Motivo..."
+                   />
+                 </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCashOperation}>Confirmar</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="destructive">
+                <ArrowDown className="mr-2 h-4 w-4" />
+                Nova Despesa
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Registrar Despesa</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Descrição</Label>
+                  <Input value={newExpense.description} onChange={(e) => setNewExpense({...newExpense, description: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Valor (R$)</Label>
+                  <Input type="number" value={newExpense.amount} onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Categoria</Label>
+                  <Select value={newExpense.category} onValueChange={(v) => setNewExpense({...newExpense, category: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Geral">Geral</SelectItem>
+                      <SelectItem value="Insumos">Insumos/Compras</SelectItem>
+                      <SelectItem value="Aluguel">Aluguel</SelectItem>
+                      <SelectItem value="Funcionários">Funcionários</SelectItem>
+                      <SelectItem value="Manutenção">Manutenção</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleAddExpense}>Salvar</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>

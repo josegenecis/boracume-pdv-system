@@ -137,25 +137,47 @@ const Configuracoes: React.FC = () => {
               <p className="text-sm">Teste rápido de push</p>
               <div className="flex justify-end mt-2">
                 <button
-                  className="h-9 px-3 rounded-md border"
+                  className="h-9 px-3 rounded-md border hover:bg-gray-100"
                   onClick={async () => {
                     try {
                       const { data: { user } } = await supabase.auth.getUser()
-                      const { data: subs } = await supabase
+                      if (!user) {
+                         alert('Usuário não logado');
+                         return;
+                      }
+                      
+                      const { data: subs, error: subError } = await supabase
                         .from('push_subscriptions' as any)
                         .select('endpoint, keys')
-                        .eq('user_id', user?.id)
+                        .eq('user_id', user.id)
+                      
+                      if (subError) {
+                        alert('Erro ao buscar inscrições: ' + subError.message);
+                        return;
+                      }
+
                       if (Array.isArray(subs) && subs.length > 0) {
-                        await supabase.functions.invoke('send-push', {
+                        const { data, error } = await supabase.functions.invoke('send-push', {
                           body: {
                             subscriptions: subs,
                             title: 'Teste de Push',
-                            body: 'Notificação de teste',
+                            body: 'Notificação de teste enviada com sucesso!',
                             url: '/pedidos'
                           }
-                        })
+                        });
+                        
+                        if (error) {
+                          alert('Erro na função: ' + error.message);
+                        } else {
+                          console.log('Push result:', data);
+                          alert('Push enviado! Verifique se recebeu.');
+                        }
+                      } else {
+                        alert('Nenhuma inscrição encontrada. Clique em "Ativar Push" primeiro.');
                       }
-                    } catch {}
+                    } catch (e: any) {
+                      alert('Erro inesperado: ' + e.message);
+                    }
                   }}
                 >Enviar teste</button>
               </div>
