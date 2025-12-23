@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { supabase } from '@/integrations/supabase/client';
 
 
 const Configuracoes: React.FC = () => {
@@ -104,7 +105,17 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
         
         <TabsContent value="devices">
-          <ErrorBoundary fallback={<div className="p-4 text-sm">Erro ao carregar Dispositivos. Tente atualizar a página.</div>}>
+          <ErrorBoundary fallback={<div className="p-4 text-sm">
+            <p className="mb-2">Erro ao carregar Dispositivos. Tente atualizar a página.</p>
+            <button
+              className="h-9 px-3 rounded-md border"
+              onClick={() => {
+                try { window.location.reload(); } catch {}
+              }}
+            >
+              Atualizar
+            </button>
+          </div>}>
             <DeviceManager />
           </ErrorBoundary>
         </TabsContent>
@@ -120,6 +131,33 @@ const Configuracoes: React.FC = () => {
               <p className="text-sm text-muted-foreground">Ative notificações push para receber alertas mesmo com o app fechado.</p>
               <div className="flex justify-end mt-2">
                 <button className="h-9 px-3 rounded-md border" onClick={() => ensureSubscribed()}>Ativar Push</button>
+              </div>
+            </div>
+            <div className="p-3 border rounded-lg">
+              <p className="text-sm">Teste rápido de push</p>
+              <div className="flex justify-end mt-2">
+                <button
+                  className="h-9 px-3 rounded-md border"
+                  onClick={async () => {
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser()
+                      const { data: subs } = await supabase
+                        .from('push_subscriptions' as any)
+                        .select('endpoint, keys')
+                        .eq('user_id', user?.id)
+                      if (Array.isArray(subs) && subs.length > 0) {
+                        await supabase.functions.invoke('send-push', {
+                          body: {
+                            subscriptions: subs,
+                            title: 'Teste de Push',
+                            body: 'Notificação de teste',
+                            url: '/pedidos'
+                          }
+                        })
+                      }
+                    } catch {}
+                  }}
+                >Enviar teste</button>
               </div>
             </div>
           </div>

@@ -101,6 +101,26 @@ export class WebSocketPrinterFallback {
       this.ws!.send(JSON.stringify({ action: 'scan_network_printers', payload: { subnets } }))
     })
   }
+  async scanUSB(): Promise<Array<{ vendorId: number, productId: number }>> {
+    if (!this.ws) return [] as any
+    return await new Promise((resolve) => {
+      const handler = (ev: MessageEvent) => {
+        try { const resp = JSON.parse(ev.data); if (resp?.event === 'scan_usb_done') { this.ws?.removeEventListener('message', handler); resolve(resp.printers || []) } } catch {}
+      }
+      this.ws!.addEventListener('message', handler)
+      this.ws!.send(JSON.stringify({ action: 'scan_usb_printers' }))
+    })
+  }
+  async scanOSPrinters(): Promise<Array<{ name: string, isDefault?: boolean }>> {
+    if (!this.ws) return [] as any
+    return await new Promise((resolve) => {
+      const handler = (ev: MessageEvent) => {
+        try { const resp = JSON.parse(ev.data); if (resp?.event === 'scan_os_done') { this.ws?.removeEventListener('message', handler); resolve(resp.printers || []) } } catch {}
+      }
+      this.ws!.addEventListener('message', handler)
+      this.ws!.send(JSON.stringify({ action: 'scan_os_printers' }))
+    })
+  }
 }
 
 export class HardwareFallbackManager {

@@ -152,12 +152,13 @@ const DeviceManager = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
-                    <Select value={bridgeConfig.transport} onValueChange={(v) => setBridgeConfig(prev => ({ ...prev, transport: v as any }))}>
+                    <Select value={['network','usb','bluetooth','system'].includes(bridgeConfig.transport as any) ? (bridgeConfig.transport as any) : 'network'} onValueChange={(v) => setBridgeConfig(prev => ({ ...prev, transport: v as any }))}>
                       <SelectTrigger className="w-full"><SelectValue placeholder="Transporte" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="network">Rede (IP)</SelectItem>
                         <SelectItem value="usb">USB</SelectItem>
                         <SelectItem value="bluetooth">Bluetooth</SelectItem>
+                        <SelectItem value="system">Sistema (OS)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

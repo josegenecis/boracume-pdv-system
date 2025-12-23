@@ -8,7 +8,13 @@ import './index.css'
 // Service Worker para Push Notifications (desativado por padrão)
 if ('serviceWorker' in navigator) {
   const enableSW = import.meta.env.VITE_ENABLE_SW === 'true'
-  if (enableSW) {
+  const isStandalone = (() => {
+    try {
+      const mq = window.matchMedia('(display-mode: standalone)')
+      return mq.matches || (navigator as any).standalone === true
+    } catch { return false }
+  })()
+  if (enableSW || isStandalone) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').catch(() => {})
     })

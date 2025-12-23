@@ -11,7 +11,8 @@
     "escpos-usb": "3.0.0-alpha.4",
     "escpos-bluetooth": "3.0.0-alpha.4",
     "escpos-network": "3.0.0-alpha.3",
+    "usb": "1.9.2",
+    "printer": "@thiagoelg/node-printer",
     "ws": "8.16.0"
   }
 }
-

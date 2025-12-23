@@ -21,7 +21,10 @@ export default async function handler(req: Request): Promise<Response> {
     const results: any[] = []
     for (const sub of subscriptions) {
       try {
-        const res = await webpush.sendNotification(sub, payload)
+        const res = await webpush.sendNotification(sub, payload, {
+          TTL: 0,
+          headers: { Urgency: 'high' }
+        } as any)
         results.push({ ok: true, status: res.statusCode })
       } catch (e) {
         results.push({ ok: false, error: String(e?.message || e) })
@@ -32,4 +35,3 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: String(e?.message || e) }, { status: 400 })
   }
 }
-

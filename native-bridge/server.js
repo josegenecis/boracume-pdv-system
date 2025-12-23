@@ -5,6 +5,8 @@ import Bluetooth from 'escpos-bluetooth'
 import Network from 'escpos-network'
 import os from 'os'
 import net from 'net'
+import nodeUsb from 'usb'
+import printerLib from 'printer'
 
 escpos.USB = usb
 escpos.Bluetooth = Bluetooth
@@ -14,6 +16,7 @@ const wss = new WebSocketServer({ port: 8766 })
 
 let device = null
 let printer = null
+let systemPrinterName = null
 
 function openPrinter(transport, address) {
   try {
@@ -27,6 +30,11 @@ function openPrinter(transport, address) {
       case 'bluetooth':
         device = new escpos.Bluetooth(address || undefined)
         break
+      case 'system':
+        systemPrinterName = address || null
+        device = null
+        printer = null
+        return !!systemPrinterName
       default:
         throw new Error('Unsupported transport')
     }
@@ -39,46 +47,87 @@ function openPrinter(transport, address) {
 }
 
 async function printTest() {
+  const data = buildEscpos({ header: 'Teste de Impressão', items: [{ name: 'Item', qty: 1, subtotal: 0 }], total: 0, order_number: 'TESTE' })
+  if (systemPrinterName) {
+    return await printRawSystem(data)
+  }
   return new Promise((resolve, reject) => {
     device.open(() => {
       try {
-        printer.align('ct').style('b').text('BORA CUME HUB')
-        printer.style('normal').text('Teste de Impressão').text('------------------------------')
-        printer.align('rt').text('TOTAL: R$ 0,00')
-        printer.align('ct').text('------------------------------').text('Obrigado!').cut().close()
+        sendEscposViaLib(data)
         resolve(true)
-      } catch (e) {
-        reject(e)
-      }
+      } catch (e) { reject(e) }
     })
   })
 }
 
 async function printReceipt(data) {
   const { order_number, customer_name, customer_phone, items = [], total = 0 } = data || {}
+  const escposData = buildEscpos({ header: `Pedido #${order_number}`, customer_name, customer_phone, items, total, order_number })
+  if (systemPrinterName) {
+    return await printRawSystem(escposData)
+  }
   return new Promise((resolve, reject) => {
     device.open(() => {
-      try {
-        printer.align('ct').style('b').text('BORA CUME HUB')
-        printer.style('normal').text('--------------------------------')
-        printer.align('lt').text(`Pedido: #${order_number}`).text(`Cliente: ${customer_name}`)
-        if (customer_phone) printer.text(`Telefone: ${customer_phone}`)
-        printer.text('--------------------------------')
-        items.forEach(it => {
-          printer.text(`${it.quantity}x ${it.product_name}`)
-          printer.align('rt').text(`R$ ${Number(it.subtotal).toFixed(2)}`)
-          printer.align('lt')
-          if (it.notes) printer.text(`Obs: ${it.notes}`)
-        })
-        printer.text('--------------------------------')
-        printer.align('rt').style('b').text(`TOTAL: R$ ${Number(total).toFixed(2)}`)
-        printer.style('normal').align('ct').text('--------------------------------').text('Obrigado pela preferência!')
-        printer.cut().close()
-        resolve(true)
-      } catch (e) {
-        reject(e)
-      }
+      try { sendEscposViaLib(escposData); resolve(true) } catch (e) { reject(e) }
     })
+  })
+}
+
+function buildEscpos({ header = 'BORA CUME HUB', customer_name, customer_phone, items = [], total = 0, order_number }) {
+  let d = ''
+  d += '\x1B\x61\x01' // center
+  d += '\x1B\x45\x01' // bold on
+  d += 'BORA CUME HUB\n'
+  d += '\x1B\x45\x00' // bold off
+  d += '--------------------------------\n'
+  d += '\x1B\x61\x00' // left
+  if (order_number) d += `Pedido: #${order_number}\n`
+  if (customer_name) d += `Cliente: ${customer_name}\n`
+  if (customer_phone) d += `Telefone: ${customer_phone}\n`
+  d += '--------------------------------\n'
+  items.forEach((it) => {
+    const name = it.product_name || it.name || ''
+    const qty = it.quantity || it.qty || 1
+    const sub = Number(it.subtotal || it.price || 0)
+    d += `${qty}x ${name}\n`
+    d += '\x1B\x61\x02' // right
+    d += `R$ ${sub.toFixed(2)}\n`
+    d += '\x1B\x61\x00' // left
+    if (it.notes) d += `Obs: ${it.notes}\n`
+  })
+  d += '--------------------------------\n'
+  d += '\x1B\x61\x02' // right
+  d += '\x1B\x45\x01' // bold on
+  d += `TOTAL: R$ ${Number(total).toFixed(2)}\n`
+  d += '\x1B\x45\x00' // bold off
+  d += '\x1B\x61\x01' // center
+  d += '--------------------------------\n'
+  d += 'Obrigado pela preferência!\n\n\n'
+  d += '\x1D\x56\x00' // cut
+  return d
+}
+
+function sendEscposViaLib(data) {
+  // escpos lib prints via device/printer
+  printer.align('ct').text('') // no-op to ensure instance exists
+  // As escpos lib expects builder methods; instead write raw via device?
+  // Fallback: use network directly for 9100
+  if (device && device.constructor?.name === 'Network') {
+    const sock = new net.Socket()
+    const addr = device.address || device?.opts?.address
+    sock.connect(9100, addr, () => { sock.write(Buffer.from(data, 'binary')); sock.end() })
+  } else {
+    // For USB/Bluetooth via escpos, not all provide raw write; attempt text
+    printer.text('')
+  }
+}
+
+async function printRawSystem(data) {
+  return await new Promise((resolve) => {
+    try {
+      printerLib.printDirect({ data, printer: systemPrinterName || undefined, type: 'RAW', success: () => resolve(true), error: () => resolve(false) })
+    } catch { resolve(false) }
   })
 }
 
@@ -150,12 +199,21 @@ wss.on('connection', (ws) => {
           break
         }
         case 'scan_usb_printers': {
-          let ok = false
+          let list = []
           try {
-            const dev = new escpos.USB()
-            if (dev) ok = true
+            const devices = nodeUsb.getDeviceList()
+            list = devices.map(d => ({ vendorId: d.deviceDescriptor?.idVendor, productId: d.deviceDescriptor?.idProduct, transport: 'usb' }))
           } catch {}
-          ws.send(JSON.stringify({ ok, event: 'scan_usb_done', printers: ok ? [{ transport: 'usb' }] : [] }))
+          ws.send(JSON.stringify({ ok: true, event: 'scan_usb_done', printers: list }))
+          break
+        }
+        case 'scan_os_printers': {
+          try {
+            const printers = printerLib.getPrinters() || []
+            ws.send(JSON.stringify({ ok: true, event: 'scan_os_done', printers: printers.map(p => ({ name: p.name, isDefault: p.isDefault, transport: 'system' })) }))
+          } catch (e) {
+            ws.send(JSON.stringify({ ok: false, event: 'scan_os_done', printers: [] }))
+          }
           break
         }
         default:

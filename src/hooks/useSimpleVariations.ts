@@ -5,7 +5,7 @@ import { supabase } from "../integrations/supabase/client";
 export function useSimpleVariations() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchVariations = async (productId: string): Promise<ProductVariation[]> => {
+  const fetchVariations = async (productId: string): Promise<any[]> => {
     console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
     console.log('🔍 CARDÁPIO DIGITAL - URL atual:', window.location.href);
     console.log('🔍 CARDÁPIO DIGITAL - Produto ID tipo:', typeof productId, 'valor:', productId);
@@ -32,7 +32,7 @@ export function useSimpleVariations() {
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
         .select('global_variation_id, required, min_selections, max_selections')
-        .eq('product_id', productId);
+        .eq('product_id', productId) as any;
 
       if (globalError) {
         console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar links de variações globais:', globalError);
@@ -42,14 +42,15 @@ export function useSimpleVariations() {
 
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
-      if (globalVariationLinks && globalVariationLinks.length > 0) {
-        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+      const linksArr: any[] = Array.isArray(globalVariationLinks) ? globalVariationLinks as any[] : [];
+      if (linksArr.length > 0) {
+        const globalVariationIds = linksArr.map((link: any) => link.global_variation_id);
         console.log('🆔 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalVariationIds);
         
         const { data: globalVars, error: globalVarError } = await supabase
           .from('global_variations')
           .select('*')
-          .in('id', globalVariationIds);
+          .in('id', globalVariationIds as any) as any;
 
         if (globalVarError) {
           console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações globais:', globalVarError);
@@ -57,8 +58,9 @@ export function useSimpleVariations() {
           console.log('🌐 CARDÁPIO DIGITAL - Variações globais encontradas:', globalVars.length, globalVars);
           
           // Mesclar configurações do vínculo nas variações globais
-          globalVariations = globalVars.map(globalVar => {
-            const link = globalVariationLinks.find(l => l.global_variation_id === globalVar.id);
+          const globalsArr: any[] = Array.isArray(globalVars) ? globalVars as any[] : [];
+          globalVariations = globalsArr.map((globalVar: any) => {
+            const link = linksArr.find((l: any) => l.global_variation_id === globalVar.id);
             const mergedVariation = {
               ...globalVar,
               required: link?.required ?? false,
@@ -92,9 +94,9 @@ export function useSimpleVariations() {
         return [];
       }
 
-      const formatted: ProductVariation[] = [];
+      const formatted: any[] = [];
 
-      for (const item of allVariations) {
+      for (const item of allVariations as any[]) {
         console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name);
         console.log('🔍 CARDÁPIO DIGITAL - Dados brutos da variação:', JSON.stringify(item, null, 2));
         
@@ -165,7 +167,7 @@ export function useSimpleVariations() {
           }
 
 
-          const validOptions = [];
+          const validOptions: any[] = [];
 
           for (let i = 0; i < processedOptions.length; i++) {
             const opt = processedOptions[i] as any;
@@ -209,7 +211,7 @@ export function useSimpleVariations() {
             ? Math.max(1, Number(item.max_selections) || 1) 
             : 1;
 
-          const processedVariation: ProductVariation = {
+          const processedVariation: any = {
             id: String(item.id),
             name: String(item.name).trim(),
             required: Boolean(item.required ?? item.is_required ?? false),
@@ -243,17 +245,41 @@ export function useSimpleVariations() {
       });
 
       
-      return formatted;
+      return formatted as any[];
     } catch (error) {
       console.error('💥 CARDÁPIO DIGITAL - Erro geral ao carregar variações:', error);
-
+      // Fallback: função pública via Supabase
+      try {
+        const { data: j }: any = await supabase.functions.invoke('product-variations-public', { body: { productId } as any })
+        if (j?.ok && Array.isArray(j.variations)) {
+          const variations = j.variations.map((item: any) => ({
+            id: String(item.id),
+            name: String(item.name || ''),
+            required: Boolean(item.required ?? false),
+            max_selections: Math.max(1, Number(item.max_selections ?? 1)),
+            options: (() => {
+              const raw = item.options
+              if (!raw) return []
+              if (typeof raw === 'string') {
+                try { return JSON.parse(raw) } catch { return String(raw).split(/[,;\n]/).map((name: string) => ({ name: name.trim(), price: 0 })) }
+              }
+              if (Array.isArray(raw)) return raw
+              if (typeof raw === 'object') return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }))
+              return []
+            })()
+          }))
+          return variations as any[]
+        }
+      } catch (e) {
+        console.warn('Fallback público de variações falhou', e)
+      }
       return [];
     } finally {
       setIsLoading(false);
     }
   };
 
-  const calculateVariationPrice = (selectedVariations: Record<string, string[]>, variations: ProductVariation[]) => {
+  const calculateVariationPrice = (selectedVariations: Record<string, string[]>, variations: any[]) => {
     let total = 0;
 
 
@@ -280,11 +306,5 @@ export function useSimpleVariations() {
 
   };
 
-  return {
-    isLoading,
-    fetchVariations,
-    calculateVariationPrice,
-    getSelectedVariationsText
-  };
-
+  return { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText };
 }
