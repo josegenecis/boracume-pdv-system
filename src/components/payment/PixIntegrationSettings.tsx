@@ -149,6 +149,18 @@ const PixIntegrationSettings: React.FC = () => {
           </div>
         </div>
 
+        <div className="bg-blue-50 p-4 rounded-md border border-blue-200 text-sm space-y-2">
+            <h4 className="font-semibold text-blue-800">Como configurar o Mercado Pago:</h4>
+            <ol className="list-decimal pl-4 space-y-1 text-blue-700">
+                <li>Acesse o <a href="https://www.mercadopago.com.br/developers/panel" target="_blank" rel="noopener noreferrer" className="underline">Painel de Desenvolvedores do Mercado Pago</a>.</li>
+                <li>Crie uma nova aplicação ou selecione uma existente.</li>
+                <li>Em "Credenciais de produção", copie o "Access Token" e cole no campo <strong>API Key</strong> acima.</li>
+                <li>No menu lateral, vá em "Notificações Webhooks" e configure a URL: <code className="bg-blue-100 px-1 rounded">{endpoint}</code></li>
+                <li>Selecione os eventos: <code>payment.created</code> e <code>payment.updated</code>.</li>
+                <li>Salve as alterações no Mercado Pago e clique em "Salvar" aqui.</li>
+            </ol>
+        </div>
+
         <div className="flex gap-2">
           <Button onClick={save} disabled={loading}>Salvar</Button>
           <Button variant="outline" onClick={load} disabled={loading}>Recarregar</Button>
