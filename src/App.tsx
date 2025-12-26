@@ -40,7 +40,7 @@ import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
 import DesktopApp from '@/pages/DesktopApp';
-import { HardwareTestPage } from '@/pages/HardwareTestPage';
+import HardwareTestPage from '@/pages/HardwareTestPage';
 import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
