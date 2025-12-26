@@ -32,11 +32,11 @@ const Kitchen = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-120px)] overflow-y-auto p-4">
-      <div className="space-y-6">
-        <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+    <div className="h-[calc(100vh-80px)] flex flex-col p-4 overflow-hidden">
+      <div className="flex-none mb-4">
+        <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-gray-100">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               Cozinha (KDS)
               <span className="text-sm font-normal text-muted-foreground ml-2 bg-gray-100 px-2 py-1 rounded-full">
                 {orders.length} pedidos
@@ -59,19 +59,23 @@ const Kitchen = () => {
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="flex-1 min-h-0">
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
 
             {/* PREPARING COLUMN */}
-            <div className="flex flex-col h-full bg-gray-50/50 rounded-xl p-4 border border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-blue-700 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                    {preparingOrders.length}
-                  </div>
-                  Em Preparo
-                </h2>
+            <div className="flex flex-col h-full bg-gray-50/80 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex-none p-4 border-b border-gray-200 bg-white/50 backdrop-blur-sm">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-blue-700 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
+                      {preparingOrders.length}
+                    </div>
+                    Em Preparo
+                  </h2>
+                </div>
               </div>
 
               <Droppable droppableId="preparing">
@@ -79,11 +83,12 @@ const Kitchen = () => {
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex-1 space-y-3 overflow-y-auto min-h-[500px] transition-colors rounded-lg p-2 ${snapshot.isDraggingOver ? 'bg-blue-50 ring-2 ring-blue-200' : ''
-                      }`}
+                    className={`flex-1 overflow-y-auto p-4 space-y-3 transition-colors ${
+                      snapshot.isDraggingOver ? 'bg-blue-50/50' : ''
+                    }`}
                   >
                     {preparingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+                      <div className="flex flex-col items-center justify-center h-full text-gray-400 border-2 border-dashed border-gray-200 rounded-lg m-2">
                         <AlertCircle className="w-12 h-12 mb-2 opacity-20" />
                         <p>Sem pedidos em preparo</p>
                       </div>
@@ -95,7 +100,8 @@ const Kitchen = () => {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`transform transition-transform ${snapshot.isDragging ? 'scale-105 rotate-1' : ''}`}
+                              className={`transform transition-transform ${snapshot.isDragging ? 'scale-105 rotate-1 z-50' : ''}`}
+                              style={provided.draggableProps.style}
                             >
                               <KitchenOrderCard
                                 order={order as any}
@@ -113,14 +119,16 @@ const Kitchen = () => {
             </div>
 
             {/* READY COLUMN */}
-            <div className="flex flex-col h-full bg-gray-50/50 rounded-xl p-4 border border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-green-700 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-                    {readyOrders.length}
-                  </div>
-                  Prontos / Aguardando Entrega
-                </h2>
+            <div className="flex flex-col h-full bg-gray-50/80 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex-none p-4 border-b border-gray-200 bg-white/50 backdrop-blur-sm">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-green-700 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-700">
+                      {readyOrders.length}
+                    </div>
+                    Prontos / Aguardando
+                  </h2>
+                </div>
               </div>
 
               <Droppable droppableId="ready">
@@ -128,11 +136,12 @@ const Kitchen = () => {
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`flex-1 space-y-3 overflow-y-auto min-h-[500px] transition-colors rounded-lg p-2 ${snapshot.isDraggingOver ? 'bg-green-50 ring-2 ring-green-200' : ''
-                      }`}
+                    className={`flex-1 overflow-y-auto p-4 space-y-3 transition-colors ${
+                      snapshot.isDraggingOver ? 'bg-green-50/50' : ''
+                    }`}
                   >
                     {readyOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+                      <div className="flex flex-col items-center justify-center h-full text-gray-400 border-2 border-dashed border-gray-200 rounded-lg m-2">
                         <AlertCircle className="w-12 h-12 mb-2 opacity-20" />
                         <p>Sem pedidos prontos</p>
                       </div>
@@ -144,7 +153,8 @@ const Kitchen = () => {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`transform transition-transform ${snapshot.isDragging ? 'scale-105 rotate-1' : ''}`}
+                              className={`transform transition-transform ${snapshot.isDragging ? 'scale-105 rotate-1 z-50' : ''}`}
+                              style={provided.draggableProps.style}
                             >
                               <KitchenOrderCard
                                 order={order as any}

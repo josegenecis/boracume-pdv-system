@@ -45,6 +45,8 @@ import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
 import AgentDashboard from '@/pages/AgentDashboard';
+import WaiterLogin from '@/pages/WaiterLogin';
+import WaiterDashboard from '@/pages/WaiterDashboard';
 import './App.css';
 import './styles/responsive.css';
 
@@ -58,6 +60,9 @@ function AppContent() {
       <Route path="/menu-digital" element={<MenuDigital />} />
       <Route path="/track/:orderId" element={<OrderTracking />} />
       
+      {/* Rotas do Garçom */}
+      <Route path="/waiter-login" element={<WaiterLogin />} />
+      <Route path="/waiter-dashboard" element={<WaiterDashboard />} />
 
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
