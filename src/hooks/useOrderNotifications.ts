@@ -54,7 +54,7 @@ export const useOrderNotifications = () => {
 
     // Escutar novos pedidos em tempo real
     const channel = supabase
-      .channel('new-orders')
+      .channel('new-orders-sound-notification') // Changed channel name to ensure uniqueness
       .on(
         'postgres_changes',
         {
@@ -64,30 +64,35 @@ export const useOrderNotifications = () => {
           filter: `user_id=eq.${user.id}`
         },
         async (payload) => {
-          console.log('🔔 Novo pedido recebido:', payload);
-          console.log('🔊 useOrderNotifications - Estado atual:', { enabled, soundType, volume });
+          console.log('🔔 Novo pedido recebido (Realtime):', payload);
+          
+          // Force reload of settings to ensure fresh state if needed, or rely on state
+          // We rely on state 'enabled' here. 
           
           if (enabled) {
             // Reproduzir som de notificação
             try {
-              console.log(`🎵 useOrderNotifications - Reproduzindo som: ${soundType}`);
+              console.log(`🎵 Tentando reproduzir som: ${soundType}`);
+              // Use a slight delay to ensure browser interaction policies are met if possible, 
+              // or just fire away.
               await soundNotifications.playSound(soundType);
-              console.log('✅ useOrderNotifications - Som reproduzido com sucesso');
+              console.log('✅ Som reproduzido com sucesso');
             } catch (error) {
-              console.error('❌ useOrderNotifications - Erro ao reproduzir som:', error);
+              console.error('❌ Erro ao reproduzir som:', error);
             }
-          } else {
-            console.log('🔇 useOrderNotifications - Som desabilitado');
           }
 
           // Mostrar toast
           toast({
             title: "Novo Pedido!",
             description: `Pedido #${payload.new.order_number} recebido`,
+            duration: 10000, // Longer duration
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`📡 Status da subscrição de notificações: ${status}`);
+      });
 
     return () => {
       supabase.removeChannel(channel);

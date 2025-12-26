@@ -3,7 +3,8 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Clock, RotateCcw, Package, User, CheckCircle, Truck } from 'lucide-react';
+import { Clock, RotateCcw, Package, User, CheckCircle, Truck, Phone, MapPin } from 'lucide-react';
+import { OrderStatusType } from '@/components/orders/OrderStatusBadge';
 
 interface OrderItem {
   id: string;
@@ -23,12 +24,13 @@ interface KitchenOrder {
   order_number: string;
   customer_name: string;
   customer_phone?: string;
+  customer_address?: string;
   items: OrderItem[];
   priority?: 'normal' | 'high';
   status: 'pending' | 'preparing' | 'ready' | 'completed' | 'delivered' | 'cancelled';
   created_at: string;
   updated_at: string;
-  timestamp?: Date;
+  order_type?: string;
 }
 
 interface KitchenOrderCardProps {
@@ -76,8 +78,26 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
     }
   };
 
+  const getOrderTypeColor = (type?: string) => {
+    switch (type) {
+      case 'delivery': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'pickup': return 'bg-green-100 text-green-800 border-green-300';
+      case 'dine_in': return 'bg-purple-100 text-purple-800 border-purple-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const getOrderTypeLabel = (type?: string) => {
+    switch (type) {
+      case 'delivery': return 'Delivery';
+      case 'pickup': return 'Retirada';
+      case 'dine_in': return 'Mesa';
+      default: return type || 'Pedido';
+    }
+  };
+
   return (
-    <Card className={`w-full hover:shadow-md transition-shadow ${isHighPriority ? 'border-red-500 border-2' : 'border-gray-200'}`}>
+    <Card className={`w-full max-w-sm hover:shadow-md transition-shadow ${isHighPriority ? 'border-red-500 border-2' : 'border-gray-200'}`}>
       <CardHeader className="pb-3 bg-gray-50/50">
         <div className="flex justify-between items-start">
           <div className="flex flex-col gap-1">
@@ -89,9 +109,10 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 </Badge>
               )}
             </CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User size={14} />
-              <span className="font-medium truncate max-w-[150px]">{order.customer_name}</span>
+            <div className="flex flex-col gap-1">
+               <Badge className={`text-xs w-fit ${getOrderTypeColor(order.order_type)}`} variant="outline">
+                  {getOrderTypeLabel(order.order_type)}
+               </Badge>
             </div>
           </div>
           
@@ -107,7 +128,29 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         </div>
       </CardHeader>
       
-      <CardContent className="py-3">
+      <CardContent className="py-3 space-y-3">
+        {/* Customer Info */}
+        <div className="text-sm space-y-1">
+            <div className="flex items-center gap-2">
+              <User size={14} className="text-muted-foreground" />
+              <span className="font-medium truncate">{order.customer_name}</span>
+            </div>
+             {order.customer_phone && (
+              <div className="flex items-center gap-2">
+                <Phone size={14} className="text-muted-foreground" />
+                <span className="text-muted-foreground">{order.customer_phone}</span>
+              </div>
+            )}
+             {order.customer_address && (
+              <div className="flex items-start gap-2">
+                <MapPin size={14} className="text-muted-foreground mt-0.5" />
+                <span className="text-muted-foreground text-xs leading-tight">{order.customer_address}</span>
+              </div>
+            )}
+        </div>
+
+        <Separator />
+
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
             <Package size={16} />

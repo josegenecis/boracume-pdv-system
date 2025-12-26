@@ -1117,6 +1117,36 @@ const PDV = () => {
                   Finalizar Venda
                 </Button>
               </div>
+
+              {/* Mobile Floating Actions */}
+              <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg lg:hidden z-50 flex gap-2 items-center">
+                 <div className="flex-1">
+                   <p className="text-xs text-muted-foreground">Total</p>
+                   <p className="text-lg font-bold text-primary">{formatCurrency(getFinalTotal())}</p>
+                 </div>
+                 
+                 {selectedTable && orderType === 'dine_in' ? (
+                   <Button
+                      onClick={addToTable}
+                      disabled={cart.length === 0 || processing}
+                      className="bg-blue-900 hover:bg-blue-800 h-12 px-6"
+                    >
+                      <UtensilsCrossed size={20} />
+                    </Button>
+                 ) : (
+                    <Button
+                      onClick={handleFinalizeSale}
+                      disabled={cart.length === 0 || !paymentMethod || processing}
+                      className="bg-green-600 hover:bg-green-700 h-12 px-6"
+                    >
+                      <Calculator size={20} />
+                    </Button>
+                 )}
+              </div>
+              
+              {/* Spacer for mobile bottom bar */}
+              <div className="h-24 lg:hidden"></div>
+
             </div>
           </div>
         </TabsContent>

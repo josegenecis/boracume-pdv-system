@@ -64,7 +64,18 @@ const Garcons = () => {
       if (error) throw error;
       setForm({ name: '', pin: '' });
       loadWaiters();
-      toast({ title: 'Garçom cadastrado com sucesso!' });
+      
+      const link = `${window.location.origin}/waiter-login`;
+      toast({ 
+        title: 'Garçom cadastrado!', 
+        description: `Link de acesso: ${link}`,
+        action: (
+            <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(link)}>
+                Copiar
+            </Button>
+        ),
+        duration: 8000
+      });
     } catch (e: any) {
       toast({ title: 'Erro ao cadastrar', description: e?.message, variant: 'destructive' });
     } finally { setLoading(false); }
