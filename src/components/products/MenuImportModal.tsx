@@ -57,11 +57,16 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         if (!textInput.trim()) throw new Error('Cole o texto do cardápio.');
         productsToImport = parseMenuText(textInput);
       } else if (activeTab === 'link') {
-        // Mock import for link - in real world would need backend proxy
         if (!urlInput.trim()) throw new Error('Insira um link válido.');
-        // Simulate processing delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        throw new Error('Importação via link requer backend dedicado (bloqueio CORS). Use a opção de Texto por enquanto.');
+        
+        const { data, error } = await supabase.functions.invoke('scrape-menu', {
+          body: { url: urlInput }
+        });
+
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error || 'Falha ao ler o site.');
+        
+        productsToImport = data.products;
       } else {
         // Image handling would go here
         throw new Error('Importação por imagem requer serviço OCR configurado.');

@@ -93,6 +93,14 @@ const WaiterDashboard = () => {
     navigate(`/pdv?orderId=${orderId}&waiterId=${waiter.id}&mode=waiter`);
   };
 
+  if (initialCheck) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   if (!waiter) return null;
 
   return (
