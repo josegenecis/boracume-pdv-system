@@ -66,6 +66,10 @@ const Garcons = () => {
       loadWaiters();
       
       const link = `${window.location.origin}/waiter-login`;
+      
+      // Criar a conta de autenticação se não existir (opcional, dependendo de como o auth é tratado)
+      // Aqui estamos apenas criando o registro na tabela waiters
+
       toast({ 
         title: 'Garçom cadastrado!', 
         description: `Link de acesso: ${link}`,
@@ -96,9 +100,9 @@ const Garcons = () => {
     setShowPins(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const copyLink = () => {
+  const copyLink = async () => {
     const link = `${window.location.origin}/waiter-login`;
-    navigator.clipboard.writeText(link);
+    await navigator.clipboard.writeText(link);
     toast({ title: 'Link copiado!', description: 'Envie este link para os garçons acessarem o sistema.' });
   };
 
@@ -152,10 +156,16 @@ const Garcons = () => {
             <CardTitle>Equipe de Garçons</CardTitle>
             <CardDescription>Gerencie o acesso da sua equipe</CardDescription>
           </div>
-          <Button variant="outline" onClick={copyLink}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copiar Link de Acesso
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => window.open(`${window.location.origin}/waiter-login`, '_blank')}>
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Testar Link
+            </Button>
+            <Button variant="outline" onClick={copyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar Link de Acesso
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {waiters.length === 0 ? (

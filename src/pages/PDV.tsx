@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -82,6 +82,10 @@ const PDV = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { sendToKitchen } = useKitchenIntegration();
+
+  // Refs for animation
+  const cartContainerRef = useRef<HTMLDivElement>(null);
+  const mobileCartBtnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -183,56 +187,29 @@ const PDV = () => {
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
-
-      console.log('🔍 PDV - Iniciando carregamento de variações para produto:', productId);
-      
-
       // Buscar variações específicas do produto
       const { data: productVariations, error: productError } = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId);
 
-      if (productError) {
-
-        console.error('❌ PDV - Erro ao carregar variações do produto:', productError);
-      } else {
-        console.log('📋 PDV - Variações específicas encontradas:', productVariations?.length || 0, productVariations);
-      }
-
       // Buscar variações globais associadas ao produto
-      console.log('🔍 PDV - Buscando links de variações globais...');
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
         .select('global_variation_id, required, min_selections, max_selections')
         .eq('product_id', productId);
 
-      if (globalError) {
-        console.error('❌ PDV - Erro ao carregar variações globais:', globalError);
-      } else {
-        console.log('🔗 PDV - Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
-
-      }
-
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
         const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
-
-        console.log('🆔 PDV - IDs das variações globais a buscar:', globalVariationIds);
-
         
         const { data: globalVars, error: globalVarError } = await supabase
           .from('global_variations')
           .select('*')
           .in('id', globalVariationIds);
 
-        if (globalVarError) {
-
-          console.error('❌ PDV - Erro ao buscar variações globais:', globalVarError);
-        } else if (globalVars) {
-          console.log('🌐 PDV - Variações globais encontradas:', globalVars.length, globalVars);
-          
+        if (globalVars) {
           // Mesclar configurações do vínculo nas variações globais
           globalVariations = globalVars.map(globalVar => {
             const link = globalVariationLinks.find(l => l.global_variation_id === globalVar.id);
@@ -242,13 +219,9 @@ const PDV = () => {
               min_selections: link?.min_selections ?? 0,
               max_selections: link?.max_selections ?? 1
             };
-            console.log('🔧 PDV - Variação global mesclada:', mergedVariation);
             return mergedVariation;
           });
         }
-      } else {
-        console.log('⚠️ PDV - Nenhum link de variação global encontrado para o produto');
-
       }
 
       // Combinar todas as variações
@@ -257,10 +230,6 @@ const PDV = () => {
         ...globalVariations
       ];
       
-
-      console.log('📊 PDV - Total de variações combinadas:', allVariations.length, allVariations);
-      
-
       const formattedVariations: ProductVariation[] = allVariations
         .map(item => {
           try {
@@ -270,11 +239,9 @@ const PDV = () => {
               try {
                 options = JSON.parse(item.options);
               } catch (e) {
-                console.warn('⚠️ PDV - Erro ao parsear options como string:', e, item.options);
                 options = [];
               }
             } else if (Array.isArray(item.options)) {
-
               options = item.options
                 .filter((opt: any) => {
                   return opt && 
@@ -290,57 +257,72 @@ const PDV = () => {
                 }));
             }
 
-            
-            const formattedVariation = {
-
+            return {
               id: item.id,
               name: item.name || '',
               options,
               max_selections: Math.max(1, Number(item.max_selections) || 1),
               required: Boolean(item.required)
             };
-
-            
-            console.log('✅ PDV - Variação formatada:', formattedVariation);
-            return formattedVariation;
           } catch (itemError) {
-            console.error('❌ PDV - Erro ao processar variação:', itemError, item);
-
             return null;
           }
         })
         .filter((variation): variation is ProductVariation => variation !== null);
       
-
-      console.log('🎯 PDV - Variações finais formatadas:', formattedVariations.length, formattedVariations);
       return formattedVariations;
     } catch (error) {
-      console.error('💥 PDV - Erro geral ao carregar variações:', error);
-
+      console.error('Erro geral ao carregar variações:', error);
       return [];
     }
   };
 
-  const handleProductClick = async (product: Product) => {
+  const animateFlyToCart = (startRect: DOMRect) => {
+    // Determine target based on viewport (desktop or mobile)
+    const isMobile = window.innerWidth < 1024;
+    const targetEl = isMobile 
+      ? document.getElementById('mobile-cart-btn') 
+      : document.getElementById('cart-container');
+      
+    if (!targetEl) return;
 
-    console.log('🔄 PDV - Produto clicado:', product.name, 'ID:', product.id);
+    const endRect = targetEl.getBoundingClientRect();
+    
+    const flyItem = document.createElement('div');
+    flyItem.className = 'fly-item bg-primary shadow-lg z-50 fixed rounded-full flex items-center justify-center';
+    flyItem.style.left = `${startRect.left}px`;
+    flyItem.style.top = `${startRect.top}px`;
+    flyItem.style.width = `${Math.min(startRect.width, 50)}px`;
+    flyItem.style.height = `${Math.min(startRect.height, 50)}px`;
+    
+    // Set variables for CSS animation
+    const tx = endRect.left - startRect.left + (endRect.width / 2) - (Math.min(startRect.width, 50) / 2);
+    const ty = endRect.top - startRect.top + (endRect.height / 2) - (Math.min(startRect.height, 50) / 2);
+    
+    flyItem.style.setProperty('--tx', `${tx}px`);
+    flyItem.style.setProperty('--ty', `${ty}px`);
+    
+    document.body.appendChild(flyItem);
+    
+    setTimeout(() => {
+      document.body.removeChild(flyItem);
+    }, 800);
+  };
+
+  const handleProductClick = async (product: Product, event?: React.MouseEvent) => {
+    // Capture click position for animation if no variations
+    const clickRect = event?.currentTarget.getBoundingClientRect();
     
     const variations = await fetchProductVariations(product.id);
     
-    console.log('📊 PDV - Resultado final das variações:', {
-      produto: product.name,
-      totalVariacoes: variations.length,
-      variacoes: variations
-    });
-    
-
     if (variations.length > 0) {
-      console.log('🔄 PDV - Produto tem variações, abrindo modal');
       setSelectedProduct(product);
       setProductVariations(variations);
       setShowVariationModal(true);
     } else {
-      console.log('✅ PDV - Produto sem variações, adicionando direto ao carrinho');
+      if (clickRect) {
+        animateFlyToCart(clickRect);
+      }
       addToCart(product, 1);
     }
   };
@@ -373,6 +355,7 @@ const PDV = () => {
     toast({
       title: "Produto adicionado",
       description: `${product.name} foi adicionado ao carrinho.`,
+      duration: 1500,
     });
   };
 
@@ -382,7 +365,6 @@ const PDV = () => {
     
     try {
       return selectedVariations.flatMap(variation => {
-        // Handle new format from ProductVariationModal: {variationId, options}
         if (variation && variation.options && Array.isArray(variation.options)) {
           return variation.options.map((option: any) => {
             if (typeof option === 'object' && option.name) {
@@ -391,21 +373,16 @@ const PDV = () => {
             return String(option);
           });
         }
-        
-        // Handle legacy format or direct string values
         if (typeof variation === 'string') {
           return [variation];
         }
-        
-        // Handle legacy format with nested options
         if (variation && variation.options && Array.isArray(variation.options)) {
           return variation.options.map((option: any) => option.name || String(option));
         }
-        
         return [];
       });
     } catch (error) {
-      console.error('Error formatting variations:', error, selectedVariations);
+      console.error('Error formatting variations:', error);
       return [];
     }
   };
@@ -491,7 +468,6 @@ const PDV = () => {
         .maybeSingle();
 
       if (existingAccount) {
-        // Parse existing items properly
         let existingItems = [];
         try {
           if (typeof existingAccount.items === 'string') {
@@ -500,7 +476,6 @@ const PDV = () => {
             existingItems = existingAccount.items;
           }
         } catch (e) {
-          console.error('Error parsing existing items:', e);
           existingItems = [];
         }
 
@@ -544,7 +519,6 @@ const PDV = () => {
 
       setCart([]);
       setSelectedTable('');
-      
       fetchTables();
     } catch (error: any) {
       console.error('Erro ao adicionar à mesa:', error);
@@ -559,6 +533,8 @@ const PDV = () => {
   };
 
   const handleFinalizeSale = async () => {
+    console.log('Finalizando venda...');
+    
     if (cart.length === 0) {
       toast({
         title: "Carrinho vazio",
@@ -629,6 +605,7 @@ const PDV = () => {
 
     try {
       setProcessing(true);
+      console.log('Validations passed, creating order...');
 
       const orderNumber = generateOrderNumber();
       
@@ -673,14 +650,7 @@ const PDV = () => {
         throw error;
       }
 
-      // Filter items for KDS that should be sent to kitchen
-      const itemsForKitchen = orderItems.filter(item => {
-        const product = products.find(p => p.id === item.product_id);
-        return product?.send_to_kds === true;
-      });
-
-      // Não enviar para KDS automaticamente
-      // Apenas após aceitação manual no Orders.tsx
+      console.log('Pedido criado com sucesso:', data);
 
       if (orderType === 'dine_in' && selectedTable) {
         try {
@@ -692,8 +662,6 @@ const PDV = () => {
           console.warn('Não foi possível atualizar status da mesa:', error);
         }
       }
-
-      console.log('Pedido criado com sucesso:', data);
 
       if (paymentMethod === 'pix') {
         setPixAmount(getFinalTotal());
@@ -761,397 +729,361 @@ const PDV = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="products">Vendas</TabsTrigger>
-          <TabsTrigger value="accounts">MESAS</TabsTrigger>
-        </TabsList>
+    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-gray-50/50">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+        <div className="px-4 pt-2 shrink-0 bg-white border-b z-10">
+          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto mb-2">
+            <TabsTrigger value="products">Vendas</TabsTrigger>
+            <TabsTrigger value="accounts">MESAS</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="products" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-            <div className="lg:col-span-2 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Produtos</CardTitle>
-                  <CardDescription>Selecione os produtos para adicionar ao pedido</CardDescription>
-                  
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <Input
-                      placeholder="Buscar produtos..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
+        <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row h-full mt-0">
+          {/* Left Column: Products (Scrollable) */}
+          <div className="flex-1 overflow-y-auto p-4 lg:p-6 lg:border-r">
+            <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
+              <div className="shrink-0 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold text-gray-800">Produtos</h2>
+                  <Button variant="ghost" size="sm" onClick={() => fetchData()}>
+                    <RefreshCw size={16} />
+                  </Button>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar produtos por nome ou código..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-white"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto pb-24 lg:pb-0">
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">
+                      {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
+                    </p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  
-                  {filteredProducts.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">
-                        {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
-                      {filteredProducts.map((product) => (
-                        <Card key={product.id} className="hover:shadow-lg transition-shadow">
-                          <div className="aspect-square relative overflow-hidden rounded-t-lg">
-                            {product.image_url ? (
-                              <img 
-                                src={product.image_url} 
-                                alt={product.name} 
-                                className="object-cover w-full h-full"
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                <span className="text-gray-400 text-xs">Sem imagem</span>
-                              </div>
-                            )}
-                          </div>
-                          <CardContent className="p-2">
-                            <h3 className="font-medium text-xs mb-1 line-clamp-2">{product.name}</h3>
-                            <p className="text-base font-bold text-primary mb-2">
-                              {formatCurrency(product.price)}
-                              {product.weight_based && <span className="text-xs text-gray-500 ml-1">/kg</span>}
-                            </p>
-                            <Button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleProductClick(product);
-                              }}
-                              className="w-full"
-                              size="xs"
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {filteredProducts.map((product) => (
+                      <Card 
+                        key={product.id} 
+                        className="hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100"
+                        onClick={(e) => handleProductClick(product, e)}
+                      >
+                        <div className="aspect-square relative overflow-hidden rounded-t-lg">
+                          {product.image_url ? (
+                            <img 
+                              id={`product-img-${product.id}`}
+                              src={product.image_url} 
+                              alt={product.name} 
+                              className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div 
+                              id={`product-img-${product.id}`}
+                              className="w-full h-full bg-gray-100 flex items-center justify-center"
                             >
-                              <Plus size={16} />
-                              <span className="hidden sm:inline ml-1">Adicionar</span>
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                              <Store className="text-gray-300 w-8 h-8" />
+                            </div>
+                          )}
+                          <div className="absolute top-2 right-2 bg-white/90 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm">
+                            {formatCurrency(product.price)}
+                          </div>
+                        </div>
+                        <CardContent className="p-3">
+                          <h3 className="font-medium text-xs sm:text-sm line-clamp-2 min-h-[2.5em] mb-1 leading-tight">
+                            {product.name}
+                          </h3>
+                          <Button 
+                            className="w-full mt-1 bg-primary/10 text-primary hover:bg-primary hover:text-white h-7 text-xs"
+                            size="sm"
+                            variant="ghost"
+                          >
+                            Adicionar
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Right Column: Cart (Fixed on Desktop, Drawer/Scroll on Mobile) */}
+          <div className="lg:w-[400px] xl:w-[450px] bg-white flex flex-col h-full shadow-xl z-20">
+            <div className="p-4 border-b bg-gray-50/50">
+              <div className="flex items-center gap-2 mb-4">
+                <Calculator className="text-primary" />
+                <h2 className="font-bold text-lg">Carrinho de Compras</h2>
+              </div>
+              
+              <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="delivery" className="text-xs sm:text-sm">Entrega</TabsTrigger>
+                  <TabsTrigger value="pickup" className="text-xs sm:text-sm">Retirada</TabsTrigger>
+                  <TabsTrigger value="dine_in" className="text-xs sm:text-sm">Mesa</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
 
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tipo de Pedido</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="delivery" className="flex items-center gap-1">
-                        <Truck size={16} />
-                        Entrega
-                      </TabsTrigger>
-                      <TabsTrigger value="pickup" className="flex items-center gap-1">
-                        <Store size={16} />
-                        Retirada
-                      </TabsTrigger>
-                      <TabsTrigger value="dine_in" className="flex items-center gap-1">
-                        <UtensilsCrossed size={16} />
-                        No Local
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calculator size={20} />
-                    Carrinho
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {cart.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">
-                      Carrinho vazio
-                    </p>
-                  ) : (
-                    <>
-                      <div className="space-y-3 max-h-60 overflow-y-auto">
-                        {cart.map((item, index) => {
-                          const formattedVariations = formatSelectedVariations(item.selectedVariations);
-                          
-                          return (
-                            <div key={`${item.id}-${index}`} className="flex items-center justify-between p-2 border rounded">
-                              <div className="flex-1">
-                                <p className="font-medium text-sm">{item.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {formatCurrency(item.price)} cada
-                                </p>
-                                {formattedVariations && formattedVariations.length > 0 && (
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    {formattedVariations.map((option, optIndex) => (
-                                      <div key={optIndex}>• {option}</div>
-                                    ))}
-                                  </div>
-                                )}
-                                {item.notes && (
-                                  <div className="text-xs text-gray-500 mt-1 italic">
-                                    Obs: {item.notes}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                >
-                                  <Minus size={12} />
-                                </Button>
-                                <span className="w-8 text-center">{item.quantity}</span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                >
-                                  <Plus size={12} />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => removeFromCart(item.id)}
-                                >
-                                  <Trash2 size={12} />
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
+            {/* Cart Items List - Scrollable */}
+            <div 
+              id="cart-container" 
+              ref={cartContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3"
+            >
+              {cart.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
+                  <Store size={48} />
+                  <p>Carrinho vazio</p>
+                </div>
+              ) : (
+                cart.map((item, index) => {
+                  const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                  return (
+                    <div key={`${item.id}-${index}`} className="flex flex-col p-3 border rounded-lg bg-gray-50 animate-in fade-in slide-in-from-right-4 duration-300">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1 mr-2">
+                          <span className="font-medium text-sm line-clamp-1">{item.name}</span>
+                          <span className="text-xs text-muted-foreground block">
+                            {formatCurrency(item.price)} un.
+                          </span>
+                        </div>
+                        <span className="font-bold text-sm">
+                          {formatCurrency(item.price * item.quantity)}
+                        </span>
                       </div>
                       
-                      <Separator />
+                      {formattedVariations.length > 0 && (
+                        <div className="text-xs text-gray-500 mb-2 pl-2 border-l-2 border-gray-200">
+                          {formattedVariations.map((v, i) => (
+                            <div key={i}>{v}</div>
+                          ))}
+                        </div>
+                      )}
                       
-                      <div className="space-y-3">
-                        <div className="flex justify-between">
-                          <span>Subtotal:</span>
-                          <span>{formatCurrency(getTotalValue())}</span>
+                      {item.notes && (
+                        <div className="text-xs text-amber-600 mb-2 italic bg-amber-50 p-1 rounded">
+                          Obs: {item.notes}
                         </div>
-                        
-                        {orderType === 'delivery' && getDeliveryFee() > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span>Taxa de entrega:</span>
-                            <span>{formatCurrency(getDeliveryFee())}</span>
-                          </div>
-                        )}
-                        
-                        <div className="flex justify-between text-lg font-bold">
-                          <span>Total:</span>
-                          <span>{formatCurrency(getFinalTotal())}</span>
-                        </div>
-                        
-                        {paymentMethod === 'dinheiro' && changeAmount && (
-                          <div className="flex justify-between text-sm">
-                            <span>Troco:</span>
-                            <span className={getChangeValue() >= 0 ? 'text-green-600' : 'text-red-600'}>
-                              {formatCurrency(getChangeValue())}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+                      )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Dados do Cliente</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                      <div className="flex items-center justify-end gap-2">
+                         <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                          <Minus size={12} />
+                        </Button>
+                        <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <Plus size={12} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 ml-2"
+                          onClick={() => removeFromCart(item.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Checkout Form & Totals - Fixed at Bottom */}
+            <div className="p-4 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+              {/* Customer Info Form */}
+              <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
+                <div className="flex gap-2">
                   <Input
-                    placeholder={orderType === 'dine_in' ? "Nome do cliente (opcional)" : "Nome do cliente *"}
+                    placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome do Cliente *"}
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    required={orderType !== 'dine_in'}
+                    className="h-9 text-sm"
                   />
                   <Input
                     placeholder="Telefone"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
+                    className="h-9 text-sm"
                   />
-                  
-                  {orderType === 'delivery' && (
-                    <>
-                      <Textarea
-                        placeholder="Endereço para entrega *"
-                        value={customerAddress}
-                        onChange={(e) => setCustomerAddress(e.target.value)}
-                        rows={2}
-                        required
-                      />
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Bairro de Entrega *</label>
-                        <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o bairro" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {deliveryZones.length === 0 ? (
-                              <div className="p-2 text-sm text-gray-500">
-                                Nenhum bairro cadastrado
-                              </div>
-                            ) : (
-                              deliveryZones.map((zone) => (
-                                <SelectItem key={zone.id} value={zone.id}>
-                                  <div className="flex flex-col w-full">
-                                    <div className="flex justify-between items-center w-full">
-                                      <span>{zone.name}</span>
-                                      <span className="ml-2 text-sm text-green-600 font-medium">
-                                        {formatCurrency(zone.delivery_fee)}
-                                      </span>
-                                    </div>
-                                    {zone.minimum_order > 0 && (
-                                      <div className="text-xs text-gray-500 text-left">
-                                        Mínimo: {formatCurrency(zone.minimum_order)}
-                                      </div>
-                                    )}
-                                  </div>
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        
-                        {deliveryZones.length === 0 && (
-                          <p className="text-xs text-red-500">
-                            Configure os bairros de entrega na seção "Configurações" → "Delivery"
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
-                  
-                  {orderType === 'dine_in' && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Mesa *</label>
-                      <Select value={selectedTable} onValueChange={setSelectedTable}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma mesa" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tables.map((table) => (
-                            <SelectItem key={table.id} value={table.id}>
-                              Mesa {table.table_number}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Pagamento</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="paymentMethod">Método de Pagamento</Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o método" />
+                {orderType === 'delivery' && (
+                  <>
+                    <Input
+                      placeholder="Endereço Completo *"
+                      value={customerAddress}
+                      onChange={(e) => setCustomerAddress(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                    <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Selecione o Bairro *" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pix">PIX</SelectItem>
-                        <SelectItem value="cartao">Cartão</SelectItem>
-                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        {deliveryZones.map((zone) => (
+                          <SelectItem key={zone.id} value={zone.id}>
+                            {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </>
+                )}
 
+                {orderType === 'dine_in' && (
+                  <Select value={selectedTable} onValueChange={setSelectedTable}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Selecione a Mesa *" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tables.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          Mesa {table.table_number}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <div className="flex gap-2">
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="h-9 text-sm flex-1">
+                      <SelectValue placeholder="Pagamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
                   {paymentMethod === 'dinheiro' && (
-                    <div>
-                      <Label htmlFor="changeAmount">Valor pago</Label>
-                      <Input
-                        id="changeAmount"
-                        type="number"
-                        step="0.01"
-                        value={changeAmount}
-                        onChange={(e) => setChangeAmount(e.target.value)}
-                        placeholder="0,00"
-                      />
-                    </div>
+                    <Input
+                      placeholder="Valor pago"
+                      value={changeAmount}
+                      onChange={(e) => setChangeAmount(e.target.value)}
+                      className="h-9 text-sm w-24"
+                      type="number"
+                    />
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              <div className="space-y-2">
-                {selectedTable && orderType === 'dine_in' && (
+              {/* Totals */}
+              <div className="space-y-1 text-sm mb-4">
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(getTotalValue())}</span>
+                </div>
+                {getDeliveryFee() > 0 && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Entrega</span>
+                    <span>{formatCurrency(getDeliveryFee())}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t">
+                  <span>Total</span>
+                  <span>{formatCurrency(getFinalTotal())}</span>
+                </div>
+                {getChangeValue() > 0 && (
+                  <div className="flex justify-between text-green-600 text-sm">
+                    <span>Troco</span>
+                    <span>{formatCurrency(getChangeValue())}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                {orderType === 'dine_in' ? (
                   <Button
                     onClick={addToTable}
-                    disabled={cart.length === 0 || processing}
-                    className="w-full bg-blue-900 hover:bg-blue-800"
-                    size="lg"
+                    disabled={processing || cart.length === 0}
+                    className="w-full bg-blue-600 hover:bg-blue-700 h-12"
                   >
-                    <UtensilsCrossed size={16} className="mr-2" />
-                    Adicionar à Mesa
+                    {processing ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <UtensilsCrossed className="mr-2 h-4 w-4" />
+                        Add Mesa
+                      </>
+                    )}
                   </Button>
+                ) : (
+                   <div className="col-span-2"></div>
                 )}
                 
                 <Button
                   onClick={handleFinalizeSale}
-                  disabled={cart.length === 0 || !paymentMethod || processing}
-                  className="w-full bg-green-600 hover:bg-green-700"
-                  size="lg"
+                  disabled={processing || cart.length === 0}
+                  className={`${orderType === 'dine_in' ? '' : 'col-span-2'} w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold shadow-md hover:shadow-lg transition-all`}
                 >
-                  <Calculator size={16} className="mr-2" />
-                  Finalizar Venda
+                  {processing ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <>
+                      Finalizar
+                      <span className="ml-2 text-sm font-normal opacity-90">
+                        {formatCurrency(getFinalTotal())}
+                      </span>
+                    </>
+                  )}
                 </Button>
               </div>
-
-              {/* Mobile Floating Actions */}
-              <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg lg:hidden z-50 flex gap-2 items-center">
-                 <div className="flex-1">
-                   <p className="text-xs text-muted-foreground">Total</p>
-                   <p className="text-lg font-bold text-primary">{formatCurrency(getFinalTotal())}</p>
-                 </div>
-                 
-                 {selectedTable && orderType === 'dine_in' ? (
-                   <Button
-                      onClick={addToTable}
-                      disabled={cart.length === 0 || processing}
-                      className="bg-blue-900 hover:bg-blue-800 h-12 px-6"
-                    >
-                      <UtensilsCrossed size={20} />
-                    </Button>
-                 ) : (
-                    <Button
-                      onClick={handleFinalizeSale}
-                      disabled={cart.length === 0 || !paymentMethod || processing}
-                      className="bg-green-600 hover:bg-green-700 h-12 px-6"
-                    >
-                      <Calculator size={20} />
-                    </Button>
-                 )}
-              </div>
-              
-              {/* Spacer for mobile bottom bar */}
-              <div className="h-24 lg:hidden"></div>
-
             </div>
+          </div>
+          
+          {/* Mobile Cart Floating Button */}
+          <div 
+            id="mobile-cart-btn" 
+            ref={mobileCartBtnRef}
+            className="lg:hidden fixed bottom-4 right-4 z-50"
+            onClick={() => {
+              const cartContainer = document.getElementById('cart-container');
+              cartContainer?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          >
+             <div className="relative">
+                <Button className="h-14 w-14 rounded-full shadow-xl bg-primary text-white p-0 flex items-center justify-center">
+                  <Calculator size={24} />
+                </Button>
+                {cart.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white">
+                    {cart.reduce((acc, item) => acc + item.quantity, 0)}
+                  </span>
+                )}
+             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="accounts" className="space-y-6">
+        <TabsContent value="accounts" className="flex-1 overflow-y-auto p-4 mt-0">
           <TableAccountManager onFinalize={handleTableFinalization} />
         </TabsContent>
       </Tabs>

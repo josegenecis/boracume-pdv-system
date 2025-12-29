@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,19 +6,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2 } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
-
-// Banners removidos desta página; serão movidos para Marketing
+import MenuImportModal from '@/components/products/MenuImportModal';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
 
-
-// Using the same ProductItem interface definition as in ProductForm.tsx to ensure consistency
 interface ProductItem {
   id: string;
   name: string;
@@ -29,8 +25,8 @@ interface ProductItem {
   category_id?: string;
   image_url?: string;
   available: boolean;
-  weight_based: boolean; // Ensuring this is not optional
-  send_to_kds: boolean; // Making this required to match ProductForm.tsx
+  weight_based: boolean;
+  send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
 }
@@ -49,6 +45,7 @@ const Products = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
 
@@ -97,14 +94,13 @@ const Products = () => {
       
       if (error) throw error;
       
-      // Transform data to ensure category field is present and add default values for missing fields
       const transformedProducts = (data || []).map(product => ({
         ...product,
-        category: product.category || 'Sem categoria', // Ensure category is always present
+        category: product.category || 'Sem categoria',
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
         show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
-        weight_based: product.weight_based !== undefined ? product.weight_based : false, // Ensure weight_based is always present
-        send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false // Ensure send_to_kds is always present
+        weight_based: product.weight_based !== undefined ? product.weight_based : false,
+        send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false
       })) as ProductItem[];
       
       setProducts(transformedProducts);
@@ -197,7 +193,6 @@ const Products = () => {
   const handleFormSubmit = async (savedProductId?: string) => {
     await fetchProducts();
     if (savedProductId) {
-      // Recarrega o produto salvo e reabre o formulário para garantir vínculo das variações globais
       const produtoSalvo = products.find(p => p.id === savedProductId);
       if (produtoSalvo) {
         setEditingProduct(produtoSalvo);
@@ -206,7 +201,6 @@ const Products = () => {
       }
     }
     
-
     setShowForm(false);
     setEditingProduct(null);
     setIsSheetOpen(false);
@@ -232,11 +226,23 @@ const Products = () => {
           <Package className="h-6 w-6 text-orange-500" />
           <h1 className="text-2xl font-bold">Produtos</h1>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Package className="h-4 w-4 mr-2" />
-          Novo Produto
-        </Button>
+        <div>
+          <Button variant="outline" onClick={() => setShowImportModal(true)} className="mr-2">
+            <Import className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
+          <Button onClick={() => setShowForm(true)}>
+            <Package className="h-4 w-4 mr-2" />
+            Novo Produto
+          </Button>
+        </div>
       </div>
+
+      <MenuImportModal 
+        isOpen={showImportModal} 
+        onClose={() => setShowImportModal(false)} 
+        onImportComplete={fetchProducts}
+      />
 
       <Tabs defaultValue="products" className="w-full">
         <TabsList className="mb-2 flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide">
@@ -247,7 +253,6 @@ const Products = () => {
         
         <TabsContent value="products" className="space-y-6">
           <>
-            {/* Filtros */}
             <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col md:flex-row gap-4">
@@ -262,7 +267,6 @@ const Products = () => {
                         />
                       </div>
                     </div>
-                    {/* Filtros de categoria: Select no mobile, chips com scroll no desktop */}
                     <div className="sm:hidden w-full">
                       <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                         <SelectTrigger className="w-full">
@@ -301,7 +305,6 @@ const Products = () => {
                 </CardContent>
               </Card>
 
-              {/* Lista de Produtos */}
               {filteredProducts.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-12">
@@ -335,7 +338,6 @@ const Products = () => {
                     <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
                       <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                          {/* Imagem do produto */}
                           {product.image_url ? (
                             <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                               <img 
@@ -350,7 +352,6 @@ const Products = () => {
                             </div>
                           )}
 
-                          {/* Informações principais */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2 mb-1">
                               <h3 className="font-semibold text-sm leading-tight truncate flex-1">
@@ -385,7 +386,6 @@ const Products = () => {
                                 </Badge>
                               </div>
 
-                              {/* Status badges inline */}
                               <div className="flex items-center gap-1">
                                 {product.show_in_delivery && (
                                   <Badge variant="outline" className="text-xs px-1.5 py-0">
@@ -406,7 +406,6 @@ const Products = () => {
                             </div>
                           </div>
 
-                          {/* Botões de ação */}
                            <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
                              <Button
                                variant="outline"
@@ -449,10 +448,8 @@ const Products = () => {
         <CategoryManager />
       </TabsContent>
         
-        {/* Banners removidos desta página */}
       </Tabs>
 
-      {/* Editor lateral (Sheet) */}
       {!isMobile && (
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
         <SheetContent side="right" className="sm:max-w-md p-0">
