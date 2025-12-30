@@ -122,18 +122,38 @@ serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errorData = await aiResponse.text();
-      throw new Error(`Erro na OpenAI: ${errorData}`);
+      throw new Error(`Erro na OpenAI (${aiResponse.status}): ${errorData}`);
     }
 
     const aiData = await aiResponse.json();
     const rawContent = aiData.choices[0].message.content;
     
+    console.log('AI Raw Response:', rawContent);
+
     let parsedData;
     try {
+      // Try parsing pure JSON
       parsedData = JSON.parse(rawContent);
     } catch (e) {
-      const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '');
-      parsedData = JSON.parse(cleanJson);
+      // Try cleaning markdown
+      try {
+        const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsedData = JSON.parse(cleanJson);
+      } catch (e2) {
+        console.error('JSON Parse Error:', e2);
+        // Return the raw text so the user can see what happened
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "A IA não retornou um JSON válido.",
+            raw_response: rawContent
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200 
+          }
+        )
+      }
     }
 
     const products = Array.isArray(parsedData) ? parsedData : (parsedData.products || parsedData.items || []);
@@ -142,7 +162,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         products: products,
-        count: products.length 
+        count: products.length,
+        raw_response: rawContent // Return this for debugging
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -169,7 +169,20 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
         const data = await response.json();
 
-        if (!data.success) throw new Error(data.error || 'Falha ao processar imagem.');
+        if (!data.success) {
+          console.error('Erro Backend:', data);
+          // Show raw response if available to help debugging
+          if (data.raw_response) {
+            console.log('Resposta Crua da IA:', data.raw_response);
+            throw new Error(`Erro na leitura da IA: ${data.error}. Veja o console para detalhes.`);
+          }
+          throw new Error(data.error || 'Falha ao processar imagem.');
+        }
+
+        if (data.products.length === 0) {
+           console.warn('Resposta vazia da IA. Raw:', data.raw_response);
+           throw new Error('A IA não encontrou produtos. Tente uma foto mais clara ou com menos itens.');
+        }
 
         productsToImport = data.products;
       }
