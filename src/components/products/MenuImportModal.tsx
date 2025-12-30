@@ -72,8 +72,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Resize to max 1024px width/height to save bandwidth and stay within limits
-          const MAX_SIZE = 1024;
+          // Resize to max 1600px (increased from 1024px for better OCR)
+          const MAX_SIZE = 1600;
           let width = img.width;
           let height = img.height;
           
@@ -93,8 +93,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG 0.7 quality
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          // Compress to JPEG 0.85 quality (better text clarity)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
           resolve(compressedBase64);
         };
         img.onerror = (error) => reject(error);
