@@ -45,79 +45,39 @@ const EXPENSE_CATEGORIES = [
 ];
 
 /**
- * Process natural language commands and execute deterministic tasks using GPT-4o
+ * Process natural language commands and execute deterministic tasks
  */
 export async function processAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
   try {
+    // Normalize command
+    const normalizedCommand = command.toLowerCase().trim();
+    
     // Log the command for tracking
     await logAgentActivity(userId, 'command_received', command);
 
-    // Call Supabase Edge Function to interpret intent with GPT-4o
-    // Using direct fetch for reliability
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    
-    console.log('Sending command to agent-chat function...');
-    
-    const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/agent-chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({ message: command })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Function error (${response.status}): ${errorText}`);
+    // Parse and execute command
+    if (isIngredientDisableCommand(normalizedCommand)) {
+      return await handleIngredientDisable(normalizedCommand, userId);
+    } else if (isExpenseRegistrationCommand(normalizedCommand)) {
+      return await handleExpenseRegistration(normalizedCommand, userId);
+    } else if (isIngredientQueryCommand(normalizedCommand)) {
+      return await handleIngredientQuery(normalizedCommand, userId);
+    } else if (isHelpCommand(normalizedCommand)) {
+      return await handleHelpCommand();
+    } else {
+      return {
+        success: false,
+        message: 'Não entendi seu comando. Tente: "Desativar [ingrediente] de todos os produtos" ou "Lançar despesa de R$ [valor] para [categoria]"'
+      };
     }
-
-    const aiResponse = await response.json();
-
-    if (!aiResponse.success) throw new Error(aiResponse.error);
-
-    const { intent, parameters, reply } = aiResponse.data;
-
-    console.log('AI Intent:', intent, parameters);
-
-    // Execute logic based on intent
-    if (intent === 'DISABLE_INGREDIENT') {
-      if (parameters.ingredient) {
-        return await executeDisableIngredient(parameters.ingredient, userId, reply);
-      }
-    } 
-    else if (intent === 'REGISTER_EXPENSE') {
-      if (parameters.amount && parameters.category) {
-        return await executeRegisterExpense(parameters.amount, parameters.category, parameters.description || 'Despesa via Assistente', userId, reply);
-      }
-    }
-    else if (intent === 'QUERY_INGREDIENTS') {
-      return await handleIngredientQuery('mostrar ingredientes', userId); // Reuse existing
-    }
-    else if (intent === 'UPDATE_PRODUCT_PRICE') {
-      if (parameters.product_name && parameters.new_price) {
-        return await executeProductPriceUpdate(parameters.product_name, parameters.new_price, userId, reply);
-      }
-    }
-    else if (intent === 'TOGGLE_PRODUCT_AVAILABILITY') {
-      if (parameters.product_name && parameters.status) {
-        return await executeProductAvailabilityToggle(parameters.product_name, parameters.status === 'active', userId, reply);
-      }
-    }
-    
-    // Default fallback for CHAT or unknown
-    return {
-      success: true,
-      message: reply || 'Entendido.'
-    };
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing agent command:', error);
+    await logAgentActivity(userId, 'command_error', command, { error: error.message });
     
-    // Fallback to local regex if AI fails
-    console.log('Falling back to local regex processing...');
-    return processLocalAgentCommand(command, userId);
+    return {
+      success: false,
+      message: 'Erro ao processar comando. Tente novamente.'
+    };
   }
 }
 

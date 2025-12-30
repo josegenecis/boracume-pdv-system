@@ -67,15 +67,21 @@ serve(async (req) => {
       contentPayload = [{ type: "text", text: userPrompt }];
 
     } else if (imageBase64) {
-      userPrompt = `Analise esta imagem de cardápio. Identifique todos os produtos e preços.
-      Retorne APENAS um JSON válido contendo uma lista de objetos com as chaves: "name" (string), "price" (number), "description" (string, opcional).
+      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços.
+      Retorne APENAS um JSON válido.
+      Exemplo de retorno esperado:
+      {
+        "products": [
+          { "name": "Coca Cola", "price": 5.00, "description": "Lata 350ml" },
+          { "name": "X-Burger", "price": 20.00 }
+        ]
+      }
       
-      REGRAS IMPORTANTES:
-      1. Se houver múltiplos preços (P, M, G), crie um item separado para cada tamanho ou pegue o preço principal. Ex: "Pizza Calabresa (P)" e "Pizza Calabresa (G)".
-      2. Se o preço tiver cifrão (R$) ou vírgula, converta para number (ex: 25.00).
-      3. Tente extrair a descrição dos ingredientes se estiver visível.
-      4. Ignore cabeçalhos, rodapés e telefones. Foque apenas nos itens vendáveis.
-      5. Se não tiver certeza absoluta de um item, ignore-o, mas tente extrair o máximo possível.`;
+      REGRAS:
+      1. Se houver múltiplos preços, crie variações no nome.
+      2. Converta preços para número (ponto flutuante).
+      3. Se a imagem estiver ruim ou não tiver produtos, retorne { "products": [] }.
+      4. NÃO adicione texto antes ou depois do JSON. Apenas o JSON puro.`;
 
       contentPayload = [
         { type: "text", text: userPrompt },
