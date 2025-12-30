@@ -822,8 +822,13 @@ const PDV = () => {
             </Card>
           </div>
 
-          {/* Right Column: Cart (Fixed on Desktop, Drawer/Scroll on Mobile) */}
-          <div className="lg:w-[400px] xl:w-[450px] bg-white flex flex-col h-full shadow-xl z-20">
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+
+// ... (inside component)
+
+          {/* Right Column: Cart (Desktop) */}
+          <div className="hidden lg:flex lg:w-[400px] xl:w-[450px] bg-white flex-col h-full shadow-xl z-20">
+            {/* ... same content as before ... */}
             <div className="p-4 border-b bg-gray-50/50">
               <div className="flex items-center gap-2 mb-4">
                 <Calculator className="text-primary" />
@@ -1061,26 +1066,212 @@ const PDV = () => {
           </div>
           
           {/* Mobile Cart Floating Button */}
-          <div 
-            id="mobile-cart-btn" 
-            ref={mobileCartBtnRef}
-            className="lg:hidden fixed bottom-4 right-4 z-50"
-            onClick={() => {
-              const cartContainer = document.getElementById('cart-container');
-              cartContainer?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          >
-             <div className="relative">
-                <Button className="h-14 w-14 rounded-full shadow-xl bg-primary text-white p-0 flex items-center justify-center">
-                  <Calculator size={24} />
-                </Button>
-                {cart.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white">
-                    {cart.reduce((acc, item) => acc + item.quantity, 0)}
-                  </span>
-                )}
-             </div>
-          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <div 
+                id="mobile-cart-btn" 
+                ref={mobileCartBtnRef}
+                className="lg:hidden fixed bottom-4 right-4 z-50"
+              >
+                <div className="relative">
+                    <Button className="h-14 w-14 rounded-full shadow-xl bg-primary text-white p-0 flex items-center justify-center">
+                      <Calculator size={24} />
+                    </Button>
+                    {cart.length > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white">
+                        {cart.reduce((acc, item) => acc + item.quantity, 0)}
+                      </span>
+                    )}
+                </div>
+              </div>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0">
+               <SheetHeader className="p-4 border-b">
+                 <SheetTitle>Carrinho de Compras</SheetTitle>
+               </SheetHeader>
+               
+               <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {/* Cart Items (Duplicate logic or componentize ideally) */}
+                  {cart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
+                      <Store size={48} />
+                      <p>Carrinho vazio</p>
+                    </div>
+                  ) : (
+                    cart.map((item, index) => {
+                      const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                      return (
+                        <div key={`mob-${item.id}-${index}`} className="flex flex-col p-3 border rounded-lg bg-gray-50">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1 mr-2">
+                              <span className="font-medium text-sm line-clamp-1">{item.name}</span>
+                              <span className="text-xs text-muted-foreground block">
+                                {formatCurrency(item.price)} un.
+                              </span>
+                            </div>
+                            <span className="font-bold text-sm">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
+                          </div>
+                          
+                          {formattedVariations.length > 0 && (
+                            <div className="text-xs text-gray-500 mb-2 pl-2 border-l-2 border-gray-200">
+                              {formattedVariations.map((v, i) => (
+                                <div key={i}>{v}</div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {item.notes && (
+                            <div className="text-xs text-amber-600 mb-2 italic bg-amber-50 p-1 rounded">
+                              Obs: {item.notes}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-end gap-2">
+                             <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            >
+                              <Minus size={12} />
+                            </Button>
+                            <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            >
+                              <Plus size={12} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 ml-2"
+                              onClick={() => removeFromCart(item.id)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+               </div>
+
+               {/* Mobile Checkout Form */}
+               <div className="p-4 bg-white border-t">
+                  <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
+                    {/* ... (Same inputs as desktop) ... */}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome do Cliente *"}
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                      <Input
+                        placeholder="Telefone"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    {orderType === 'delivery' && (
+                      <>
+                        <Input
+                          placeholder="Endereço Completo *"
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                        <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Selecione o Bairro *" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {deliveryZones.map((zone) => (
+                              <SelectItem key={zone.id} value={zone.id}>
+                                {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
+
+                    {orderType === 'dine_in' && (
+                      <Select value={selectedTable} onValueChange={setSelectedTable}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Selecione a Mesa *" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tables.map((table) => (
+                            <SelectItem key={table.id} value={table.id}>
+                              Mesa {table.table_number}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    
+                    <div className="flex gap-2">
+                       <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                        <SelectTrigger className="h-9 text-sm flex-1">
+                          <SelectValue placeholder="Pagamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pix">PIX</SelectItem>
+                          <SelectItem value="cartao">Cartão</SelectItem>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                       {paymentMethod === 'dinheiro' && (
+                        <Input
+                          placeholder="Valor pago"
+                          value={changeAmount}
+                          onChange={(e) => setChangeAmount(e.target.value)}
+                          className="h-9 text-sm w-24"
+                          type="number"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-sm mb-4">
+                    <div className="flex justify-between text-gray-500">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(getTotalValue())}</span>
+                    </div>
+                    {getDeliveryFee() > 0 && (
+                      <div className="flex justify-between text-gray-500">
+                        <span>Entrega</span>
+                        <span>{formatCurrency(getDeliveryFee())}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t">
+                      <span>Total</span>
+                      <span>{formatCurrency(getFinalTotal())}</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleFinalizeSale}
+                    disabled={processing || cart.length === 0}
+                    className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold"
+                  >
+                     {processing ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>Finalizar {formatCurrency(getFinalTotal())}</>
+                    )}
+                  </Button>
+               </div>
+            </SheetContent>
+          </Sheet>
         </TabsContent>
 
         <TabsContent value="accounts" className="flex-1 overflow-y-auto p-4 mt-0">

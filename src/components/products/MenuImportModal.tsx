@@ -9,6 +9,7 @@ import { Upload, Link as LinkIcon, Type, Loader2, AlertTriangle, CheckCircle2 } 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import Tesseract from 'tesseract.js';
 
 interface MenuImportModalProps {
   isOpen: boolean;
@@ -21,18 +22,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const [textInput, setTextInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const { toast } = useToast();
   const { user } = useAuth();
 
   const parseMenuText = (text: string) => {
-    // Simple parser: assumes "Name - Price" or "Name ... Price" format
     const lines = text.split('\n');
     const products = [];
     
     for (const line of lines) {
       if (!line.trim()) continue;
       
-      // Try to find price (R$ XX,XX or just XX,XX)
       const priceMatch = line.match(/(?:R\$\s*)?(\d+[,.]\d{2})/);
       
       if (priceMatch) {
@@ -48,13 +48,53 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     return products;
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setOcrProgress(0);
+
+    try {
+      const { data: { text } } = await Tesseract.recognize(
+        file,
+        'por', // Portuguese
+        {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              setOcrProgress(Math.round(m.progress * 100));
+            }
+          }
+        }
+      );
+
+      setTextInput(text);
+      setActiveTab('text');
+      toast({
+        title: "OCR Concluído",
+        description: "Texto extraído da imagem. Verifique e corrija se necessário.",
+      });
+
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro no OCR",
+        description: "Não foi possível ler a imagem. Tente uma foto mais clara.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+      setOcrProgress(0);
+    }
+  };
+
   const handleImport = async () => {
     setLoading(true);
     try {
       let productsToImport: { name: string; price: number }[] = [];
 
-      if (activeTab === 'text') {
-        if (!textInput.trim()) throw new Error('Cole o texto do cardápio.');
+      if (activeTab === 'text' || activeTab === 'image') { // Image ultimately fills textInput
+        if (!textInput.trim()) throw new Error('Cole o texto do cardápio ou use OCR.');
         productsToImport = parseMenuText(textInput);
       } else if (activeTab === 'link') {
         if (!urlInput.trim()) throw new Error('Insira um link válido.');
@@ -67,22 +107,18 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         if (!data.success) throw new Error(data.error || 'Falha ao ler o site.');
         
         productsToImport = data.products;
-      } else {
-        // Image handling would go here
-        throw new Error('Importação por imagem requer serviço OCR configurado.');
       }
 
       if (productsToImport.length === 0) {
         throw new Error('Nenhum produto identificado. Verifique o formato (Ex: Hamburguer ... 25,00)');
       }
 
-      // Batch insert
       const productsData = productsToImport.map(p => ({
         user_id: user?.id,
         name: p.name,
         price: p.price,
         available: true,
-        category_id: null // Would need category mapping logic
+        category_id: null
       }));
 
       const { error } = await supabase.from('products').insert(productsData);
@@ -115,7 +151,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         <DialogHeader>
           <DialogTitle>Importar Cardápio</DialogTitle>
           <DialogDescription>
-            Adicione produtos em massa rapidamente.
+            Importe por Texto, Link ou Foto (OCR).
           </DialogDescription>
         </DialogHeader>
 
@@ -157,11 +193,28 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           </TabsContent>
 
           <TabsContent value="image" className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg h-40 flex flex-col items-center justify-center text-gray-500">
-              <Upload className="w-8 h-8 mb-2" />
-              <p className="text-sm">Arraste uma foto do cardápio</p>
-              <p className="text-xs mt-1">(Em breve)</p>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg h-40 flex flex-col items-center justify-center text-gray-500 relative">
+              {loading && activeTab === 'image' ? (
+                <div className="flex flex-col items-center">
+                  <Loader2 className="w-8 h-8 animate-spin mb-2" />
+                  <p className="text-sm">Lendo imagem... {ocrProgress}%</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-8 h-8 mb-2" />
+                  <p className="text-sm">Clique para enviar foto</p>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={handleImageUpload}
+                  />
+                </>
+              )}
             </div>
+            <p className="text-xs text-center text-muted-foreground">
+              A foto será convertida em texto e jogada na aba "Texto" para revisão.
+            </p>
           </TabsContent>
         </Tabs>
 
