@@ -30,26 +30,40 @@ serve(async (req) => {
         throw new Error('URL inválida');
       }
 
-      const response = await fetch(url, {
+      console.log(`Fetching URL via Jina Reader: ${url}`);
+      
+      // Use jina.ai reader to convert complex SPA sites (like iFood) to LLM-friendly markdown
+      const jinaUrl = `https://r.jina.ai/${url}`;
+      
+      const response = await fetch(jinaUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (compatible; BoraCumeBot/1.0)',
+          'Accept': 'text/plain,text/markdown',
+          'X-Return-Format': 'markdown'
         }
       });
 
       if (!response.ok) {
-        throw new Error(`Falha ao acessar o site: ${response.status}`);
+        // Fallback to direct fetch if Jina fails
+        console.log('Jina Reader failed, falling back to direct fetch...');
+        const directResponse = await fetch(url);
+        if (!directResponse.ok) throw new Error(`Falha ao acessar o site: ${response.status}`);
+        const html = await directResponse.text();
+        // Simple HTML cleanup
+        userPrompt = `Analise o HTML bruto abaixo. Tente encontrar produtos e preços. Texto: ${html.slice(0, 15000)}`;
+      } else {
+        const markdown = await response.text();
+        // Limit context to avoid token limits, but keep enough for menu
+        const cleanMarkdown = markdown.slice(0, 25000); 
+        
+        userPrompt = `Analise este cardápio (formato Markdown). Extraia TODOS os produtos alimentícios e bebidas com seus preços.
+        Retorne APENAS um JSON válido com a lista de produtos.
+        Formato: { "products": [{ "name": "...", "price": 10.50, "description": "..." }] }
+        
+        Cardápio:
+        ${cleanMarkdown}`;
       }
-
-      const html = await response.text();
-      const cleanText = html
-        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .slice(0, 15000);
-
-      userPrompt = `Analise o texto do cardápio e extraia produtos (nome, preço, descrição). Retorne JSON. Texto: ${cleanText}`;
+      
       contentPayload = [{ type: "text", text: userPrompt }];
 
     } else if (imageBase64) {
