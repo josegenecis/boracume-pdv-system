@@ -84,11 +84,6 @@ export async function processAgentCommand(command: string, userId: string): Prom
     // Execute logic based on intent
     if (intent === 'DISABLE_INGREDIENT') {
       if (parameters.ingredient) {
-        // Reuse existing logic but with AI-extracted parameter
-        // We construct a simulated command to reuse the regex logic or call a new specific function
-        // For simplicity, let's call the handle function directly if we refactor, but here we can just reuse the existing function logic adapted
-        
-        // Let's create a direct handler reusing the core logic
         return await executeDisableIngredient(parameters.ingredient, userId, reply);
       }
     } 
@@ -99,6 +94,16 @@ export async function processAgentCommand(command: string, userId: string): Prom
     }
     else if (intent === 'QUERY_INGREDIENTS') {
       return await handleIngredientQuery('mostrar ingredientes', userId); // Reuse existing
+    }
+    else if (intent === 'UPDATE_PRODUCT_PRICE') {
+      if (parameters.product_name && parameters.new_price) {
+        return await executeProductPriceUpdate(parameters.product_name, parameters.new_price, userId, reply);
+      }
+    }
+    else if (intent === 'TOGGLE_PRODUCT_AVAILABILITY') {
+      if (parameters.product_name && parameters.status) {
+        return await executeProductAvailabilityToggle(parameters.product_name, parameters.status === 'active', userId, reply);
+      }
     }
     
     // Default fallback for CHAT or unknown

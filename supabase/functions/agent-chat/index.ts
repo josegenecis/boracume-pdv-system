@@ -48,14 +48,23 @@ serve(async (req) => {
             1. "DISABLE_INGREDIENT": Quando o usuário quer desativar/remover/tirar um ingrediente.
             2. "REGISTER_EXPENSE": Quando o usuário quer lançar uma despesa/gasto.
             3. "QUERY_INGREDIENTS": Quando o usuário quer ver/listar ingredientes.
-            4. "CHAT": Conversa geral, dúvidas sobre culinária, gestão, etc.
+            4. "UPDATE_PRODUCT_PRICE": Quando o usuário quer mudar o preço de um produto. (Extrair: "product_name", "new_price").
+            5. "TOGGLE_PRODUCT_AVAILABILITY": Quando o usuário quer pausar/desativar ou ativar um produto do cardápio. (Extrair: "product_name", "status": "active" | "inactive").
+            6. "CHAT": Conversa geral, dúvidas sobre culinária, gestão, etc.
 
             FORMATO DE RESPOSTA (JSON):
             {
-              "intent": "DISABLE_INGREDIENT" | "REGISTER_EXPENSE" | "QUERY_INGREDIENTS" | "CHAT",
+              "intent": "DISABLE_INGREDIENT" | "REGISTER_EXPENSE" | "QUERY_INGREDIENTS" | "UPDATE_PRODUCT_PRICE" | "TOGGLE_PRODUCT_AVAILABILITY" | "CHAT",
               "parameters": { ... }, 
               "reply": "Texto de resposta amigável para o usuário"
             }
+
+            Exemplos:
+            User: "Mude o preço do X-Bacon para 30 reais"
+            Response: { "intent": "UPDATE_PRODUCT_PRICE", "parameters": { "product_name": "X-Bacon", "new_price": 30 }, "reply": "Certo, alterando preço do X-Bacon." }
+
+            User: "Acabou a Coca-Cola, desativa ela"
+            Response: { "intent": "TOGGLE_PRODUCT_AVAILABILITY", "parameters": { "product_name": "Coca-Cola", "status": "inactive" }, "reply": "Ok, pausando a venda de Coca-Cola." }
             `
           },
           {
