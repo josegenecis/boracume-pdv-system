@@ -5,11 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, AlertTriangle, CheckCircle2, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import Tesseract from 'tesseract.js';
 
 interface MenuImportModalProps {
   isOpen: boolean;
@@ -22,7 +21,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const [textInput, setTextInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -48,55 +49,37 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     return products;
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setLoading(true);
-    setOcrProgress(0);
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
-    try {
-      const { data: { text } } = await Tesseract.recognize(
-        file,
-        'por', // Portuguese
-        {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              setOcrProgress(Math.round(m.progress * 100));
-            }
-          }
-        }
-      );
-
-      setTextInput(text);
-      setActiveTab('text');
-      toast({
-        title: "OCR Concluído",
-        description: "Texto extraído da imagem. Verifique e corrija se necessário.",
-      });
-
-    } catch (error) {
-      console.error(error);
-      toast({
-        title: "Erro no OCR",
-        description: "Não foi possível ler a imagem. Tente uma foto mais clara.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-      setOcrProgress(0);
-    }
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
   };
 
   const handleImport = async () => {
     setLoading(true);
     try {
-      let productsToImport: { name: string; price: number }[] = [];
+      let productsToImport: { name: string; price: number, description?: string }[] = [];
 
-      if (activeTab === 'text' || activeTab === 'image') { // Image ultimately fills textInput
-        if (!textInput.trim()) throw new Error('Cole o texto do cardápio ou use OCR.');
+      if (activeTab === 'text') {
+        if (!textInput.trim()) throw new Error('Cole o texto do cardápio.');
         productsToImport = parseMenuText(textInput);
-      } else if (activeTab === 'link') {
+      } 
+      else if (activeTab === 'link') {
         if (!urlInput.trim()) throw new Error('Insira um link válido.');
         
         const { data, error } = await supabase.functions.invoke('scrape-menu', {
@@ -107,16 +90,32 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         if (!data.success) throw new Error(data.error || 'Falha ao ler o site.');
         
         productsToImport = data.products;
+      } 
+      else if (activeTab === 'image') {
+        if (!selectedImage) throw new Error('Selecione uma imagem do cardápio.');
+
+        // Convert image to base64
+        const base64Image = await convertFileToBase64(selectedImage);
+
+        const { data, error } = await supabase.functions.invoke('scrape-menu', {
+          body: { imageBase64: base64Image }
+        });
+
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error || 'Falha ao processar imagem.');
+
+        productsToImport = data.products;
       }
 
       if (productsToImport.length === 0) {
-        throw new Error('Nenhum produto identificado. Verifique o formato (Ex: Hamburguer ... 25,00)');
+        throw new Error('Nenhum produto identificado. Tente novamente ou verifique a imagem/link.');
       }
 
       const productsData = productsToImport.map(p => ({
         user_id: user?.id,
         name: p.name,
         price: p.price,
+        description: p.description || '',
         available: true,
         category_id: null
       }));
@@ -127,17 +126,26 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
       toast({
         title: 'Importação Concluída!',
-        description: `${productsToImport.length} produtos foram importados.`,
+        description: `${productsToImport.length} produtos foram importados com Inteligência Artificial.`,
       });
       
       onImportComplete();
       onClose();
       setTextInput('');
+      setSelectedImage(null);
+      setImagePreview(null);
+      setUrlInput('');
       
     } catch (error: any) {
+      console.error(error);
+      let errorMessage = error.message;
+      if (errorMessage.includes('OPENAI_API_KEY')) {
+        errorMessage = "Configuração necessária: Adicione a chave OPENAI_API_KEY nos segredos do Supabase.";
+      }
+      
       toast({
         title: 'Erro na importação',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {
@@ -149,9 +157,12 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Importar Cardápio</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="w-5 h-5 text-purple-600" />
+            Importar Cardápio com IA
+          </DialogTitle>
           <DialogDescription>
-            Importe por Texto, Link ou Foto (OCR).
+            Use Inteligência Artificial para ler cardápios por Link ou Foto.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,57 +183,65 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 onChange={(e) => setTextInput(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                O sistema tentará identificar Nome e Preço em cada linha.
+                Importação manual simples (sem IA).
               </p>
             </div>
           </TabsContent>
 
           <TabsContent value="link" className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Link do iFood ou Site</Label>
+              <Label>Link do Cardápio Digital (iFood, Goomer, Site próprio)</Label>
               <Input 
                 placeholder="https://..." 
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
               />
-              <div className="flex items-center gap-2 p-3 bg-yellow-50 text-yellow-800 rounded-md text-xs">
-                <AlertTriangle className="w-4 h-4" />
-                <span>Sites como iFood podem bloquear importação automática.</span>
+              <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
+                <Wand2 className="w-4 h-4" />
+                <span>A IA visitará o site e extrairá os produtos automaticamente.</span>
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="image" className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg h-40 flex flex-col items-center justify-center text-gray-500 relative">
-              {loading && activeTab === 'image' ? (
-                <div className="flex flex-col items-center">
-                  <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                  <p className="text-sm">Lendo imagem... {ocrProgress}%</p>
-                </div>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg h-48 flex flex-col items-center justify-center text-gray-500 relative overflow-hidden bg-gray-50">
+              {imagePreview ? (
+                <>
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-contain opacity-50" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Button variant="secondary" size="sm" className="shadow-lg" onClick={() => {
+                        setSelectedImage(null);
+                        setImagePreview(null);
+                    }}>
+                      Trocar Imagem
+                    </Button>
+                  </div>
+                </>
               ) : (
                 <>
                   <Upload className="w-8 h-8 mb-2" />
-                  <p className="text-sm">Clique para enviar foto</p>
+                  <p className="text-sm">Clique para enviar foto do cardápio</p>
                   <input 
                     type="file" 
                     accept="image/*" 
                     className="absolute inset-0 opacity-0 cursor-pointer"
-                    onChange={handleImageUpload}
+                    onChange={handleImageSelect}
                   />
                 </>
               )}
             </div>
-            <p className="text-xs text-center text-muted-foreground">
-              A foto será convertida em texto e jogada na aba "Texto" para revisão.
-            </p>
+            <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
+                <Wand2 className="w-4 h-4" />
+                <span>O GPT-4o Vision analisará a foto e identificará os itens.</span>
+            </div>
           </TabsContent>
         </Tabs>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-          <Button onClick={handleImport} disabled={loading}>
+          <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            Importar Produtos
+            {activeTab === 'text' ? 'Importar' : 'Processar com IA'}
           </Button>
         </DialogFooter>
       </DialogContent>
