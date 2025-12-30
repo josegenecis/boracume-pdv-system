@@ -53,11 +53,28 @@ export async function processAgentCommand(command: string, userId: string): Prom
     await logAgentActivity(userId, 'command_received', command);
 
     // Call Supabase Edge Function to interpret intent with GPT-4o
-    const { data: aiResponse, error } = await supabase.functions.invoke('agent-chat', {
-      body: { message: command }
+    // Using direct fetch for reliability
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
+    console.log('Sending command to agent-chat function...');
+    
+    const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/agent-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ message: command })
     });
 
-    if (error) throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Function error (${response.status}): ${errorText}`);
+    }
+
+    const aiResponse = await response.json();
+
     if (!aiResponse.success) throw new Error(aiResponse.error);
 
     const { intent, parameters, reply } = aiResponse.data;

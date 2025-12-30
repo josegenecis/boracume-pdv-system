@@ -115,11 +115,28 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       else if (activeTab === 'link') {
         if (!urlInput.trim()) throw new Error('Insira um link válido.');
         
-        const { data, error } = await supabase.functions.invoke('scrape-menu', {
-          body: { url: urlInput }
+        console.log('Enviando requisição para scrape-menu (Link)...');
+        
+        // Direct fetch to bypass potential client lib issues
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/scrape-menu', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({ url: urlInput })
         });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Erro no servidor (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+
         if (!data.success) throw new Error(data.error || 'Falha ao ler o site.');
         
         productsToImport = data.products;
@@ -127,14 +144,31 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       else if (activeTab === 'image') {
         if (!selectedImage) throw new Error('Selecione uma imagem do cardápio.');
 
+        console.log('Processando imagem...');
         // Convert image to base64
         const base64Image = await convertFileToBase64(selectedImage);
+        console.log('Imagem convertida, enviando para API...');
 
-        const { data, error } = await supabase.functions.invoke('scrape-menu', {
-          body: { imageBase64: base64Image }
+        // Direct fetch
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/scrape-menu', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({ imageBase64: base64Image })
         });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Erro no servidor (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+
         if (!data.success) throw new Error(data.error || 'Falha ao processar imagem.');
 
         productsToImport = data.products;
