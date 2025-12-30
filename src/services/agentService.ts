@@ -45,17 +45,128 @@ const EXPENSE_CATEGORIES = [
 ];
 
 /**
- * Process natural language commands and execute deterministic tasks
+ * Process natural language commands and execute deterministic tasks using GPT-4o
  */
 export async function processAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
   try {
-    // Normalize command
-    const normalizedCommand = command.toLowerCase().trim();
-    
     // Log the command for tracking
     await logAgentActivity(userId, 'command_received', command);
 
-    // Parse and execute command
+    // Call Supabase Edge Function to interpret intent with GPT-4o
+    const { data: aiResponse, error } = await supabase.functions.invoke('agent-chat', {
+      body: { message: command }
+    });
+
+    if (error) throw error;
+    if (!aiResponse.success) throw new Error(aiResponse.error);
+
+    const { intent, parameters, reply } = aiResponse.data;
+
+    console.log('AI Intent:', intent, parameters);
+
+    // Execute logic based on intent
+    if (intent === 'DISABLE_INGREDIENT') {
+      if (parameters.ingredient) {
+        // Reuse existing logic but with AI-extracted parameter
+        // We construct a simulated command to reuse the regex logic or call a new specific function
+        // For simplicity, let's call the handle function directly if we refactor, but here we can just reuse the existing function logic adapted
+        
+        // Let's create a direct handler reusing the core logic
+        return await executeDisableIngredient(parameters.ingredient, userId, reply);
+      }
+    } 
+    else if (intent === 'REGISTER_EXPENSE') {
+      if (parameters.amount && parameters.category) {
+        return await executeRegisterExpense(parameters.amount, parameters.category, parameters.description || 'Despesa via Assistente', userId, reply);
+      }
+    }
+    else if (intent === 'QUERY_INGREDIENTS') {
+      return await handleIngredientQuery('mostrar ingredientes', userId); // Reuse existing
+    }
+    
+    // Default fallback for CHAT or unknown
+    return {
+      success: true,
+      message: reply || 'Entendido.'
+    };
+
+  } catch (error) {
+    console.error('Error processing agent command:', error);
+    
+    // Fallback to local regex if AI fails
+    console.log('Falling back to local regex processing...');
+    return processLocalAgentCommand(command, userId);
+  }
+}
+
+// ... (Existing regex functions renamed to processLocalAgentCommand or kept as helpers)
+
+// Helper to execute disabling directly with AI params
+async function executeDisableIngredient(ingredientName: string, userId: string, aiReply: string): Promise<AgentCommandResult> {
+  try {
+    const { data: ingredients, error } = await supabase
+      .from('ingredients')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .ilike('name', `%${ingredientName}%`);
+
+    if (error) throw error;
+
+    if (!ingredients || ingredients.length === 0) {
+      return {
+        success: false,
+        message: `Não encontrei nenhum ingrediente ativo chamado "${ingredientName}".`
+      };
+    }
+
+    const ingredientIds = ingredients.map(ing => ing.id);
+    await supabase
+      .from('ingredients')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .in('id', ingredientIds);
+
+    await logAgentActivity(userId, 'ingredient_disable', `IA: Desativado(s) ${ingredients.length} ingrediente(s): ${ingredients.map(ing => ing.name).join(', ')}`);
+
+    return {
+      success: true,
+      message: aiReply || `✅ ${ingredients.length} ingrediente(s) desativado(s): ${ingredients.map(ing => ing.name).join(', ')}`,
+      metadata: { action: 'ingredient_disable', count: ingredients.length }
+    };
+  } catch (e: any) {
+    return { success: false, message: `Erro: ${e.message}` };
+  }
+}
+
+async function executeRegisterExpense(amount: number, category: string, description: string, userId: string, aiReply: string): Promise<AgentCommandResult> {
+  try {
+     const expense: Omit<Expense, 'id' | 'created_at'> = {
+      description: description,
+      amount: amount,
+      category: category.toLowerCase(),
+      expense_date: new Date().toISOString().split('T')[0],
+      user_id: userId
+    };
+
+    await supabase.from('expenses').insert(expense);
+    await logAgentActivity(userId, 'expense_register', `IA: Despesa registrada: R$ ${amount}`);
+
+    return {
+      success: true,
+      message: aiReply || `✅ Despesa registrada: R$ ${amount.toFixed(2)} em ${category}`,
+      metadata: { action: 'expense_register' }
+    };
+  } catch (e: any) {
+    return { success: false, message: `Erro: ${e.message}` };
+  }
+}
+
+/**
+ * Legacy local processing (Fallback)
+ */
+async function processLocalAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
+    // ... (Old processAgentCommand logic here)
+    const normalizedCommand = command.toLowerCase().trim();
     if (isIngredientDisableCommand(normalizedCommand)) {
       return await handleIngredientDisable(normalizedCommand, userId);
     } else if (isExpenseRegistrationCommand(normalizedCommand)) {
@@ -67,19 +178,11 @@ export async function processAgentCommand(command: string, userId: string): Prom
     } else {
       return {
         success: false,
-        message: 'Não entendi seu comando. Tente: "Desativar [ingrediente] de todos os produtos" ou "Lançar despesa de R$ [valor] para [categoria]"'
+        message: 'Não entendi. (Modo Offline)'
       };
     }
-  } catch (error) {
-    console.error('Error processing agent command:', error);
-    await logAgentActivity(userId, 'command_error', command, { error: error.message });
-    
-    return {
-      success: false,
-      message: 'Erro ao processar comando. Tente novamente.'
-    };
-  }
 }
+
 
 /**
  * Check if command is for disabling ingredients
