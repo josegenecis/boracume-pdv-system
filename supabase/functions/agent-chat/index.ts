@@ -4,9 +4,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -16,12 +18,14 @@ serve(async (req) => {
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openAiKey) {
-      throw new Error('Chave da API OpenAI não configurada.');
+      throw new Error('Chave da API OpenAI não configurada no Supabase Secrets.');
     }
 
     if (!message) {
       throw new Error('Mensagem é obrigatória.');
     }
+
+    console.log('Sending to OpenAI:', message);
 
     // Call OpenAI API
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -49,19 +53,9 @@ serve(async (req) => {
             FORMATO DE RESPOSTA (JSON):
             {
               "intent": "DISABLE_INGREDIENT" | "REGISTER_EXPENSE" | "QUERY_INGREDIENTS" | "CHAT",
-              "parameters": { ... }, // Parâmetros extraídos (ex: nome do ingrediente, valor da despesa)
+              "parameters": { ... }, 
               "reply": "Texto de resposta amigável para o usuário"
             }
-
-            Exemplos:
-            User: "Tirar carne de sol de tudo"
-            Response: { "intent": "DISABLE_INGREDIENT", "parameters": { "ingredient": "carne de sol" }, "reply": "Entendido, vou desativar a carne de sol." }
-
-            User: "Gastei 50 reais com uber"
-            Response: { "intent": "REGISTER_EXPENSE", "parameters": { "amount": 50, "category": "transporte", "description": "Uber" }, "reply": "Certo, registrando R$ 50,00 em transporte." }
-
-            User: "Como faço um bom strogonoff?"
-            Response: { "intent": "CHAT", "reply": "Para um bom strogonoff, o segredo é..." }
             `
           },
           {
@@ -76,11 +70,13 @@ serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errorData = await aiResponse.text();
-      console.error('OpenAI Error:', errorData);
-      throw new Error(`Erro na IA: ${aiResponse.statusText}`);
+      console.error('OpenAI API Error:', errorData);
+      throw new Error(`Erro na API OpenAI: ${aiResponse.status} - ${errorData}`);
     }
 
     const aiData = await aiResponse.json();
+    console.log('OpenAI Success Response');
+    
     const content = JSON.parse(aiData.choices[0].message.content);
 
     return new Response(
@@ -95,12 +91,16 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Function error:', error);
+    console.error('Edge Function Error:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ 
+        success: false, 
+        error: error.message,
+        details: error.stack 
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400
+        status: 200 // Return 200 even on error to avoid CORS issues in browser, handle success: false in frontend
       }
     )
   }
