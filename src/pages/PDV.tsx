@@ -63,7 +63,7 @@ const PDV = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('delivery');
+  const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('counter');
   const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -780,7 +780,7 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
                     {filteredProducts.map((product) => (
                       <Card 
                         key={product.id} 
@@ -841,9 +841,9 @@ const PDV = () => {
               
               <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 h-8">
+                  <TabsTrigger value="counter" className="text-xs h-7">Balcão</TabsTrigger>
                   <TabsTrigger value="delivery" className="text-xs h-7">Entrega</TabsTrigger>
                   <TabsTrigger value="pickup" className="text-xs h-7">Retirada</TabsTrigger>
-                  <TabsTrigger value="counter" className="text-xs h-7">Balcão</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
