@@ -850,7 +850,7 @@ const PDV = () => {
             <div 
               id="cart-container" 
               ref={cartContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-3"
+              className="flex-1 overflow-y-auto p-2 space-y-1"
             >
               {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
@@ -861,60 +861,35 @@ const PDV = () => {
                 cart.map((item, index) => {
                   const formattedVariations = formatSelectedVariations(item.selectedVariations);
                   return (
-                    <div key={`${item.id}-${index}`} className="flex flex-col p-3 border rounded-lg bg-gray-50 animate-in fade-in slide-in-from-right-4 duration-300">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1 mr-2">
-                          <span className="font-medium text-sm line-clamp-1">{item.name}</span>
-                          <span className="text-xs text-muted-foreground block">
-                            {formatCurrency(item.price)} un.
-                          </span>
+                    <div key={`${item.id}-${index}`} className="flex items-center justify-between p-2 border-b last:border-0 hover:bg-gray-50 text-sm">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium truncate">{item.quantity}x {item.name}</span>
+                          <span className="font-bold">{formatCurrency(item.price * item.quantity)}</span>
                         </div>
-                        <span className="font-bold text-sm">
-                          {formatCurrency(item.price * item.quantity)}
-                        </span>
+                        
+                        {/* Show variations in a very compact way */}
+                        {formattedVariations.length > 0 && (
+                          <div className="text-xs text-gray-500 truncate">
+                            {formattedVariations.join(', ')}
+                          </div>
+                        )}
+                        
+                        {item.notes && (
+                          <div className="text-[10px] text-amber-600 truncate italic">
+                            Obs: {item.notes}
+                          </div>
+                        )}
                       </div>
-                      
-                      {formattedVariations.length > 0 && (
-                        <div className="text-xs text-gray-500 mb-2 pl-2 border-l-2 border-gray-200">
-                          {formattedVariations.map((v, i) => (
-                            <div key={i}>{v}</div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {item.notes && (
-                        <div className="text-xs text-amber-600 mb-2 italic bg-amber-50 p-1 rounded">
-                          Obs: {item.notes}
-                        </div>
-                      )}
 
-                      <div className="flex items-center justify-end gap-2">
-                         <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          <Minus size={12} />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          <Plus size={12} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 ml-2"
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
+                        onClick={() => removeFromCart(item.id)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
                     </div>
                   );
                 })
