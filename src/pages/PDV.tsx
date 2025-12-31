@@ -742,7 +742,7 @@ const PDV = () => {
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-gray-50/50">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
         <div className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
           <TabsList className="grid w-48 sm:w-64 grid-cols-2">
@@ -768,7 +768,7 @@ const PDV = () => {
           )}
         </div>
 
-        <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row h-full mt-0">
+        <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row mt-0 min-h-0">
           {/* Left Column: Products (Scrollable) */}
           <div className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 lg:border-r">
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
