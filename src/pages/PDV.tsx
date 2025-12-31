@@ -698,7 +698,7 @@ const PDV = () => {
     }
   };
 
-  const handleTableFinalization = (items: any[], total: number, tableNumber: number) => {
+  const handleTableFinalization = (items: any[], total: number, tableNumber: number, tableId: string) => {
     const cartItems: CartItem[] = items.map(item => ({
       id: item.product_id,
       name: item.product_name,
@@ -712,6 +712,7 @@ const PDV = () => {
     setCart(cartItems);
     setCustomerName(`Mesa ${tableNumber}`);
     setOrderType('dine_in');
+    setSelectedTable(tableId);
     setActiveTab('products');
 
     toast({

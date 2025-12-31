@@ -33,7 +33,7 @@ interface TableAccountModalProps {
   tableId: string;
   tableNumber: number;
   onAccountUpdate: () => void;
-  onFinalize?: (items: TableAccountItem[], total: number, tableNumber: number) => void;
+  onFinalize?: (items: TableAccountItem[], total: number, tableNumber: number, tableId: string) => void;
 }
 
 const TableAccountModal: React.FC<TableAccountModalProps> = ({
@@ -175,7 +175,7 @@ const TableAccountModal: React.FC<TableAccountModalProps> = ({
 
       // Pass the account data to finalize in PDV
       if (onFinalize) {
-        onFinalize(account.items, account.total, tableNumber);
+        onFinalize(account.items, account.total, tableNumber, tableId);
       }
 
       onClose();

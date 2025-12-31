@@ -26,7 +26,7 @@ interface TableAccount {
 }
 
 interface TableAccountManagerProps {
-  onFinalize?: (items: any[], total: number, tableNumber: number) => void;
+  onFinalize?: (items: any[], total: number, tableNumber: number, tableId: string) => void;
 }
 
 const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize }) => {
