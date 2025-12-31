@@ -63,7 +63,7 @@ const PDV = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in'>('delivery');
+  const [orderType, setOrderType] = useState<'delivery' | 'pickup' | 'dine_in' | 'counter'>('delivery');
   const [selectedDeliveryZone, setSelectedDeliveryZone] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -544,7 +544,7 @@ const PDV = () => {
       return;
     }
 
-    if (orderType !== 'dine_in' && !customerName.trim()) {
+    if (orderType !== 'dine_in' && orderType !== 'counter' && !customerName.trim()) {
       toast({
         title: "Nome obrigatório",
         description: "Por favor, informe o nome do cliente.",
@@ -620,7 +620,7 @@ const PDV = () => {
       }));
 
       const orderData = {
-        customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : customerName.trim(),
+        customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : (orderType === 'counter' ? (customerName.trim() || 'Venda Balcão') : customerName.trim()),
         customer_phone: customerPhone.trim() || null,
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
         order_type: orderType,
@@ -840,9 +840,10 @@ const PDV = () => {
               </div>
               
               <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 h-8">
+                <TabsList className="grid w-full grid-cols-3 h-8">
                   <TabsTrigger value="delivery" className="text-xs h-7">Entrega</TabsTrigger>
                   <TabsTrigger value="pickup" className="text-xs h-7">Retirada</TabsTrigger>
+                  <TabsTrigger value="counter" className="text-xs h-7">Balcão</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -916,17 +917,19 @@ const PDV = () => {
                 <div className="space-y-2">
                    <div className="flex gap-2">
                       <Input
-                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
+                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         className="h-8 text-xs"
                       />
-                      <Input
-                        placeholder="Tel"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="h-8 text-xs w-28 shrink-0"
-                      />
+                      {orderType !== 'counter' && (
+                        <Input
+                          placeholder="Tel"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          className="h-8 text-xs w-28 shrink-0"
+                        />
+                      )}
                     </div>
 
                     {orderType === 'delivery' && (
