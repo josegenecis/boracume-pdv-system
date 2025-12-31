@@ -48,6 +48,7 @@ import OrderTracking from '@/pages/OrderTracking';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
 import './styles/responsive.css';
 
