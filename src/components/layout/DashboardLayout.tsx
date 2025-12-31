@@ -39,8 +39,8 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
               : 'ml-16'
           }
         `}>
-          <div className="p-3 sm:p-4 md:p-6 h-[calc(100vh-64px)] overflow-y-auto w-full">
-            <div className="w-full max-w-full">
+          <div className="h-[calc(100vh-64px)] w-full">
+            <div className="w-full max-w-full h-full">
               {children}
             </div>
           </div>

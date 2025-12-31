@@ -741,7 +741,7 @@ const PDV = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-gray-50/50">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50/50">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
         <div className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
