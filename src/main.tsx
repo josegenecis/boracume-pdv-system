@@ -5,6 +5,16 @@ import App from './App.tsx'
 // import AuthOnlyApp from './App.auth-only.tsx'
 import './index.css'
 
+// Global Error Handler for debugging white screens
+window.addEventListener('error', (event) => {
+  console.error('Global Error Caught:', event.error);
+  // Optional: You could render a fallback UI directly into document.body here if React fails completely
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled Promise Rejection:', event.reason);
+});
+
 // Service Worker para Push Notifications (desativado por padrão)
 if ('serviceWorker' in navigator) {
   const enableSW = import.meta.env.VITE_ENABLE_SW === 'true'

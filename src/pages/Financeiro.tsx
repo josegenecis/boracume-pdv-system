@@ -324,21 +324,36 @@ const Financeiro = () => {
   };
   
   const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    if (!date || isNaN(date.getTime())) return '-';
+    try {
+      return new Intl.DateTimeFormat('pt-BR').format(date);
+    } catch (e) {
+      return '-';
+    }
   };
   
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    if (!date || isNaN(date.getTime())) return '-';
+    try {
+      return date.toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (e) {
+      return '-';
+    }
   };
   
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(amount);
+    if (amount === undefined || amount === null || isNaN(amount)) return 'R$ 0,00';
+    try {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      }).format(amount);
+    } catch (e) {
+      return 'R$ 0,00';
+    }
   };
   
   const getPaymentMethodLabel = (method?: PaymentMethod) => {

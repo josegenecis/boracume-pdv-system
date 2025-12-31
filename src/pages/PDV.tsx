@@ -721,10 +721,15 @@ const PDV = () => {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    try {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(value);
+    } catch (e) {
+      return 'R$ 0,00';
+    }
   };
 
   if (loading) {
