@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { UserPlus, Link as LinkIcon, Trash2, Key, Copy, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Link as LinkIcon, Trash2, Key, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 
 interface Waiter {
   id: string;

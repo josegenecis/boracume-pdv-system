@@ -160,14 +160,23 @@ const Financeiro = () => {
 
   const checkOpenSession = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from('cash_register_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'open')
-      .maybeSingle();
-    
-    setCurrentSession(data);
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'open')
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error checking open session:', error);
+        return;
+      }
+      
+      setCurrentSession(data);
+    } catch (err) {
+      console.error('Unexpected error checking session:', err);
+    }
   };
 
   const handleAddExpense = async () => {

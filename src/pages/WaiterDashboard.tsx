@@ -14,6 +14,7 @@ interface TableOrder {
   status: string;
   customer_name: string;
   total_amount: number;
+  created_at: string;
 }
 
 const WaiterDashboard = () => {
@@ -93,7 +94,7 @@ const WaiterDashboard = () => {
     navigate(`/pdv?orderId=${orderId}&waiterId=${waiter.id}&mode=waiter`);
   };
 
-  if (initialCheck) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -167,7 +168,7 @@ const WaiterDashboard = () => {
                     {table.customer_name || 'Cliente sem nome'}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
-                    {new Date(table.created_at || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {table.created_at ? new Date(table.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </div>
                 </CardContent>
               </Card>
