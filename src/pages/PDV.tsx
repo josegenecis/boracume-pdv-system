@@ -16,6 +16,7 @@ import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 interface Product {
   id: string;
