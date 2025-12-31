@@ -897,7 +897,7 @@ const PDV = () => {
             </div>
 
             {/* Checkout Form & Totals - Fixed at Bottom */}
-            <div className="p-4 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+            <div className="p-4 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] shrink-0 z-10">
               {/* Customer Info Form */}
               <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
                 <div className="flex gap-2">
