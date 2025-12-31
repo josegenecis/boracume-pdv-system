@@ -1210,20 +1210,39 @@ const PDV = () => {
                       </>
                     )}
 
-                    {orderType === 'dine_in' && (
-                      <Select value={selectedTable} onValueChange={setSelectedTable}>
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue placeholder="Selecione a Mesa *" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tables.map((table) => (
-                            <SelectItem key={table.id} value={table.id}>
-                              Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                   {orderType === 'dine_in' ? (
+                     <div className="flex gap-2 items-center">
+                        <Select value={selectedTable} onValueChange={setSelectedTable}>
+                           <SelectTrigger className="h-9 text-sm flex-1">
+                             <SelectValue placeholder="Selecione a Mesa *" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {tables.length > 0 ? (
+                               tables.map((table) => (
+                                 <SelectItem key={table.id} value={table.id}>
+                                   Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                                 </SelectItem>
+                               ))
+                             ) : (
+                               <div className="p-2 text-xs text-center text-muted-foreground">
+                                 Nenhuma mesa cadastrada
+                               </div>
+                             )}
+                           </SelectContent>
+                         </Select>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="h-9 w-9 text-red-500 hover:bg-red-50"
+                           onClick={() => {
+                             setOrderType('delivery');
+                             setSelectedTable('');
+                           }}
+                         >
+                           <Minus size={16} />
+                         </Button>
+                     </div>
+                   ) : null}
                     
                     <div className="flex gap-2">
                        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -1266,14 +1285,42 @@ const PDV = () => {
                   </div>
 
                   <Button
+                    variant="outline"
+                    onClick={() => {
+                       if (orderType === 'dine_in') {
+                         addToTable();
+                       } else {
+                         setOrderType('dine_in');
+                         setCustomerName('');
+                       }
+                    }}
+                    disabled={processing || cart.length === 0}
+                    className="w-full h-12 text-lg font-bold border-blue-200 text-blue-700 hover:bg-blue-50"
+                  >
+                    {processing && orderType === 'dine_in' ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-700"></div>
+                    ) : (
+                      <>
+                        <UtensilsCrossed className="mr-2 h-4 w-4" />
+                        {orderType === 'dine_in' ? 'Confirmar' : 'Mesa'}
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
                     onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0}
                     className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold"
                   >
-                     {processing ? (
+                    {processing && orderType !== 'dine_in' ? (
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     ) : (
-                      <>Finalizar {formatCurrency(getFinalTotal())}</>
+                      <>
+                        Finalizar
+                        <span className="ml-2 text-sm font-normal opacity-90">
+                          {formatCurrency(getFinalTotal())}
+                        </span>
+                      </>
                     )}
                   </Button>
                </div>
