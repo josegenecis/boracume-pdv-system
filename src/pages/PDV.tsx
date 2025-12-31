@@ -167,7 +167,6 @@ const PDV = () => {
         .from('tables')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('status', 'available')
         .order('table_number');
 
       if (error) {
@@ -742,37 +741,37 @@ const PDV = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-gray-50/50">
+    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-gray-50/50">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-        <div className="px-4 pt-2 shrink-0 bg-white border-b z-10">
-          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto mb-2">
+        {/* Top Header Bar - Consolidated */}
+        <div className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
+          <TabsList className="grid w-48 sm:w-64 grid-cols-2">
             <TabsTrigger value="products">Vendas</TabsTrigger>
-            <TabsTrigger value="accounts">MESAS</TabsTrigger>
+            <TabsTrigger value="accounts">Mesas</TabsTrigger>
           </TabsList>
+
+          {activeTab === 'products' && (
+            <div className="flex-1 max-w-md flex items-center gap-2 justify-end sm:justify-start">
+              <div className="relative w-full sm:w-auto sm:flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Buscar produtos..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors w-full"
+                />
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-9 w-9">
+                <RefreshCw size={16} />
+              </Button>
+            </div>
+          )}
         </div>
 
         <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row h-full mt-0">
           {/* Left Column: Products (Scrollable) */}
-          <div className="flex-1 overflow-y-auto p-4 lg:p-6 lg:border-r">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 lg:border-r">
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
-              <div className="shrink-0 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-xl font-bold text-gray-800">Produtos</h2>
-                  <Button variant="ghost" size="sm" onClick={() => fetchData()}>
-                    <RefreshCw size={16} />
-                  </Button>
-                </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Buscar produtos por nome ou código..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-white"
-                  />
-                </div>
-              </div>
-              
               <div className="flex-1 overflow-y-auto pb-24 lg:pb-0">
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
@@ -785,35 +784,36 @@ const PDV = () => {
                     {filteredProducts.map((product) => (
                       <Card 
                         key={product.id} 
-                        className="hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100"
+                        className="hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100 flex flex-col overflow-hidden border-gray-200"
                         onClick={(e) => handleProductClick(product, e)}
                       >
-                        <div className="aspect-square relative overflow-hidden rounded-t-lg">
+                        <div className="aspect-square relative overflow-hidden bg-gray-100">
                           {product.image_url ? (
                             <img 
                               id={`product-img-${product.id}`}
                               src={product.image_url} 
                               alt={product.name} 
                               className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
                             />
                           ) : (
                             <div 
                               id={`product-img-${product.id}`}
-                              className="w-full h-full bg-gray-100 flex items-center justify-center"
+                              className="w-full h-full flex items-center justify-center"
                             >
                               <Store className="text-gray-300 w-8 h-8" />
                             </div>
                           )}
-                          <div className="absolute top-2 right-2 bg-white/90 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm">
+                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold shadow-sm border border-gray-100">
                             {formatCurrency(product.price)}
                           </div>
                         </div>
-                        <CardContent className="p-3">
-                          <h3 className="font-medium text-xs sm:text-sm line-clamp-2 min-h-[2.5em] mb-1 leading-tight">
+                        <CardContent className="p-2 flex-1 flex flex-col justify-between bg-white">
+                          <h3 className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight mb-2" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="w-full mt-1 bg-primary/10 text-primary hover:bg-primary hover:text-white h-7 text-xs"
+                            className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white h-7 text-xs font-medium"
                             size="sm"
                             variant="ghost"
                           >
@@ -829,19 +829,21 @@ const PDV = () => {
           </div>
 
           {/* Right Column: Cart (Desktop) */}
-          <div className="hidden lg:flex lg:w-[400px] xl:w-[450px] bg-white flex-col h-full shadow-xl z-20">
-            {/* ... same content as before ... */}
-            <div className="p-4 border-b bg-gray-50/50">
-              <div className="flex items-center gap-2 mb-4">
-                <Calculator className="text-primary" />
-                <h2 className="font-bold text-lg">Carrinho de Compras</h2>
+          <div className="hidden lg:flex lg:w-[380px] xl:w-[420px] bg-white flex-col h-full shadow-xl z-20 border-l">
+            <div className="p-3 border-b bg-gray-50/80 backdrop-blur-sm shrink-0">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="text-primary w-5 h-5" />
+                <h2 className="font-bold text-base">Carrinho</h2>
+                <span className="ml-auto text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
+                </span>
               </div>
               
               <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="delivery" className="text-xs sm:text-sm">Entrega</TabsTrigger>
-                  <TabsTrigger value="pickup" className="text-xs sm:text-sm">Retirada</TabsTrigger>
-                  <TabsTrigger value="dine_in" className="text-xs sm:text-sm">Mesa</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 h-8">
+                  <TabsTrigger value="delivery" className="text-xs h-7">Entrega</TabsTrigger>
+                  <TabsTrigger value="pickup" className="text-xs h-7">Retirada</TabsTrigger>
+                  <TabsTrigger value="dine_in" className="text-xs h-7">Mesa</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -850,194 +852,208 @@ const PDV = () => {
             <div 
               id="cart-container" 
               ref={cartContainerRef}
-              className="flex-1 overflow-y-auto p-2 space-y-1"
+              className="flex-1 overflow-y-auto p-0 min-h-0"
             >
               {cart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
-                  <Store size={48} />
-                  <p>Carrinho vazio</p>
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2 p-4">
+                  <Store size={40} strokeWidth={1.5} />
+                  <p className="text-sm">Carrinho vazio</p>
                 </div>
               ) : (
-                cart.map((item, index) => {
-                  const formattedVariations = formatSelectedVariations(item.selectedVariations);
-                  return (
-                    <div key={`${item.id}-${index}`} className="flex items-center justify-between p-2 border-b last:border-0 hover:bg-gray-50 text-sm">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium truncate">{item.quantity}x {item.name}</span>
-                          <span className="font-bold">{formatCurrency(item.price * item.quantity)}</span>
-                        </div>
-                        
-                        {/* Show variations in a very compact way */}
-                        {formattedVariations.length > 0 && (
-                          <div className="text-xs text-gray-500 truncate">
-                            {formattedVariations.join(', ')}
+                <div className="divide-y divide-gray-100">
+                  {cart.map((item, index) => {
+                    const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                    return (
+                      <div key={`${item.id}-${index}`} className="flex items-start justify-between p-3 hover:bg-gray-50 transition-colors group">
+                        <div className="flex-1 min-w-0 pr-3">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-medium text-sm text-gray-900 leading-tight line-clamp-2">
+                              {item.name}
+                            </span>
+                            <span className="font-bold text-sm text-gray-900 ml-2 whitespace-nowrap">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
                           </div>
-                        )}
-                        
-                        {item.notes && (
-                          <div className="text-[10px] text-amber-600 truncate italic">
-                            Obs: {item.notes}
+                          
+                          <div className="flex items-center text-xs text-gray-500 mb-1">
+                             <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-medium mr-2">
+                               {item.quantity}x
+                             </span>
+                             <span>{formatCurrency(item.price)} un.</span>
                           </div>
-                        )}
-                      </div>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                        onClick={() => removeFromCart(item.id)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  );
-                })
+                          {formattedVariations.length > 0 && (
+                            <div className="text-[11px] text-gray-500 leading-tight mb-1">
+                              {formattedVariations.join(', ')}
+                            </div>
+                          )}
+                          
+                          {item.notes && (
+                            <div className="text-[11px] text-amber-600 italic bg-amber-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                              {item.notes}
+                            </div>
+                          )}
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-gray-400 hover:text-red-500 hover:bg-red-50 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeFromCart(item.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
             {/* Checkout Form & Totals - Fixed at Bottom */}
-            <div className="p-4 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] shrink-0 z-10">
-              {/* Customer Info Form */}
-              <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome do Cliente *"}
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <Input
-                    placeholder="Telefone"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="h-9 text-sm"
-                  />
+            <div className="bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-30">
+              <div className="p-3 space-y-3">
+                {/* Compact Form */}
+                <div className="space-y-2">
+                   <div className="flex gap-2">
+                      <Input
+                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <Input
+                        placeholder="Tel"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        className="h-8 text-xs w-28 shrink-0"
+                      />
+                    </div>
+
+                    {orderType === 'delivery' && (
+                      <>
+                        <Input
+                          placeholder="Endereço *"
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          className="h-8 text-xs"
+                        />
+                        <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Bairro *" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {deliveryZones.map((zone) => (
+                              <SelectItem key={zone.id} value={zone.id}>
+                                {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
+
+                    {orderType === 'dine_in' && (
+                      <Select value={selectedTable} onValueChange={setSelectedTable}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Selecione a Mesa *" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tables.length > 0 ? (
+                            tables.map((table) => (
+                              <SelectItem key={table.id} value={table.id}>
+                                Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="p-2 text-xs text-center text-muted-foreground">
+                              Nenhuma mesa cadastrada
+                            </div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                          <SelectValue placeholder="Pagamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pix">PIX</SelectItem>
+                          <SelectItem value="cartao">Cartão</SelectItem>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {paymentMethod === 'dinheiro' && (
+                        <Input
+                          placeholder="Valor"
+                          value={changeAmount}
+                          onChange={(e) => setChangeAmount(e.target.value)}
+                          className="h-8 text-xs w-20"
+                          type="number"
+                        />
+                      )}
+                    </div>
                 </div>
 
-                {orderType === 'delivery' && (
-                  <>
-                    <Input
-                      placeholder="Endereço Completo *"
-                      value={customerAddress}
-                      onChange={(e) => setCustomerAddress(e.target.value)}
-                      className="h-9 text-sm"
-                    />
-                    <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Selecione o Bairro *" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {deliveryZones.map((zone) => (
-                          <SelectItem key={zone.id} value={zone.id}>
-                            {zone.name} (+{formatCurrency(zone.delivery_fee)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </>
-                )}
-
-                {orderType === 'dine_in' && (
-                  <Select value={selectedTable} onValueChange={setSelectedTable}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Selecione a Mesa *" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tables.map((table) => (
-                        <SelectItem key={table.id} value={table.id}>
-                          Mesa {table.table_number}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
-                <div className="flex gap-2">
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger className="h-9 text-sm flex-1">
-                      <SelectValue placeholder="Pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="cartao">Cartão</SelectItem>
-                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  {paymentMethod === 'dinheiro' && (
-                    <Input
-                      placeholder="Valor pago"
-                      value={changeAmount}
-                      onChange={(e) => setChangeAmount(e.target.value)}
-                      className="h-9 text-sm w-24"
-                      type="number"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="space-y-1 text-sm mb-4">
-                <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(getTotalValue())}</span>
-                </div>
-                {getDeliveryFee() > 0 && (
+                {/* Totals Summary */}
+                <div className="bg-gray-50 rounded-lg p-2 text-xs space-y-1 border">
                   <div className="flex justify-between text-gray-500">
-                    <span>Entrega</span>
-                    <span>{formatCurrency(getDeliveryFee())}</span>
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(getTotalValue())}</span>
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t">
-                  <span>Total</span>
-                  <span>{formatCurrency(getFinalTotal())}</span>
+                  {getDeliveryFee() > 0 && (
+                    <div className="flex justify-between text-gray-500">
+                      <span>Entrega</span>
+                      <span>{formatCurrency(getDeliveryFee())}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-sm text-gray-900 pt-1 border-t border-gray-200 mt-1">
+                    <span>Total</span>
+                    <span>{formatCurrency(getFinalTotal())}</span>
+                  </div>
                 </div>
-                {getChangeValue() > 0 && (
-                  <div className="flex justify-between text-green-600 text-sm">
-                    <span>Troco</span>
-                    <span>{formatCurrency(getChangeValue())}</span>
-                  </div>
-                )}
-              </div>
 
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-3">
-                {orderType === 'dine_in' ? (
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  {orderType === 'dine_in' ? (
+                    <Button
+                      onClick={addToTable}
+                      disabled={processing || cart.length === 0}
+                      className="w-full bg-blue-600 hover:bg-blue-700 h-10 text-xs font-bold"
+                    >
+                      {processing ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <UtensilsCrossed className="mr-1 h-3 w-3" />
+                          Add Mesa
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                     <div className="col-span-2 hidden"></div>
+                  )}
+                  
                   <Button
-                    onClick={addToTable}
+                    onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0}
-                    className="w-full bg-blue-600 hover:bg-blue-700 h-12"
+                    className={`${orderType === 'dine_in' ? '' : 'col-span-2'} w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-bold shadow-sm`}
                   >
                     {processing ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     ) : (
                       <>
-                        <UtensilsCrossed className="mr-2 h-4 w-4" />
-                        Add Mesa
+                        Finalizar
+                        <span className="ml-1 opacity-90 text-xs font-normal">
+                          {formatCurrency(getFinalTotal())}
+                        </span>
                       </>
                     )}
                   </Button>
-                ) : (
-                   <div className="col-span-2"></div>
-                )}
-                
-                <Button
-                  onClick={handleFinalizeSale}
-                  disabled={processing || cart.length === 0}
-                  className={`${orderType === 'dine_in' ? '' : 'col-span-2'} w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold shadow-md hover:shadow-lg transition-all`}
-                >
-                  {processing ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  ) : (
-                    <>
-                      Finalizar
-                      <span className="ml-2 text-sm font-normal opacity-90">
-                        {formatCurrency(getFinalTotal())}
-                      </span>
-                    </>
-                  )}
-                </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1068,7 +1084,6 @@ const PDV = () => {
                </SheetHeader>
                
                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {/* Cart Items (Duplicate logic or componentize ideally) */}
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
                       <Store size={48} />
@@ -1141,10 +1156,9 @@ const PDV = () => {
                {/* Mobile Checkout Form */}
                <div className="p-4 bg-white border-t">
                   <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
-                    {/* ... (Same inputs as desktop) ... */}
                     <div className="flex gap-2">
                       <Input
-                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome do Cliente *"}
+                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         className="h-9 text-sm"
@@ -1188,7 +1202,7 @@ const PDV = () => {
                         <SelectContent>
                           {tables.map((table) => (
                             <SelectItem key={table.id} value={table.id}>
-                              Mesa {table.table_number}
+                              Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
                             </SelectItem>
                           ))}
                         </SelectContent>
