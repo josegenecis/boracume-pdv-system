@@ -574,12 +574,21 @@ const PDV = () => {
     }
 
     if (orderType === 'dine_in' && !selectedTable && !customerName.includes('Mesa ')) {
-      toast({
-        title: "Mesa obrigatória",
-        description: "Por favor, selecione uma mesa.",
-        variant: "destructive",
-      });
-      return;
+      // Se não tem mesa selecionada, mas o nome do cliente já veio preenchido com "Mesa X" (caso de finalização de conta),
+      // então não deve barrar. O problema é que customerName.includes('Mesa ') é frágil.
+      // Melhor verificar se veio de uma finalização de conta pelo customerName ou se tem selectedTable.
+      
+      // Se customerName começa com "Mesa " e tem itens, assumimos que é uma conta sendo finalizada
+      const isTableFinalization = customerName.startsWith('Mesa ') && cart.length > 0;
+
+      if (!isTableFinalization) {
+         toast({
+          title: "Mesa obrigatória",
+          description: "Por favor, selecione uma mesa.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < getFinalTotal()) {
