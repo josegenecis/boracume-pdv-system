@@ -840,10 +840,9 @@ const PDV = () => {
               </div>
               
               <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-8">
+                <TabsList className="grid w-full grid-cols-2 h-8">
                   <TabsTrigger value="delivery" className="text-xs h-7">Entrega</TabsTrigger>
                   <TabsTrigger value="pickup" className="text-xs h-7">Retirada</TabsTrigger>
-                  <TabsTrigger value="dine_in" className="text-xs h-7">Mesa</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -953,26 +952,39 @@ const PDV = () => {
                       </>
                     )}
 
-                    {orderType === 'dine_in' && (
-                      <Select value={selectedTable} onValueChange={setSelectedTable}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Selecione a Mesa *" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tables.length > 0 ? (
-                            tables.map((table) => (
-                              <SelectItem key={table.id} value={table.id}>
-                                Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <div className="p-2 text-xs text-center text-muted-foreground">
-                              Nenhuma mesa cadastrada
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    {orderType === 'dine_in' ? (
+                      <div className="flex gap-2 items-center">
+                         <Select value={selectedTable} onValueChange={setSelectedTable}>
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder="Selecione a Mesa *" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tables.length > 0 ? (
+                                tables.map((table) => (
+                                  <SelectItem key={table.id} value={table.id}>
+                                    Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="p-2 text-xs text-center text-muted-foreground">
+                                  Nenhuma mesa cadastrada
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-red-500 hover:bg-red-50"
+                            onClick={() => {
+                              setOrderType('delivery');
+                              setSelectedTable('');
+                            }}
+                          >
+                            <Minus size={16} />
+                          </Button>
+                      </div>
+                    ) : null}
                     
                     <div className="flex gap-2">
                       <Select value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -1018,31 +1030,35 @@ const PDV = () => {
 
                 {/* Action Buttons */}
                 <div className="grid grid-cols-2 gap-2">
-                  {orderType === 'dine_in' ? (
-                    <Button
-                      onClick={addToTable}
-                      disabled={processing || cart.length === 0}
-                      className="w-full bg-blue-600 hover:bg-blue-700 h-10 text-xs font-bold"
-                    >
-                      {processing ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <UtensilsCrossed className="mr-1 h-3 w-3" />
-                          Add Mesa
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                     <div className="col-span-2 hidden"></div>
-                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                       if (orderType === 'dine_in') {
+                         addToTable();
+                       } else {
+                         setOrderType('dine_in');
+                         setCustomerName('');
+                       }
+                    }}
+                    disabled={processing || cart.length === 0}
+                    className="w-full h-10 text-xs font-bold border-blue-200 text-blue-700 hover:bg-blue-50"
+                  >
+                    {processing && orderType === 'dine_in' ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-700"></div>
+                    ) : (
+                      <>
+                        <UtensilsCrossed className="mr-1 h-3 w-3" />
+                        {orderType === 'dine_in' ? 'Confirmar' : 'Mesa'}
+                      </>
+                    )}
+                  </Button>
                   
                   <Button
                     onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0}
-                    className={`${orderType === 'dine_in' ? '' : 'col-span-2'} w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-bold shadow-sm`}
+                    className="w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-bold shadow-sm"
                   >
-                    {processing ? (
+                    {processing && orderType !== 'dine_in' ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     ) : (
                       <>
