@@ -827,10 +827,6 @@ const PDV = () => {
             </Card>
           </div>
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-
-// ... (inside component)
-
           {/* Right Column: Cart (Desktop) */}
           <div className="hidden lg:flex lg:w-[400px] xl:w-[450px] bg-white flex-col h-full shadow-xl z-20">
             {/* ... same content as before ... */}
