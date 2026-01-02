@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed, RefreshCw } from 'lucide-react';
+import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -725,6 +726,10 @@ const PDV = () => {
         description: error.message || "Não foi possível finalizar a venda.",
         variant: "destructive"
       });
+      try {
+        // Fallback visual para garantir feedback
+        alert(`Falha ao finalizar: ${error?.message || 'Erro desconhecido'}`);
+      } catch {}
     } finally {
       setProcessing(false);
     }
@@ -797,6 +802,7 @@ const PDV = () => {
               <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-9 w-9">
                 <RefreshCw size={16} />
               </Button>
+              <OperatorSwitcher />
             </div>
           )}
         </div>
