@@ -231,7 +231,11 @@ const Products = () => {
             <Import className="h-4 w-4 mr-2" />
             Importar
           </Button>
-          <Button onClick={() => setShowForm(true)}>
+          <Button onClick={() => {
+            setEditingProduct(null);
+            setShowForm(true);
+            if (!isMobile) setIsSheetOpen(true);
+          }}>
             <Package className="h-4 w-4 mr-2" />
             Novo Produto
           </Button>
@@ -306,21 +310,39 @@ const Products = () => {
               </Card>
 
               {filteredProducts.length === 0 ? (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
-                    <p className="text-muted-foreground mb-4">
-                      {searchQuery || selectedCategory !== 'all'
-                        ? 'Tente ajustar os filtros ou buscar por outros termos.'
-                        : 'Comece criando seu primeiro produto.'}
-                    </p>
-                    <Button onClick={() => setShowForm(true)}>
-                      <Package className="h-4 w-4 mr-2" />
-                      Criar Produto
-                    </Button>
-                  </CardContent>
-                </Card>
+                <div className="space-y-4">
+                  {showForm ? (
+                    <Card>
+                      <CardContent className="p-4">
+                        <ProductForm
+                          product={undefined}
+                          onSave={handleFormSubmit}
+                          onCancel={() => { setShowForm(false); setEditingProduct(null); }}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card>
+                      <CardContent className="text-center py-12">
+                        <Package className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                        <p className="text-lg font-medium mb-2">Nenhum produto encontrado</p>
+                        <p className="text-muted-foreground mb-4">
+                          {searchQuery || selectedCategory !== 'all'
+                            ? 'Tente ajustar os filtros ou buscar por outros termos.'
+                            : 'Comece criando seu primeiro produto.'}
+                        </p>
+                        <Button onClick={() => {
+                          setEditingProduct(null);
+                          setShowForm(true);
+                          if (!isMobile) setIsSheetOpen(true);
+                        }}>
+                          <Package className="h-4 w-4 mr-2" />
+                          Criar Produto
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {isMobile && showForm && (

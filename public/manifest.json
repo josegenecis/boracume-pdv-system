@@ -5,15 +5,15 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#FF5722",
+  "theme_color": "#1a1a1a",
   "orientation": "any",
   "scope": "/",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
     },
     {
       "src": "/icon-192x192.png",
@@ -36,21 +36,21 @@
       "short_name": "Pedidos",
       "description": "Visualizar pedidos",
       "url": "/pedidos",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
     },
     {
       "name": "PDV",
       "short_name": "PDV",
       "description": "Ponto de Venda",
       "url": "/pdv",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
     },
     {
       "name": "Cozinha",
       "short_name": "Cozinha",
       "description": "Kitchen Display System",
       "url": "/cozinha",
-      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+      "icons": [{ "src": "/favicon.ico", "sizes": "96x96" }]
     }
   ]
 }

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#ffffff"/>
-  <path d="M256 64C167.6 64 96 135.6 96 224v32c0 17.7 14.3 32 32 32h256c17.7 0 32-14.3 32-32v-32c0-88.4-71.6-160-160-160z" fill="#FF5722"/>
-  <circle cx="256" cy="56" r="16" fill="#FF5722"/>
-  <rect x="96" y="272" width="320" height="32" rx="8" fill="#FF5722"/>
-  <text x="50%" y="420" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="#FF5722" text-anchor="middle">BORACUMÊ</text>
-</svg>

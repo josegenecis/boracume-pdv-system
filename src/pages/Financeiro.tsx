@@ -131,8 +131,7 @@ const Financeiro = () => {
       }));
 
       // 2. Fetch Expenses (Outcome)
-      const { data: expenses } = await supabase
-        .from('expenses')
+      const { data: expenses } = await (supabase.from('expenses') as any)
         .select('*')
         .eq('user_id', user.id);
 
@@ -279,11 +278,11 @@ const Financeiro = () => {
   const applyFilters = () => {
     let result = [...transactions];
     
-    if (filters.paymentMethod) {
+    if (filters.paymentMethod && filters.paymentMethod !== 'all') {
       result = result.filter(t => t.paymentMethod === filters.paymentMethod);
     }
     
-    if (filters.type) {
+    if (filters.type && filters.type !== 'all') {
       result = result.filter(t => t.type === filters.type);
     }
     
@@ -305,6 +304,31 @@ const Financeiro = () => {
     setFilteredTransactions(result);
   };
   
+  const generateCSV = () => {
+    const rows = [
+      ['Data', 'Hora', 'Descrição', 'Categoria', 'Método', 'Valor', 'Tipo'],
+      ...filteredTransactions.map(t => [
+        formatDate(t.date),
+        formatTime(t.date),
+        t.description,
+        t.category,
+        getPaymentMethodLabel(t.paymentMethod),
+        String(t.amount).replace('.', ','),
+        t.type
+      ])
+    ];
+    const csvContent = rows.map(r => r.map(field => `"${String(field).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const start = filters.startDate ? formatDate(filters.startDate) : 'inicio';
+    const end = filters.endDate ? formatDate(filters.endDate) : 'fim';
+    a.download = `relatorio_${start}_${end}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  
   const resetFilters = () => {
     setFilters({
       paymentMethod: '',
@@ -322,6 +346,10 @@ const Financeiro = () => {
       [field]: value
     });
   };
+  
+  useEffect(() => {
+    applyFilters();
+  }, [filters.startDate, filters.endDate]);
   
   const formatDate = (date: Date) => {
     if (!date || isNaN(date.getTime())) return '-';
@@ -722,7 +750,7 @@ const Financeiro = () => {
                 </Select>
               </div>
               
-              <Button className="w-full mt-4">
+              <Button className="w-full mt-4" onClick={generateCSV}>
                 <Download className="mr-2 h-4 w-4" />
                 Gerar Relatório
               </Button>

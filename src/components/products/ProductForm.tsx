@@ -228,24 +228,30 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     try {
       const { data, error } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id, required, min_selections, max_selections')
+        .select('global_variation_id')
         .eq('product_id', productId);
 
       console.log('📊 Resultado da consulta de variações:', { data, error });
 
       if (error) throw error;
       
-      const variationIds = data?.map(link => link.global_variation_id) || [];
+      const variationIds = data?.map((link: any) => link.global_variation_id) || [];
       console.log('🎯 IDs das variações carregadas:', variationIds);
       
       setSelectedVariations(variationIds);
       
+      // Carregar configurações padrão das variações globais
+      const gvIds = variationIds.length ? variationIds : [];
+      const { data: gvData } = await supabase
+        .from('global_variations')
+        .select('id, required, max_selections')
+        .in('id', gvIds);
       const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
-      data?.forEach(link => {
-        settings[link.global_variation_id] = {
-          required: link.required,
-          min_selections: link.min_selections,
-          max_selections: link.max_selections
+      (gvData || []).forEach((gv: any) => {
+        settings[gv.id] = {
+          required: !!gv.required,
+          min_selections: 0,
+          max_selections: gv.max_selections ?? 1
         };
       });
       
@@ -450,11 +456,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price]);
 
 
-  const saveProductVariations = async (productId: string, variations: string[] = selectedVariations, settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = variationSettings) => {
+  const saveProductVariations = async (productId: string, variations: string[] = selectedVariations) => {
     console.log('🔄 Iniciando saveProductVariations:', { 
       productId, 
       variations, 
-      settings,
       selectedVariations,
       variationSettings 
     });
@@ -477,18 +482,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (variations.length > 0) {
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
-        const links = variations.map(variationId => {
-          const setting = settings[variationId];
-          const link = {
-            product_id: productId,
-            global_variation_id: variationId,
-            required: setting?.required || false,
-            min_selections: setting?.min_selections || 0,
-            max_selections: setting?.max_selections || 1
-          };
-          console.log('🔗 Criando vínculo:', link);
-          return link;
-        });
+        const links = variations.map(variationId => ({
+          product_id: productId,
+          global_variation_id: variationId
+        }));
         
         console.log('💾 Inserindo vínculos no banco:', links);
         const { data, error } = await supabase
