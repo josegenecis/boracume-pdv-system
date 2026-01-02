@@ -196,7 +196,7 @@ const PDV = () => {
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id, required, min_selections, max_selections')
+        .select('global_variation_id')
         .eq('product_id', productId);
 
       // Buscar as variações globais pelos IDs
@@ -210,17 +210,12 @@ const PDV = () => {
           .in('id', globalVariationIds);
 
         if (globalVars) {
-          // Mesclar configurações do vínculo nas variações globais
-          globalVariations = globalVars.map(globalVar => {
-            const link = globalVariationLinks.find(l => l.global_variation_id === globalVar.id);
-            const mergedVariation = {
-              ...globalVar,
-              required: link?.required ?? false,
-              min_selections: link?.min_selections ?? 0,
-              max_selections: link?.max_selections ?? 1
-            };
-            return mergedVariation;
-          });
+          globalVariations = globalVars.map(globalVar => ({
+            ...globalVar,
+            required: !!globalVar.required,
+            min_selections: 0,
+            max_selections: globalVar.max_selections ?? 1
+          }));
         }
       }
 
@@ -574,12 +569,15 @@ const PDV = () => {
     }
 
     if (orderType === 'dine_in' && !selectedTable && !customerName.includes('Mesa ')) {
-      toast({
-        title: "Mesa obrigatória",
-        description: "Por favor, selecione uma mesa.",
-        variant: "destructive",
-      });
-      return;
+      const isTableFinalization = customerName.startsWith('Mesa ') && cart.length > 0;
+      if (!isTableFinalization) {
+        toast({
+          title: "Mesa obrigatória",
+          description: "Por favor, selecione uma mesa.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < getFinalTotal()) {
@@ -619,6 +617,16 @@ const PDV = () => {
         notes: item.notes || ''
       }));
 
+      const operatorSession = (() => {
+        try {
+          const waiter = localStorage.getItem('waiter_session');
+          if (waiter) return JSON.parse(waiter);
+          const op = localStorage.getItem('operator_session');
+          if (op) return JSON.parse(op);
+          return null;
+        } catch { return null; }
+      })();
+
       const orderData = {
         customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : (orderType === 'counter' ? (customerName.trim() || 'Venda Balcão') : customerName.trim()),
         customer_phone: customerPhone.trim() || null,
@@ -635,7 +643,12 @@ const PDV = () => {
         acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'pending_acceptance',
         order_number: orderNumber,
         user_id: user?.id,
-        estimated_time: '30-45 min'
+        estimated_time: '30-45 min',
+        variations: {
+          operator: operatorSession ? { id: operatorSession.id, name: operatorSession.name } : null,
+          source: 'PDV',
+          environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+        }
       };
 
       console.log('Criando pedido:', orderData);
@@ -665,13 +678,32 @@ const PDV = () => {
 
       if (paymentMethod === 'pix') {
         setPixAmount(getFinalTotal());
-        setPixOrderId(data?.[0]?.id || data?.id);
+        const created = Array.isArray(data) ? data[0] : data;
+        setPixOrderId(created?.id || null);
         setIsPixModalOpen(true);
+        try {
+          await supabase.from('security_logs').insert({
+            user_id: user?.id,
+            event_type: 'order_finalize',
+            description: `Pedido ${orderNumber} criado (PIX) por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
+            severity: 'info',
+            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+          } as any);
+        } catch {}
         toast({
           title: "Pedido criado!",
           description: "Aguardando pagamento do PIX para enviar ao restaurante.",
         });
       } else {
+        try {
+          await supabase.from('security_logs').insert({
+            user_id: user?.id,
+            event_type: 'order_finalize',
+            description: `Pedido ${orderNumber} finalizado por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
+            severity: 'info',
+            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+          } as any);
+        } catch {}
         toast({
           title: "Venda finalizada!",
           description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
