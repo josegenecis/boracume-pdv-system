@@ -1,0 +1,64 @@
+name: electron-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Install Electron deps
+        working-directory: electron
+        run: |
+          npm ci
+      - name: Rebuild native deps
+        working-directory: electron
+        run: |
+          npm run rebuild
+      - name: Build Windows app
+        working-directory: electron
+        run: |
+          npm run build-win
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-windows
+          path: dist-electron/**
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Install Electron deps
+        working-directory: electron
+        run: |
+          npm ci
+      - name: Rebuild native deps
+        working-directory: electron
+        run: |
+          npm run rebuild
+      - name: Build macOS app
+        working-directory: electron
+        run: |
+          npm run build-mac
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-macos
+          path: dist-electron/**
