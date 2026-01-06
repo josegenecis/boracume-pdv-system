@@ -46,52 +46,68 @@ const Downloads = () => {
     else setDetectedOS('Unknown');
   }, []);
 
-  const releases: OSInfo[] = [
-    {
-      name: 'Windows (Instalador)',
-      icon: <Monitor className="w-6 h-6" />,
-
-      downloadUrl: '/dist-electron/BoraCumê Desktop Setup 0.0.0.exe',
-      fileSize: '~120 MB',
-
-      version: '1.0.0',
-      type: 'installer',
-      available: true
-    },
-    {
-      name: 'Windows (Portátil)',
-      icon: <Monitor className="w-6 h-6" />,
-
-      downloadUrl: '/dist-electron/BoraCumê Desktop 0.0.0.exe',
-      fileSize: '~115 MB',
-
-      version: '1.0.0',
-      type: 'portable',
-      available: true
-    },
-    {
-      name: 'macOS',
-      icon: <Monitor className="w-6 h-6" />,
-
-      downloadUrl: '/dist-electron/BoraCumê Desktop-0.0.0.dmg',
-      fileSize: '~125 MB',
-      version: '1.0.0',
-      type: 'installer',
-      available: false
-
-    },
-    {
-      name: 'Linux',
-      icon: <Monitor className="w-6 h-6" />,
-
-      downloadUrl: '/dist-electron/BoraCumê Desktop-0.0.0.AppImage',
-      fileSize: '~120 MB',
-      version: '1.0.0',
-      type: 'portable',
-      available: false
-
-    }
-  ];
+  const [releases, setReleases] = useState<OSInfo[]>([]);
+  useEffect(() => {
+    const loadLatest = async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/josegenecis/boracume-pdv-system/releases/latest');
+        const json = await res.json();
+        const assets = Array.isArray(json.assets) ? json.assets : [];
+        const findAsset = (ext: string, match?: RegExp) => {
+          const a = assets.find((x: any) => x.name?.toLowerCase().endsWith(ext) && (!match || match.test(x.name)));
+          return a ? { url: a.browser_download_url, size: (a.size / (1024 * 1024)).toFixed(1) + ' MB' } : null;
+        };
+        const winInstaller = findAsset('.exe', /setup|installer/i);
+        const winPortable = findAsset('.exe', /portable/i);
+        const macDmg = findAsset('.dmg');
+        const linuxAppImage = findAsset('.appimage');
+        const version = json.tag_name || 'latest';
+        const items: OSInfo[] = [
+          {
+            name: 'Windows (Instalador)',
+            icon: <Monitor className="w-6 h-6" />,
+            downloadUrl: winInstaller?.url || '',
+            fileSize: winInstaller?.size || '~120 MB',
+            version,
+            type: 'installer',
+            available: !!winInstaller
+          },
+          {
+            name: 'Windows (Portátil)',
+            icon: <Monitor className="w-6 h-6" />,
+            downloadUrl: winPortable?.url || '',
+            fileSize: winPortable?.size || '~115 MB',
+            version,
+            type: 'portable',
+            available: !!winPortable
+          },
+          {
+            name: 'macOS',
+            icon: <Monitor className="w-6 h-6" />,
+            downloadUrl: macDmg?.url || '',
+            fileSize: macDmg?.size || '~125 MB',
+            version,
+            type: 'installer',
+            available: !!macDmg
+          },
+          {
+            name: 'Linux',
+            icon: <Monitor className="w-6 h-6" />,
+            downloadUrl: linuxAppImage?.url || '',
+            fileSize: linuxAppImage?.size || '~120 MB',
+            version,
+            type: 'portable',
+            available: !!linuxAppImage
+          }
+        ];
+        setReleases(items);
+      } catch (e) {
+        // fallback: show empty and rely on PWA
+        setReleases([]);
+      }
+    };
+    loadLatest();
+  }, []);
 
   const pwaFeatures = [
     {
