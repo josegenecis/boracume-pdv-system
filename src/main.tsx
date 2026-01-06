@@ -15,28 +15,11 @@ window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled Promise Rejection:', event.reason);
 });
 
-// Service Worker para Push Notifications (desativado por padrão)
+// Service Worker: registrar sempre em produção para habilitar PWA
 if ('serviceWorker' in navigator) {
-  const enableSW = import.meta.env.VITE_ENABLE_SW === 'true'
-  const isStandalone = (() => {
-    try {
-      const mq = window.matchMedia('(display-mode: standalone)')
-      return mq.matches || (navigator as any).standalone === true
-    } catch { return false }
-  })()
-  if (enableSW || isStandalone) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {})
-    })
-  } else {
-    // Se desativado, garantir que SW antigo seja removido e caches limpos
-    navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => r.unregister())
-    }).catch(() => {})
-    if ('caches' in window) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {})
-    }
-  }
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
 }
 
 // Link de força para limpar SW/caches e recarregar automaticamente

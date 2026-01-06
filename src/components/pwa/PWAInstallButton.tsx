@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, Smartphone, Monitor } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -16,6 +18,7 @@ const PWAInstallButton: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -57,34 +60,22 @@ const PWAInstallButton: React.FC = () => {
     if (!deferredPrompt) {
       // Show manual installation instructions for iOS
       if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-        toast({
-          title: "Instalar no iOS",
-          description: "Toque no ícone de compartilhar e selecione 'Adicionar à Tela Inicial'",
-        });
+        setShowHelp(true);
         return;
       }
 
       // Show manual installation instructions for other browsers
       if (/Chrome/.test(navigator.userAgent)) {
-        toast({
-          title: "Instalar no Chrome",
-          description: "Clique nos 3 pontos → 'Instalar BoraCumê' ou procure o ícone de instalação na barra de endereços",
-        });
+        setShowHelp(true);
         return;
       }
 
       if (/Edge/.test(navigator.userAgent)) {
-        toast({
-          title: "Instalar no Edge", 
-          description: "Clique nos 3 pontos → 'Aplicativos' → 'Instalar este site como um aplicativo'",
-        });
+        setShowHelp(true);
         return;
       }
       
-      toast({
-        title: "Instalação Manual",
-        description: "Procure pela opção 'Instalar' ou 'Adicionar à tela inicial' no menu do seu navegador.",
-      });
+      setShowHelp(true);
       return;
     }
 
@@ -136,22 +127,44 @@ const PWAInstallButton: React.FC = () => {
     );
   }
 
-  // Show install button if prompt is available or on iOS, or fallback
-  if (deferredPrompt || /iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    return (
-      <Button onClick={handleInstallClick} className="flex items-center gap-2">
-        <Download className="w-4 h-4" />
-        {getInstallText()}
-      </Button>
-    );
-  }
-
-  // Fallback button for browsers that don't support auto-prompt
   return (
-    <Button onClick={handleInstallClick} variant="outline" className="flex items-center gap-2">
-      <Download className="w-4 h-4" />
-      Instalar App
-    </Button>
+    <>
+      <Button onClick={handleInstallClick} variant={deferredPrompt ? 'default' : 'outline'} className="flex items-center gap-2">
+        <Download className="w-4 h-4" />
+        {deferredPrompt ? getInstallText() : 'Instalar App'}
+      </Button>
+      <Dialog open={showHelp} onOpenChange={setShowHelp}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Instalar como App</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>Caso não apareça o diálogo automático, siga as instruções do seu navegador:</p>
+            <Separator />
+            <div>
+              <strong>Chrome (Windows/macOS):</strong>
+              <ol className="list-decimal list-inside mt-1">
+                <li>Clique no ícone de instalação na barra de endereços</li>
+                <li>Ou Menu ⋮ → Instalar BoraCumê</li>
+              </ol>
+            </div>
+            <div>
+              <strong>Edge (Windows/macOS):</strong>
+              <ol className="list-decimal list-inside mt-1">
+                <li>Menu ⋯ → Aplicativos → Instalar este site como aplicativo</li>
+              </ol>
+            </div>
+            <div>
+              <strong>iOS (Safari):</strong>
+              <ol className="list-decimal list-inside mt-1">
+                <li>Toque em Compartilhar</li>
+                <li>Adicionar à Tela Inicial</li>
+              </ol>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
