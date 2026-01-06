@@ -267,6 +267,25 @@ const Downloads = () => {
                   </Button>
                 </div>
               ))}
+              {releases.filter(r => r.available).length === 0 && (
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Monitor className="w-6 h-6" />
+                    <div>
+                      <h4 className="font-medium text-sm">Baixar pelo GitHub</h4>
+                      <p className="text-xs text-muted-foreground">Instaladores publicados nos Releases</p>
+                    </div>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => window.open('https://github.com/josegenecis/boracume-pdv-system/releases/latest', '_blank')}
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    Abrir Releases
+                  </Button>
+                </div>
+              )}
             </div>
             
             <Alert className="border-orange-200 bg-orange-50">
