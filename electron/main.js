@@ -91,7 +91,8 @@ ipcMain.handle('connect-printer', async (event, deviceId, protocol = 'epson', op
     if (!printerService) {
       return { success: false, error: 'Serviço de impressora não inicializado' };
     }
-    const result = await printerService.connectPrinter(deviceId, protocol, options);
+    const merged = { ...(options || {}), protocol };
+    const result = await printerService.connectPrinter(deviceId, merged);
     return result;
   } catch (error) {
     console.error('Error connecting to printer:', error);

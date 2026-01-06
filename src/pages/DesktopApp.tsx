@@ -24,10 +24,12 @@ import DeviceStatus from '@/components/desktop/DeviceStatus';
 import WeightInput from '@/components/WeightInput';
 import DesktopStatus from '@/components/desktop/DesktopStatus';
 import DesktopIndicator from '@/components/desktop/DesktopIndicator';
+import PrinterSettings from '@/components/desktop/PrinterSettings';
 
 const DesktopApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showDeviceManager, setShowDeviceManager] = useState(false);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
 
   // Verificar se está no Electron
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -298,6 +300,14 @@ const DesktopApp: React.FC = () => {
                     <Settings className="h-4 w-4 mr-2" />
                     Gerenciar Dispositivos
                   </Button>
+                  <Button 
+                    onClick={() => setShowPrinterSettings(true)}
+                    className="w-full justify-start"
+                    variant="outline"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Configurar Impressora
+                  </Button>
                   
                   <div className="text-center py-8">
                     <Settings className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
@@ -320,6 +330,14 @@ const DesktopApp: React.FC = () => {
             <DialogTitle>Gerenciador de Dispositivos</DialogTitle>
           </DialogHeader>
           <DeviceManager />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showPrinterSettings} onOpenChange={setShowPrinterSettings}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Configurar Impressora</DialogTitle>
+          </DialogHeader>
+          <PrinterSettings />
         </DialogContent>
       </Dialog>
     </div>
