@@ -248,25 +248,54 @@ const Downloads = () => {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {releases.filter(release => release.available).map((release, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {release.icon}
-                    <div>
-                      <h4 className="font-medium text-sm">{release.name}</h4>
-                      <p className="text-xs text-muted-foreground">{release.fileSize}</p>
-                    </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Monitor className="w-6 h-6" />
+                  <div>
+                    <h4 className="font-medium text-sm">Windows (Instalador)</h4>
+                    <p className="text-xs text-muted-foreground">.exe padrão para instalação</p>
                   </div>
-                  <Button 
-                    size="sm" 
-                    onClick={() => handleDownload(release)}
-                    className="bg-orange-600 hover:bg-orange-700"
-                  >
-                    <Download className="w-4 h-4 mr-1" />
-                    Baixar
-                  </Button>
                 </div>
-              ))}
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = '/electron-dist/windows-installer.exe';
+                    link.download = 'BoracumeHub-Desktop-Installer.exe';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Baixar
+                </Button>
+              </div>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Monitor className="w-6 h-6" />
+                  <div>
+                    <h4 className="font-medium text-sm">Windows (Portátil)</h4>
+                    <p className="text-xs text-muted-foreground">.exe portátil, sem instalação</p>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = '/electron-dist/windows-portable.exe';
+                    link.download = 'BoracumeHub-Desktop-Portable.exe';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Baixar
+                </Button>
+              </div>
               {releases.filter(r => r.available).length === 0 && (
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-3">

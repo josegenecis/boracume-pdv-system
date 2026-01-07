@@ -53,6 +53,18 @@ async function buildDesktop() {
     if (fs.existsSync(builtFilesDir)) {
       console.log('📋 Copying built files to public directory...');
       await copyDirectory(builtFilesDir, publicDistDir);
+      const files = fs.readdirSync(publicDistDir);
+      const installer = files.find(f => /\.exe$/i.test(f) && /setup|installer/i.test(f));
+      const portable = files.find(f => /\.exe$/i.test(f) && /portable/i.test(f));
+      const firstExe = files.find(f => /\.exe$/i.test(f));
+      if (installer) {
+        fs.renameSync(path.join(publicDistDir, installer), path.join(publicDistDir, 'windows-installer.exe'));
+      } else if (firstExe) {
+        fs.renameSync(path.join(publicDistDir, firstExe), path.join(publicDistDir, 'windows-installer.exe'));
+      }
+      if (portable && portable !== installer) {
+        fs.renameSync(path.join(publicDistDir, portable), path.join(publicDistDir, 'windows-portable.exe'));
+      }
     }
     
     console.log('✅ Desktop application built successfully!');
