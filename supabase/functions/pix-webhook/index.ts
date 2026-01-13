@@ -12,10 +12,16 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('BORACUME_SUPABASE_URL') ?? '',
-      Deno.env.get('BORACUME_SERVICE_ROLE_KEY') ?? ''
-    )
+    const supabaseUrl =
+      Deno.env.get('SUPABASE_URL') ??
+      Deno.env.get('BORACUME_SUPABASE_URL') ??
+      ''
+    const serviceRole =
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+      Deno.env.get('BORACUME_SERVICE_ROLE_KEY') ??
+      Deno.env.get('SERVICE_ROLE_KEY') ??
+      ''
+    const supabase = createClient(supabaseUrl, serviceRole)
 
   const url = new URL(req.url)
   const providedSecret = (req.headers.get('x-pix-secret') ?? '') || (url.searchParams.get('secret') ?? '')
