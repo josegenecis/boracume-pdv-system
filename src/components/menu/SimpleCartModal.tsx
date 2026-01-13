@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -70,13 +71,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
   // Remove this line:
   // const [extraFee, setExtraFee] = useState(0);
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('payment_methods')
           .select('*')
           .eq('user_id', userId)
@@ -270,6 +272,21 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
 
+      if (paymentMethod === 'pix') {
+        const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
+          body: { restaurantUserId: userId, orderPayload: orderData } as any
+        });
+        if (!data?.ok) {
+          throw new Error(data?.error || 'Não foi possível iniciar pagamento PIX');
+        }
+        setPixCheckout({
+          correlationID: data.correlationID,
+          brCode: data.brCode,
+          qrCodeImage: data.qrCodeImage,
+          paymentLinkUrl: data.paymentLinkUrl
+        });
+        return;
+      }
       await onPlaceOrder(orderData);
     } catch (error) {
       console.error('Erro ao finalizar pedido:', error);
@@ -304,6 +321,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         </DialogHeader>
         
         <div className="space-y-6 pt-2">
+          {pixCheckout && (
+            <PixCheckoutModal
+              isOpen={!!pixCheckout}
+              onClose={() => setPixCheckout(null)}
+              correlationID={pixCheckout.correlationID}
+              brCode={pixCheckout.brCode}
+              qrCodeImage={pixCheckout.qrCodeImage}
+              paymentLinkUrl={pixCheckout.paymentLinkUrl}
+            />
+          )}
           {/* Itens do carrinho */}
           <div className="space-y-4">
             <h3 className="font-bold text-gray-900">Seus itens:</h3>
@@ -510,8 +537,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               </RadioGroup>
 
               {isPixSelected && (
-                <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-                  PIX disponível, mas o pedido só será criado após confirmação via integração. Selecione outra forma para finalizar.
+                <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2 mt-2">
+                  Ao selecionar PIX, vamos gerar o QR Code e liberar o pedido apenas após confirmação do pagamento.
                 </div>
               )}
 
@@ -586,7 +613,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder}
-              disabled={!isFormValid() || isLoading || isPixSelected}
+              disabled={!isFormValid() || isLoading}
               className="flex-1 bg-boracume-orange hover:bg-boracume-orange/90 rounded-xl font-bold"
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}

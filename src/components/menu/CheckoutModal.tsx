@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation, CheckCircle } from 'lucide-react';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { supabase } from '@/integrations/supabase/client';
+import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 // Removido hook de mobile fora do componente para evitar uso inválido
 
 interface CartItem {
@@ -71,6 +72,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [changeAmount, setChangeAmount] = useState('');
   const [selectedZone, setSelectedZone] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
 
   // Métodos de pagamento personalizados
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -124,7 +126,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         console.log('🔄 [FETCH] Buscando métodos personalizados...');
         console.log('🔄 [FETCH] User ID:', userId);
         
-          const { data, error } = await supabase
+        try {
+          const { data, error } = await (supabase as any)
             .from('payment_methods')
             .select('*')
             .eq('user_id', userId)
@@ -182,13 +185,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [paymentMethod, paymentMethods]);
 
-  const extraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
-  const totalWithDeliveryAndFee = total + deliveryFee + extraFee;
-
   const selectedZoneData = deliveryZones.find(zone => zone.id === selectedZone);
   const deliveryFee = selectedZoneData?.delivery_fee || 0;
   const minimumOrder = selectedZoneData?.minimum_order || 0;
   const totalWithDelivery = total + deliveryFee;
+
+  const extraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
+  const totalWithDeliveryAndFee = total + deliveryFee + extraFee;
 
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId || '');
 
@@ -310,6 +313,21 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
 
+      if (paymentMethod === 'pix') {
+        const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
+          body: { restaurantUserId: userId, orderPayload: orderData } as any
+        });
+        if (!data?.ok) {
+          throw new Error(data?.error || 'Não foi possível iniciar pagamento PIX');
+        }
+        setPixCheckout({
+          correlationID: data.correlationID,
+          brCode: data.brCode,
+          qrCodeImage: data.qrCodeImage,
+          paymentLinkUrl: data.paymentLinkUrl
+        });
+        return;
+      }
       await onPlaceOrder(orderData);
     } catch (error) {
       let errorMessage = 'Erro desconhecido ao processar pedido';
@@ -348,6 +366,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         </DialogHeader>
         
         <div className="space-y-6">
+          {pixCheckout && (
+            <PixCheckoutModal
+              isOpen={!!pixCheckout}
+              onClose={() => setPixCheckout(null)}
+              correlationID={pixCheckout.correlationID}
+              brCode={pixCheckout.brCode}
+              qrCodeImage={pixCheckout.qrCodeImage}
+              paymentLinkUrl={pixCheckout.paymentLinkUrl}
+            />
+          )}
           {/* Resumo do Pedido */}
           <Card>
             <CardContent className="p-4">
@@ -558,8 +586,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </RadioGroup>
 
                 {paymentMethod === 'pix' && (
-                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
-                    PIX disponível, mas o pedido só será criado após confirmação via integração. Selecione outra forma para finalizar.
+                  <div className="text-sm text-muted-foreground bg-muted/50 border rounded-lg p-2 mt-2">
+                    Ao selecionar PIX, vamos gerar o QR Code e liberar o pedido apenas após confirmação do pagamento.
                   </div>
                 )}
 
@@ -592,7 +620,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder} 
-              disabled={!isFormValid() || loading || paymentMethod === 'pix'}
+              disabled={!isFormValid() || loading}
               className="flex-1"
             >
               {loading ? 'Processando...' : 'Finalizar Pedido'}
