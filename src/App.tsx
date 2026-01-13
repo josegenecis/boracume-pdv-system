@@ -40,6 +40,7 @@ import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
 import DesktopApp from '@/pages/DesktopApp';
+import PixSetup from '@/pages/PixSetup';
 import HardwareTestPage from '@/pages/HardwareTestPage';
 import SystemCheck from '@/pages/SystemCheck';
 import TestPage from '@/pages/TestPage';
@@ -104,6 +105,7 @@ function AppContent() {
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
+          <Route path="/pix" element={<PixSetup />} />
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />
 

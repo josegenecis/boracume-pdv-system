@@ -47,6 +47,10 @@ const Downloads = () => {
   }, []);
 
   const [releases, setReleases] = useState<OSInfo[]>([]);
+  const [siteInstallerAvailable, setSiteInstallerAvailable] = useState<boolean>(false);
+  const [sitePortableAvailable, setSitePortableAvailable] = useState<boolean>(false);
+  const [winInstallerUrl, setWinInstallerUrl] = useState<string>('');
+  const [winPortableUrl, setWinPortableUrl] = useState<string>('');
   useEffect(() => {
     const loadLatest = async () => {
       try {
@@ -62,6 +66,8 @@ const Downloads = () => {
         const macDmg = findAsset('.dmg');
         const linuxAppImage = findAsset('.appimage');
         const version = json.tag_name || 'latest';
+        setWinInstallerUrl(winInstaller?.url || '');
+        setWinPortableUrl(winPortable?.url || '');
         const items: OSInfo[] = [
           {
             name: 'Windows (Instalador)',
@@ -106,9 +112,54 @@ const Downloads = () => {
         setReleases([]);
       }
     };
+    const checkSiteFiles = async () => {
+      try {
+        const [inst, port] = await Promise.allSettled([
+          fetch('/electron-dist/windows-installer.exe', { method: 'HEAD' }),
+          fetch('/electron-dist/windows-portable.exe', { method: 'HEAD' })
+        ]);
+        setSiteInstallerAvailable(inst.status === 'fulfilled' && (inst.value as Response).ok);
+        setSitePortableAvailable(port.status === 'fulfilled' && (port.value as Response).ok);
+      } catch {
+        setSiteInstallerAvailable(false);
+        setSitePortableAvailable(false);
+      }
+    };
     loadLatest();
+    checkSiteFiles();
   }, []);
 
+  const downloadWindowsInstaller = () => {
+    const siteUrl = '/electron-dist/windows-installer.exe';
+    const ghUrl = winInstallerUrl;
+    const url = siteInstallerAvailable ? siteUrl : ghUrl;
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'BoracumeHub-Desktop-Installer.exe';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      window.open('https://github.com/josegenecis/boracume-pdv-system/releases/latest', '_blank');
+    }
+  };
+
+  const downloadWindowsPortable = () => {
+    const siteUrl = '/electron-dist/windows-portable.exe';
+    const ghUrl = winPortableUrl;
+    const url = sitePortableAvailable ? siteUrl : ghUrl;
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'BoracumeHub-Desktop-Portable.exe';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      window.open('https://github.com/josegenecis/boracume-pdv-system/releases/latest', '_blank');
+    }
+  };
   const pwaFeatures = [
     {
       icon: <Zap className="w-5 h-5 text-yellow-600" />,
@@ -247,7 +298,25 @@ const Downloads = () => {
               </div>
             </div>
             
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={downloadWindowsInstaller}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Baixar para Windows
+              </Button>
+              <Button 
+                onClick={downloadWindowsPortable}
+                variant="outline"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Versão Portátil
+              </Button>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {siteInstallerAvailable && (
               <div className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <Monitor className="w-6 h-6" />
@@ -272,6 +341,8 @@ const Downloads = () => {
                   Baixar
                 </Button>
               </div>
+              )}
+              {sitePortableAvailable && (
               <div className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <Monitor className="w-6 h-6" />
@@ -296,6 +367,7 @@ const Downloads = () => {
                   Baixar
                 </Button>
               </div>
+              )}
               {releases.filter(r => r.available).length === 0 && (
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-3">

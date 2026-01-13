@@ -36,6 +36,7 @@ const CollapsibleSidebar = () => {
     { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
+    { to: '/pix', icon: CreditCard, label: 'Pix' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
     { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },
