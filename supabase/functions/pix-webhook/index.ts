@@ -17,10 +17,11 @@ serve(async (req) => {
       Deno.env.get('BORACUME_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const providedSecret = req.headers.get('x-pix-secret') ?? ''
-    if (!providedSecret) {
-      return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
+  const url = new URL(req.url)
+  const providedSecret = (req.headers.get('x-pix-secret') ?? '') || (url.searchParams.get('secret') ?? '')
+  if (!providedSecret) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
 
     let userIdFromSecret: string | null = null
     let secretValidated = false

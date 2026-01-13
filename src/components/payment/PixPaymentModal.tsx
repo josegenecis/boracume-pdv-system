@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, Check, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { buildPixPayload } from '@/utils/pix';
 
 interface PixPaymentModalProps {
     isOpen: boolean;
@@ -23,23 +25,47 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
     const [pixCode, setPixCode] = useState('');
     const [copied, setCopied] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<'idle' | 'awaiting' | 'paid' | 'error'>('idle');
     const { toast } = useToast();
 
-    // Generate a random PIX payload for simulation
-    // In a real app, this would come from a backend integration (Mercado Pago, Gerencianet, etc.)
-    const generatePixCode = () => {
+    const generatePixCode = async () => {
+        if (!orderId) {
+            setStatus('error');
+            toast({ title: 'PIX', description: 'Pedido não encontrado para gerar o PIX.', variant: 'destructive' });
+            return;
+        }
         setLoading(true);
+        setStatus('awaiting');
+        try {
+            const { data: order, error: orderErr } = await supabase
+                .from('orders')
+                .select('id, order_number, user_id, acceptance_status')
+                .eq('id', orderId)
+                .maybeSingle();
+            if (orderErr || !order) throw new Error('Não foi possível carregar o pedido');
 
-        // Simulate API delay
-        setTimeout(() => {
-            // This is a dummy PIX payload structure
-            // Real payload would be generated based on the amount and merchant key
-            const randomId = Math.random().toString(36).substring(7);
-            const payload = `00020126580014BR.GOV.BCB.PIX0136123e4567-e89b-12d3-a456-426614174000520400005303986540${amount.toFixed(2).replace('.', '')}5802BR5913Boracume PDV6008Sao Paulo62070503***6304${randomId}`;
+            const { data: pixSettings }: any = await supabase.functions.invoke('pix-settings-public', { body: { userId: order.user_id } as any })
+            const settings = pixSettings?.settings
+            if (!settings?.enabled || !settings?.pix_key) {
+                throw new Error('PIX não está configurado para este restaurante');
+            }
 
-            setPixCode(payload);
+            const code = buildPixPayload({
+                pixKey: settings.pix_key,
+                amount,
+                merchantName: settings.merchant_name || 'BoraCume',
+                merchantCity: settings.merchant_city || 'BRASIL',
+                txid: order.order_number || order.id,
+                description: `Pedido ${order.order_number || ''}`.trim()
+            });
+            setPixCode(code);
+            setStatus(order.acceptance_status === 'pending_acceptance' ? 'paid' : 'awaiting');
+        } catch (e: any) {
+            setStatus('error');
+            toast({ title: 'PIX', description: e?.message || 'Falha ao gerar o PIX', variant: 'destructive' });
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
     useEffect(() => {
@@ -48,8 +74,30 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
         } else {
             setPixCode('');
             setCopied(false);
+            setStatus('idle');
         }
     }, [isOpen, amount]);
+
+    useEffect(() => {
+        if (!isOpen || !orderId) return;
+        const channel = supabase.channel(`pix-order-${orderId}`);
+        channel
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'orders',
+                filter: `id=eq.${orderId}`,
+            }, (payload: any) => {
+                const next = payload?.new?.acceptance_status;
+                if (next === 'pending_acceptance' || next === 'accepted') {
+                    setStatus('paid');
+                }
+            })
+            .subscribe();
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [isOpen, orderId]);
 
     const handleCopy = async () => {
         try {
@@ -100,6 +148,16 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)}
                         </p>
                     </div>
+                    {status === 'paid' && (
+                        <div className="text-center text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2 w-full">
+                            Pagamento confirmado. Aguarde o restaurante aceitar o pedido.
+                        </div>
+                    )}
+                    {status === 'awaiting' && (
+                        <div className="text-center text-xs text-muted-foreground w-full">
+                            Após pagar, o pedido será liberado automaticamente quando o pagamento for confirmado.
+                        </div>
+                    )}
 
                     <div className="w-full flex gap-2">
                         <Button
@@ -118,8 +176,8 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                     <Button variant="ghost" onClick={onClose}>
                         Cancelar
                     </Button>
-                    <Button onClick={handleConfirm} className="bg-green-600 hover:bg-green-700">
-                        Confirmar Pagamento
+                    <Button onClick={handleConfirm} className="bg-green-600 hover:bg-green-700" disabled={status !== 'paid'}>
+                        Concluir
                     </Button>
                 </DialogFooter>
             </DialogContent>
