@@ -46,6 +46,7 @@ import SystemCheck from '@/pages/SystemCheck';
 import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
+import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
@@ -62,6 +63,7 @@ function AppContent() {
       <Route path="/menu/:userId" element={<MenuDigital />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
       <Route path="/track/:orderId" element={<OrderTracking />} />
+      <Route path="/mp/return" element={<MercadoPagoReturn />} />
       
       {/* Rotas do Garçom */}
       <Route path="/waiter-login" element={<WaiterLogin />} />

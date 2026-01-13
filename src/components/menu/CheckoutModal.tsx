@@ -305,7 +305,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         delivery_instructions: customerData.notes.trim() || null,
         estimated_time: selectedZoneData?.delivery_time || '30-45 min',
         status: 'pending',
-        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'pending_acceptance',
+        acceptance_status: 'pending_acceptance',
         customer_latitude: location.latitude,
         customer_longitude: location.longitude,
         customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
@@ -313,12 +313,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
 
-      if (paymentMethod === 'pix') {
+      if (paymentMethod !== 'dinheiro') {
         const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
-          body: { restaurantUserId: userId, orderPayload: orderData } as any
+          body: { restaurantUserId: userId, orderPayload: orderData, preferredMethod: paymentMethod } as any
         });
         if (!data?.ok) {
-          throw new Error(data?.error || 'Não foi possível iniciar pagamento PIX');
+          throw new Error(data?.error || 'Não foi possível iniciar pagamento');
+        }
+        if (data.initPoint) {
+          window.location.href = data.initPoint;
+          return;
         }
         setPixCheckout({
           correlationID: data.correlationID,

@@ -272,12 +272,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
 
-      if (paymentMethod === 'pix') {
+      if (paymentMethod !== 'dinheiro') {
         const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
-          body: { restaurantUserId: userId, orderPayload: orderData } as any
+          body: { restaurantUserId: userId, orderPayload: orderData, preferredMethod: paymentMethod } as any
         });
         if (!data?.ok) {
-          throw new Error(data?.error || 'Não foi possível iniciar pagamento PIX');
+          throw new Error(data?.error || 'Não foi possível iniciar pagamento');
+        }
+        if (data.initPoint) {
+          window.location.href = data.initPoint;
+          return;
         }
         setPixCheckout({
           correlationID: data.correlationID,
