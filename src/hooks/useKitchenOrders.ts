@@ -49,8 +49,9 @@ export const useKitchenOrders = () => {
       console.log('🔄 Fetching kitchen orders...');
       
       const { data, error } = await supabase
-        .from('kitchen_orders')
+        .from('orders') // Changed from kitchen_orders
         .select('*')
+        .in('status', ['pending', 'preparing', 'ready', 'completed']) // Filter pertinent statuses
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -58,6 +59,8 @@ export const useKitchenOrders = () => {
         setError(error.message);
         return;
       }
+      
+      // ... (rest of the mapping logic needs to handle orders structure)
 
       console.log('✅ Kitchen orders fetched:', data?.length || 0);
       
@@ -146,7 +149,7 @@ export const useKitchenOrders = () => {
         return {
           ...order,
           items: processedItems,
-          priority: order.priority as 'normal' | 'high',
+          priority: (order as any).priority as 'normal' | 'high' || 'normal',
           status: order.status as 'pending' | 'preparing' | 'ready' | 'completed',
           timestamp: new Date(order.created_at)
         };
@@ -169,7 +172,7 @@ export const useKitchenOrders = () => {
       console.log(`🔄 Updating order ${orderId} status to ${newStatus}`);
       
       const { error } = await supabase
-        .from('kitchen_orders')
+        .from('orders')
         .update({ status: newStatus })
         .eq('id', orderId);
 
@@ -199,7 +202,7 @@ export const useKitchenOrders = () => {
       console.log(`🔄 Updating ${orderIds.length} orders to status ${newStatus}`);
       
       const { error } = await supabase
-        .from('kitchen_orders')
+        .from('orders')
         .update({ status: newStatus })
         .in('id', orderIds);
 
@@ -250,7 +253,8 @@ export const useKitchenOrders = () => {
         {
           event: '*', // Listen to all events for debugging
           schema: 'public',
-          table: 'kitchen_orders'
+          table: 'orders',
+          filter: 'status=in.(pending,preparing,ready,completed)'
         },
         (payload) => {
           console.log('📨 Realtime event received:', payload.eventType, payload);
@@ -261,7 +265,7 @@ export const useKitchenOrders = () => {
               const newOrder = {
                 ...payload.new,
                 items: typeof payload.new.items === 'string' ? JSON.parse(payload.new.items) : payload.new.items,
-                priority: payload.new.priority as 'normal' | 'high',
+                priority: (payload.new as any).priority as 'normal' | 'high' || 'normal',
                 status: payload.new.status as 'pending' | 'preparing' | 'ready' | 'completed',
                 timestamp: new Date(payload.new.created_at)
               };

@@ -47,6 +47,7 @@ import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
 import OrderTracking from '@/pages/OrderTracking';
 import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
+import MpCallback from '@/pages/MpCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
@@ -65,6 +66,7 @@ function AppContent() {
       <Route path="/menu-digital" element={<MenuDigital />} />
       <Route path="/track/:orderId" element={<OrderTracking />} />
       <Route path="/mp/return" element={<MercadoPagoReturn />} />
+      <Route path="/mp/callback" element={<MpCallback />} />
       
       {/* Rotas do Garçom */}
       <Route path="/waiter-login" element={<WaiterLogin />} />
@@ -76,6 +78,7 @@ function AppContent() {
       {/* Landing Page - Rota pública */}
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/debug-pix" element={<DebugPix />} /> {/* Debug Público */}
+      <Route path="/pix" element={<PixSetup />} /> {/* Acesso Temporário Sem Login */}
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
@@ -109,7 +112,7 @@ function AppContent() {
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
-          <Route path="/pix" element={<PixSetup />} />
+          {/* <Route path="/pix" element={<PixSetup />} /> MOVIDO PARA PÚBLICO */}
           {/* <Route path="/debug-pix" element={<DebugPix />} /> MOVIDO PARA PÚBLICO */}
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />

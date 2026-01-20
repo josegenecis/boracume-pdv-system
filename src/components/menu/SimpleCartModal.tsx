@@ -60,6 +60,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+  
+  // Coupon State
+  const [couponCode, setCouponCode] = React.useState('');
+  const [couponError, setCouponError] = React.useState('');
+  const [discount, setDiscount] = React.useState(0);
+  const [appliedCoupon, setAppliedCoupon] = React.useState<{ code: string; type: string } | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = React.useState(false);
+
   const [location, setLocation] = React.useState({
     latitude: null as number | null,
     longitude: null as number | null,
@@ -121,8 +129,53 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const deliveryFee = selectedZone?.delivery_fee || 0;
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
-  const finalTotal = total + deliveryFee + computedExtraFee;
+  
+  // Calcular Total Final com Desconto
+  const preTotal = total + deliveryFee + computedExtraFee;
+  const finalTotal = Math.max(0, preTotal - discount);
+
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode) return;
+    setIsValidatingCoupon(true);
+    setCouponError('');
+    setDiscount(0);
+    setAppliedCoupon(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-coupon', {
+        body: { 
+          code: couponCode, 
+          cartTotal: total, 
+          userId: userId,
+          // customerId: ??? (Se tivéssemos o ID do cliente logado, passaria aqui)
+        }
+      });
+
+      if (error) throw error;
+
+      if (!data.valid) {
+        setCouponError(data.message);
+        return;
+      }
+
+      setDiscount(data.discountAmount);
+      setAppliedCoupon({ code: couponCode, type: data.type });
+      
+      // Se for frete grátis e o desconto veio 0 da API (porque ela não sabe o frete), aplicamos aqui
+      if (data.type === 'shipping' || data.type === 'free_shipping') {
+        setDiscount(deliveryFee);
+      }
+
+    } catch (err: any) {
+      console.error('Erro cupom:', err);
+      setCouponError('Erro ao validar cupom');
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
 
 
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId);
@@ -266,6 +319,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           total: item.totalPrice
         })),
         delivery_fee: deliveryFee,
+        discount: discount, // Add Discount
+        coupon_code: appliedCoupon?.code, // Add Coupon Code
         total: finalTotal,
         status: 'pending',
         order_type: 'delivery',
@@ -598,6 +653,36 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
           </div>
 
+          {/* Cupom de Desconto */}
+          <div className="border-t border-gray-100 pt-4">
+             <Label htmlFor="coupon">Cupom de Desconto</Label>
+             <div className="flex gap-2 mt-1">
+               <Input 
+                 id="coupon" 
+                 placeholder="Digite seu código" 
+                 value={couponCode}
+                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                 className="uppercase"
+                 disabled={!!appliedCoupon}
+               />
+               {appliedCoupon ? (
+                 <Button variant="outline" onClick={() => {
+                   setAppliedCoupon(null); 
+                   setDiscount(0); 
+                   setCouponCode('');
+                 }} className="border-red-200 text-red-600 hover:bg-red-50">
+                   Remover
+                 </Button>
+               ) : (
+                 <Button onClick={handleApplyCoupon} disabled={!couponCode || isValidatingCoupon}>
+                   {isValidatingCoupon ? '...' : 'Aplicar'}
+                 </Button>
+               )}
+             </div>
+             {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
+             {appliedCoupon && <p className="text-xs text-green-600 mt-1">Cupom {appliedCoupon.code} aplicado!</p>}
+          </div>
+
           {/* Resumo */}
           <div className="border-t border-gray-100 pt-6 space-y-3">
             <div className="bg-gray-50 p-4 rounded-xl space-y-2">
@@ -609,6 +694,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <span className="text-gray-700">Taxa de entrega:</span>
                 <span className="font-bold">R$ {deliveryFee.toFixed(2)}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span className="font-medium">Desconto:</span>
+                  <span className="font-bold">- R$ {discount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
                 <span className="text-gray-900">Total:</span>
                 <span className="text-boracume-orange">R$ {finalTotal.toFixed(2)}</span>
