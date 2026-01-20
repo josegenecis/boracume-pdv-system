@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Printer, Scale, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Printer, Scale, AlertTriangle, CheckCircle, RefreshCw, Usb } from 'lucide-react';
 import { scaleService, ScaleData } from '@/utils/scaleService';
 import { PrinterService } from '@/utils/printerService';
 import { PrinterConfig } from '@/components/printer/PrinterConfig';
@@ -12,6 +12,8 @@ const HardwareSettings = () => {
   const [weightData, setWeightData] = useState<ScaleData | null>(null);
   const { toast } = useToast();
 
+  const [printerConnected, setPrinterConnected] = useState(false);
+
   useEffect(() => {
     // Tentar reconectar balança se já estava conectada antes (opcional, requer persistência)
     return () => {
@@ -19,6 +21,20 @@ const HardwareSettings = () => {
       scaleService.disconnect();
     };
   }, []);
+
+  const handleConnectPrinter = async () => {
+    const success = await PrinterService.connectUsb();
+    if (success) {
+      setPrinterConnected(true);
+      toast({ title: 'Impressora USB conectada!', description: 'Agora a impressão será direta e silenciosa.' });
+    } else {
+      toast({ 
+        title: 'Falha ao conectar impressora', 
+        description: 'Verifique se é uma impressora USB compatível e se você deu permissão.',
+        variant: 'destructive' 
+      });
+    }
+  };
 
   const handleConnectScale = async () => {
     const success = await scaleService.connect();
@@ -72,6 +88,29 @@ const HardwareSettings = () => {
         
         {/* Coluna 1: Impressora */}
         <div className="space-y-6">
+          <Card>
+             <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                   <Usb className="h-5 w-5" /> Impressão Direta (USB)
+                </CardTitle>
+                <CardDescription>Conecte para imprimir sem janelas de confirmação</CardDescription>
+             </CardHeader>
+             <CardContent>
+                {!printerConnected ? (
+                  <Button onClick={handleConnectPrinter} className="w-full" variant="outline">
+                    Conectar Impressora USB
+                  </Button>
+                ) : (
+                  <div className="flex items-center justify-between bg-green-50 p-4 rounded-lg border border-green-200 text-green-800">
+                    <span className="flex items-center gap-2 font-medium">
+                      <CheckCircle className="h-5 w-5" /> Impressora Pronta
+                    </span>
+                    <span className="text-xs">Modo Silencioso Ativo</span>
+                  </div>
+                )}
+             </CardContent>
+          </Card>
+
           <PrinterConfig />
           
           <Card>
