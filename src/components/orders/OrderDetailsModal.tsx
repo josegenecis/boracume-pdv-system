@@ -20,10 +20,12 @@ import {
   CheckCircle,
   XCircle,
   Check,
-  MessageCircle
+  MessageCircle,
+  Printer
 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PrinterService } from '@/utils/printerService';
 
 interface OrderItem {
   product_name: string;
@@ -222,6 +224,15 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <Badge className={getStatusColor(order?.status || 'pending')}>
                   {getStatusLabel(order?.status || 'pending')}
                 </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => PrinterService.printOrder(order)}
+                >
+                  <Printer className="h-3 w-3 mr-1" />
+                  Imprimir
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

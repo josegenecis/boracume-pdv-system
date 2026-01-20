@@ -14,8 +14,10 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Bot
+  Bot,
+  Settings
 } from 'lucide-react';
+import { PrinterConfig } from '@/components/printer/PrinterConfig';
 
 interface DashboardStats {
   totalIngredients: number;
@@ -234,6 +236,7 @@ export function AgentDashboard() {
           <TabsTrigger value="console">Console</TabsTrigger>
           <TabsTrigger value="activities">Atividades</TabsTrigger>
           <TabsTrigger value="quick-actions">Ações Rápidas</TabsTrigger>
+          <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configurações</TabsTrigger>
         </TabsList>
 
         <TabsContent value="console" className="space-y-4">
@@ -385,6 +388,12 @@ export function AgentDashboard() {
                 </Button>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+        <TabsContent value="settings" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <PrinterConfig />
+            {/* Outras configs podem vir aqui */}
           </div>
         </TabsContent>
       </Tabs>

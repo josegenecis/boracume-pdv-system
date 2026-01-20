@@ -11,50 +11,30 @@ Deno.serve(async (req) => {
     await client.connect();
 
     const sql = `
-      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-      -- 1. Tabela de Programas de Fidelidade (Regras)
-      CREATE TABLE IF NOT EXISTS public.loyalty_programs (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id uuid NOT NULL, 
-        type text NOT NULL, -- 'points', 'visits', 'spending'
-        goal_value numeric NOT NULL, 
-        reward_type text NOT NULL, -- 'percent', 'fixed_amount', 'free_product', 'free_shipping'
-        reward_value numeric NOT NULL, 
-        active boolean DEFAULT true,
-        created_at timestamptz DEFAULT now()
-      );
-
-      -- 2. Tabela de Cupons
-      CREATE TABLE IF NOT EXISTS public.coupons (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id uuid NOT NULL, 
-        code text NOT NULL, 
-        description text,
-        discount_type text NOT NULL, -- 'percent', 'fixed', 'shipping'
-        discount_value numeric NOT NULL,
-        min_purchase numeric DEFAULT 0, 
-        max_uses integer, 
-        uses_count integer DEFAULT 0,
-        expiration_date timestamptz,
-        active boolean DEFAULT true,
-        created_at timestamptz DEFAULT now()
-      );
-
-      -- 3. Tabela de Recompensas do Cliente
-      CREATE TABLE IF NOT EXISTS public.customer_rewards (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        customer_id uuid REFERENCES public.customers(id),
-        program_id uuid REFERENCES public.loyalty_programs(id),
-        code text, 
-        discount_type text,
-        discount_value numeric,
-        status text DEFAULT 'available', 
+      -- Tabela de Configurações de Impressão
+      CREATE TABLE IF NOT EXISTS public.printer_settings (
+        user_id uuid PRIMARY KEY REFERENCES auth.users(id),
+        paper_width text DEFAULT '80mm', -- '58mm' ou '80mm'
+        font_size text DEFAULT 'normal', -- 'small', 'normal', 'large'
+        print_header text, -- Nome da loja ou CNPJ no topo
+        print_footer text DEFAULT 'Obrigado pela preferência!',
+        auto_print boolean DEFAULT false, -- Imprimir automático ao aceitar pedido
+        copies integer DEFAULT 1,
         created_at timestamptz DEFAULT now(),
-        expires_at timestamptz
+        updated_at timestamptz DEFAULT now()
       );
 
-      -- 4. Função Mágica Atualizada
+      -- Policy (Permissões) - Simples para permitir leitura/escrita pelo dono
+      ALTER TABLE public.printer_settings ENABLE ROW LEVEL SECURITY;
+      
+      DROP POLICY IF EXISTS "Users can manage their own printer settings" ON public.printer_settings;
+      CREATE POLICY "Users can manage their own printer settings"
+      ON public.printer_settings
+      FOR ALL
+      USING (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+      
+      -- Atualizar a função de fidelidade
       CREATE OR REPLACE FUNCTION public.process_loyalty_rules()
       RETURNS TRIGGER AS $$
       DECLARE
@@ -62,18 +42,29 @@ Deno.serve(async (req) => {
         cust RECORD;
         new_visits integer;
         new_spent numeric;
+        points_earned numeric;
+        msg text;
       BEGIN
         IF NEW.status = 'completed' AND (OLD.status IS DISTINCT FROM 'completed') THEN
           
           SELECT * INTO cust FROM public.customers WHERE id = NEW.customer_id;
           
           IF cust IS NOT NULL THEN
+            points_earned := FLOOR(NEW.total);
+            
             UPDATE public.customers
             SET 
-              points = COALESCE(points, 0) + FLOOR(NEW.total),
+              points = COALESCE(points, 0) + points_earned,
               total_spent = COALESCE(total_spent, 0) + NEW.total,
               visits_count = COALESCE(visits_count, 0) + 1
             WHERE id = NEW.customer_id;
+
+            IF cust.phone IS NOT NULL THEN
+              msg := 'Olá ' || cust.name || '! Seu pedido foi concluído. Você ganhou ' || points_earned || ' pontos! Saldo atual: ' || (COALESCE(cust.points, 0) + points_earned);
+              
+              INSERT INTO public.notification_queue (user_id, customer_id, phone, message)
+              VALUES (NEW.user_id, NEW.customer_id, cust.phone, msg);
+            END IF;
 
             new_visits := COALESCE(cust.visits_count, 0) + 1;
             new_spent := COALESCE(cust.total_spent, 0) + NEW.total;
@@ -88,19 +79,31 @@ Deno.serve(async (req) => {
                   program.reward_type, 
                   program.reward_value
                 );
+                
+                IF cust.phone IS NOT NULL THEN
+                  msg := 'PARABÉNS! Você completou ' || program.goal_value || ' pedidos e ganhou um prêmio!';
+                  INSERT INTO public.notification_queue (user_id, customer_id, phone, message)
+                  VALUES (NEW.user_id, NEW.customer_id, cust.phone, msg);
+                END IF;
               END IF;
             END LOOP;
 
             FOR program IN SELECT * FROM public.loyalty_programs WHERE user_id = NEW.user_id AND type = 'spending' AND active = true LOOP
               IF FLOOR(new_spent / program.goal_value) > FLOOR(COALESCE(cust.total_spent, 0) / program.goal_value) THEN
-                INSERT INTO public.customer_rewards (customer_id, program_id, code, discount_type, discount_value)
-                VALUES (
-                  NEW.customer_id, 
-                  program.id, 
-                  'VIP-' || substring(uuid_generate_v4()::text from 1 for 8),
-                  program.reward_type, 
-                  program.reward_value
-                );
+                 INSERT INTO public.customer_rewards (customer_id, program_id, code, discount_type, discount_value)
+                 VALUES (
+                   NEW.customer_id, 
+                   program.id, 
+                   'VIP-' || substring(uuid_generate_v4()::text from 1 for 8),
+                   program.reward_type, 
+                   program.reward_value
+                 );
+                 
+                 IF cust.phone IS NOT NULL THEN
+                  msg := 'PARABÉNS VIP! Você atingiu R$ ' || program.goal_value || ' em compras e ganhou um prêmio!';
+                  INSERT INTO public.notification_queue (user_id, customer_id, phone, message)
+                  VALUES (NEW.user_id, NEW.customer_id, cust.phone, msg);
+                 END IF;
               END IF;
             END LOOP;
 
@@ -109,15 +112,6 @@ Deno.serve(async (req) => {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-      DROP TRIGGER IF EXISTS on_order_completed_loyalty ON public.orders;
-      CREATE TRIGGER on_order_completed_loyalty
-      AFTER UPDATE ON public.orders
-      FOR EACH ROW
-      EXECUTE FUNCTION public.process_loyalty_rules();
-      
-      -- Remove old trigger to avoid conflict
-      DROP TRIGGER IF EXISTS on_order_completed ON public.orders;
     `;
 
     await client.queryArray(sql);
