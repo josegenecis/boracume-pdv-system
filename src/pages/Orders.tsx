@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle } from 'lucide-react';
+import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -15,6 +15,7 @@ import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { WhatsAppService } from '@/services/WhatsAppService';
+import { PrinterService } from '@/utils/printerService';
 
 interface Order {
   id: string;
@@ -713,14 +714,14 @@ const Orders = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 h-8 text-xs px-2"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handlePixPayment(order);
+                              PrinterService.printOrder(order);
                             }}
                           >
-                            <QrCode className="h-3 w-3 mr-1" />
-                            PIX
+                            <Printer className="h-3 w-3 mr-1" />
+                            Imprimir
                           </Button>
                           <Button
                             variant="outline"
@@ -863,14 +864,14 @@ const Orders = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 h-8 text-xs px-2"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handlePixPayment(order);
+                              PrinterService.printOrder(order);
                             }}
                           >
-                            <QrCode className="h-3 w-3 mr-1" />
-                            PIX
+                            <Printer className="h-3 w-3 mr-1" />
+                            Imprimir
                           </Button>
                           <Button
                             variant="outline"
