@@ -17,7 +17,8 @@ import {
   Download,
   Tag,
   QrCode,
-  Bot
+  Bot,
+  Bug
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -42,6 +43,7 @@ const SidebarLinks = () => {
     { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
+    { to: '/debug-pix', icon: Bug, label: 'Debug Pix' }, // Temporário
   ];
 
   return (

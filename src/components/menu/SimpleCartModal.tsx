@@ -273,11 +273,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       };
 
       if (paymentMethod !== 'dinheiro') {
-        const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
+        const { data, error }: any = await supabase.functions.invoke('pix-start-checkout', {
           body: { restaurantUserId: userId, orderPayload: orderData, preferredMethod: paymentMethod } as any
         });
+
+        if (error) {
+          throw new Error('Erro na conexão com checkout: ' + (error.message || error));
+        }
+
         if (!data?.ok) {
-          throw new Error(data?.error || 'Não foi possível iniciar pagamento');
+          throw new Error(data?.error || 'Erro desconhecido ao iniciar pagamento');
         }
         if (data.initPoint) {
           window.location.href = data.initPoint;
@@ -292,8 +297,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         return;
       }
       await onPlaceOrder(orderData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
+      alert(`Erro ao finalizar pedido: ${error.message || error}. Verifique se a tabela pix_checkouts foi criada no banco.`);
     } finally {
       setIsLoading(false);
     }

@@ -50,6 +50,7 @@ import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
+import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
 import './styles/responsive.css';
@@ -74,6 +75,7 @@ function AppContent() {
       
       {/* Landing Page - Rota pública */}
       <Route path="/landing" element={<LandingPage />} />
+      <Route path="/debug-pix" element={<DebugPix />} /> {/* Debug Público */}
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
@@ -108,6 +110,7 @@ function AppContent() {
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/pix" element={<PixSetup />} />
+          {/* <Route path="/debug-pix" element={<DebugPix />} /> MOVIDO PARA PÚBLICO */}
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />
 

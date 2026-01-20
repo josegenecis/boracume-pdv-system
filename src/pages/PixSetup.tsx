@@ -23,17 +23,33 @@ export default function PixSetup() {
     const load = async () => {
       if (!user?.id) return;
       try {
-        const { data } = await (supabase as any)
+        console.log('Carregando configurações Pix para usuário:', user.id);
+        const { data, error } = await (supabase as any)
           .from('pix_settings')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        if (error) {
+          console.error('Erro ao carregar configurações:', error);
+          toast({ 
+            title: 'Erro ao carregar', 
+            description: error.message, 
+            variant: 'destructive' 
+          });
+          return;
+        }
+
+        console.log('Dados carregados:', data);
+
         if (data) {
           setEnabled(!!data.enabled);
           setAccessToken(data.client_id || '');
           setWebhookSecret(data.webhook_secret || '');
         }
-      } catch {}
+      } catch (e) {
+        console.error('Exceção ao carregar:', e);
+      }
     };
     load();
   }, [user?.id]);
@@ -65,32 +81,78 @@ export default function PixSetup() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      console.log('Salvando configurações Pix (Upsert)...', { user_id: user.id });
+      
       const payload = {
         user_id: user.id,
-        enabled,
-        bank,
+        enabled: !!enabled,
+        bank: 'mercadopago',
         client_id: accessToken || null,
-        pix_key: null,
-        merchant_name: null,
-        merchant_city: null,
-        client_secret: null,
         webhook_secret: webhookSecret || null,
-        endpoint_base: null,
         updated_at: new Date().toISOString(),
       };
-      const { data: existing } = await (supabase as any)
+
+      // Usar upsert para simplificar e evitar erros de "check existence"
+      const result = await (supabase as any)
         .from('pix_settings')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (existing?.id) {
-        await (supabase as any).from('pix_settings').update(payload).eq('id', existing.id);
-      } else {
-        await (supabase as any).from('pix_settings').insert(payload);
-      }
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
+
+      if (result.error) throw result.error;
+
+      console.log('Salvo com sucesso:', result.data);
       toast({ title: 'Configurações salvas', description: 'Mercado Pago configurado para o restaurante' });
     } catch (e: any) {
-      toast({ title: 'Erro ao salvar', description: e?.message || 'Verifique campos e tente novamente', variant: 'destructive' });
+      console.error('Erro detalhado ao salvar:', e);
+      toast({ 
+        title: 'Erro ao salvar', 
+        description: `Erro: ${e.message || 'Desconhecido'} ${e.details ? `(${e.details})` : ''} ${e.hint ? `- Dica: ${e.hint}` : ''}`, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testPix = async () => {
+    if (!user?.id) return;
+    if (!enabled || !accessToken) return alert('Ative e salve o token antes de testar.');
+    
+    setLoading(true);
+    try {
+      console.log('Iniciando teste Pix...');
+      const { data, error } = await supabase.functions.invoke('pix-start-checkout', {
+        body: { 
+          restaurantUserId: user.id, 
+          orderPayload: { total: 1.00, customer_name: 'Teste Admin', payment_method: 'pix' }, 
+          preferredMethod: 'pix' 
+        }
+      });
+
+      if (error) {
+        console.error('Erro na chamada da função:', error);
+        throw new Error(error.message || JSON.stringify(error));
+      }
+
+      console.log('Resposta do teste:', data);
+
+      if (!data?.ok) {
+        throw new Error(data?.error || 'Erro desconhecido na resposta (ok: false)');
+      }
+
+      toast({ 
+        title: 'Teste com Sucesso!', 
+        description: 'QR Code gerado corretamente. Integração OK.' 
+      });
+      
+      if (data.brCode) {
+        console.log('Copia e Cola:', data.brCode);
+        alert(`Sucesso! Copia e Cola gerado (veja console). Link: ${data.paymentLinkUrl}`);
+      }
+
+    } catch (e: any) {
+      console.error('Erro no teste:', e);
+      alert(`Erro no teste: ${e.message}. Verifique o console.`);
     } finally {
       setLoading(false);
     }
@@ -157,9 +219,15 @@ export default function PixSetup() {
               </p>
             </div>
           </div>
-          <Button onClick={save} disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar Configurações'}
-          </Button>
+          <div className="flex gap-4">
+            <Button onClick={save} disabled={loading}>
+              {loading ? 'Processando...' : 'Salvar Configurações'}
+            </Button>
+            
+            <Button variant="secondary" onClick={testPix} disabled={loading || !enabled}>
+              Testar Integração (R$ 1,00)
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
