@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Printer, Scale, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 import { scaleService, ScaleData } from '@/utils/scaleService';
-import { printerService } from '@/utils/printerService';
+import { PrinterService } from '@/utils/printerService';
 import { useToast } from '@/hooks/use-toast';
 
 const HardwareTestPage = () => {
@@ -13,6 +13,7 @@ const HardwareTestPage = () => {
   const { toast } = useToast();
 
   const handleConnectScale = async () => {
+    // ... (mantém igual)
     const success = await scaleService.connect();
     if (success) {
       setScaleConnected(true);
@@ -32,19 +33,25 @@ const HardwareTestPage = () => {
   };
 
   const handleTestPrint = () => {
-    printerService.print({
-      restaurantName: 'Restaurante Teste',
-      orderNumber: '1234',
-      customerName: 'Cliente Teste',
+    // Adaptação para o formato esperado pelo PrinterService.printOrder
+    PrinterService.printOrder({
+      order_number: 'TEST-1234',
+      created_at: new Date().toISOString(),
+      customer_name: 'Cliente Teste',
+      customer_phone: '(11) 99999-9999',
       items: [
-        { name: 'Hambúrguer', quantity: 2, price: 25.00 },
-        { name: 'Refrigerante', quantity: 2, price: 5.00 }
+        { product_name: 'Hambúrguer X-Tudo', quantity: 2, price: 25.00, total: 50.00 },
+        { product_name: 'Coca-Cola 350ml', quantity: 2, price: 5.00, total: 10.00 }
       ],
-      subtotal: 60.00,
       total: 60.00,
-      paymentMethod: 'Dinheiro',
-      date: new Date().toLocaleString(),
-      type: 'dine_in'
+      subtotal: 60.00,
+      delivery_fee: 5.00,
+      discount: 0,
+      payment_method: 'dinheiro',
+      change_amount: 100.00,
+      order_type: 'dine_in',
+      status: 'completed',
+      user_id: 'test-user' // Vai usar config default
     });
   };
 
