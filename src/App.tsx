@@ -41,7 +41,6 @@ import Downloads from '@/pages/Downloads';
 import Menu from '@/pages/Menu';
 import DesktopApp from '@/pages/DesktopApp';
 import PixSetup from '@/pages/PixSetup';
-import HardwareTestPage from '@/pages/HardwareTestPage';
 import SystemCheck from '@/pages/SystemCheck';
 import TestPage from '@/pages/TestPage';
 import AuthCallback from '@/pages/AuthCallback';
@@ -118,7 +117,6 @@ function AppContent() {
           <Route path="/agente" element={<AgentDashboard />} />
 
           <Route path="/system-check" element={<SystemCheck />} />
-          <Route path="/hardware-test" element={<HardwareTestPage />} />
           <Route path="/test" element={<TestPage />} />
 
         </Route>

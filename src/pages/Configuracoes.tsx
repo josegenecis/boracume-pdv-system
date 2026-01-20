@@ -6,7 +6,6 @@ import ProfileSettings from '@/components/settings/ProfileSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import AppearanceSettings from '@/components/settings/AppearanceSettings';
 import WhatsAppSettings from '@/components/settings/WhatsAppSettings';
-import ScaleIntegrationSettings from '@/components/settings/ScaleIntegrationSettings';
 import DeliverySettings from '@/components/settings/DeliverySettings';
 import QRCodeGenerator from '@/components/products/QRCodeGenerator';
 import MenuLinkGenerator from '@/components/menu/MenuLinkGenerator';
@@ -18,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
+import HardwareSettings from '@/components/settings/HardwareSettings';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -54,6 +54,7 @@ const Configuracoes: React.FC = () => {
               onChange={(e) => setTab(e.target.value)}
             >
               <option value="general">Geral</option>
+              <option value="hardware">Impressoras e Balanças</option>
               <option value="menu">Cardápio</option>
               <option value="devices">Dispositivos</option>
               <option value="profile">Perfil</option>
@@ -73,8 +74,9 @@ const Configuracoes: React.FC = () => {
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="mb-4 hidden sm:flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
           <TabsTrigger value="general">Geral</TabsTrigger>
+          <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
           <TabsTrigger value="menu">Cardápio</TabsTrigger>
-          <TabsTrigger value="devices">Dispositivos</TabsTrigger>
+          <TabsTrigger value="devices">Sessões Ativas</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="appearance">Aparência</TabsTrigger>
@@ -93,8 +95,12 @@ const Configuracoes: React.FC = () => {
         <TabsContent value="general" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <WhatsAppSettings />
-            <ScaleIntegrationSettings />
+            {/* Outras configs gerais */}
           </div>
+        </TabsContent>
+
+        <TabsContent value="hardware">
+          <HardwareSettings />
         </TabsContent>
         
         <TabsContent value="menu">
