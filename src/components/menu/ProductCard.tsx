@@ -52,7 +52,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
           </p>
 
           {/* Preço com desconto ou preço normal */}
-          {product.original_price && product.discount_percentage ? (
+          {product.name.toLowerCase().includes('fartureia') ? (
+            <span className="font-bold text-boracume-orange text-lg">
+              Pré-venda
+            </span>
+          ) : product.original_price && product.discount_percentage ? (
             <DiscountBadge
               originalPrice={product.original_price}
               discountedPrice={product.price}

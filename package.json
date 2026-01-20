@@ -98,12 +98,15 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "body-parser": "^2.2.2",
     "concurrently": "^9.0.1",
+    "cors": "^2.8.5",
     "electron": "^32.1.2",
     "electron-builder": "^25.0.5",
     "eslint": "^9.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
+    "express": "^5.2.1",
     "globals": "^15.9.0",
     "lovable-tagger": "^1.1.7",
     "postcss": "^8.4.47",
@@ -113,7 +116,8 @@
     "terser": "^5.43.1",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "ws": "^8.19.0"
   },
   "main": "electron/main.js",
   "build": {

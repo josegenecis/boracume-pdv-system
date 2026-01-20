@@ -26,6 +26,11 @@ import DesktopStatus from '@/components/desktop/DesktopStatus';
 import DesktopIndicator from '@/components/desktop/DesktopIndicator';
 import PrinterSettings from '@/components/desktop/PrinterSettings';
 
+// Componentes do Sistema (Reutilizados)
+import PDV from '@/pages/PDV';
+import Products from '@/pages/Products';
+import LoyaltyManager from '@/components/loyalty/LoyaltyManager';
+
 const DesktopApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showDeviceManager, setShowDeviceManager] = useState(false);
@@ -35,40 +40,24 @@ const DesktopApp: React.FC = () => {
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
   const testPrint = async () => {
-    if (!isElectron) {
-      toast.error('Função disponível apenas no aplicativo desktop');
-      return;
-    }
-
     try {
-      const testOrder = {
-        id: 'TEST-001',
+      const result = await window.electronAPI?.printReceipt(null, {
+        order_number: 'TESTE-001',
+        customer_name: 'Cliente Teste',
         items: [
-          {
-            name: 'Produto Teste',
-            quantity: 1,
-            price: 10.50,
-            weight: 0.5
-          }
+          { quantity: 1, product_name: 'Item de Teste', subtotal: 10.00 }
         ],
-        total: 10.50,
-        customer: {
-          name: 'Cliente Teste',
-          phone: '(11) 99999-9999'
-        },
-        createdAt: new Date().toISOString()
-      };
+        total: 10.00
+      });
 
-      const result = await window.electronAPI.printReceipt(testOrder);
-      
-      if (result.success) {
-        toast.success('Cupom de teste impresso com sucesso!');
+      if (result?.success) {
+        toast.success('Impressão de teste enviada com sucesso!');
       } else {
-        toast.error(result.error || 'Erro ao imprimir cupom de teste');
+        toast.error('Erro ao enviar impressão de teste: ' + (result?.error || 'Desconhecido'));
       }
     } catch (error) {
-      console.error('Erro ao imprimir cupom de teste:', error);
-      toast.error('Erro ao imprimir cupom de teste');
+      console.error('Erro no teste de impressão:', error);
+      toast.error('Erro ao comunicar com o serviço de impressão');
     }
   };
 
@@ -93,15 +82,15 @@ const DesktopApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col h-screen overflow-hidden">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+      <header className="border-b bg-card shrink-0">
+        <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <Monitor className="h-6 w-6" />
-                <h1 className="text-xl font-bold">Bora Cume Hub Desktop</h1>
+                <Monitor className="h-5 w-5 text-primary" />
+                <h1 className="text-lg font-bold">Bora Cume Hub Desktop</h1>
               </div>
               <DesktopIndicator />
             </div>
@@ -115,33 +104,35 @@ const DesktopApp: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="dashboard" className="flex items-center space-x-2">
-              <BarChart3 className="h-4 w-4" />
-              <span>Dashboard</span>
-            </TabsTrigger>
-            <TabsTrigger value="pos" className="flex items-center space-x-2">
-              <ShoppingCart className="h-4 w-4" />
-              <span>PDV</span>
-            </TabsTrigger>
-            <TabsTrigger value="products" className="flex items-center space-x-2">
-              <Package className="h-4 w-4" />
-              <span>Produtos</span>
-            </TabsTrigger>
-            <TabsTrigger value="customers" className="flex items-center space-x-2">
-              <Users className="h-4 w-4" />
-              <span>Clientes</span>
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center space-x-2">
-              <Settings className="h-4 w-4" />
-              <span>Configurações</span>
-            </TabsTrigger>
-          </TabsList>
+      <main className="flex-1 overflow-hidden flex flex-col">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
+          <div className="border-b bg-muted/40 px-4 shrink-0">
+            <TabsList className="grid w-full max-w-2xl grid-cols-5 h-10">
+              <TabsTrigger value="dashboard" className="flex items-center space-x-2 text-xs">
+                <BarChart3 className="h-3 w-3" />
+                <span>Dashboard</span>
+              </TabsTrigger>
+              <TabsTrigger value="pos" className="flex items-center space-x-2 text-xs">
+                <ShoppingCart className="h-3 w-3" />
+                <span>PDV</span>
+              </TabsTrigger>
+              <TabsTrigger value="products" className="flex items-center space-x-2 text-xs">
+                <Package className="h-3 w-3" />
+                <span>Produtos</span>
+              </TabsTrigger>
+              <TabsTrigger value="customers" className="flex items-center space-x-2 text-xs">
+                <Users className="h-3 w-3" />
+                <span>Clientes</span>
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="flex items-center space-x-2 text-xs">
+                <Settings className="h-3 w-3" />
+                <span>Config</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Dashboard */}
-          <TabsContent value="dashboard" className="space-y-6">
+          <TabsContent value="dashboard" className="flex-1 overflow-auto p-4 space-y-6 m-0">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -230,91 +221,64 @@ const DesktopApp: React.FC = () => {
             </div>
           </TabsContent>
 
-          {/* PDV */}
-          <TabsContent value="pos" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Ponto de Venda (PDV)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">PDV em Desenvolvimento</h3>
-                  <p className="text-muted-foreground">
-                    O sistema de PDV integrado com balanças e impressoras estará disponível em breve.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          {/* PDV (Full Height) */}
+          <TabsContent value="pos" className="flex-1 overflow-hidden m-0">
+             <div className="h-full w-full">
+               <PDV />
+             </div>
           </TabsContent>
 
           {/* Produtos */}
-          <TabsContent value="products" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gerenciamento de Produtos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Produtos</h3>
-                  <p className="text-muted-foreground">
-                    Gerencie seu catálogo de produtos com integração para pesagem automática.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="products" className="flex-1 overflow-auto p-4 m-0">
+            <div className="container mx-auto">
+              <Products />
+            </div>
           </TabsContent>
 
           {/* Clientes */}
-          <TabsContent value="customers" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gerenciamento de Clientes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <Users className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Clientes</h3>
-                  <p className="text-muted-foreground">
-                    Gerencie informações de clientes e histórico de compras.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="customers" className="flex-1 overflow-auto p-4 m-0">
+            <div className="container mx-auto">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Fidelidade e Clientes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <LoyaltyManager />
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Configurações */}
-          <TabsContent value="settings" className="space-y-6">
+          <TabsContent value="settings" className="flex-1 overflow-auto p-4 m-0">
             <Card>
               <CardHeader>
                 <CardTitle>Configurações do Sistema</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <Button 
-                    onClick={() => setShowDeviceManager(true)}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Gerenciar Dispositivos
-                  </Button>
-                  <Button 
-                    onClick={() => setShowPrinterSettings(true)}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Configurar Impressora
-                  </Button>
-                  
-                  <div className="text-center py-8">
-                    <Settings className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold mb-2">Configurações</h3>
-                    <p className="text-muted-foreground">
-                      Configure impressoras, balanças e outras preferências do sistema.
-                    </p>
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">Gerenciador de Dispositivos</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Configure impressoras, balanças e outros periféricos
+                      </p>
+                    </div>
+                    <Button onClick={() => setShowDeviceManager(true)}>
+                      Abrir Gerenciador
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-medium">Configurações de Impressão</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Defina layouts de recibos e opções de corte
+                      </p>
+                    </div>
+                    <Button onClick={() => setShowPrinterSettings(true)}>
+                      Configurar Impressão
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -323,19 +287,20 @@ const DesktopApp: React.FC = () => {
         </Tabs>
       </main>
 
-      {/* Device Manager Dialog */}
+      {/* Modals */}
       <Dialog open={showDeviceManager} onOpenChange={setShowDeviceManager}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Gerenciador de Dispositivos</DialogTitle>
+            <DialogTitle>Gerenciamento de Dispositivos</DialogTitle>
           </DialogHeader>
           <DeviceManager />
         </DialogContent>
       </Dialog>
+
       <Dialog open={showPrinterSettings} onOpenChange={setShowPrinterSettings}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Configurar Impressora</DialogTitle>
+            <DialogTitle>Configurações de Impressão</DialogTitle>
           </DialogHeader>
           <PrinterSettings />
         </DialogContent>

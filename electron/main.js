@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
 const path = require('path');
 const isDev = !app.isPackaged;
 const { SerialPort } = require('serialport');
@@ -8,13 +8,26 @@ const PrinterTypes = require('node-thermal-printer').types;
 const DeviceManager = require('./services/DeviceManager');
 const PrinterService = require('./services/PrinterService');
 const ScaleService = require('./services/ScaleService');
+const PrintAgentServer = require('./server');
 
 let mainWindow;
+let tray = null;
 let deviceManager;
 let printerService;
 let scaleService;
+let printAgentServer;
+
+// Verificar se deve rodar em modo "Agente" (sem janela principal, apenas Tray)
+// Pode ser passado via linha de comando: --agent-mode
+const isAgentMode = process.argv.includes('--agent-mode');
 
 function createWindow() {
+  // Se for modo agente, não criar janela principal imediatamente, ou criar oculta
+  if (isAgentMode) {
+    createTray();
+    return;
+  }
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -45,13 +58,67 @@ function createWindow() {
     mainWindow = null;
   });
 
+  // Criar Tray icon mesmo com janela aberta, para acesso rápido
+  if (!tray) {
+    createTray();
+  }
+
   initializeServices();
 }
 
-app.whenReady().then(createWindow);
+function createTray() {
+  try {
+    const iconPath = path.join(__dirname, '../public/favicon.ico'); // Ajustar caminho se necessário
+    tray = new Tray(iconPath);
+    
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'BoraCumê Print Agent', enabled: false },
+      { type: 'separator' },
+      { label: 'Status: Rodando', enabled: false },
+      { label: 'Porta: 17171', enabled: false },
+      { type: 'separator' },
+      { 
+        label: 'Abrir Painel', 
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+          } else {
+            // Se estiver em modo agente e usuário clicar em abrir, recria janela normal
+            // mas navegando para uma página de status local se possível, ou recarregando app
+             if (isAgentMode && !mainWindow) {
+               // TODO: Implementar janela de status leve
+               // Por enquanto, não faz nada ou abre app completo
+             }
+             if (!mainWindow) createWindow();
+          }
+        } 
+      },
+      { label: 'Sair', click: () => app.quit() }
+    ]);
+
+    tray.setToolTip('BoraCumê Print Agent');
+    tray.setContextMenu(contextMenu);
+    
+    // Duplo clique abre
+    tray.on('double-click', () => {
+      if (mainWindow) mainWindow.show();
+      else createWindow();
+    });
+
+  } catch (error) {
+    console.error('Erro ao criar Tray:', error);
+  }
+}
+
+app.whenReady().then(() => {
+  createWindow();
+  // Iniciar servidor local
+  startPrintServer();
+});
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // No modo agente ou se tiver tray, manter rodando
+  if (process.platform !== 'darwin' && !tray) {
     app.quit();
   }
 });
@@ -64,22 +131,45 @@ app.on('activate', () => {
 
 function initializeServices() {
   try {
-    deviceManager = new DeviceManager();
-    printerService = new PrinterService(deviceManager);
-    scaleService = new ScaleService(deviceManager);
+    // Se já foi inicializado pelo Server, reaproveitar ou garantir singleton
+    if (!deviceManager) {
+      deviceManager = new DeviceManager();
+      printerService = new PrinterService(deviceManager);
+      scaleService = new ScaleService(deviceManager);
+    }
     console.log('Serviços de dispositivos inicializados com sucesso');
   } catch (error) {
     console.error('Erro ao inicializar serviços:', error);
   }
 }
 
+function startPrintServer() {
+  try {
+    printAgentServer = new PrintAgentServer(17171);
+    printAgentServer.start();
+    
+    // Sincronizar instâncias de serviço se necessário
+    // O PrintAgentServer cria suas próprias instâncias de DeviceManager, etc.
+    // O ideal seria compartilhar, mas para simplificar MVP vamos deixar independentes
+    // ou fazer o Server usar os globais se existirem.
+    
+    // Melhor: O Server instancia seus serviços. Vamos usar as referências dele para o IPC também
+    // para evitar conflito de acesso às portas seriais.
+    deviceManager = printAgentServer.deviceManager;
+    printerService = printAgentServer.printerService;
+    scaleService = printAgentServer.scaleService;
+    
+    console.log('Print Agent Server iniciado');
+  } catch (error) {
+    console.error('Erro ao iniciar Print Agent Server:', error);
+  }
+}
+
+// IPC Handlers (mantidos iguais, agora usando as instâncias do Server)
 ipcMain.handle('scan-serial-ports', async () => {
   try {
-    if (!deviceManager) {
-      return { success: false, error: 'Serviços não inicializados' };
-    }
-    const result = await deviceManager.scanDevices();
-    return result;
+    if (!deviceManager) return { success: false, error: 'Serviços não inicializados' };
+    return await deviceManager.scanForDevices(); // Corrigido nome do método se necessário
   } catch (error) {
     console.error('Error scanning serial ports:', error);
     return { success: false, error: error.message };
@@ -88,12 +178,9 @@ ipcMain.handle('scan-serial-ports', async () => {
 
 ipcMain.handle('connect-printer', async (event, deviceId, protocol = 'epson', options = {}) => {
   try {
-    if (!printerService) {
-      return { success: false, error: 'Serviço de impressora não inicializado' };
-    }
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
     const merged = { ...(options || {}), protocol };
-    const result = await printerService.connectPrinter(deviceId, merged);
-    return result;
+    return await printerService.connectPrinter(deviceId, merged);
   } catch (error) {
     console.error('Error connecting to printer:', error);
     return { success: false, error: error.message };
@@ -102,11 +189,8 @@ ipcMain.handle('connect-printer', async (event, deviceId, protocol = 'epson', op
 
 ipcMain.handle('print-receipt', async (event, deviceId, orderData, template = 'receipt') => {
   try {
-    if (!printerService) {
-      return { success: false, error: 'Serviço de impressora não inicializado' };
-    }
-    const result = await printerService.printReceipt(deviceId, orderData, template);
-    return result;
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
+    return await printerService.printReceipt(deviceId, orderData, template);
   } catch (error) {
     console.error('Error printing receipt:', error);
     return { success: false, error: error.message };
@@ -115,11 +199,8 @@ ipcMain.handle('print-receipt', async (event, deviceId, orderData, template = 'r
 
 ipcMain.handle('connect-scale', async (event, deviceId, protocol = 'generic', options = {}) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.connectScale(deviceId, protocol, options);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.connectScale(deviceId, protocol, options);
   } catch (error) {
     console.error('Error connecting to scale:', error);
     return { success: false, error: error.message };
@@ -128,11 +209,8 @@ ipcMain.handle('connect-scale', async (event, deviceId, protocol = 'generic', op
 
 ipcMain.handle('read-weight', async (event, deviceId, timeout = 5000) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.readWeight(deviceId, timeout);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.readWeight(deviceId, timeout);
   } catch (error) {
     console.error('Error reading weight:', error);
     return { success: false, error: error.message };
@@ -141,11 +219,8 @@ ipcMain.handle('read-weight', async (event, deviceId, timeout = 5000) => {
 
 ipcMain.handle('disconnect-printer', async (event, deviceId) => {
   try {
-    if (!printerService) {
-      return { success: false, error: 'Serviço de impressora não inicializado' };
-    }
-    const result = await printerService.disconnectPrinter(deviceId);
-    return result;
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
+    return await printerService.disconnectPrinter(deviceId);
   } catch (error) {
     console.error('Error disconnecting printer:', error);
     return { success: false, error: error.message };
@@ -154,11 +229,8 @@ ipcMain.handle('disconnect-printer', async (event, deviceId) => {
 
 ipcMain.handle('disconnect-scale', async (event, deviceId) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.disconnectScale(deviceId);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.disconnectScale(deviceId);
   } catch (error) {
     console.error('Error disconnecting scale:', error);
     return { success: false, error: error.message };
@@ -168,12 +240,7 @@ ipcMain.handle('disconnect-scale', async (event, deviceId) => {
 ipcMain.handle('show-notification', async (event, title, body) => {
   try {
     if (Notification.isSupported()) {
-      const notification = new Notification({
-        title,
-        body,
-        icon: path.join(__dirname, '../assets/icon.png')
-      });
-      notification.show();
+      new Notification({ title, body, icon: path.join(__dirname, '../assets/icon.png') }).show();
     }
     return { success: true };
   } catch (error) {
@@ -184,11 +251,8 @@ ipcMain.handle('show-notification', async (event, title, body) => {
 
 ipcMain.handle('tare-scale', async (event, deviceId) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.tareScale(deviceId);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.tareScale(deviceId);
   } catch (error) {
     console.error('Error taring scale:', error);
     return { success: false, error: error.message };
@@ -197,11 +261,8 @@ ipcMain.handle('tare-scale', async (event, deviceId) => {
 
 ipcMain.handle('zero-scale', async (event, deviceId) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.zeroScale(deviceId);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.zeroScale(deviceId);
   } catch (error) {
     console.error('Error zeroing scale:', error);
     return { success: false, error: error.message };
@@ -210,11 +271,8 @@ ipcMain.handle('zero-scale', async (event, deviceId) => {
 
 ipcMain.handle('calibrate-scale', async (event, deviceId, knownWeight, currentReading) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
-    const result = await scaleService.calibrateScale(deviceId, knownWeight, currentReading);
-    return result;
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
+    return await scaleService.calibrateScale(deviceId, knownWeight, currentReading);
   } catch (error) {
     console.error('Error calibrating scale:', error);
     return { success: false, error: error.message };
@@ -223,9 +281,7 @@ ipcMain.handle('calibrate-scale', async (event, deviceId, knownWeight, currentRe
 
 ipcMain.handle('start-auto-reading', async (event, deviceId) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
     scaleService.startAutoReading(deviceId);
     return { success: true, message: 'Leitura automática iniciada' };
   } catch (error) {
@@ -236,9 +292,7 @@ ipcMain.handle('start-auto-reading', async (event, deviceId) => {
 
 ipcMain.handle('stop-auto-reading', async (event, deviceId) => {
   try {
-    if (!scaleService) {
-      return { success: false, error: 'Serviço de balança não inicializado' };
-    }
+    if (!scaleService) return { success: false, error: 'Serviço de balança não inicializado' };
     scaleService.stopAutoReading(deviceId);
     return { success: true, message: 'Leitura automática parada' };
   } catch (error) {
@@ -277,9 +331,7 @@ ipcMain.handle('get-supported-protocols', async (event, deviceType) => {
 
 ipcMain.handle('get-available-printers', async () => {
   try {
-    if (!printerService) {
-      throw new Error('Serviço de impressora não inicializado');
-    }
+    if (!printerService) throw new Error('Serviço de impressora não inicializado');
     const printers = await printerService.getAvailablePrinters();
     return { success: true, printers };
   } catch (error) {
@@ -290,11 +342,8 @@ ipcMain.handle('get-available-printers', async () => {
 
 ipcMain.handle('open-cash-drawer', async (event, deviceId) => {
   try {
-    if (!printerService) {
-      return { success: false, error: 'Serviço de impressora não inicializado' };
-    }
-    const result = await printerService.openCashDrawer(deviceId);
-    return result;
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
+    return await printerService.openCashDrawer(deviceId);
   } catch (error) {
     console.error('Error opening cash drawer:', error);
     return { success: false, error: error.message };
@@ -303,11 +352,8 @@ ipcMain.handle('open-cash-drawer', async (event, deviceId) => {
 
 ipcMain.handle('print-product-label', async (event, deviceId, productData) => {
   try {
-    if (!printerService) {
-      return { success: false, error: 'Serviço de impressora não inicializado' };
-    }
-    const result = await printerService.printReceipt(deviceId, productData, 'product_label');
-    return result;
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
+    return await printerService.printReceipt(deviceId, productData, 'product_label');
   } catch (error) {
     console.error('Error printing product label:', error);
     return { success: false, error: error.message };

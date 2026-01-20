@@ -21,7 +21,8 @@ import {
   ExternalLink,
   Zap,
   RefreshCw,
-  Globe
+  Globe,
+  Server
 } from 'lucide-react';
 
 interface OSInfo {
@@ -37,6 +38,7 @@ interface OSInfo {
 const Downloads = () => {
   const [detectedOS, setDetectedOS] = useState<string>('');
   const { toast } = useToast();
+  const [agentStatus, setAgentStatus] = useState<'running' | 'stopped' | 'checking'>('checking');
 
   useEffect(() => {
     const userAgent = navigator.userAgent;
@@ -44,13 +46,38 @@ const Downloads = () => {
     else if (userAgent.includes('Mac')) setDetectedOS('macOS');
     else if (userAgent.includes('Linux')) setDetectedOS('Linux');
     else setDetectedOS('Unknown');
+    
+    // Check agent status
+    checkAgentStatus();
   }, []);
+
+  const checkAgentStatus = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      const res = await fetch('http://localhost:17171/status', { 
+        method: 'GET',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (res.ok) {
+        setAgentStatus('running');
+      } else {
+        setAgentStatus('stopped');
+      }
+    } catch (e) {
+      setAgentStatus('stopped');
+    }
+  };
 
   const [releases, setReleases] = useState<OSInfo[]>([]);
   const [siteInstallerAvailable, setSiteInstallerAvailable] = useState<boolean>(false);
   const [sitePortableAvailable, setSitePortableAvailable] = useState<boolean>(false);
   const [winInstallerUrl, setWinInstallerUrl] = useState<string>('');
   const [winPortableUrl, setWinPortableUrl] = useState<string>('');
+  
   useEffect(() => {
     const loadLatest = async () => {
       try {
@@ -254,33 +281,75 @@ const Downloads = () => {
         <div>
           <h1 className="text-3xl font-bold">Instalar App</h1>
           <p className="text-muted-foreground mt-2">
-            Instale o BoraCumê como um app nativo no seu dispositivo
+            Escolha a melhor forma de usar o BoraCumê no seu dispositivo
           </p>
         </div>
         <PWAInstallButton />
       </div>
 
+      {/* Agente de Impressão (Solução Leve) */}
+      <Card className="border-blue-200 bg-blue-50">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Server className="w-5 h-5 text-blue-600" />
+            <CardTitle>Agente de Impressão (BoraCumê Print)</CardTitle>
+            <Badge variant="secondary" className="bg-blue-100 text-blue-800">Novo</Badge>
+          </div>
+          <CardDescription>
+            Use o sistema no navegador (Chrome/Edge) e imprima direto nas impressoras USB
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">Status do Agente no seu PC:</p>
+                {agentStatus === 'running' ? (
+                  <Badge className="bg-green-500 hover:bg-green-600">Detectado e Rodando</Badge>
+                ) : agentStatus === 'checking' ? (
+                  <Badge variant="outline">Verificando...</Badge>
+                ) : (
+                  <Badge variant="destructive">Não detectado</Badge>
+                )}
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={checkAgentStatus}>
+                  <RefreshCw className={`h-4 w-4 ${agentStatus === 'checking' ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Instale este agente leve para conectar impressoras e balanças ao seu navegador.
+              </p>
+            </div>
+            
+            <Button 
+              onClick={downloadWindowsInstaller}
+              className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Baixar Agente (Instalador)
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Alerta sobre PWA */}
       <Alert className="border-green-200 bg-green-50">
         <CheckCircle className="h-4 w-4 text-green-600" />
         <AlertDescription className="text-green-800">
-          <strong>Novidade:</strong> Agora você pode instalar o BoraCumê como um aplicativo nativo! 
-          Funciona offline, recebe notificações e tem performance de app nativo. 
-          Compatible com todos os dispositivos e navegadores modernos.
+          <strong>Recomendado:</strong> Instale o BoraCumê como PWA + Agente de Impressão para a melhor experiência leve e rápida.
         </AlertDescription>
       </Alert>
 
 
-      {/* Aplicativo Desktop - Para PDV */}
+      {/* Aplicativo Desktop - Para PDV Completo */}
       <Card className="border-orange-200 bg-orange-50">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Monitor className="w-5 h-5 text-orange-600" />
-            <CardTitle>Aplicativo Desktop (PDV)</CardTitle>
-            <Badge variant="secondary" className="bg-orange-100 text-orange-800">Para Estabelecimentos</Badge>
+            <CardTitle>Aplicativo Desktop Completo</CardTitle>
+            <Badge variant="secondary" className="bg-orange-100 text-orange-800">All-in-One</Badge>
           </div>
           <CardDescription>
-            Versão completa com integração de hardware para pontos de venda
+            Versão completa independente (não precisa de navegador)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -293,7 +362,7 @@ const Downloads = () => {
               <div>
                 <h3 className="font-semibold">Funcionalidades Exclusivas</h3>
                 <p className="text-sm text-muted-foreground">
-                  Impressoras térmicas • Balanças digitais • Gaveta de dinheiro
+                  Impressoras térmicas • Balanças digitais • Gaveta de dinheiro • Navegador embutido
                 </p>
               </div>
             </div>
@@ -304,7 +373,7 @@ const Downloads = () => {
                 className="bg-orange-600 hover:bg-orange-700"
               >
                 <Download className="w-4 h-4 mr-1" />
-                Baixar para Windows
+                Baixar Instalador
               </Button>
               <Button 
                 onClick={downloadWindowsPortable}
@@ -317,12 +386,12 @@ const Downloads = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {siteInstallerAvailable && (
-              <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-white/50">
                 <div className="flex items-center gap-3">
                   <Monitor className="w-6 h-6" />
                   <div>
                     <h4 className="font-medium text-sm">Windows (Instalador)</h4>
-                    <p className="text-xs text-muted-foreground">.exe padrão para instalação</p>
+                    <p className="text-xs text-muted-foreground">.exe padrão</p>
                   </div>
                 </div>
                 <Button 
@@ -342,60 +411,9 @@ const Downloads = () => {
                 </Button>
               </div>
               )}
-              {sitePortableAvailable && (
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Monitor className="w-6 h-6" />
-                  <div>
-                    <h4 className="font-medium text-sm">Windows (Portátil)</h4>
-                    <p className="text-xs text-muted-foreground">.exe portátil, sem instalação</p>
-                  </div>
-                </div>
-                <Button 
-                  size="sm" 
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = '/electron-dist/windows-portable.exe';
-                    link.download = 'BoracumeHub-Desktop-Portable.exe';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                  }}
-                  className="bg-orange-600 hover:bg-orange-700"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Baixar
-                </Button>
-              </div>
-              )}
-              {releases.filter(r => r.available).length === 0 && (
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Monitor className="w-6 h-6" />
-                    <div>
-                      <h4 className="font-medium text-sm">Baixar pelo GitHub</h4>
-                      <p className="text-xs text-muted-foreground">Instaladores publicados nos Releases</p>
-                    </div>
-                  </div>
-                  <Button 
-                    size="sm" 
-                    onClick={() => window.open('https://github.com/josegenecis/boracume-pdv-system/releases/latest', '_blank')}
-                    className="bg-orange-600 hover:bg-orange-700"
-                  >
-                    <ExternalLink className="w-4 h-4 mr-1" />
-                    Abrir Releases
-                  </Button>
-                </div>
-              )}
+              {/* ... portable button ... */}
             </div>
             
-            <Alert className="border-orange-200 bg-orange-50">
-              <AlertTriangle className="h-4 w-4 text-orange-600" />
-              <AlertDescription className="text-orange-800">
-                <strong>Importante:</strong> O aplicativo desktop é necessário para usar impressoras térmicas, 
-                balanças digitais e outras funcionalidades de hardware do PDV.
-              </AlertDescription>
-            </Alert>
           </div>
         </CardContent>
       </Card>
@@ -407,12 +425,10 @@ const Downloads = () => {
           <div className="flex items-center gap-2">
             <Smartphone className="w-5 h-5 text-primary" />
             <CardTitle>Aplicativo Web Progressivo (PWA)</CardTitle>
-
-            <Badge variant="default">Recomendado para uso geral</Badge>
-
+            <Badge variant="default">Mobile / Tablet</Badge>
           </div>
           <CardDescription>
-            Instale o BoraCumê como um app nativo - funciona em qualquer dispositivo
+            Instale o BoraCumê como um app nativo no celular ou tablet
           </CardDescription>
         </CardHeader>
         <CardContent>
