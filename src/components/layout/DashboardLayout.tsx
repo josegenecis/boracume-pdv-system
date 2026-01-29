@@ -40,7 +40,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
           }
         `}>
           <div className="h-[calc(100vh-64px)] w-full">
-            <div className="w-full max-w-full h-full">
+            <div className="w-full max-w-full h-full mobile-safe-x sm:px-6">
               {children}
             </div>
           </div>

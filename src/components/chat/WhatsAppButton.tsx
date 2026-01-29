@@ -47,7 +47,7 @@ const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({
   };
   
   return (
-    <div className={`fixed bottom-4 ${positionClass} z-50`}>
+    <div className={`fixed ${positionClass} z-50 mobile-safe-bottom-offset`}>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button

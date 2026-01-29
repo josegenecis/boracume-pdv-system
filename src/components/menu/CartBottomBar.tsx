@@ -18,7 +18,7 @@ const CartBottomBar: React.FC<CartBottomBarProps> = ({
   if (itemCount === 0) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50 p-4">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50 p-4 mobile-safe-bottom">
       <div className="max-w-4xl mx-auto">
         <Button 
           onClick={onOpenCart}

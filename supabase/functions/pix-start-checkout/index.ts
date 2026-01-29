@@ -1,4 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
+// @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -9,15 +10,37 @@ const corsHeaders = {
 
 console.log("Edge Function pix-start-checkout init")
 
-Deno.serve(async (req) => {
+const getEnv = (...keys: string[]) => {
+  for (const key of keys) {
+    const value = Deno.env.get(key)
+    if (value) return value
+  }
+  return ''
+}
+
+const getRequestOrigin = (req: Request) => {
+  const origin = req.headers.get('origin')
+  if (origin) return origin
+  const referer = req.headers.get('referer')
+  if (referer) {
+    try {
+      return new URL(referer).origin
+    } catch {
+      return ''
+    }
+  }
+  return ''
+}
+
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
+    const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY', 'BORACUME_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !serviceKey) {
       console.error("Missing environment variables")
@@ -29,9 +52,9 @@ Deno.serve(async (req) => {
     let body
     try {
       body = await req.json()
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error parsing JSON body:", e)
-      return new Response(JSON.stringify({ ok: false, error: 'invalid_json_body', details: e.message }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: false, error: 'invalid_json_body', details: e?.message }), { status: 400, headers: corsHeaders })
     }
 
     const restaurantUserId = String(body?.restaurantUserId || '')
@@ -69,10 +92,13 @@ Deno.serve(async (req) => {
     const customerPhone = String(orderPayload?.customer_phone || '')
     
     // Fallback seguro para origin se header não existir
-    const origin = req.headers.get('origin') || 'http://localhost:5173'
+    const origin = getRequestOrigin(req) || 'http://localhost:5173'
 
     const provider = String(pix.bank || 'mercadopago').toLowerCase()
-    const webhookSecret = Deno.env.get('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
+    const webhookSecret = getEnv('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
+    if (!webhookSecret) {
+      return new Response(JSON.stringify({ ok: false, error: 'missing_webhook_secret' }), { status: 400, headers: corsHeaders })
+    }
     const webhookBase = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/pix-webhook`
     const notificationUrl = `${webhookBase}?secret=${encodeURIComponent(webhookSecret)}&cid=${encodeURIComponent(correlationID)}`
 
@@ -127,8 +153,31 @@ Deno.serve(async (req) => {
 
         if (!mpResp.ok) {
           console.error("MP Error:", mpJson)
+          await supabase
+            .from('pix_checkouts')
+            .update({
+              status: 'FAILED',
+              metadata: { provider: 'mercadopago', error: mpJson },
+              updated_at: new Date().toISOString()
+            })
+            .eq('correlation_id', correlationID)
           return new Response(JSON.stringify({ ok: false, error: 'provider_error', details: mpJson }), { status: 502, headers: corsHeaders })
         }
+
+        await supabase
+          .from('pix_checkouts')
+          .update({
+            status: String(mpJson?.status || 'PENDING').toUpperCase(),
+            transaction_id: String(mpJson?.id || ''),
+            metadata: {
+              provider: 'mercadopago',
+              payment_id: mpJson?.id ?? null,
+              status: mpJson?.status ?? null,
+              ticket_url: mpJson?.point_of_interaction?.transaction_data?.ticket_url ?? null
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('correlation_id', correlationID)
 
         const brCode = mpJson?.point_of_interaction?.transaction_data?.qr_code || ''
         const qrBase64 = mpJson?.point_of_interaction?.transaction_data?.qr_code_base64 || ''
@@ -138,9 +187,72 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago' }), { headers: corsHeaders })
       }
 
-      // ... checkout preferences logic ...
-      // Simplificado para focar no Pix
-      return new Response(JSON.stringify({ ok: false, error: 'method_not_implemented_in_debug' }), { status: 400, headers: corsHeaders })
+      const preferenceBody = {
+        items: [
+          {
+            title: `Pedido ${orderPayload?.order_number || correlationID}`,
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: Number((value / 100).toFixed(2)),
+          },
+        ],
+        external_reference: correlationID,
+        notification_url: notificationUrl,
+        payer: {
+          email: `${correlationID}@boracume.local`,
+          name: customerName,
+          phone: customerPhone ? { area_code: "11", number: customerPhone.replace(/\D/g, '') } : undefined,
+        },
+        back_urls: {
+          success: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
+          pending: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
+          failure: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
+        },
+        auto_return: 'approved',
+        metadata: {
+          correlationID,
+          restaurantUserId,
+          payment_method: preferredMethod || null,
+        },
+      }
+
+      const prefResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(preferenceBody),
+      })
+
+      const prefJson: any = await prefResp.json().catch(() => ({}))
+      if (!prefResp.ok) {
+        await supabase
+          .from('pix_checkouts')
+          .update({
+            status: 'FAILED',
+            metadata: { provider: 'mercadopago', error: prefJson },
+            updated_at: new Date().toISOString()
+          })
+          .eq('correlation_id', correlationID)
+        return new Response(JSON.stringify({ ok: false, error: 'provider_error', details: prefJson }), { status: 502, headers: corsHeaders })
+      }
+
+      await supabase
+        .from('pix_checkouts')
+        .update({
+          status: 'PENDING',
+          transaction_id: String(prefJson?.id || ''),
+          metadata: {
+            provider: 'mercadopago',
+            preference_id: prefJson?.id ?? null,
+            init_point: prefJson?.init_point ?? null
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('correlation_id', correlationID)
+
+      return new Response(JSON.stringify({ ok: true, correlationID, initPoint: prefJson?.init_point || '', provider: 'mercadopago' }), { headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ ok: false, error: 'unsupported_provider' }), { status: 400, headers: corsHeaders })
