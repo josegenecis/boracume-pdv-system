@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { createPrintAgentToken, enqueuePrintJob } from '@/services/printRelay';
 import { supabase } from '@/integrations/supabase/client';
+import { claimBridgePairing } from '@/services/printPairing';
 
 const DeviceManager = () => {
   const { user } = useAuth();
@@ -38,6 +39,8 @@ const DeviceManager = () => {
   const [cloudPrinters, setCloudPrinters] = React.useState<Array<{ agent_id: string; printer_id: string; name: string; transport: string; address?: string }>>([]);
   const [fetchingCloudPrinters, setFetchingCloudPrinters] = React.useState(false);
   const [selectedCloudPrinterId, setSelectedCloudPrinterId] = React.useState<string>(() => loadPrinterConfig().relay?.selectedPrinter?.printerId || '');
+  const [pairingCode, setPairingCode] = React.useState('');
+  const [claimingPairing, setClaimingPairing] = React.useState(false);
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -230,7 +233,32 @@ const DeviceManager = () => {
               <div className="p-3 border rounded-lg">
                 <div className="text-sm font-medium mb-2">Cloud Relay (sem configurar IP no PWA)</div>
                 <div className="text-sm text-muted-foreground mb-3">
-                  Gere um token e configure no computador/mini-pc onde o bridge está rodando.
+                  Instale o BoraCumê Bridge no computador/mini-pc, gere um código e vincule aqui.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  <div className="sm:col-span-2">
+                    <Input value={pairingCode} onChange={(e) => setPairingCode(e.target.value)} placeholder="Código do Bridge (6 dígitos)" />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <Button
+                      className="w-full"
+                      disabled={claimingPairing || !user?.id || !pairingCode.trim()}
+                      onClick={async () => {
+                        try {
+                          setClaimingPairing(true);
+                          await claimBridgePairing({ pairingCode: pairingCode.trim(), name: tokenName });
+                          toast({ title: 'Bridge vinculado', description: 'Agora clique em “Buscar impressoras”.' });
+                          setPairingCode('');
+                        } catch (e: any) {
+                          toast({ title: 'Falha ao vincular', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
+                        } finally {
+                          setClaimingPairing(false);
+                        }
+                      }}
+                    >
+                      {claimingPairing ? 'Vinculando…' : 'Vincular'}
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="sm:col-span-2">

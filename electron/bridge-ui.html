@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BoraCumê Bridge</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0b0b0f; color: #f2f2f2; }
+      .wrap { padding: 20px; }
+      .card { background: #151521; border: 1px solid #25253a; border-radius: 12px; padding: 16px; margin-top: 12px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+      button { background: #3b82f6; color: #fff; border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; font-weight: 600; }
+      button.secondary { background: #2b2b3f; }
+      button:disabled { opacity: .5; cursor: default; }
+      .muted { color: #a4a4b8; font-size: 13px; }
+      .code { font-size: 34px; letter-spacing: 6px; font-weight: 800; text-align: center; padding: 12px; background: #0f0f18; border-radius: 12px; border: 1px solid #25253a; }
+      .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #23233a; border: 1px solid #2f2f4a; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h2 style="margin:0 0 6px 0">BoraCumê Bridge</h2>
+      <div class="muted">Deixe este app rodando no computador/mini-pc conectado à impressora.</div>
+
+      <div class="card">
+        <div class="row" style="align-items:center; justify-content:space-between">
+          <div>
+            <div style="font-weight:700">Status</div>
+            <div class="muted" id="statusText">Carregando…</div>
+          </div>
+          <div class="badge" id="badge">—</div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="btnStart">Iniciar</button>
+          <button class="secondary" id="btnStop">Parar</button>
+          <button class="secondary" id="btnPair">Gerar código</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:700; margin-bottom:8px">Vincular ao restaurante</div>
+        <div class="muted" style="margin-bottom:10px">
+          No PWA: Configurações → Dispositivos → Impressoras → Conectar Bridge (código).
+        </div>
+        <div class="code" id="pairingCode">------</div>
+        <div class="muted" style="margin-top:10px" id="pairingHelp">Clique em “Gerar código”.</div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const btnStart = $('btnStart')
+      const btnStop = $('btnStop')
+      const btnPair = $('btnPair')
+      const badge = $('badge')
+      const statusText = $('statusText')
+      const pairingCode = $('pairingCode')
+      const pairingHelp = $('pairingHelp')
+
+      let polling = null
+
+      const setStatus = (s) => {
+        badge.textContent = s
+        statusText.textContent = s === 'paired' ? 'Vinculado e pronto para imprimir' : (s === 'running' ? 'Rodando' : (s === 'stopped' ? 'Parado' : s))
+      }
+
+      const refresh = async () => {
+        const st = await window.bridgeAPI.getStatus()
+        if (st.pairingCode) {
+          pairingCode.textContent = st.pairingCode
+          pairingHelp.textContent = 'Digite esse código no PWA para vincular.'
+        } else {
+          pairingCode.textContent = '------'
+          pairingHelp.textContent = st.paired ? 'Já vinculado.' : 'Clique em “Gerar código”.'
+        }
+        if (st.paired) setStatus(st.running ? 'paired' : 'paired')
+        else setStatus(st.running ? 'running' : 'stopped')
+      }
+
+      btnStart.onclick = async () => { await window.bridgeAPI.start(); await refresh() }
+      btnStop.onclick = async () => { await window.bridgeAPI.stop(); await refresh() }
+      btnPair.onclick = async () => {
+        const res = await window.bridgeAPI.startPairing()
+        if (res?.pairingCode) {
+          pairingCode.textContent = res.pairingCode
+          pairingHelp.textContent = 'Digite esse código no PWA para vincular.'
+        }
+        if (polling) clearInterval(polling)
+        polling = setInterval(async () => {
+          const r = await window.bridgeAPI.pollPairing()
+          if (r?.status === 'paired') {
+            clearInterval(polling)
+            polling = null
+            await refresh()
+          }
+        }, 1500)
+      }
+
+      refresh()
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,40 @@
+{
+  "appId": "com.boracume.bridge",
+  "productName": "BoraCumê Bridge",
+  "directories": {
+    "output": "dist-bridge"
+  },
+  "files": [
+    "electron/bridge-*.js",
+    "electron/bridge-ui.html",
+    "native-bridge/**/*"
+  ],
+  "extraMetadata": {
+    "main": "electron/bridge-main.js"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/icon-512x512.png",
+    "verifyUpdateCodeSignature": false
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "mac": {
+    "target": "dmg",
+    "icon": "public/icon-512x512.png"
+  },
+  "linux": {
+    "target": "AppImage",
+    "icon": "public/icon-512x512.png"
+  }
+}
+

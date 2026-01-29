@@ -19,7 +19,9 @@
     "build:electron": "npm run build && electron-builder",
     "dist:electron": "npm run build && electron-builder --publish=never",
     "pack:electron": "electron-builder --dir",
-    "build:desktop-portable": "node build-desktop-portable.cjs"
+    "build:desktop-portable": "node build-desktop-portable.cjs",
+    "dist:bridge": "electron-builder --config electron-builder.bridge.json --publish=never",
+    "pack:bridge": "electron-builder --config electron-builder.bridge.json --dir"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^7.1.1",
