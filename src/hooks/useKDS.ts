@@ -37,6 +37,7 @@ export const useKDS = () => {
       const userId = user?.id || ''
       if (!userId) return
 
+      const cfgPrinter = loadPrinterConfig().relay?.selectedPrinter
       await enqueuePrintJob({
         restaurantUserId: userId,
         jobType: 'kds_receipt',
@@ -48,6 +49,12 @@ export const useKDS = () => {
           total: (order as any).total ?? 0,
           payment_method: (order as any).payment_method ?? undefined,
           date: order.created_at,
+          printer: cfgPrinter ? {
+            printer_id: cfgPrinter.printerId,
+            name: cfgPrinter.name,
+            transport: cfgPrinter.transport,
+            address: cfgPrinter.address || undefined,
+          } : undefined,
         }
       })
     } catch {

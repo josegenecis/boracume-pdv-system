@@ -7,6 +7,14 @@ export interface PrinterConfig {
     transport: PrinterTransport
     address?: string
   }
+  relay: {
+    selectedPrinter?: {
+      printerId: string
+      name: string
+      transport: PrinterTransport
+      address?: string
+    }
+  }
 }
 
 const STORAGE_KEY = 'boracume_printer_config_v1'
@@ -18,6 +26,7 @@ export const getDefaultPrinterConfig = (): PrinterConfig => ({
     transport: 'network',
     address: '',
   },
+  relay: {},
 })
 
 export const loadPrinterConfig = (): PrinterConfig => {
@@ -32,6 +41,10 @@ export const loadPrinterConfig = (): PrinterConfig => {
       bridge: {
         ...getDefaultPrinterConfig().bridge,
         ...(parsed?.bridge || {}),
+      },
+      relay: {
+        ...getDefaultPrinterConfig().relay,
+        ...(parsed?.relay || {}),
       },
     }
     return merged

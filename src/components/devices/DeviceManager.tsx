@@ -13,6 +13,7 @@ import { discoverBridgeWebsocketUrl } from '@/services/bridgeDiscovery';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { createPrintAgentToken, enqueuePrintJob } from '@/services/printRelay';
+import { supabase } from '@/integrations/supabase/client';
 
 const DeviceManager = () => {
   const { user } = useAuth();
@@ -34,6 +35,9 @@ const DeviceManager = () => {
   const [tokenName, setTokenName] = React.useState('Bridge Impressão');
   const [generatedToken, setGeneratedToken] = React.useState<string | null>(null);
   const [generatingToken, setGeneratingToken] = React.useState(false);
+  const [cloudPrinters, setCloudPrinters] = React.useState<Array<{ agent_id: string; printer_id: string; name: string; transport: string; address?: string }>>([]);
+  const [fetchingCloudPrinters, setFetchingCloudPrinters] = React.useState(false);
+  const [selectedCloudPrinterId, setSelectedCloudPrinterId] = React.useState<string>(() => loadPrinterConfig().relay?.selectedPrinter?.printerId || '');
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -274,6 +278,76 @@ const DeviceManager = () => {
                     </div>
                   </div>
                 )}
+                <div className="mt-4 border-t pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-medium">Impressoras disponíveis</div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={fetchingCloudPrinters || !user?.id}
+                      onClick={async () => {
+                        try {
+                          setFetchingCloudPrinters(true);
+                          const { data, error } = await supabase
+                            .from('print_agent_printers' as any)
+                            .select('agent_id, printer_id, name, transport, address, updated_at')
+                            .eq('restaurant_user_id', user?.id || '')
+                            .order('updated_at', { ascending: false })
+                            .limit(50);
+                          if (error) throw error;
+                          setCloudPrinters((data || []) as any);
+                        } catch (e: any) {
+                          toast({ title: 'Falha ao buscar impressoras', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
+                        } finally {
+                          setFetchingCloudPrinters(false);
+                        }
+                      }}
+                    >
+                      {fetchingCloudPrinters ? 'Buscando…' : 'Buscar impressoras'}
+                    </Button>
+                  </div>
+
+                  {cloudPrinters.length > 0 ? (
+                    <Select
+                      value={selectedCloudPrinterId}
+                      onValueChange={(v) => {
+                        setSelectedCloudPrinterId(v);
+                        const p = cloudPrinters.find(x => x.printer_id === v);
+                        if (p) {
+                          const cfg = loadPrinterConfig();
+                          savePrinterConfig({
+                            ...cfg,
+                            relay: {
+                              ...cfg.relay,
+                              selectedPrinter: {
+                                printerId: p.printer_id,
+                                name: p.name,
+                                transport: p.transport as any,
+                                address: p.address || '',
+                              }
+                            }
+                          });
+                          toast({ title: 'Impressora selecionada', description: p.name });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione uma impressora" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cloudPrinters.map((p) => (
+                          <SelectItem key={`${p.agent_id}:${p.printer_id}`} value={p.printer_id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      Clique em “Buscar impressoras”. O bridge precisa estar ligado e com token configurado.
+                    </div>
+                  )}
+                </div>
               </div>
               {printers.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">

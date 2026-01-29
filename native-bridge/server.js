@@ -242,6 +242,7 @@ const printAgentToken = getEnv('PRINT_AGENT_TOKEN')
 const relayTransport = getEnv('PRINT_TRANSPORT', 'BRIDGE_TRANSPORT') || 'system'
 const relayAddress = getEnv('PRINT_ADDRESS', 'BRIDGE_ADDRESS') || ''
 const relayIntervalMs = Number(getEnv('PRINT_RELAY_INTERVAL_MS') || '2000')
+const reportIntervalMs = Number(getEnv('PRINT_REPORT_INTERVAL_MS') || '5000')
 
 async function pollPrintJobs() {
   if (!supabaseUrl || !supabaseAnonKey || !printAgentToken) return
@@ -264,6 +265,10 @@ async function pollPrintJobs() {
       let ok = false
       let errText = ''
       try {
+        const printerCfg = job?.payload?.printer || {}
+        const transport = printerCfg.transport || relayTransport
+        const address = printerCfg.address || relayAddress || undefined
+        try { openPrinter(transport, address) } catch {}
         ok = await printReceipt(job?.payload || {})
       } catch (e) {
         ok = false
@@ -285,6 +290,37 @@ async function pollPrintJobs() {
   }
 }
 
+async function reportPrinters() {
+  if (!supabaseUrl || !supabaseAnonKey || !printAgentToken) return
+  try {
+    let printers = []
+    try {
+      const list = printerLib.getPrinters() || []
+      printers = list.map((p) => ({
+        printer_id: p.name,
+        name: p.isDefault ? `${p.name} (padrão)` : p.name,
+        transport: 'system',
+        address: p.name,
+        meta: { isDefault: !!p.isDefault, status: p.status || null },
+      }))
+    } catch {
+      printers = []
+    }
+
+    await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/print-agent-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'x-print-agent-token': printAgentToken,
+      },
+      body: JSON.stringify({ printers }),
+    }).catch(() => {})
+  } catch {
+  }
+}
+
 try {
   openPrinter(relayTransport, relayAddress || undefined)
 } catch {
@@ -292,4 +328,6 @@ try {
 
 if (supabaseUrl && supabaseAnonKey && printAgentToken) {
   setInterval(pollPrintJobs, Math.max(500, relayIntervalMs))
+  setInterval(reportPrinters, Math.max(1000, reportIntervalMs))
+  reportPrinters()
 }
