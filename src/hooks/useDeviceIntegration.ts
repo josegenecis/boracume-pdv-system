@@ -1,10 +1,11 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService, PrinterDevice } from '@/services/PrinterService';
 import { ScaleService, ScaleDevice } from '@/services/ScaleService';
-import { HardwareFallbackManager } from '@/services/hardwareFallback';
+import { WebSocketPrinterFallback } from '@/services/hardwareFallback';
 import { ElectronDeviceService, ElectronDevice } from '@/services/ElectronDeviceService';
+import { loadPrinterConfig, savePrinterConfig, type PrinterTransport } from '@/services/printerConfig';
 
 export interface Device {
   id: string;
@@ -21,22 +22,31 @@ export const useDeviceIntegration = () => {
   const { toast } = useToast();
 
   // Initialize services
-  const printerService = new PrinterService();
-  const scaleService = new ScaleService();
-  const fallback = new HardwareFallbackManager();
-  const bridgePrinter = fallback.createWebSocketPrinter();
-  const [bridgeConfig, setBridgeConfig] = useState<{ transport: 'network' | 'usb' | 'bluetooth' | 'system'; address?: string }>({ transport: 'network' });
+  const printerService = useMemo(() => new PrinterService(), []);
+  const scaleService = useMemo(() => new ScaleService(), []);
+  const initialCfg = useMemo(() => loadPrinterConfig(), []);
+  const [bridgeConfig, setBridgeConfig] = useState<{ websocketUrl: string; transport: PrinterTransport; address?: string }>(() => ({
+    websocketUrl: initialCfg.bridge.websocketUrl,
+    transport: initialCfg.bridge.transport,
+    address: initialCfg.bridge.address || '',
+  }));
+  const bridgePrinter = useMemo(() => new WebSocketPrinterFallback(bridgeConfig.websocketUrl), [bridgeConfig.websocketUrl]);
   const electronService = new ElectronDeviceService();
   const isElectron = electronService.isElectronEnvironment();
 
-  const connectBridgePrinter = useCallback(async (cfg?: { transport?: 'network' | 'usb' | 'bluetooth' | 'system'; address?: string }) => {
+  const connectBridgePrinter = useCallback(async (cfg?: { websocketUrl?: string; transport?: PrinterTransport; address?: string }) => {
     const config = { ...bridgeConfig, ...(cfg || {}) };
     const ok = await bridgePrinter.connect(config.transport as any, config.address);
     if (ok) {
       setDevices(prev => prev.map(d => d.id === 'bridge_printer' ? { ...d, status: 'connected' } : d));
+      const saved = loadPrinterConfig()
+      savePrinterConfig({
+        ...saved,
+        bridge: { ...saved.bridge, websocketUrl: config.websocketUrl, transport: config.transport, address: config.address || '' },
+      })
       toast({ title: 'Bridge conectada', description: `Transporte: ${config.transport}${config.address ? `, endereço: ${config.address}` : ''}` });
     } else {
-      toast({ title: 'Falha ao conectar bridge', description: 'Verifique se o servidor local está rodando (ws://localhost:8766)', variant: 'destructive' });
+      toast({ title: 'Falha ao conectar bridge', description: `Verifique se o servidor está rodando (${config.websocketUrl})`, variant: 'destructive' });
     }
     return ok;
   }, [bridgeConfig, bridgePrinter, toast]);

@@ -8,6 +8,8 @@ import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff, Link as 
 import { useDeviceIntegration, Device } from '@/hooks/useDeviceIntegration';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { loadPrinterConfig, savePrinterConfig } from '@/services/printerConfig';
 
 const DeviceManager = () => {
   const { 
@@ -21,6 +23,8 @@ const DeviceManager = () => {
     setBridgeConfig,
     connectBridgePrinter
   } = useDeviceIntegration();
+
+  const [autoPrintKds, setAutoPrintKds] = React.useState(() => loadPrinterConfig().autoPrintKds);
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -148,9 +152,16 @@ const DeviceManager = () => {
               <div className="p-3 border rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <LinkIcon size={18} />
-                  <span className="text-sm">Bridge local (ws://localhost:8766)</span>
+                  <span className="text-sm">Bridge de impressão (WebSocket)</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-3">
+                    <Input
+                      placeholder="ws://localhost:8766 (ou ws://IP_DA_REDE:8766)"
+                      value={bridgeConfig.websocketUrl}
+                      onChange={(e) => setBridgeConfig(prev => ({ ...prev, websocketUrl: e.target.value }))}
+                    />
+                  </div>
                   <div>
                     <Select value={['network','usb','bluetooth','system'].includes(bridgeConfig.transport as any) ? (bridgeConfig.transport as any) : 'network'} onValueChange={(v) => setBridgeConfig(prev => ({ ...prev, transport: v as any }))}>
                       <SelectTrigger className="w-full"><SelectValue placeholder="Transporte" /></SelectTrigger>
@@ -166,8 +177,22 @@ const DeviceManager = () => {
                     <Input placeholder="Endereço/IP (ex.: 192.168.0.50)" value={bridgeConfig.address || ''} onChange={(e) => setBridgeConfig(prev => ({ ...prev, address: e.target.value }))} />
                   </div>
                 </div>
+                <div className="flex items-center justify-between mt-3 border-t pt-3">
+                  <div className="text-sm">
+                    <div className="font-medium">Impressão automática (Cozinha/KDS)</div>
+                    <div className="text-muted-foreground">Imprime quando o pedido entrar em preparo</div>
+                  </div>
+                  <Switch
+                    checked={autoPrintKds}
+                    onCheckedChange={(checked) => {
+                      setAutoPrintKds(checked);
+                      const cfg = loadPrinterConfig();
+                      savePrinterConfig({ ...cfg, autoPrintKds: checked, bridge: { ...cfg.bridge, websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address || '' } });
+                    }}
+                  />
+                </div>
                 <div className="flex justify-end mt-2">
-                  <Button size="sm" variant="outline" onClick={() => connectBridgePrinter()}>Conectar Bridge</Button>
+                  <Button size="sm" variant="outline" onClick={() => connectBridgePrinter({ websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address })}>Conectar Bridge</Button>
                 </div>
               </div>
               {printers.length === 0 ? (

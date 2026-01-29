@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { loadPrinterConfig } from '@/services/printerConfig';
+import { bridgePrintReceipt } from '@/services/bridgePrinterClient';
 
 export interface KitchenOrder {
   id: string;
@@ -21,6 +23,38 @@ export const useKDS = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
+  const printedIds = (globalThis as any).__boracumePrintedKdsOrders || new Set<string>();
+  (globalThis as any).__boracumePrintedKdsOrders = printedIds;
+
+  const tryAutoPrint = async (order: KitchenOrder) => {
+    try {
+      const cfg = loadPrinterConfig();
+      if (!cfg.autoPrintKds) return;
+      if (!order?.id) return;
+      if (printedIds.has(order.id)) return;
+      printedIds.add(order.id);
+
+      const ok = await bridgePrintReceipt({
+        websocketUrl: cfg.bridge.websocketUrl,
+        transport: cfg.bridge.transport,
+        address: cfg.bridge.address || undefined,
+        payload: {
+          order_number: order.order_number,
+          customer_name: order.customer_name,
+          items: order.items || [],
+          total: (order as any).total ?? 0,
+          payment_method: (order as any).payment_method ?? undefined,
+          date: order.created_at,
+        },
+        timeoutMs: 12000,
+      });
+
+      if (!ok) {
+        printedIds.delete(order.id);
+      }
+    } catch {
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -75,6 +109,9 @@ export const useKDS = () => {
             if (['preparing', 'ready'].includes(newOrder.status)) {
               setOrders(prev => [...prev, newOrder]);
               playNotificationSound();
+              if (newOrder.status === 'preparing') {
+                tryAutoPrint(newOrder);
+              }
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as KitchenOrder;
@@ -90,6 +127,9 @@ export const useKDS = () => {
                   return prev.map(o => o.id === updatedOrder.id ? updatedOrder : o);
                 } else {
                   playNotificationSound();
+                  if (updatedOrder.status === 'preparing') {
+                    tryAutoPrint(updatedOrder);
+                  }
                   return [...prev, updatedOrder];
                 }
               });
