@@ -1,7 +1,6 @@
 const { spawnSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const os = require('os')
 
 const run = (cmd, args, cwd, env) => {
   const res = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32', env: env || process.env })
@@ -30,6 +29,12 @@ const env = {
   ...process.env,
   PATH: `${shimDir}${path.delimiter}${process.env.PATH || ''}`,
   PYTHON: process.platform === 'win32' ? 'python' : 'python3',
+}
+
+if (process.platform !== 'win32') {
+  env.CXXFLAGS = env.CXXFLAGS ? `${env.CXXFLAGS} -std=c++20` : '-std=c++20'
+  env.CFLAGS = env.CFLAGS ? `${env.CFLAGS} -std=c++20` : '-std=c++20'
+  env.npm_config_cxxflags = env.CXXFLAGS
 }
 
 run('npm', ['install', '--no-audit', '--no-fund'], nativeBridgeDir, env)

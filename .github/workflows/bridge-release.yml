@@ -6,6 +6,9 @@ on:
     tags:
       - "bridge-v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -57,4 +60,3 @@ jobs:
           files: |
             release-artifacts/**/*
           generate_release_notes: true
-
