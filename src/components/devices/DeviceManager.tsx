@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { loadPrinterConfig, savePrinterConfig } from '@/services/printerConfig';
+import { discoverBridgeWebsocketUrl } from '@/services/bridgeDiscovery';
 
 const DeviceManager = () => {
   const { 
@@ -25,6 +26,7 @@ const DeviceManager = () => {
   } = useDeviceIntegration();
 
   const [autoPrintKds, setAutoPrintKds] = React.useState(() => loadPrinterConfig().autoPrintKds);
+  const [detectingBridge, setDetectingBridge] = React.useState(false);
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -191,7 +193,25 @@ const DeviceManager = () => {
                     }}
                   />
                 </div>
-                <div className="flex justify-end mt-2">
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={detectingBridge}
+                    onClick={async () => {
+                      try {
+                        setDetectingBridge(true);
+                        const found = await discoverBridgeWebsocketUrl({ timeoutMs: 900 });
+                        if (found) {
+                          setBridgeConfig(prev => ({ ...prev, websocketUrl: found }));
+                        }
+                      } finally {
+                        setDetectingBridge(false);
+                      }
+                    }}
+                  >
+                    {detectingBridge ? 'Detectando…' : 'Detectar bridge'}
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => connectBridgePrinter({ websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address })}>Conectar Bridge</Button>
                 </div>
               </div>
