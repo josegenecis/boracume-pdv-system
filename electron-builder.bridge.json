@@ -7,7 +7,9 @@
   "files": [
     "electron/bridge-*.js",
     "electron/bridge-ui.html",
-    "native-bridge/**/*"
+    "native-bridge/**/*",
+    "native-bridge/node_modules/**/*",
+    "public/icon-512x512.png"
   ],
   "extraMetadata": {
     "main": "electron/bridge-main.js"
@@ -37,4 +39,3 @@
     "icon": "public/icon-512x512.png"
   }
 }
-

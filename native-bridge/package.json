@@ -7,12 +7,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "escpos": "3.0.0-alpha.7",
-    "escpos-usb": "3.0.0-alpha.4",
-    "escpos-bluetooth": "3.0.0-alpha.4",
-    "escpos-network": "3.0.0-alpha.3",
-    "usb": "1.9.2",
-    "printer": "@thiagoelg/node-printer",
+    "@thiagoelg/node-printer": "0.6.2",
+    "node-gyp": "^10.0.1",
     "ws": "8.16.0"
   }
 }

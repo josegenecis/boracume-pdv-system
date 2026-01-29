@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
+const { Tray, Menu } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { spawn } = require('child_process')
@@ -16,6 +17,8 @@ const writeConfig = (cfg) => {
 }
 
 let bridgeProc = null
+let tray = null
+let win = null
 
 const stopBridge = () => {
   try { bridgeProc?.kill() } catch {}
@@ -42,10 +45,10 @@ const fetchJson = async (url, options) => {
   try { return JSON.parse(text) } catch { return {} }
 }
 
-const functionsBase = () => `${SUPABASE_URL.replace(/\\/+$/, '')}/functions/v1`
+const functionsBase = () => `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1`
 
 const createWindow = () => {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 520,
     height: 520,
     resizable: false,
@@ -54,6 +57,25 @@ const createWindow = () => {
     }
   })
   win.loadFile(path.join(__dirname, 'bridge-ui.html'))
+  win.on('close', (e) => {
+    e.preventDefault()
+    win.hide()
+  })
+}
+
+const createTray = () => {
+  const iconPath = path.join(__dirname, '..', 'public', 'icon-512x512.png')
+  tray = new Tray(iconPath)
+  tray.setToolTip('BoraCumê Bridge')
+  tray.on('double-click', () => {
+    if (win) win.show()
+  })
+  const menu = Menu.buildFromTemplate([
+    { label: 'Abrir', click: () => win && win.show() },
+    { type: 'separator' },
+    { label: 'Sair', click: () => { stopBridge(); app.exit(0) } },
+  ])
+  tray.setContextMenu(menu)
 }
 
 ipcMain.handle('bridge:getStatus', async () => {
@@ -120,12 +142,17 @@ ipcMain.handle('bridge:stop', async () => {
 app.whenReady().then(() => {
   const cfg = readConfig()
   if (cfg?.token) startBridge(cfg.token)
+  app.setLoginItemSettings({ openAtLogin: true })
+  if (!app.requestSingleInstanceLock()) {
+    app.quit()
+    return
+  }
+  createTray()
   createWindow()
 })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit()
+    return
   }
 })
-

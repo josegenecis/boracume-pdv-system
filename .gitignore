@@ -7,35 +7,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
-<<<<<<< HEAD
 dist-electron
-*.local
+dist-bridge
+*.zip
+.bridge-build-bin
 
-# Environment files
+# Local config
+*.local
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Build outputs
-dist.zip
-*.zip
-
-# Test files
-test-*.cjs
-test-*.js
-debug-*.cjs
-debug-*.js
-*.test.js
-*.test.cjs
-
-# Database and SQL files
-*.sql
-*.cjs
+# Scratch scripts (keeps repo clean)
+/*.cjs
 aplicar-*.cjs
 corrigir-*.cjs
 solucao-*.cjs
@@ -52,48 +44,28 @@ populate-*.js
 create-*.js
 system-*.js
 open-*.cjs
-create-*.cjs
 force-*.js
 finalizar-*.cjs
 
-# Supabase
+# Supabase local cache
 supabase/.branches
 supabase/.temp
 
-# Electron
+# Electron cache
 electron/dist
 electron/build
 
-=======
-*.local
-
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
-# Editor directories and files
+# Editor/OS files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-<<<<<<< HEAD
 
-# OS generated files
-Thumbs.db
-.DS_Store
-
-# Backup files
-*-backup.*
-Orders-backup.tsx
-
-# Documentation files (optional)
-*.md
-!README.md
-
-# Batch files
-*.bat
-=======
->>>>>>> e6b7a9c65be63386bc4aeecbe63c76dd1d44ce44
 .vercel
+.trae

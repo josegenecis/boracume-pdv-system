@@ -1,22 +1,12 @@
 import { WebSocketServer } from 'ws'
-import escpos from 'escpos'
-import usb from 'escpos-usb'
-import Bluetooth from 'escpos-bluetooth'
-import Network from 'escpos-network'
 import os from 'os'
 import net from 'net'
-import nodeUsb from 'usb'
-import printerLib from 'printer'
-
-escpos.USB = usb
-escpos.Bluetooth = Bluetooth
-escpos.Network = Network
+import printerLib from '@thiagoelg/node-printer'
 
 const wss = new WebSocketServer({ port: 8766 })
 
-let device = null
-let printer = null
 let systemPrinterName = null
+let networkAddress = null
 
 const getEnv = (...keys) => {
   for (const k of keys) {
@@ -30,28 +20,46 @@ function openPrinter(transport, address) {
   try {
     switch (transport) {
       case 'network':
-        device = new escpos.Network(address || '192.168.0.100')
-        break
-      case 'usb':
-        device = new escpos.USB()
-        break
-      case 'bluetooth':
-        device = new escpos.Bluetooth(address || undefined)
-        break
+        networkAddress = address || null
+        systemPrinterName = null
+        return !!networkAddress
       case 'system':
-        systemPrinterName = address || null
-        device = null
-        printer = null
+        systemPrinterName = address || printerLib.getDefaultPrinterName?.() || null
+        networkAddress = null
+        return !!systemPrinterName
+      case 'usb':
+      case 'bluetooth':
+        systemPrinterName = address || printerLib.getDefaultPrinterName?.() || null
+        networkAddress = null
         return !!systemPrinterName
       default:
         throw new Error('Unsupported transport')
     }
-    printer = new escpos.Printer(device)
-    return true
   } catch (e) {
     console.error('openPrinter error', e)
     return false
   }
+}
+
+async function printRawNetwork(data) {
+  return await new Promise((resolve) => {
+    try {
+      const sock = new net.Socket()
+      let resolved = false
+      const done = (ok) => { if (!resolved) { resolved = true; try { sock.destroy() } catch {} ; resolve(ok) } }
+      sock.setTimeout(4000)
+      sock.once('connect', () => {
+        try { sock.write(Buffer.from(data, 'binary')) } catch {}
+        try { sock.end() } catch {}
+        done(true)
+      })
+      sock.once('error', () => done(false))
+      sock.once('timeout', () => done(false))
+      sock.connect(9100, networkAddress)
+    } catch {
+      resolve(false)
+    }
+  })
 }
 
 async function printTest() {
@@ -59,14 +67,8 @@ async function printTest() {
   if (systemPrinterName) {
     return await printRawSystem(data)
   }
-  return new Promise((resolve, reject) => {
-    device.open(() => {
-      try {
-        sendEscposViaLib(data)
-        resolve(true)
-      } catch (e) { reject(e) }
-    })
-  })
+  if (networkAddress) return await printRawNetwork(data)
+  return false
 }
 
 async function printReceipt(data) {
@@ -75,11 +77,8 @@ async function printReceipt(data) {
   if (systemPrinterName) {
     return await printRawSystem(escposData)
   }
-  return new Promise((resolve, reject) => {
-    device.open(() => {
-      try { sendEscposViaLib(escposData); resolve(true) } catch (e) { reject(e) }
-    })
-  })
+  if (networkAddress) return await printRawNetwork(escposData)
+  return false
 }
 
 function buildEscpos({ header = 'BORA CUME HUB', customer_name, customer_phone, items = [], total = 0, order_number }) {
@@ -114,21 +113,6 @@ function buildEscpos({ header = 'BORA CUME HUB', customer_name, customer_phone, 
   d += 'Obrigado pela preferência!\n\n\n'
   d += '\x1D\x56\x00' // cut
   return d
-}
-
-function sendEscposViaLib(data) {
-  // escpos lib prints via device/printer
-  printer.align('ct').text('') // no-op to ensure instance exists
-  // As escpos lib expects builder methods; instead write raw via device?
-  // Fallback: use network directly for 9100
-  if (device && device.constructor?.name === 'Network') {
-    const sock = new net.Socket()
-    const addr = device.address || device?.opts?.address
-    sock.connect(9100, addr, () => { sock.write(Buffer.from(data, 'binary')); sock.end() })
-  } else {
-    // For USB/Bluetooth via escpos, not all provide raw write; attempt text
-    printer.text('')
-  }
 }
 
 async function printRawSystem(data) {
@@ -187,12 +171,12 @@ wss.on('connection', (ws) => {
           break
         }
         case 'test_print': {
-          const ok = printer ? await printTest() : false
+          const ok = (systemPrinterName || networkAddress) ? await printTest() : false
           ws.send(JSON.stringify({ ok, event: 'printed_test' }))
           break
         }
         case 'print_receipt': {
-          const ok = printer ? await printReceipt(payload) : false
+          const ok = (systemPrinterName || networkAddress) ? await printReceipt(payload) : false
           ws.send(JSON.stringify({ ok, event: 'printed_receipt' }))
           break
         }
@@ -207,11 +191,7 @@ wss.on('connection', (ws) => {
           break
         }
         case 'scan_usb_printers': {
-          let list = []
-          try {
-            const devices = nodeUsb.getDeviceList()
-            list = devices.map(d => ({ vendorId: d.deviceDescriptor?.idVendor, productId: d.deviceDescriptor?.idProduct, transport: 'usb' }))
-          } catch {}
+          const list = []
           ws.send(JSON.stringify({ ok: true, event: 'scan_usb_done', printers: list }))
           break
         }
