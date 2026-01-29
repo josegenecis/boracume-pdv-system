@@ -18,6 +18,14 @@ let device = null
 let printer = null
 let systemPrinterName = null
 
+const getEnv = (...keys) => {
+  for (const k of keys) {
+    const v = process.env[k]
+    if (v) return v
+  }
+  return ''
+}
+
 function openPrinter(transport, address) {
   try {
     switch (transport) {
@@ -227,3 +235,61 @@ wss.on('connection', (ws) => {
 })
 
 console.log('Native Bridge listening on ws://localhost:8766')
+
+const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
+const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'BORACUME_SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY')
+const printAgentToken = getEnv('PRINT_AGENT_TOKEN')
+const relayTransport = getEnv('PRINT_TRANSPORT', 'BRIDGE_TRANSPORT') || 'system'
+const relayAddress = getEnv('PRINT_ADDRESS', 'BRIDGE_ADDRESS') || ''
+const relayIntervalMs = Number(getEnv('PRINT_RELAY_INTERVAL_MS') || '2000')
+
+async function pollPrintJobs() {
+  if (!supabaseUrl || !supabaseAnonKey || !printAgentToken) return
+  try {
+    const resp = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/print-agent-poll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'x-print-agent-token': printAgentToken,
+      },
+      body: JSON.stringify({ limit: 5 }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    const jobs = Array.isArray(json?.jobs) ? json.jobs : []
+    if (jobs.length === 0) return
+
+    for (const job of jobs) {
+      let ok = false
+      let errText = ''
+      try {
+        ok = await printReceipt(job?.payload || {})
+      } catch (e) {
+        ok = false
+        errText = String(e?.message || e)
+      }
+
+      await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/print-agent-complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'x-print-agent-token': printAgentToken,
+        },
+        body: JSON.stringify({ jobId: job.id, ok, error: errText }),
+      }).catch(() => {})
+    }
+  } catch {
+  }
+}
+
+try {
+  openPrinter(relayTransport, relayAddress || undefined)
+} catch {
+}
+
+if (supabaseUrl && supabaseAnonKey && printAgentToken) {
+  setInterval(pollPrintJobs, Math.max(500, relayIntervalMs))
+}

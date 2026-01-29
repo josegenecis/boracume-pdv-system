@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { loadPrinterConfig } from '@/services/printerConfig';
-import { bridgePrintReceipt } from '@/services/bridgePrinterClient';
+import { enqueuePrintJob } from '@/services/printRelay';
 
 export interface KitchenOrder {
   id: string;
@@ -34,25 +34,24 @@ export const useKDS = () => {
       if (printedIds.has(order.id)) return;
       printedIds.add(order.id);
 
-      const ok = await bridgePrintReceipt({
-        websocketUrl: cfg.bridge.websocketUrl,
-        transport: cfg.bridge.transport,
-        address: cfg.bridge.address || undefined,
+      const userId = user?.id || ''
+      if (!userId) return
+
+      await enqueuePrintJob({
+        restaurantUserId: userId,
+        jobType: 'kds_receipt',
         payload: {
+          order_id: order.id,
           order_number: order.order_number,
           customer_name: order.customer_name,
           items: order.items || [],
           total: (order as any).total ?? 0,
           payment_method: (order as any).payment_method ?? undefined,
           date: order.created_at,
-        },
-        timeoutMs: 12000,
-      });
-
-      if (!ok) {
-        printedIds.delete(order.id);
-      }
+        }
+      })
     } catch {
+      printedIds.delete(order.id);
     }
   };
 
@@ -77,7 +76,7 @@ export const useKDS = () => {
 
       if (error) throw error;
       
-      setOrders(data || []);
+      setOrders((data || []) as any);
     } catch (error) {
       console.error('Error fetching KDS orders:', error);
       toast({

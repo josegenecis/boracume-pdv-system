@@ -3,7 +3,6 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Scale, Printer, Bluetooth, Wifi, Usb, Search, Power, PowerOff, Link as LinkIcon } from 'lucide-react';
 import { useDeviceIntegration, Device } from '@/hooks/useDeviceIntegration';
 import { Input } from '@/components/ui/input';
@@ -11,8 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { loadPrinterConfig, savePrinterConfig } from '@/services/printerConfig';
 import { discoverBridgeWebsocketUrl } from '@/services/bridgeDiscovery';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { createPrintAgentToken, enqueuePrintJob } from '@/services/printRelay';
 
 const DeviceManager = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const { 
     devices, 
     isScanning, 
@@ -27,6 +31,9 @@ const DeviceManager = () => {
 
   const [autoPrintKds, setAutoPrintKds] = React.useState(() => loadPrinterConfig().autoPrintKds);
   const [detectingBridge, setDetectingBridge] = React.useState(false);
+  const [tokenName, setTokenName] = React.useState('Bridge Impressão');
+  const [generatedToken, setGeneratedToken] = React.useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = React.useState(false);
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -215,6 +222,59 @@ const DeviceManager = () => {
                   <Button size="sm" variant="outline" onClick={() => connectBridgePrinter({ websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address })}>Conectar Bridge</Button>
                 </div>
               </div>
+
+              <div className="p-3 border rounded-lg">
+                <div className="text-sm font-medium mb-2">Cloud Relay (sem configurar IP no PWA)</div>
+                <div className="text-sm text-muted-foreground mb-3">
+                  Gere um token e configure no computador/mini-pc onde o bridge está rodando.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <Input value={tokenName} onChange={(e) => setTokenName(e.target.value)} placeholder="Nome do token (ex.: Caixa 1)" />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <Button
+                      className="w-full"
+                      disabled={generatingToken || !user?.id}
+                      onClick={async () => {
+                        try {
+                          setGeneratingToken(true);
+                          const { token } = await createPrintAgentToken({ restaurantUserId: user?.id || '', name: tokenName });
+                          setGeneratedToken(token);
+                          toast({ title: 'Token gerado', description: 'Copie e cole no bridge (PRINT_AGENT_TOKEN).' });
+                        } catch (e: any) {
+                          toast({ title: 'Falha ao gerar token', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
+                        } finally {
+                          setGeneratingToken(false);
+                        }
+                      }}
+                    >
+                      {generatingToken ? 'Gerando…' : 'Gerar token'}
+                    </Button>
+                  </div>
+                </div>
+                {generatedToken && (
+                  <div className="mt-3">
+                    <Input readOnly value={generatedToken} />
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(generatedToken);
+                            toast({ title: 'Copiado', description: 'Token copiado para a área de transferência.' });
+                          } catch {
+                            toast({ title: 'Não foi possível copiar', description: 'Copie manualmente o token.', variant: 'destructive' });
+                          }
+                        }}
+                      >
+                        Copiar token
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
               {printers.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">
                   Nenhuma impressora encontrada
@@ -261,7 +321,7 @@ const DeviceManager = () => {
                 ))
               )}
              {connectedPrinter && (
-               <div className="flex justify-end">
+               <div className="flex justify-end gap-2">
                  <Button
                    variant="default"
                    size="sm"
@@ -269,6 +329,25 @@ const DeviceManager = () => {
                     onClick={() => printReceipt({ order_number: 'TESTE', customer_name: 'Teste', items: [{ quantity: 1, product_name: 'Item', subtotal: 0 }], total: 0 }, { transport: bridgeConfig.transport, address: bridgeConfig.address })}
                   >
                     Imprimir teste
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!user?.id}
+                    onClick={async () => {
+                      try {
+                        await enqueuePrintJob({
+                          restaurantUserId: user?.id || '',
+                          jobType: 'test_receipt',
+                          payload: { order_number: 'TESTE', customer_name: 'Teste', items: [{ quantity: 1, product_name: 'Item', subtotal: 0 }], total: 0, date: new Date().toISOString() }
+                        })
+                        toast({ title: 'Enfileirado', description: 'Job enviado para a fila (cloud relay).' })
+                      } catch (e: any) {
+                        toast({ title: 'Falha ao enfileirar', description: e?.message || 'Erro desconhecido', variant: 'destructive' })
+                      }
+                    }}
+                  >
+                    Enviar teste (fila)
                   </Button>
                 </div>
               )}
