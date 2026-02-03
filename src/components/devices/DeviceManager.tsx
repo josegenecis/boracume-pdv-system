@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createPrintAgentToken, enqueuePrintJob } from '@/services/printRelay';
 import { supabase } from '@/integrations/supabase/client';
 import { claimBridgePairing } from '@/services/printPairing';
+import { getLatestBridgeWindowsExe } from '@/services/bridgeDownload';
 
 const DeviceManager = () => {
   const { user } = useAuth();
@@ -41,6 +42,7 @@ const DeviceManager = () => {
   const [selectedCloudPrinterId, setSelectedCloudPrinterId] = React.useState<string>(() => loadPrinterConfig().relay?.selectedPrinter?.printerId || '');
   const [pairingCode, setPairingCode] = React.useState('');
   const [claimingPairing, setClaimingPairing] = React.useState(false);
+  const [downloadingBridge, setDownloadingBridge] = React.useState(false);
 
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
@@ -234,6 +236,28 @@ const DeviceManager = () => {
                 <div className="text-sm font-medium mb-2">Cloud Relay (sem configurar IP no PWA)</div>
                 <div className="text-sm text-muted-foreground mb-3">
                   Instale o BoraCumê Bridge no computador/mini-pc, gere um código e vincule aqui.
+                </div>
+                <div className="flex justify-end mb-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={downloadingBridge}
+                    onClick={async () => {
+                      try {
+                        setDownloadingBridge(true);
+                        const exe = await getLatestBridgeWindowsExe();
+                        if (exe?.url) {
+                          window.open(exe.url, '_blank', 'noopener,noreferrer');
+                        } else {
+                          window.open('https://github.com/josegenecis/boracume-pdv-system/releases', '_blank', 'noopener,noreferrer');
+                        }
+                      } finally {
+                        setDownloadingBridge(false);
+                      }
+                    }}
+                  >
+                    {downloadingBridge ? 'Abrindo…' : 'Baixar Bridge (Windows .exe)'}
+                  </Button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                   <div className="sm:col-span-2">

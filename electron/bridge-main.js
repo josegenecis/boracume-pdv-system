@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron')
 const { Tray, Menu } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const { spawn } = require('child_process')
+const { spawn, exec } = require('child_process')
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gcfyrcpugmducptktjic.supabase.co'
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZnlyY3B1Z21kdWNwdGt0amljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MzAwNjUsImV4cCI6MjA2MzUwNjA2NX0.G9l2LEE6DtnSGChmGx5sTCQhC7yVHZJtq6rTTsti2aE'
@@ -27,11 +27,14 @@ const stopBridge = () => {
 
 const startBridge = (token) => {
   stopBridge()
+  const cfg = readConfig()
   const env = {
     ...process.env,
     SUPABASE_URL,
     SUPABASE_ANON_KEY,
     PRINT_AGENT_TOKEN: token,
+    PRINT_TRANSPORT: 'system',
+    PRINT_ADDRESS: cfg?.printerName || '',
   }
 
   const serverPath = path.join(__dirname, '..', 'native-bridge', 'server.js')
@@ -136,6 +139,45 @@ ipcMain.handle('bridge:start', async () => {
 
 ipcMain.handle('bridge:stop', async () => {
   stopBridge()
+  return { ok: true }
+})
+
+ipcMain.handle('bridge:listPrinters', async () => {
+  if (process.platform !== 'win32') return { ok: true, printers: [] }
+  return await new Promise((resolve) => {
+    const cmd = 'powershell "Get-Printer | Select-Object Name, PrinterStatus, DriverName, PortName, Shared, Published, IsDefault | ConvertTo-Json"'
+    exec(cmd, { windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+      if (err) return resolve({ ok: false, printers: [] })
+      try {
+        const data = JSON.parse(stdout || '[]')
+        const arr = Array.isArray(data) ? data : (data ? [data] : [])
+        resolve({
+          ok: true,
+          printers: arr.map((p) => ({
+            name: p.Name,
+            isDefault: !!p.IsDefault,
+            status: p.PrinterStatus,
+            driver: p.DriverName,
+            port: p.PortName,
+          })),
+        })
+      } catch {
+        resolve({ ok: false, printers: [] })
+      }
+    })
+  })
+})
+
+ipcMain.handle('bridge:getPrinterSelection', async () => {
+  const cfg = readConfig()
+  return { ok: true, printerName: cfg?.printerName || '' }
+})
+
+ipcMain.handle('bridge:setPrinterSelection', async (_ev, payload) => {
+  const cfg = readConfig()
+  const printerName = payload?.printerName ? String(payload.printerName) : ''
+  writeConfig({ ...cfg, printerName })
+  if (cfg?.token) startBridge(cfg.token)
   return { ok: true }
 })
 

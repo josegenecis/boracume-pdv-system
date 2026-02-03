@@ -15,6 +15,7 @@
       .muted { color: #a4a4b8; font-size: 13px; }
       .code { font-size: 34px; letter-spacing: 6px; font-weight: 800; text-align: center; padding: 12px; background: #0f0f18; border-radius: 12px; border: 1px solid #25253a; }
       .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #23233a; border: 1px solid #2f2f4a; }
+      select { width: 100%; background: #0f0f18; color: #f2f2f2; border: 1px solid #25253a; border-radius: 10px; padding: 10px 12px; }
     </style>
   </head>
   <body>
@@ -45,6 +46,17 @@
         <div class="code" id="pairingCode">------</div>
         <div class="muted" style="margin-top:10px" id="pairingHelp">Clique em “Gerar código”.</div>
       </div>
+
+      <div class="card">
+        <div style="font-weight:700; margin-bottom:8px">Impressora do Windows</div>
+        <div class="muted" style="margin-bottom:10px">Escolha a impressora que vai imprimir os pedidos.</div>
+        <select id="printerSelect"></select>
+        <div class="row" style="margin-top:12px">
+          <button class="secondary" id="btnRefreshPrinters">Atualizar lista</button>
+          <button id="btnSavePrinter">Salvar</button>
+        </div>
+        <div class="muted" style="margin-top:10px" id="printerHelp"></div>
+      </div>
     </div>
 
     <script>
@@ -56,6 +68,10 @@
       const statusText = $('statusText')
       const pairingCode = $('pairingCode')
       const pairingHelp = $('pairingHelp')
+      const printerSelect = $('printerSelect')
+      const btnRefreshPrinters = $('btnRefreshPrinters')
+      const btnSavePrinter = $('btnSavePrinter')
+      const printerHelp = $('printerHelp')
 
       let polling = null
 
@@ -77,6 +93,30 @@
         else setStatus(st.running ? 'running' : 'stopped')
       }
 
+      const loadPrinters = async () => {
+        printerSelect.innerHTML = ''
+        const sel = await window.bridgeAPI.getPrinterSelection()
+        const current = sel?.printerName || ''
+        const res = await window.bridgeAPI.listPrinters()
+        const printers = (res && res.ok && Array.isArray(res.printers)) ? res.printers : []
+        if (printers.length === 0) {
+          const opt = document.createElement('option')
+          opt.value = ''
+          opt.textContent = 'Nenhuma impressora encontrada (instale no Windows)'
+          printerSelect.appendChild(opt)
+          printerHelp.textContent = 'Se sua impressora é USB, instale o driver e adicione no Windows.'
+          return
+        }
+        for (const p of printers) {
+          const opt = document.createElement('option')
+          opt.value = p.name
+          opt.textContent = p.isDefault ? `${p.name} (padrão)` : p.name
+          if (p.name === current) opt.selected = true
+          printerSelect.appendChild(opt)
+        }
+        printerHelp.textContent = current ? `Selecionada: ${current}` : 'Selecione uma impressora e clique em Salvar.'
+      }
+
       btnStart.onclick = async () => { await window.bridgeAPI.start(); await refresh() }
       btnStop.onclick = async () => { await window.bridgeAPI.stop(); await refresh() }
       btnPair.onclick = async () => {
@@ -96,8 +136,15 @@
         }, 1500)
       }
 
+      btnRefreshPrinters.onclick = async () => { await loadPrinters() }
+      btnSavePrinter.onclick = async () => {
+        const name = printerSelect.value || ''
+        await window.bridgeAPI.setPrinterSelection(name)
+        printerHelp.textContent = name ? `Selecionada: ${name}` : 'Selecione uma impressora e clique em Salvar.'
+      }
+
       refresh()
+      loadPrinters()
     </script>
   </body>
 </html>
-

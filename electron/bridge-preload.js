@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('bridgeAPI', {
   pollPairing: () => ipcRenderer.invoke('bridge:pollPairing'),
   start: () => ipcRenderer.invoke('bridge:start'),
   stop: () => ipcRenderer.invoke('bridge:stop'),
+  listPrinters: () => ipcRenderer.invoke('bridge:listPrinters'),
+  getPrinterSelection: () => ipcRenderer.invoke('bridge:getPrinterSelection'),
+  setPrinterSelection: (printerName) => ipcRenderer.invoke('bridge:setPrinterSelection', { printerName }),
 })
-
