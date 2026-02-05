@@ -17,6 +17,10 @@ import TableAccountManager from '@/components/pdv/TableAccountManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
+import NFCeEmissionModal from '@/components/nfce/NFCeEmissionModal';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
+import { verifyAdminPin } from '@/services/adminPin';
 
 interface Product {
   id: string;
@@ -87,11 +91,20 @@ const PDV = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
   const [pixAmount, setPixAmount] = useState(0);
+  const [createdOrderForNfce, setCreatedOrderForNfce] = useState<any>(null);
+  const [nfceModalOpen, setNfceModalOpen] = useState(false);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [mustCreateOperator, setMustCreateOperator] = useState(false);
+  const [cashMoveOpen, setCashMoveOpen] = useState(false);
+  const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('out');
+  const [cashMoveAmount, setCashMoveAmount] = useState('');
+  const [cashMoveDesc, setCashMoveDesc] = useState('');
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [tefOpen, setTefOpen] = useState(false);
+  const [tefData, setTefData] = useState<{ nsu: string; auth: string; brand: string; acquirer: string; installments: string } | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -224,6 +237,45 @@ const PDV = () => {
     } catch (e: any) {
       toast({ title: 'Erro no caixa', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
       try { alert(e?.message || 'Erro no caixa') } catch {}
+    }
+  };
+
+  const submitCashMovement = async () => {
+    if (!user?.id) return;
+    if (!cashSession?.id) {
+      toast({ title: 'Caixa fechado', description: 'Abra o caixa primeiro', variant: 'destructive' });
+      return;
+    }
+    const amount = Number(cashMoveAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: 'Valor inválido', description: 'Informe um valor válido', variant: 'destructive' });
+      return;
+    }
+    const session = getLocalOperatorSession();
+    if (!session?.id) {
+      toast({ title: 'Selecione um operador', variant: 'destructive' });
+      return;
+    }
+    const needsAdmin = cashMoveType === 'out' && !isAdminOperator(session);
+    if (needsAdmin) {
+      setAdminPinOpen(true);
+      return;
+    }
+    try {
+      const { error } = await (supabase as any).from('cash_movements').insert({
+        session_id: cashSession.id,
+        user_id: user.id,
+        type: cashMoveType,
+        amount,
+        description: cashMoveDesc || null,
+      });
+      if (error) throw error;
+      toast({ title: cashMoveType === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
+      setCashMoveOpen(false);
+      setCashMoveAmount('');
+      setCashMoveDesc('');
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Erro ao registrar movimentação', variant: 'destructive' });
     }
   };
 
@@ -795,7 +847,8 @@ const PDV = () => {
         variations: {
           operator: operatorSession ? { id: operatorSession.id, name: operatorSession.name } : null,
           source: 'PDV',
-          environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+          environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+          tef: paymentMethod === 'cartao' ? (tefData || null) : null
         }
       };
 
@@ -828,6 +881,7 @@ const PDV = () => {
         setPixAmount(getFinalTotal());
         const created = Array.isArray(data) ? data[0] : data;
         setPixOrderId(created?.id || null);
+        setCreatedOrderForNfce(created || null);
         setIsPixModalOpen(true);
         try {
           await supabase.from('security_logs').insert({
@@ -843,6 +897,8 @@ const PDV = () => {
           description: "Aguardando pagamento do PIX para enviar ao restaurante.",
         });
       } else {
+        const created = Array.isArray(data) ? data[0] : data;
+        setCreatedOrderForNfce(created || null);
         try {
           await supabase.from('security_logs').insert({
             user_id: user?.id,
@@ -856,6 +912,7 @@ const PDV = () => {
           title: "Venda finalizada!",
           description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
         });
+        setNfceModalOpen(true);
         setCart([]);
         setCustomerName('');
         setCustomerPhone('');
@@ -962,6 +1019,24 @@ const PDV = () => {
                 onClick={() => openCashDialog(cashSession?.id ? 'close' : 'open')}
               >
                 {cashSession?.id ? 'Fechar Caixa' : 'Abrir Caixa'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={!cashSession?.id}
+                onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
+              >
+                Suprimento
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={!cashSession?.id}
+                onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
+              >
+                Sangria
               </Button>
               <OperatorSwitcher />
             </div>
@@ -1196,7 +1271,7 @@ const PDV = () => {
                           size="sm"
                           variant={paymentMethod === 'pix' ? 'default' : 'outline'}
                           className="h-8 text-xs"
-                          onClick={() => setPaymentMethod('pix')}
+                          onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
                         >
                           PIX
                         </Button>
@@ -1205,7 +1280,7 @@ const PDV = () => {
                           size="sm"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
                           className="h-8 text-xs"
-                          onClick={() => setPaymentMethod('cartao')}
+                          onClick={() => { setPaymentMethod('cartao'); setTefOpen(true); }}
                         >
                           Cartão
                         </Button>
@@ -1214,7 +1289,7 @@ const PDV = () => {
                           size="sm"
                           variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
                           className="h-8 text-xs"
-                          onClick={() => setPaymentMethod('dinheiro')}
+                          onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
                         >
                           Dinheiro
                         </Button>
@@ -1470,21 +1545,21 @@ const PDV = () => {
                         <Button
                           type="button"
                           variant={paymentMethod === 'pix' ? 'default' : 'outline'}
-                          onClick={() => setPaymentMethod('pix')}
+                          onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
                         >
                           PIX
                         </Button>
                         <Button
                           type="button"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
-                          onClick={() => setPaymentMethod('cartao')}
+                          onClick={() => { setPaymentMethod('cartao'); setTefOpen(true); }}
                         >
                           Cartão
                         </Button>
                         <Button
                           type="button"
                           variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
-                          onClick={() => setPaymentMethod('dinheiro')}
+                          onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
                         >
                           Dinheiro
                         </Button>
@@ -1600,6 +1675,7 @@ const PDV = () => {
                 title: "Pagamento confirmado!",
                 description: "Pedido enviado ao restaurante.",
               });
+              setNfceModalOpen(true);
               setCart([]);
               setCustomerName('');
               setCustomerPhone('');
@@ -1613,6 +1689,109 @@ const PDV = () => {
           } catch (e) {
             console.error(e);
           }
+        }}
+      />
+
+      <NFCeEmissionModal
+        isOpen={nfceModalOpen}
+        onClose={() => setNfceModalOpen(false)}
+        order={createdOrderForNfce}
+        onSuccess={() => {}}
+      />
+
+      <Dialog open={tefOpen} onOpenChange={setTefOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cartão (TEF)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>NSU</Label>
+              <Input value={tefData?.nsu || ''} onChange={(e) => setTefData(prev => ({ nsu: e.target.value, auth: prev?.auth || '', brand: prev?.brand || '', acquirer: prev?.acquirer || '', installments: prev?.installments || '' }))} placeholder="NSU" />
+            </div>
+            <div className="space-y-2">
+              <Label>Autorização</Label>
+              <Input value={tefData?.auth || ''} onChange={(e) => setTefData(prev => ({ nsu: prev?.nsu || '', auth: e.target.value, brand: prev?.brand || '', acquirer: prev?.acquirer || '', installments: prev?.installments || '' }))} placeholder="Código de autorização" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Bandeira</Label>
+                <Input value={tefData?.brand || ''} onChange={(e) => setTefData(prev => ({ nsu: prev?.nsu || '', auth: prev?.auth || '', brand: e.target.value, acquirer: prev?.acquirer || '', installments: prev?.installments || '' }))} placeholder="Visa/Master/..." />
+              </div>
+              <div className="space-y-2">
+                <Label>Parcelas</Label>
+                <Input value={tefData?.installments || ''} onChange={(e) => setTefData(prev => ({ nsu: prev?.nsu || '', auth: prev?.auth || '', brand: prev?.brand || '', acquirer: prev?.acquirer || '', installments: e.target.value.replace(/\\D/g, '') }))} placeholder="1" inputMode="numeric" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Adquirente</Label>
+              <Input value={tefData?.acquirer || ''} onChange={(e) => setTefData(prev => ({ nsu: prev?.nsu || '', auth: prev?.auth || '', brand: prev?.brand || '', acquirer: e.target.value, installments: prev?.installments || '' }))} placeholder="Ex: Stone / Cielo / Rede" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTefData(null); setTefOpen(false); }}>Pular</Button>
+            <Button onClick={() => setTefOpen(false)}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cashMoveOpen} onOpenChange={setCashMoveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{cashMoveType === 'in' ? 'Suprimento' : 'Sangria'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Valor</Label>
+              <Input value={cashMoveAmount} onChange={(e) => setCashMoveAmount(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição (opcional)</Label>
+              <Input value={cashMoveDesc} onChange={(e) => setCashMoveDesc(e.target.value)} placeholder="Ex: troco / retirada" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCashMoveOpen(false)}>Cancelar</Button>
+            <Button onClick={submitCashMovement}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AdminPinDialog
+        open={adminPinOpen}
+        title="Sangria"
+        description="Digite o PIN de administrador para autorizar a sangria."
+        confirmLabel="Autorizar"
+        onCancel={() => setAdminPinOpen(false)}
+        onConfirm={async (pin) => {
+          const restaurantUserId = user?.id || '';
+          if (!restaurantUserId) {
+            toast({ title: 'Erro', description: 'Usuário não autenticado', variant: 'destructive' });
+            return;
+          }
+          const res = await verifyAdminPin({ restaurantUserId, pin });
+          if (!res.ok) {
+            toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' });
+            return;
+          }
+          setAdminPinOpen(false);
+          const amount = Number(cashMoveAmount.replace(',', '.'));
+          if (!cashSession?.id) return;
+          const { error } = await (supabase as any).from('cash_movements').insert({
+            session_id: cashSession.id,
+            user_id: restaurantUserId,
+            type: cashMoveType,
+            amount,
+            description: cashMoveDesc || null,
+          });
+          if (error) {
+            toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+            return;
+          }
+          toast({ title: cashMoveType === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
+          setCashMoveOpen(false);
+          setCashMoveAmount('');
+          setCashMoveDesc('');
         }}
       />
 

@@ -13,6 +13,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
+import { verifyAdminPin } from '@/services/adminPin';
 
 interface NFCeCupom {
   id: string;
@@ -38,6 +41,8 @@ const NFCeManager: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [pendingCancelCupomId, setPendingCancelCupomId] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -193,8 +198,7 @@ const NFCeManager: React.FC = () => {
     }
   };
 
-  const handleCancelarCupom = async (cupomId: string) => {
-    if (!confirm('Tem certeza que deseja cancelar este cupom fiscal?')) return;
+  const doCancelCupom = async (cupomId: string) => {
 
     try {
       setLoading(true);
@@ -236,6 +240,17 @@ const NFCeManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelarCupom = async (cupomId: string) => {
+    if (!confirm('Tem certeza que deseja cancelar este cupom fiscal?')) return;
+    const session = getLocalOperatorSession();
+    if (isAdminOperator(session)) {
+      await doCancelCupom(cupomId);
+      return;
+    }
+    setPendingCancelCupomId(cupomId);
+    setAdminPinOpen(true);
   };
 
   const handleDownloadXML = async (cupomId: string, numero: number) => {
@@ -292,6 +307,28 @@ const NFCeManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <AdminPinDialog
+        open={adminPinOpen}
+        title="Cancelar NFC-e"
+        description="Somente administrador pode cancelar. Digite o PIN do administrador."
+        confirmLabel="Cancelar NFC-e"
+        onCancel={() => { setAdminPinOpen(false); setPendingCancelCupomId(null); }}
+        onConfirm={async (pin) => {
+          const restaurantUserId = user?.id || '';
+          if (!restaurantUserId) {
+            toast({ title: 'Erro', description: 'Usuário não autenticado', variant: 'destructive' });
+            return;
+          }
+          const res = await verifyAdminPin({ restaurantUserId, pin });
+          if (!res.ok) {
+            toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' });
+            return;
+          }
+          if (pendingCancelCupomId) await doCancelCupom(pendingCancelCupomId);
+          setAdminPinOpen(false);
+          setPendingCancelCupomId(null);
+        }}
+      />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Receipt className="w-6 h-6" />
