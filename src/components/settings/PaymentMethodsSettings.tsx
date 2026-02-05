@@ -9,6 +9,7 @@ import { Save, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTefSettings } from '@/hooks/useTefSettings';
 
 interface PaymentMethod {
   id?: string;
@@ -29,6 +30,7 @@ const PaymentMethodsSettings: React.FC = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
+  const { settings: tefSettings, save: saveTefSettings } = useTefSettings();
 
   useEffect(() => {
     if (user) {
@@ -155,6 +157,20 @@ const PaymentMethodsSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Cartão</CardTitle>
+          <CardDescription>Por padrão o cartão é na maquininha. Ative TEF somente se você tiver integração.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Switch
+            id="tef-enabled"
+            checked={!!tefSettings.enabled}
+            onCheckedChange={(checked) => saveTefSettings({ enabled: checked })}
+          />
+          <Label htmlFor="tef-enabled">Habilitar TEF</Label>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Formas de Pagamento</CardTitle>

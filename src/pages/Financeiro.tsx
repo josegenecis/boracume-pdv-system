@@ -118,6 +118,12 @@ const Financeiro = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user?.id && selectedSessionId) {
+      fetchSessionDetails(selectedSessionId);
+    }
+  }, [user?.id, selectedSessionId]);
+
   const fetchData = async () => {
     if (!user) return;
     setIsLoading(true);

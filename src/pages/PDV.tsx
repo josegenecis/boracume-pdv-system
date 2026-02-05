@@ -21,6 +21,7 @@ import NFCeEmissionModal from '@/components/nfce/NFCeEmissionModal';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { useTefSettings } from '@/hooks/useTefSettings';
 
 interface Product {
   id: string;
@@ -97,6 +98,8 @@ const PDV = () => {
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
   const [cashAmountInput, setCashAmountInput] = useState('');
+  const [cashCloseLoading, setCashCloseLoading] = useState(false);
+  const [cashCloseSummary, setCashCloseSummary] = useState<{ expectedCash: number; pix: number; card: number; cash: number; total: number; inAmount: number; outAmount: number; initial: number } | null>(null);
   const [mustCreateOperator, setMustCreateOperator] = useState(false);
   const [cashMoveOpen, setCashMoveOpen] = useState(false);
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('out');
@@ -105,8 +108,10 @@ const PDV = () => {
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [tefOpen, setTefOpen] = useState(false);
   const [tefData, setTefData] = useState<{ nsu: string; auth: string; brand: string; acquirer: string; installments: string } | null>(null);
+  const [cardProcessingMode, setCardProcessingMode] = useState<'maquininha' | 'tef'>('maquininha');
   const { toast } = useToast();
   const { user } = useAuth();
+  const { settings: tefSettings } = useTefSettings();
 
   // Refs for animation
   const cartContainerRef = useRef<HTMLDivElement>(null);
@@ -119,6 +124,14 @@ const PDV = () => {
       checkFirstOperator();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!tefSettings.enabled) {
+      setCardProcessingMode('maquininha');
+      setTefData(null);
+      setTefOpen(false);
+    }
+  }, [tefSettings.enabled]);
 
   const checkFirstOperator = async () => {
     try {
@@ -165,9 +178,39 @@ const PDV = () => {
     }
   };
 
-  const openCashDialog = (mode: 'open' | 'close') => {
+  const openCashDialog = async (mode: 'open' | 'close') => {
     setCashDialogMode(mode);
+    setCashCloseSummary(null);
     setCashAmountInput('');
+    if (mode === 'close' && user?.id && cashSession?.id) {
+      try {
+        setCashCloseLoading(true);
+        const [{ data: orders }, { data: moves }] = await Promise.all([
+          (supabase as any)
+            .from('orders')
+            .select('total, payment_method, status')
+            .eq('user_id', user.id)
+            .eq('cash_register_session_id', cashSession.id),
+          (supabase as any)
+            .from('cash_movements')
+            .select('type, amount')
+            .eq('user_id', user.id)
+            .eq('session_id', cashSession.id),
+        ]);
+        const sales = Array.isArray(orders) ? orders.filter((o) => o?.status !== 'cancelled') : [];
+        const pix = sales.filter((o) => o.payment_method === 'pix').reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const card = sales.filter((o) => o.payment_method === 'cartao').reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const cash = sales.filter((o) => o.payment_method === 'dinheiro').reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const total = sales.reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const inAmount = (Array.isArray(moves) ? moves : []).filter((m) => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
+        const outAmount = (Array.isArray(moves) ? moves : []).filter((m) => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
+        const initial = Number(cashSession.initial_amount || 0);
+        const expectedCash = initial + cash + inAmount - outAmount;
+        setCashCloseSummary({ expectedCash, pix, card, cash, total, inAmount, outAmount, initial });
+        setCashAmountInput(String(expectedCash.toFixed(2)));
+      } catch {}
+      setCashCloseLoading(false);
+    }
     setCashDialogOpen(true);
   };
 
@@ -214,6 +257,7 @@ const PDV = () => {
           status: 'closed',
           closed_at: new Date().toISOString(),
           final_amount: amount,
+          expected_amount: cashCloseSummary?.expectedCash ?? null,
           closed_by_waiter_id: waiterId,
         };
         const res1 = await supabase
@@ -221,6 +265,14 @@ const PDV = () => {
           .update(updatePayload)
           .eq('id', cashSession.id);
         error = (res1 as any).error;
+        if (error && String(error.message || '').includes('expected_amount')) {
+          const { expected_amount, ...fallback } = updatePayload;
+          const res2 = await supabase
+            .from('cash_register_sessions' as any)
+            .update(fallback)
+            .eq('id', cashSession.id);
+          error = (res2 as any).error;
+        }
         if (error && String(error.message || '').includes('closed_by_waiter_id')) {
           const { closed_by_waiter_id, ...fallback } = updatePayload;
           const res2 = await supabase
@@ -848,7 +900,7 @@ const PDV = () => {
           operator: operatorSession ? { id: operatorSession.id, name: operatorSession.name } : null,
           source: 'PDV',
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-          tef: paymentMethod === 'cartao' ? (tefData || null) : null
+          tef: paymentMethod === 'cartao' && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
       };
 
@@ -1280,7 +1332,7 @@ const PDV = () => {
                           size="sm"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
                           className="h-8 text-xs"
-                          onClick={() => { setPaymentMethod('cartao'); setTefOpen(true); }}
+                          onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
                         >
                           Cartão
                         </Button>
@@ -1302,6 +1354,39 @@ const PDV = () => {
                           className="h-8 text-xs"
                           type="number"
                         />
+                      )}
+                      {paymentMethod === 'cartao' && (
+                        tefSettings.enabled ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
+                                className="h-8 text-xs"
+                                onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
+                              >
+                                Maquininha
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
+                                className="h-8 text-xs"
+                                onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
+                              >
+                                TEF
+                              </Button>
+                            </div>
+                            {cardProcessingMode === 'tef' && (
+                              <Button type="button" size="sm" variant="outline" className="h-8 text-xs w-full" onClick={() => setTefOpen(true)}>
+                                Editar dados TEF
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">Cartão via maquininha</div>
+                        )
                       )}
                     </div>
                 </div>
@@ -1552,7 +1637,7 @@ const PDV = () => {
                         <Button
                           type="button"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
-                          onClick={() => { setPaymentMethod('cartao'); setTefOpen(true); }}
+                          onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
                         >
                           Cartão
                         </Button>
@@ -1572,6 +1657,35 @@ const PDV = () => {
                           className="h-9 text-sm"
                           type="number"
                         />
+                      )}
+                      {paymentMethod === 'cartao' && (
+                        tefSettings.enabled ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                type="button"
+                                variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
+                                onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
+                              >
+                                Maquininha
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
+                                onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
+                              >
+                                TEF
+                              </Button>
+                            </div>
+                            {cardProcessingMode === 'tef' && (
+                              <Button type="button" variant="outline" className="h-9 text-sm w-full" onClick={() => setTefOpen(true)}>
+                                Editar dados TEF
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">Cartão via maquininha</div>
+                        )
                       )}
                     </div>
                   </div>
@@ -1729,7 +1843,7 @@ const PDV = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setTefData(null); setTefOpen(false); }}>Pular</Button>
+            <Button variant="outline" onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}>Pular</Button>
             <Button onClick={() => setTefOpen(false)}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
@@ -1800,13 +1914,71 @@ const PDV = () => {
           <DialogHeader>
             <DialogTitle>{cashDialogMode === 'open' ? 'Abrir Caixa' : 'Fechar Caixa'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>{cashDialogMode === 'open' ? 'Valor inicial' : 'Valor final'}</Label>
-            <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
-          </div>
+          {cashDialogMode === 'open' ? (
+            <div className="space-y-2">
+              <Label>Valor inicial</Label>
+              <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cashCloseLoading ? (
+                <div className="text-sm text-muted-foreground">Carregando resumo do caixa...</div>
+              ) : cashCloseSummary ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Abertura</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.initial)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Vendas (total)</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.total)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">PIX</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.pix)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Cartão</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.card)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Dinheiro (vendas)</div>
+                      <div className="text-lg font-bold">{formatCurrency(cashCloseSummary.cash)}</div>
+                    </div>
+                    <div className="border rounded-md p-3">
+                      <div className="text-xs text-muted-foreground">Suprimento / Sangria</div>
+                      <div className="text-lg font-bold">
+                        {formatCurrency(cashCloseSummary.inAmount)} / {formatCurrency(cashCloseSummary.outAmount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-md p-3 bg-gray-50">
+                    <div className="text-xs text-muted-foreground">Saldo esperado em dinheiro</div>
+                    <div className="text-xl font-bold">{formatCurrency(cashCloseSummary.expectedCash)}</div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Não foi possível calcular o resumo do caixa.</div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Valor contado em dinheiro</Label>
+                <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
+                {cashCloseSummary && (
+                  <div className="text-xs text-muted-foreground">
+                    Diferença: {formatCurrency(((Number.isFinite(Number(cashAmountInput.replace(',', '.'))) ? Number(cashAmountInput.replace(',', '.')) : 0) - cashCloseSummary.expectedCash))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCashDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCashSubmit}>{cashDialogMode === 'open' ? 'Abrir' : 'Fechar'}</Button>
+            <Button onClick={handleCashSubmit} disabled={cashDialogMode === 'close' && cashCloseLoading}>
+              {cashDialogMode === 'open' ? 'Abrir' : 'Fechar'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
