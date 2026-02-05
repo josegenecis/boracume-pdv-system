@@ -23,7 +23,7 @@ const WaiterLogin = () => {
       // Find waiter by PIN
       const { data, error } = await supabase
         .from('waiters')
-        .select('id, name, user_id')
+        .select('id, name, user_id, role, permissions')
         .eq('pin', pin)
         .eq('active', true)
         .single();
@@ -37,6 +37,8 @@ const WaiterLogin = () => {
         id: data.id,
         name: data.name,
         restaurant_id: data.user_id,
+        role: (data as any).role || 'cashier',
+        permissions: (data as any).permissions || {},
         login_time: new Date().toISOString()
       }));
 

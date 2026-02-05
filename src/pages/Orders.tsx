@@ -16,6 +16,9 @@ import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { WhatsAppService } from '@/services/WhatsAppService';
 import { PrinterService } from '@/utils/printerService';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
+import { verifyAdminPin } from '@/services/adminPin';
 
 interface Order {
   id: string;
@@ -48,6 +51,8 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -448,6 +453,16 @@ const Orders = () => {
     }
   };
 
+  const requestCancelOrder = async (orderId: string) => {
+    const session = getLocalOperatorSession();
+    if (canCancelOrder(session)) {
+      await updateOrderStatus(orderId, 'cancelled');
+      return;
+    }
+    setPendingCancelId(orderId);
+    setAdminPinOpen(true);
+  };
+
   const handleBulkAction = async (orderIds: string[], action: string) => {
     try {
       console.log(`🔄 Executando ação em massa: ${action} para ${orderIds.length} pedidos`);
@@ -566,6 +581,28 @@ const Orders = () => {
   return (
     <div className="h-[calc(100vh-120px)] overflow-y-auto">
       <div className="space-y-6">
+        <AdminPinDialog
+          open={adminPinOpen}
+          title="Cancelar pedido"
+          description="Somente administrador pode cancelar. Digite o PIN do administrador."
+          confirmLabel="Cancelar"
+          onCancel={() => { setAdminPinOpen(false); setPendingCancelId(null); }}
+          onConfirm={async (pin) => {
+            const restaurantUserId = user?.id || '';
+            if (!restaurantUserId) {
+              toast({ title: 'Erro', description: 'Usuário não autenticado', variant: 'destructive' });
+              return;
+            }
+            const res = await verifyAdminPin({ restaurantUserId, pin });
+            if (!res.ok) {
+              toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' });
+              return;
+            }
+            if (pendingCancelId) await updateOrderStatus(pendingCancelId, 'cancelled');
+            setAdminPinOpen(false);
+            setPendingCancelId(null);
+          }}
+        />
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
           <Button onClick={fetchOrders} variant="outline">
@@ -753,7 +790,7 @@ const Orders = () => {
                             variant="destructive"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateOrderStatus(order.id, 'cancelled');
+                              requestCancelOrder(order.id);
                             }}
                             className="w-full sm:flex-1"
                           >

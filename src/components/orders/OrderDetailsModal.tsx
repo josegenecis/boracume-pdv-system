@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
+import { verifyAdminPin } from '@/services/adminPin';
 
 interface OrderItem {
   product_name: string;
@@ -33,7 +36,7 @@ interface OrderItem {
   price: number;
 
   total_price: number;
-  options?: Array<{name: string; price: number}>;
+  options?: any[];
   variations?: Array<{name: string; options: string[]}>;
 
   notes?: string;
@@ -82,6 +85,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onStatusChange 
 }) => {
   const { toast } = useToast();
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
 
   // Log detalhado quando o modal é renderizado
   useEffect(() => {
@@ -175,9 +179,17 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     };
 
     const handleStatusUpdate = (newStatus: string) => {
-      if (onStatusChange) {
-        onStatusChange(order.id, newStatus);
+      if (!onStatusChange) return;
+      if (newStatus === 'cancelled') {
+        const session = getLocalOperatorSession();
+        if (canCancelOrder(session)) {
+          onStatusChange(order.id, newStatus);
+          return;
+        }
+        setAdminPinOpen(true);
+        return;
       }
+      onStatusChange(order.id, newStatus);
     };
 
     const getStatusIcon = (status: string) => {
@@ -214,8 +226,30 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     };
 
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+      <>
+        <AdminPinDialog
+          open={adminPinOpen}
+          title="Cancelar pedido"
+          description="Somente administrador pode cancelar. Digite o PIN do administrador."
+          confirmLabel="Cancelar"
+          onCancel={() => setAdminPinOpen(false)}
+          onConfirm={async (pin) => {
+            const restaurantUserId = order?.user_id || ''
+            if (!restaurantUserId) {
+              toast({ title: 'Erro', description: 'Restaurante não identificado', variant: 'destructive' })
+              return
+            }
+            const res = await verifyAdminPin({ restaurantUserId, pin })
+            if (!res.ok) {
+              toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' })
+              return
+            }
+            onStatusChange?.(order.id, 'cancelled')
+            setAdminPinOpen(false)
+          }}
+        />
+        <Dialog open={isOpen} onOpenChange={onClose}>
+          <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <span>Pedido {order?.order_number || 'N/A'}</span>
@@ -503,8 +537,9 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               )}
             </div>
           </ScrollArea>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   } catch (error) {
     console.error('❌ ORDER_DETAILS_MODAL - Erro de renderização:', error);

@@ -16,6 +16,7 @@ import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
 
 interface Product {
   id: string;
@@ -90,6 +91,7 @@ const PDV = () => {
   const [cashDialogOpen, setCashDialogOpen] = useState(false);
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
   const [cashAmountInput, setCashAmountInput] = useState('');
+  const [mustCreateOperator, setMustCreateOperator] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -101,8 +103,25 @@ const PDV = () => {
     if (user) {
       fetchData();
       fetchOpenCashSession();
+      checkFirstOperator();
     }
   }, [user]);
+
+  const checkFirstOperator = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('waiters' as any)
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('active', true)
+        .limit(1);
+      if (error) throw error;
+      const hasAny = Array.isArray(data) && data.length > 0;
+      setMustCreateOperator(!hasAny);
+    } catch {
+      setMustCreateOperator(false);
+    }
+  };
 
   const fetchOpenCashSession = async () => {
     try {
@@ -148,18 +167,28 @@ const PDV = () => {
     }
     const operatorSession = getOperatorSession();
     const waiterId = operatorSession?.id || null;
+    if (!operatorSession?.id) {
+      toast({ title: 'Selecione um operador', description: 'Antes de abrir/fechar caixa, selecione um operador.', variant: 'destructive' });
+      return;
+    }
 
     try {
       if (cashDialogMode === 'open') {
-        const { error } = await supabase
-          .from('cash_register_sessions' as any)
-          .insert({
-            user_id: user.id,
-            initial_amount: amount,
-            status: 'open',
-            opened_at: new Date().toISOString(),
-            opened_by_waiter_id: waiterId,
-          });
+        const payload: any = {
+          user_id: user.id,
+          initial_amount: amount,
+          status: 'open',
+          opened_at: new Date().toISOString(),
+          opened_by_waiter_id: waiterId,
+        };
+        let error: any = null;
+        const res1 = await supabase.from('cash_register_sessions' as any).insert(payload);
+        error = (res1 as any).error;
+        if (error && String(error.message || '').includes('opened_by_waiter_id')) {
+          const { opened_by_waiter_id, ...fallback } = payload;
+          const res2 = await supabase.from('cash_register_sessions' as any).insert(fallback);
+          error = (res2 as any).error;
+        }
         if (error) throw error;
         toast({ title: 'Caixa aberto' });
       } else {
@@ -167,15 +196,26 @@ const PDV = () => {
           toast({ title: 'Caixa não encontrado', variant: 'destructive' });
           return;
         }
-        const { error } = await supabase
+        let error: any = null;
+        const updatePayload: any = {
+          status: 'closed',
+          closed_at: new Date().toISOString(),
+          final_amount: amount,
+          closed_by_waiter_id: waiterId,
+        };
+        const res1 = await supabase
           .from('cash_register_sessions' as any)
-          .update({
-            status: 'closed',
-            closed_at: new Date().toISOString(),
-            final_amount: amount,
-            closed_by_waiter_id: waiterId,
-          })
+          .update(updatePayload)
           .eq('id', cashSession.id);
+        error = (res1 as any).error;
+        if (error && String(error.message || '').includes('closed_by_waiter_id')) {
+          const { closed_by_waiter_id, ...fallback } = updatePayload;
+          const res2 = await supabase
+            .from('cash_register_sessions' as any)
+            .update(fallback)
+            .eq('id', cashSession.id);
+          error = (res2 as any).error;
+        }
         if (error) throw error;
         toast({ title: 'Caixa fechado' });
       }
@@ -183,6 +223,7 @@ const PDV = () => {
       await fetchOpenCashSession();
     } catch (e: any) {
       toast({ title: 'Erro no caixa', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
+      try { alert(e?.message || 'Erro no caixa') } catch {}
     }
   };
 
@@ -888,6 +929,7 @@ const PDV = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50/50">
+      <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
         <div className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
@@ -1147,24 +1189,42 @@ const PDV = () => {
                       </div>
                     ) : null}
                     
-                    <div className="flex gap-2">
-                      <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                        <SelectTrigger className="h-8 text-xs flex-1">
-                          <SelectValue placeholder="Pagamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pix">PIX</SelectItem>
-                          <SelectItem value="cartao">Cartão</SelectItem>
-                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={paymentMethod === 'pix' ? 'default' : 'outline'}
+                          className="h-8 text-xs"
+                          onClick={() => setPaymentMethod('pix')}
+                        >
+                          PIX
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
+                          className="h-8 text-xs"
+                          onClick={() => setPaymentMethod('cartao')}
+                        >
+                          Cartão
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
+                          className="h-8 text-xs"
+                          onClick={() => setPaymentMethod('dinheiro')}
+                        >
+                          Dinheiro
+                        </Button>
+                      </div>
                       {paymentMethod === 'dinheiro' && (
                         <Input
-                          placeholder="Valor"
+                          placeholder="Valor pago"
                           value={changeAmount}
                           onChange={(e) => setChangeAmount(e.target.value)}
-                          className="h-8 text-xs w-20"
+                          className="h-8 text-xs"
                           type="number"
                         />
                       )}
@@ -1405,23 +1465,36 @@ const PDV = () => {
                      </div>
                    ) : null}
                     
-                    <div className="flex gap-2">
-                       <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                        <SelectTrigger className="h-9 text-sm flex-1">
-                          <SelectValue placeholder="Pagamento" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pix">PIX</SelectItem>
-                          <SelectItem value="cartao">Cartão</SelectItem>
-                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                       {paymentMethod === 'dinheiro' && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          type="button"
+                          variant={paymentMethod === 'pix' ? 'default' : 'outline'}
+                          onClick={() => setPaymentMethod('pix')}
+                        >
+                          PIX
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
+                          onClick={() => setPaymentMethod('cartao')}
+                        >
+                          Cartão
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
+                          onClick={() => setPaymentMethod('dinheiro')}
+                        >
+                          Dinheiro
+                        </Button>
+                      </div>
+                      {paymentMethod === 'dinheiro' && (
                         <Input
                           placeholder="Valor pago"
                           value={changeAmount}
                           onChange={(e) => setChangeAmount(e.target.value)}
-                          className="h-9 text-sm w-24"
+                          className="h-9 text-sm"
                           type="number"
                         />
                       )}

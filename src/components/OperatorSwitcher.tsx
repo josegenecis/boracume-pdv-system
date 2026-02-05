@@ -14,6 +14,8 @@ interface Waiter {
   id: string;
   name: string;
   active: boolean;
+  role?: string;
+  permissions?: any;
 }
 
 export default function OperatorSwitcher() {
@@ -23,7 +25,7 @@ export default function OperatorSwitcher() {
   const [operatorId, setOperatorId] = useState<string>('');
   const [operatorName, setOperatorName] = useState<string>('');
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: '', pin: '' });
+  const [form, setForm] = useState({ name: '', pin: '', role: 'cashier' });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function OperatorSwitcher() {
       try {
         const { data } = await supabase
           .from('waiters' as any)
-          .select('id, name, active')
+          .select('id, name, active, role, permissions')
           .eq('user_id', user?.id)
           .order('name');
         setWaiters(((data as any) || []).filter((w: any) => w.active));
@@ -59,6 +61,8 @@ export default function OperatorSwitcher() {
     localStorage.setItem('operator_session', JSON.stringify({
       id,
       name,
+      role: (found as any)?.role || 'cashier',
+      permissions: (found as any)?.permissions || {},
       user_id: user?.id,
       set_at: new Date().toISOString()
     }));
@@ -75,18 +79,25 @@ export default function OperatorSwitcher() {
     }
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('waiters' as any)
-        .insert({ user_id: user?.id, name: form.name.trim(), pin: form.pin.trim(), active: true })
-        .select('id, name')
-        .single();
+      const payload: any = { user_id: user?.id, name: form.name.trim(), pin: form.pin.trim(), active: true, role: form.role }
+      let data: any = null
+      let error: any = null
+      const res1 = await supabase.from('waiters' as any).insert(payload).select('id, name, role, permissions').single()
+      data = (res1 as any).data
+      error = (res1 as any).error
+      if (error && String(error.message || '').includes('role')) {
+        const { role, ...fallback } = payload
+        const res2 = await supabase.from('waiters' as any).insert(fallback).select('id, name').single()
+        data = (res2 as any).data
+        error = (res2 as any).error
+      }
       if (error) throw error;
       const created: any = data;
       toast({ title: 'Operador criado!', description: `${created.name} adicionado` });
-      setWaiters(prev => [...prev, { id: created.id, name: created.name, active: true }]);
+      setWaiters(prev => [...prev, { id: created.id, name: created.name, active: true, role: created.role, permissions: created.permissions }]);
       // Seleciona automaticamente
       handleChange(created.id);
-      setForm({ name: '', pin: '' });
+      setForm({ name: '', pin: '', role: 'cashier' });
       setShowCreate(false);
     } catch (e: any) {
       toast({ title: 'Erro ao criar operador', description: e?.message || 'Verifique tabelas/RLS no Supabase', variant: 'destructive' });
@@ -128,6 +139,18 @@ export default function OperatorSwitcher() {
             <div className="space-y-2">
               <Label>PIN (4-6 dígitos)</Label>
               <Input value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} maxLength={6} placeholder="Ex: 1234" />
+            </div>
+            <div className="space-y-2">
+              <Label>Perfil</Label>
+              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="cashier">Operador</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
