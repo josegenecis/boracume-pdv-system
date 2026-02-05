@@ -56,6 +56,8 @@ import {
 } from "@/components/ui/dialog";
 
 type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
+type PaymentMethodFilter = '' | 'all' | PaymentMethod;
+type TxTypeFilter = '' | 'all' | 'entrada' | 'saida';
 
 interface Transaction {
   id: string;
@@ -83,6 +85,11 @@ const Financeiro = () => {
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
+  const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [sessionOrders, setSessionOrders] = useState<any[]>([]);
+  const [sessionMovements, setSessionMovements] = useState<any[]>([]);
+  const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
   
   // States for new expense
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
@@ -95,8 +102,8 @@ const Financeiro = () => {
   const [cashDescription, setCashDescription] = useState('');
 
   const [filters, setFilters] = useState({
-    paymentMethod: '' as '' | PaymentMethod,
-    type: '' as '' | 'entrada' | 'saida',
+    paymentMethod: '' as PaymentMethodFilter,
+    type: '' as TxTypeFilter,
     startDate: null as Date | null,
     endDate: null as Date | null,
     searchTerm: ''
@@ -107,6 +114,7 @@ const Financeiro = () => {
     if (user) {
       fetchData();
       checkOpenSession();
+      fetchCashSessions();
     }
   }, [user]);
 
@@ -131,7 +139,8 @@ const Financeiro = () => {
       }));
 
       // 2. Fetch Expenses (Outcome)
-      const { data: expenses } = await (supabase.from('expenses') as any)
+      const { data: expenses } = await (supabase as any)
+        .from('expenses')
         .select('*')
         .eq('user_id', user.id);
 
@@ -160,11 +169,13 @@ const Financeiro = () => {
   const checkOpenSession = async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('cash_register_sessions')
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       
       if (error) {
@@ -173,15 +184,70 @@ const Financeiro = () => {
       }
       
       setCurrentSession(data);
+      if (data?.id) setSelectedSessionId(data.id);
     } catch (err) {
       console.error('Unexpected error checking session:', err);
+    }
+  };
+
+  const fetchCashSessions = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from('cash_register_sessions')
+        .select('id, opened_at, closed_at, initial_amount, final_amount, status')
+        .eq('user_id', user.id)
+        .order('opened_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setCashSessions((data as any) || []);
+    } catch (e: any) {
+      console.error(e);
+      setCashSessions([]);
+    }
+  };
+
+  const fetchSessionDetails = async (sessionId: string) => {
+    if (!user?.id) return;
+    if (!sessionId) {
+      setSessionOrders([]);
+      setSessionMovements([]);
+      return;
+    }
+    try {
+      setLoadingSessionDetails(true);
+      const [{ data: orders, error: ordersError }, { data: movements, error: movementsError }] = await Promise.all([
+        (supabase as any)
+          .from('orders')
+          .select('id, order_number, created_at, total, payment_method, status')
+          .eq('user_id', user.id)
+          .eq('cash_register_session_id', sessionId)
+          .order('created_at', { ascending: false }),
+        (supabase as any)
+          .from('cash_movements')
+          .select('id, created_at, type, amount, description')
+          .eq('user_id', user.id)
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (ordersError) throw ordersError;
+      if (movementsError) throw movementsError;
+      setSessionOrders((orders as any) || []);
+      setSessionMovements((movements as any) || []);
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: 'Erro', description: e?.message || 'Erro ao carregar sessão', variant: 'destructive' });
+      setSessionOrders([]);
+      setSessionMovements([]);
+    } finally {
+      setLoadingSessionDetails(false);
     }
   };
 
   const handleAddExpense = async () => {
     if (!newExpense.description || !newExpense.amount) return;
     try {
-      const { error } = await supabase.from('expenses').insert({
+      const { error } = await (supabase as any).from('expenses').insert({
         user_id: user?.id,
         description: newExpense.description,
         amount: parseFloat(newExpense.amount),
@@ -206,7 +272,7 @@ const Financeiro = () => {
 
     try {
       if (cashOperation === 'open') {
-        const { error } = await supabase.from('cash_register_sessions').insert({
+        const { error } = await (supabase as any).from('cash_register_sessions').insert({
           user_id: user.id,
           initial_amount: amount,
           status: 'open',
@@ -216,7 +282,7 @@ const Financeiro = () => {
         toast({ title: 'Caixa aberto com sucesso' });
       } else if (cashOperation === 'close') {
         if (!currentSession) return;
-        const { error } = await supabase.from('cash_register_sessions').update({
+        const { error } = await (supabase as any).from('cash_register_sessions').update({
           status: 'closed',
           closed_at: new Date().toISOString(),
           final_amount: amount,
@@ -230,7 +296,7 @@ const Financeiro = () => {
           toast({ title: 'Caixa fechado', description: 'Abra o caixa primeiro', variant: 'destructive' });
           return;
         }
-        const { error } = await supabase.from('cash_movements').insert({
+        const { error } = await (supabase as any).from('cash_movements').insert({
           session_id: currentSession.id,
           user_id: user.id,
           type: cashOperation,
@@ -245,6 +311,7 @@ const Financeiro = () => {
       setCashAmount('');
       setCashDescription('');
       checkOpenSession();
+      fetchCashSessions();
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' });
     }
@@ -392,6 +459,15 @@ const Financeiro = () => {
       default: return method || '-';
     }
   };
+
+  const selectedSession = cashSessions.find(s => s.id === selectedSessionId) || currentSession || null;
+  const sessionSales = sessionOrders.filter(o => o?.status !== 'cancelled');
+  const sessionTotal = sessionSales.reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const sessionPix = sessionSales.filter(o => o.payment_method === 'pix').reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const sessionCard = sessionSales.filter(o => o.payment_method === 'cartao').reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const sessionCash = sessionSales.filter(o => o.payment_method === 'dinheiro').reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const sessionIn = sessionMovements.filter(m => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
+  const sessionOut = sessionMovements.filter(m => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
   
   return (
     <div className="space-y-6">
@@ -596,6 +672,170 @@ const Financeiro = () => {
         </TabsList>
         
         <TabsContent value="fluxo-caixa" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {currentSession ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                Sessão de Caixa
+              </CardTitle>
+              <CardDescription>Selecione uma sessão para ver o histórico de vendas e movimentações</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label>Sessão</Label>
+                  <Select
+                    value={selectedSessionId}
+                    onValueChange={(v) => {
+                      setSelectedSessionId(v);
+                      fetchSessionDetails(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma sessão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cashSessions.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {new Date(s.opened_at).toLocaleString('pt-BR')} — {s.status === 'open' ? 'ABERTO' : 'FECHADO'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <div className="h-10 flex items-center">
+                    <Badge variant={selectedSession?.status === 'open' ? 'default' : 'outline'}>
+                      {selectedSession?.status === 'open' ? 'ABERTO' : 'FECHADO'}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-end justify-end">
+                  <Button variant="outline" onClick={() => selectedSessionId && fetchSessionDetails(selectedSessionId)} disabled={!selectedSessionId || loadingSessionDetails}>
+                    {loadingSessionDetails ? 'Atualizando...' : 'Atualizar sessão'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Total Vendas</CardTitle></CardHeader>
+                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionTotal)}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">PIX</CardTitle></CardHeader>
+                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionPix)}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Cartão</CardTitle></CardHeader>
+                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCard)}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Dinheiro</CardTitle></CardHeader>
+                  <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCash)}</div></CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Abertura</CardTitle></CardHeader>
+                  <CardContent><div className="text-lg font-semibold">{formatCurrency(Number(selectedSession?.initial_amount || 0))}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Suprimentos</CardTitle></CardHeader>
+                  <CardContent><div className="text-lg font-semibold">{formatCurrency(sessionIn)}</div></CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Sangrias</CardTitle></CardHeader>
+                  <CardContent><div className="text-lg font-semibold">{formatCurrency(sessionOut)}</div></CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Vendas da Sessão</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Pedido</TableHead>
+                          <TableHead>Pagamento</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loadingSessionDetails ? (
+                          <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>
+                        ) : sessionOrders.length > 0 ? (
+                          sessionOrders.map((o) => (
+                            <TableRow key={o.id}>
+                              <TableCell>
+                                <div>{formatDate(new Date(o.created_at))}</div>
+                                <div className="text-xs text-muted-foreground">{formatTime(new Date(o.created_at))}</div>
+                              </TableCell>
+                              <TableCell>{o.order_number ? `#${o.order_number}` : o.id?.slice(0, 8)}</TableCell>
+                              <TableCell><Badge variant="outline">{getPaymentMethodLabel(o.payment_method)}</Badge></TableCell>
+                              <TableCell className="font-medium">{formatCurrency(Number(o.total || 0))}</TableCell>
+                              <TableCell><Badge variant={o.status === 'cancelled' ? 'destructive' : 'outline'}>{String(o.status || '').toUpperCase()}</Badge></TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Sem vendas nessa sessão</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Movimentações (Suprimento/Sangria)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loadingSessionDetails ? (
+                          <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>
+                        ) : sessionMovements.length > 0 ? (
+                          sessionMovements.map((m) => (
+                            <TableRow key={m.id}>
+                              <TableCell>
+                                <div>{formatDate(new Date(m.created_at))}</div>
+                                <div className="text-xs text-muted-foreground">{formatTime(new Date(m.created_at))}</div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={m.type === 'in' ? 'bg-green-500' : 'bg-red-500'}>
+                                  {m.type === 'in' ? 'SUPRIMENTO' : 'SANGRIA'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{m.description || '-'}</TableCell>
+                              <TableCell className="font-medium">{formatCurrency(Number(m.amount || 0))}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Sem movimentações</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Transações</CardTitle>

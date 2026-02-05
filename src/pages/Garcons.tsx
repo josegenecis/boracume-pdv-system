@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,13 +16,15 @@ interface Waiter {
   name: string;
   pin: string;
   active: boolean;
+  role?: 'admin' | 'cashier' | string;
+  permissions?: any;
 }
 
 const Garcons = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [waiters, setWaiters] = useState<Waiter[]>([]);
-  const [form, setForm] = useState({ name: '', pin: '' });
+  const [form, setForm] = useState({ name: '', pin: '', role: 'cashier' as 'admin' | 'cashier' });
   const [loading, setLoading] = useState(false);
   const [showPins, setShowPins] = useState<Record<string, boolean>>({});
 
@@ -30,7 +34,7 @@ const Garcons = () => {
 
   const loadWaiters = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('waiters')
         .select('*')
         .eq('user_id', user?.id)
@@ -52,17 +56,25 @@ const Garcons = () => {
 
     try {
       setLoading(true);
-      const { error } = await supabase
-        .from('waiters')
-        .insert({ 
-          user_id: user?.id, 
-          name: form.name.trim(), 
-          pin: form.pin.trim(), 
-          active: true 
-        });
+      const payload: any = {
+        user_id: user?.id,
+        name: form.name.trim(),
+        pin: form.pin.trim(),
+        active: true,
+        role: form.role,
+        permissions: form.role === 'admin' ? { admin: true, can_cancel_order: true, can_open_cash: true, can_close_cash: true } : {},
+      };
 
+      const res1 = await (supabase as any).from('waiters').insert(payload);
+      let error: any = (res1 as any).error;
+      if (error && String(error.message || '').includes('role')) {
+        const { role, permissions, ...fallback } = payload;
+        const res2 = await (supabase as any).from('waiters').insert(fallback);
+        error = (res2 as any).error;
+      }
       if (error) throw error;
-      setForm({ name: '', pin: '' });
+
+      setForm({ name: '', pin: '', role: 'cashier' });
       loadWaiters();
       
       const link = `${window.location.origin}/waiter-login`;
@@ -85,9 +97,21 @@ const Garcons = () => {
     } finally { setLoading(false); }
   };
 
+  const updateWaiter = async (id: string, patch: Partial<Waiter>) => {
+    try {
+      const payload: any = { ...patch };
+      const res1 = await (supabase as any).from('waiters').update(payload).eq('id', id);
+      const error: any = (res1 as any).error;
+      if (error) throw error;
+      loadWaiters();
+    } catch (e: any) {
+      toast({ title: 'Erro ao atualizar', description: e?.message, variant: 'destructive' });
+    }
+  };
+
   const removeWaiter = async (id: string) => {
     try {
-      const { error } = await supabase.from('waiters').delete().eq('id', id);
+      const { error } = await (supabase as any).from('waiters').delete().eq('id', id);
       if (error) throw error;
       loadWaiters();
       toast({ title: 'Garçom removido' });
@@ -112,16 +136,16 @@ const Garcons = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" /> 
-            Cadastrar Garçom
+            Cadastrar Operador
           </CardTitle>
           <CardDescription>
-            Crie um login para seus garçons lançarem pedidos nas mesas.
+            Crie operadores para usar o PDV e/ou lançar pedidos nas mesas.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <Label htmlFor="name">Nome do Garçom</Label>
+              <Label htmlFor="name">Nome</Label>
               <Input 
                 id="name"
                 placeholder="Ex: João Silva"
@@ -140,6 +164,18 @@ const Garcons = () => {
                 onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} 
               />
             </div>
+            <div>
+              <Label>Perfil</Label>
+              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as any })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cashier">Operador</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end">
               <Button onClick={addWaiter} disabled={loading || !form.name.trim() || !form.pin.trim()} className="w-full">
                 <Key className="mr-2 h-4 w-4" />
@@ -153,8 +189,8 @@ const Garcons = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Equipe de Garçons</CardTitle>
-            <CardDescription>Gerencie o acesso da sua equipe</CardDescription>
+            <CardTitle>Equipe</CardTitle>
+            <CardDescription>Gerencie operadores e permissões</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => window.open(`${window.location.origin}/waiter-login`, '_blank')}>
@@ -178,6 +214,8 @@ const Garcons = () => {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>PIN de Acesso</TableHead>
+                  <TableHead>Perfil</TableHead>
+                  <TableHead>Permissões</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -197,11 +235,50 @@ const Garcons = () => {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <Select
+                        value={(w.role as any) || 'cashier'}
+                        onValueChange={(v) => updateWaiter(w.id, { role: v as any, permissions: v === 'admin' ? { admin: true, can_cancel_order: true, can_open_cash: true, can_close_cash: true } : (w.permissions || {}) })}
+                      >
+                        <SelectTrigger className="h-8 w-[160px]">
+                          <SelectValue placeholder="Perfil" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cashier">Operador</SelectItem>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={!!(w.role === 'admin' || w.permissions?.admin || w.permissions?.can_cancel_order)}
+                            onCheckedChange={(checked) => updateWaiter(w.id, { permissions: { ...(w.permissions || {}), can_cancel_order: checked } })}
+                          />
+                          <span className="text-xs">Cancelar</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={!!(w.role === 'admin' || w.permissions?.admin || w.permissions?.can_open_cash)}
+                            onCheckedChange={(checked) => updateWaiter(w.id, { permissions: { ...(w.permissions || {}), can_open_cash: checked } })}
+                          />
+                          <span className="text-xs">Abrir caixa</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${w.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                         {w.active ? 'Ativo' : 'Inativo'}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => updateWaiter(w.id, { active: !w.active })}
+                      >
+                        {w.active ? 'Desativar' : 'Ativar'}
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => removeWaiter(w.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
                         <Trash2 className="h-4 w-4" />
                       </Button>
