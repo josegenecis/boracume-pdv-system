@@ -1,23 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, Truck, UtensilsCrossed, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface Product {
   id: string;
@@ -58,6 +56,13 @@ interface Table {
   status: string;
 }
 
+interface CashSession {
+  id: string;
+  opened_at: string;
+  initial_amount: number;
+  status: string;
+}
+
 const PDV = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -81,9 +86,12 @@ const PDV = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
   const [pixAmount, setPixAmount] = useState(0);
+  const [cashSession, setCashSession] = useState<CashSession | null>(null);
+  const [cashDialogOpen, setCashDialogOpen] = useState(false);
+  const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
+  const [cashAmountInput, setCashAmountInput] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
-  const { sendToKitchen } = useKitchenIntegration();
 
   // Refs for animation
   const cartContainerRef = useRef<HTMLDivElement>(null);
@@ -92,8 +100,91 @@ const PDV = () => {
   useEffect(() => {
     if (user) {
       fetchData();
+      fetchOpenCashSession();
     }
   }, [user]);
+
+  const fetchOpenCashSession = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_sessions' as any)
+        .select('id, opened_at, initial_amount, status')
+        .eq('user_id', user?.id)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      setCashSession((data as any) || null);
+    } catch {
+      setCashSession(null);
+    }
+  };
+
+  const getOperatorSession = () => {
+    try {
+      const waiter = localStorage.getItem('waiter_session');
+      if (waiter) return JSON.parse(waiter);
+      const op = localStorage.getItem('operator_session');
+      if (op) return JSON.parse(op);
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const openCashDialog = (mode: 'open' | 'close') => {
+    setCashDialogMode(mode);
+    setCashAmountInput('');
+    setCashDialogOpen(true);
+  };
+
+  const handleCashSubmit = async () => {
+    if (!user?.id) return;
+    const amount = Number(cashAmountInput.replace(',', '.'));
+    if (!Number.isFinite(amount)) {
+      toast({ title: 'Valor inválido', description: 'Informe um valor válido', variant: 'destructive' });
+      return;
+    }
+    const operatorSession = getOperatorSession();
+    const waiterId = operatorSession?.id || null;
+
+    try {
+      if (cashDialogMode === 'open') {
+        const { error } = await supabase
+          .from('cash_register_sessions' as any)
+          .insert({
+            user_id: user.id,
+            initial_amount: amount,
+            status: 'open',
+            opened_at: new Date().toISOString(),
+            opened_by_waiter_id: waiterId,
+          });
+        if (error) throw error;
+        toast({ title: 'Caixa aberto' });
+      } else {
+        if (!cashSession?.id) {
+          toast({ title: 'Caixa não encontrado', variant: 'destructive' });
+          return;
+        }
+        const { error } = await supabase
+          .from('cash_register_sessions' as any)
+          .update({
+            status: 'closed',
+            closed_at: new Date().toISOString(),
+            final_amount: amount,
+            closed_by_waiter_id: waiterId,
+          })
+          .eq('id', cashSession.id);
+        if (error) throw error;
+        toast({ title: 'Caixa fechado' });
+      }
+      setCashDialogOpen(false);
+      await fetchOpenCashSession();
+    } catch (e: any) {
+      toast({ title: 'Erro no caixa', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -619,16 +710,29 @@ const PDV = () => {
       }));
 
       const operatorSession = (() => {
-        try {
-          const waiter = localStorage.getItem('waiter_session');
-          if (waiter) return JSON.parse(waiter);
-          const op = localStorage.getItem('operator_session');
-          if (op) return JSON.parse(op);
-          return null;
-        } catch { return null; }
+        return getOperatorSession();
       })();
 
-      const orderData = {
+      if (!cashSession?.id) {
+        toast({
+          title: 'Caixa fechado',
+          description: 'Abra o caixa para finalizar a venda.',
+          variant: 'destructive',
+        });
+        openCashDialog('open');
+        return;
+      }
+
+      if (!operatorSession?.id) {
+        toast({
+          title: 'Operador não selecionado',
+          description: 'Selecione um operador antes de finalizar.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const orderData: any = {
         customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : (orderType === 'counter' ? (customerName.trim() || 'Venda Balcão') : customerName.trim()),
         customer_phone: customerPhone.trim() || null,
         customer_address: orderType === 'delivery' ? customerAddress.trim() : null,
@@ -645,6 +749,8 @@ const PDV = () => {
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min',
+        waiter_id: operatorSession?.id || null,
+        cash_register_session_id: cashSession?.id || null,
         variations: {
           operator: operatorSession ? { id: operatorSession.id, name: operatorSession.name } : null,
           source: 'PDV',
@@ -778,6 +884,8 @@ const PDV = () => {
     );
   }
 
+  const operatorSelected = !!getOperatorSession()?.id;
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50/50">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
@@ -801,6 +909,17 @@ const PDV = () => {
               </div>
               <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-9 w-9">
                 <RefreshCw size={16} />
+              </Button>
+              <Badge variant={cashSession?.id ? 'default' : 'destructive'} className="hidden sm:inline-flex">
+                {cashSession?.id ? 'Caixa Aberto' : 'Caixa Fechado'}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => openCashDialog(cashSession?.id ? 'close' : 'open')}
+              >
+                {cashSession?.id ? 'Fechar Caixa' : 'Abrir Caixa'}
               </Button>
               <OperatorSwitcher />
             </div>
@@ -1351,7 +1470,7 @@ const PDV = () => {
                   
                   <Button
                     onClick={handleFinalizeSale}
-                    disabled={processing || cart.length === 0}
+                    disabled={processing || cart.length === 0 || !cashSession?.id || !operatorSelected}
                     className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold"
                   >
                     {processing && orderType !== 'dine_in' ? (
@@ -1423,6 +1542,22 @@ const PDV = () => {
           }
         }}
       />
+
+      <Dialog open={cashDialogOpen} onOpenChange={setCashDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{cashDialogMode === 'open' ? 'Abrir Caixa' : 'Fechar Caixa'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>{cashDialogMode === 'open' ? 'Valor inicial' : 'Valor final'}</Label>
+            <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCashDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCashSubmit}>{cashDialogMode === 'open' ? 'Abrir' : 'Fechar'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

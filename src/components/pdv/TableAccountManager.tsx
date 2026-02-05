@@ -1,9 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Eye, Calculator, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import TableAccountModal from './TableAccountModal';
@@ -83,19 +81,6 @@ const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize })
     return table.status;
   };
 
-  const getStatusBadge = (status: string, total?: number) => {
-    switch (status) {
-      case 'open_account':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">Conta Aberta</Badge>;
-      case 'occupied':
-        return <Badge variant="secondary">Ocupada</Badge>;
-      case 'available':
-        return <Badge variant="outline">Disponível</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -125,61 +110,34 @@ const TableAccountManager: React.FC<TableAccountManagerProps> = ({ onFinalize })
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
               {tables.map((table) => {
                 const status = getTableStatus(table);
                 const account = tableAccounts[table.id];
-                
+
+                const base =
+                  status === 'open_account'
+                    ? 'bg-blue-600 text-white border-blue-700'
+                    : status === 'occupied'
+                    ? 'bg-gray-200 text-gray-900 border-gray-300'
+                    : 'bg-white text-gray-900 border-gray-200'
+
                 return (
-                  <Card key={table.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="text-center space-y-2">
-                        <h3 className="font-bold text-lg">Mesa {table.table_number}</h3>
-                        {getStatusBadge(status)}
-                        
-                        {table.location && (
-                          <p className="text-xs text-gray-500">{table.location}</p>
-                        )}
-                        
-                        <p className="text-xs text-gray-500">
-                          Capacidade: {table.capacity} pessoas
-                        </p>
-                        
-                        {account && (
-                          <>
-                            <p className="text-sm font-medium text-green-600">
-                              {formatCurrency(account.total)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {account.items.length} item(s)
-                            </p>
-                          </>
-                        )}
-                        
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewAccount(table)}
-                            className="flex-1"
-                          >
-                            <Eye size={14} className="mr-1" />
-                            Ver
-                          </Button>
-                          {account && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleViewAccount(table)}
-                              className="flex-1 bg-green-600 hover:bg-green-700"
-                            >
-                              <Calculator size={14} className="mr-1" />
-                              Finalizar
-                            </Button>
-                          )}
-                        </div>
+                  <button
+                    key={table.id}
+                    onClick={() => handleViewAccount(table)}
+                    className={`border rounded-md h-14 w-full flex flex-col items-center justify-center gap-0.5 hover:shadow-sm transition-shadow ${base}`}
+                    title={`Mesa ${table.table_number}`}
+                  >
+                    <div className="text-lg font-bold leading-none">{table.table_number}</div>
+                    {account ? (
+                      <div className="text-[10px] leading-none opacity-95">{formatCurrency(account.total)}</div>
+                    ) : (
+                      <div className="text-[10px] leading-none opacity-70">
+                        {status === 'occupied' ? 'Ocupada' : 'Livre'}
                       </div>
-                    </CardContent>
-                  </Card>
+                    )}
+                  </button>
                 );
               })}
             </div>
