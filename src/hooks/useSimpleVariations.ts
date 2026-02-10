@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
+import { invokeEdgeFunction } from "@/utils/invokeEdgeFunction";
 
 export function useSimpleVariations() {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,7 @@ export function useSimpleVariations() {
 
       if (productError) {
         console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar variações específicas:', productError);
+        throw productError
       } else {
         console.log('📋 CARDÁPIO DIGITAL - Variações específicas encontradas:', productVariations?.length || 0, productVariations);
       }
@@ -36,6 +38,7 @@ export function useSimpleVariations() {
 
       if (globalError) {
         console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar links de variações globais:', globalError);
+        throw globalError
       } else {
         console.log('🔗 CARDÁPIO DIGITAL - Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
       }
@@ -54,6 +57,7 @@ export function useSimpleVariations() {
 
         if (globalVarError) {
           console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações globais:', globalVarError);
+          throw globalVarError
         } else if (globalVars) {
           console.log('🌐 CARDÁPIO DIGITAL - Variações globais encontradas:', globalVars.length, globalVars);
           
@@ -248,9 +252,8 @@ export function useSimpleVariations() {
       return formatted as any[];
     } catch (error) {
       console.error('💥 CARDÁPIO DIGITAL - Erro geral ao carregar variações:', error);
-      // Fallback: função pública via Supabase
       try {
-        const { data: j }: any = await supabase.functions.invoke('product-variations-public', { body: { productId } as any })
+        const { data: j } = await invokeEdgeFunction<any>('product-variations-public', { productId })
         if (j?.ok && Array.isArray(j.variations)) {
           const variations = j.variations.map((item: any) => ({
             id: String(item.id),

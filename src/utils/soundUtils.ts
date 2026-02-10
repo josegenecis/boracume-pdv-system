@@ -101,6 +101,21 @@ export class SoundNotifications {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 30))
     } catch {}
 
+    try {
+      const audio = this.audioFiles.get('bell')
+      if (audio) {
+        const prevVolume = audio.volume
+        audio.volume = 0
+        if (!audio.src) audio.src = this.customSoundUrls.get('bell') || '/sounds/bell.mp3'
+        try {
+          await audio.play()
+          audio.pause()
+          audio.currentTime = 0
+        } catch {}
+        audio.volume = prevVolume
+      }
+    } catch {}
+
     if (audioContext.state !== 'running') {
       this.unlocked = false
       throw new Error('Áudio bloqueado pelo navegador')
