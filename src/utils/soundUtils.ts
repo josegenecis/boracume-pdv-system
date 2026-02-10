@@ -5,6 +5,8 @@ export class SoundNotifications {
   private audioFiles: Map<string, HTMLAudioElement> = new Map();
   private customSoundUrls: Map<string, string> = new Map();
   private currentlyPlaying: Set<HTMLAudioElement> = new Set();
+  private audioContext: AudioContext | null = null;
+  private unlocked: boolean = false;
 
   constructor() {
     this.preloadSounds();
@@ -72,9 +74,39 @@ export class SoundNotifications {
   }
 
   async enableSound() {
-    // Para HTML5 Audio, não precisa de contexto especial
-    // Apenas verificar se o áudio está funcionando
-    return Promise.resolve();
+    if (!this.isAudioSupported()) {
+      throw new Error('Áudio não suportado')
+    }
+
+    const audioContext = this.getAudioContext()
+    try {
+      if (audioContext.state !== 'running') {
+        await audioContext.resume()
+      }
+    } catch (e) {
+      this.unlocked = false
+      throw e
+    }
+
+    try {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      oscillator.frequency.setValueAtTime(1, audioContext.currentTime)
+      oscillator.type = 'sine'
+      gainNode.gain.setValueAtTime(0.00001, audioContext.currentTime)
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.02)
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 30))
+    } catch {}
+
+    if (audioContext.state !== 'running') {
+      this.unlocked = false
+      throw new Error('Áudio bloqueado pelo navegador')
+    }
+
+    this.unlocked = true
   }
 
   async playSound(soundType: string = 'bell') {
@@ -83,6 +115,11 @@ export class SoundNotifications {
     }
 
     try {
+      if (!this.unlocked) {
+        try {
+          await this.enableSound()
+        } catch {}
+      }
       const audio = this.audioFiles.get(soundType);
       
       if (audio) {
@@ -126,11 +163,21 @@ export class SoundNotifications {
     }
   }
 
+  private getAudioContext() {
+    if (this.audioContext) return this.audioContext
+    this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+    return this.audioContext
+  }
+
   private createFallbackSound() {
     try {
       // Fallback usando Web Audio API para sons sintéticos simples
-
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioContext = this.getAudioContext()
+      if (audioContext.state !== 'running') {
+        try {
+          audioContext.resume().catch(() => {})
+        } catch {}
+      }
 
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();

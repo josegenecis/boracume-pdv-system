@@ -130,19 +130,6 @@ function AppContent() {
 // Removido helper de permissão de som; habilitar automaticamente
 
 function App() {
-  useEffect(() => {
-    // Temporarily disable service worker to avoid conflicts
-    // Will re-enable after fixing core loading issues
-    console.log('App loaded successfully');
-    try {
-      soundNotifications.enableSound().then(() => {
-        localStorage.setItem('sound_enabled', 'true');
-      }).catch(() => {
-        // silencioso
-      });
-    } catch {}
-  }, []);
-
   return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>

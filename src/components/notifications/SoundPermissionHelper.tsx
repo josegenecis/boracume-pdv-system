@@ -9,11 +9,11 @@ const SoundPermissionHelper: React.FC = () => {
 
   useEffect(() => {
     // Verificar se o usuário já habilitou o som anteriormente
-    const soundAlreadyEnabled = localStorage.getItem('sound_enabled') === 'true';
+    const soundAlreadyUnlocked = localStorage.getItem('sound_unlocked') === 'true';
     
     if (!soundNotifications.isAudioSupported()) {
-      setNeedsPermission(true);
-    } else if (!soundAlreadyEnabled) {
+      setNeedsPermission(false);
+    } else if (!soundAlreadyUnlocked) {
       // Só mostrar o helper se o usuário nunca habilitou o som
       setNeedsPermission(true);
     } else {
@@ -27,7 +27,7 @@ const SoundPermissionHelper: React.FC = () => {
       await soundNotifications.playSound('bell');
       
       // Salvar no localStorage que o usuário habilitou o som
-      localStorage.setItem('sound_enabled', 'true');
+      localStorage.setItem('sound_unlocked', 'true');
       
       setNeedsPermission(false);
       console.log('✅ Áudio habilitado com sucesso e salvo no localStorage');

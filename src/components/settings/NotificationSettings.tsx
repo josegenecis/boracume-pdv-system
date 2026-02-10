@@ -120,6 +120,7 @@ const NotificationSettings = () => {
     try {
       // Evitar sobreposição: parar sons antes de testar
       soundNotifications.stopAllSounds();
+      await soundNotifications.enableSound();
       await soundNotifications.playSound(notifications.orderSound);
       toast({
         title: "Som reproduzido",
@@ -157,7 +158,7 @@ const NotificationSettings = () => {
         push_notifications: notifications.pushNotifications,
         sound_enabled: notifications.soundEnabled,
         order_sound: notifications.orderSound,
-        volume: typeof notifications.volume === 'string' ? parseInt(notifications.volume, 10) : notifications.volume,
+        volume: String(typeof notifications.volume === 'string' ? parseInt(notifications.volume, 10) : notifications.volume),
         custom_bell_url: customSoundUrls.custom_bell_url,
         custom_chime_url: customSoundUrls.custom_chime_url,
         custom_ding_url: customSoundUrls.custom_ding_url,
