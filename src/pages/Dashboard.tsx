@@ -8,7 +8,6 @@ import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
 import { CreditCard, ShoppingCart, Users, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface DashboardStats {
@@ -54,9 +53,6 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  
-  // Ativar notificações de pedidos
-  useOrderNotifications();
 
   useEffect(() => {
     console.log('🔍 [DASHBOARD] useEffect executado, user:', user?.id);

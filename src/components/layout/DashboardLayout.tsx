@@ -2,7 +2,6 @@
 import React from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
-import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
 
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
@@ -46,7 +45,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
           </div>
         </main>
       </div>
-      <GlobalNotificationSystem />
       <SoundPermissionHelper />
     </div>
   );

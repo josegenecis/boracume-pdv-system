@@ -10,7 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
-import { useOrderNotifications } from '@/hooks/useOrderNotifications';
 import OrderDetailsModal from '@/components/orders/OrderDetailsModal';
 import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
@@ -61,9 +60,6 @@ const Orders = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
-
-  // Ativar notificações de pedidos
-  useOrderNotifications();
 
   useEffect(() => {
     if (user) {

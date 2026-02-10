@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +28,8 @@ const GlobalNotificationSystem: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundType, setSoundType] = useState('bell');
+  const [volume, setVolume] = useState(0.8);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('dismissedOrders');
@@ -41,9 +43,50 @@ const GlobalNotificationSystem: React.FC = () => {
   const isOnOrdersPage = ['/orders', '/pedidos', '/kitchen', '/cozinha'].includes(location.pathname);
   const isDigitalMenu = location.pathname.includes('/menu');
 
+  const isOnOrdersPageRef = useRef(isOnOrdersPage);
+  const soundEnabledRef = useRef(soundEnabled);
+  const soundTypeRef = useRef(soundType);
+  const volumeRef = useRef(volume);
+
+  useEffect(() => {
+    isOnOrdersPageRef.current = isOnOrdersPage;
+  }, [isOnOrdersPage]);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+    soundTypeRef.current = soundType;
+    volumeRef.current = volume;
+    soundNotifications.setEnabled(soundEnabled);
+    soundNotifications.setVolume(volume);
+  }, [soundEnabled, soundType, volume]);
+
   useEffect(() => {
     if (!user) return;
     if (isDigitalMenu) return; // não mostrar para clientes no cardápio digital
+
+    const loadSettings = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('notification_settings')
+          .select('sound_enabled, volume, order_sound, custom_bell_url, custom_chime_url, custom_ding_url, custom_notification_url')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (error) return;
+        if (!data) return;
+        const enabled = !!data.sound_enabled;
+        const vol = Math.max(0, Math.min(1, parseFloat(String(data.volume || '80')) / 100));
+        const type = String(data.order_sound || 'bell');
+        setSoundEnabled(enabled);
+        setVolume(vol);
+        setSoundType(type);
+        soundNotifications.setCustomSoundUrls({
+          custom_bell_url: data.custom_bell_url || null,
+          custom_chime_url: data.custom_chime_url || null,
+          custom_ding_url: data.custom_ding_url || null,
+          custom_notification_url: data.custom_notification_url || null,
+        });
+      } catch {}
+    };
 
     // Carregar pedidos pendentes iniciais
     const loadPendingOrders = async () => {
@@ -57,17 +100,17 @@ const GlobalNotificationSystem: React.FC = () => {
 
       if (data && data.length > 0) {
         setPendingOrders(data);
-        if (!isOnOrdersPage) {
+        if (!isOnOrdersPageRef.current) {
           setIsVisible(true);
         }
       }
     };
 
-    loadPendingOrders();
+    loadSettings();
 
     // Escutar novos pedidos em tempo real
     const channel = supabase
-      .channel('global-notifications')
+      .channel(`global-notifications:${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -76,7 +119,7 @@ const GlobalNotificationSystem: React.FC = () => {
           table: 'orders',
           filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('🔔 GlobalNotification - Novo pedido:', payload);
           
           const newOrder = payload.new as PendingOrder;
@@ -86,10 +129,10 @@ const GlobalNotificationSystem: React.FC = () => {
             (newOrder as any).status === 'pending';
           if (!showForInsert) return;
           setPendingOrders(prev => [newOrder, ...prev]);
-          if (!isOnOrdersPage) {
+          if (!isOnOrdersPageRef.current) {
             setIsVisible(true);
-            if (soundEnabled) {
-              soundNotifications.playSound('bell').catch(console.error);
+            if (soundEnabledRef.current) {
+              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
             }
             if (navigator.vibrate) {
               navigator.vibrate([200, 100, 200]);
@@ -110,17 +153,17 @@ const GlobalNotificationSystem: React.FC = () => {
           table: 'orders',
           filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
+        async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
           const isPendingLike = updatedOrder.acceptance_status === 'pending_acceptance' 
             || updatedOrder.acceptance_status === 'awaiting_pix_payment'
             || (updatedOrder as any).status === 'pending';
           if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
-            if (!isOnOrdersPage) {
+            if (!isOnOrdersPageRef.current) {
               setIsVisible(true);
-              if (soundEnabled) {
-                soundNotifications.playSound('bell').catch(console.error);
+              if (soundEnabledRef.current) {
+                await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
               }
               if (navigator.vibrate) {
                 navigator.vibrate([200, 100, 200]);
@@ -150,14 +193,25 @@ const GlobalNotificationSystem: React.FC = () => {
           }
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notification_settings', filter: `user_id=eq.${user.id}` },
+        () => {
+          loadSettings();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          loadPendingOrders();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
       // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
     };
-  }, [user, isOnOrdersPage, isDigitalMenu, soundEnabled, toast]);
+  }, [user, isDigitalMenu, toast]);
 
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
