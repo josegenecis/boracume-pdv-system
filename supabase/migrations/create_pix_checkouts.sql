@@ -19,10 +19,13 @@ create policy if not exists "pix_checkouts_restaurant_read"
   on public.pix_checkouts for select
   using (restaurant_user_id = auth.uid());
 
-create policy if not exists "pix_checkouts_restaurant_write"
+drop policy if exists "pix_checkouts_restaurant_write" on public.pix_checkouts;
+create policy "pix_checkouts_restaurant_write"
   on public.pix_checkouts for insert
   with check (restaurant_user_id = auth.uid());
 
-create policy if not exists "pix_checkouts_restaurant_update"
+drop policy if exists "pix_checkouts_restaurant_update" on public.pix_checkouts;
+create policy "pix_checkouts_restaurant_update"
   on public.pix_checkouts for update
-  using (restaurant_user_id = auth.uid());
+  using (restaurant_user_id = auth.uid())
+  with check (restaurant_user_id = auth.uid());
