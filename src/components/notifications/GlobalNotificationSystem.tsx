@@ -114,13 +114,18 @@ const GlobalNotificationSystem: React.FC = () => {
 
     // Carregar pedidos pendentes iniciais
     const loadPendingOrders = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('orders')
         .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status')
         .eq('user_id', user.id)
         .in('acceptance_status', ['pending_acceptance', 'awaiting_pix_payment'])
         .or('status.eq.pending')
         .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ GlobalNotification - Erro ao carregar pedidos pendentes:', error);
+        return;
+      }
 
       if (data && data.length > 0) {
         setPendingOrders(data);
