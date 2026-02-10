@@ -14,6 +14,7 @@ import { CreditCard, Banknote, Smartphone, MapPin, Phone, User, Navigation, Chec
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { supabase } from '@/integrations/supabase/client';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 // Removido hook de mobile fora do componente para evitar uso inválido
 
 interface CartItem {
@@ -313,12 +314,17 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           generateGoogleMapsLink(location.latitude, location.longitude) : null
       };
 
-      if (paymentMethod !== 'dinheiro') {
-        const { data }: any = await supabase.functions.invoke('pix-start-checkout', {
-          body: { restaurantUserId: userId, orderPayload: orderData, preferredMethod: paymentMethod } as any
-        });
-        if (!data?.ok) {
-          throw new Error(data?.error || 'Não foi possível iniciar pagamento');
+      if (paymentMethod === 'pix') {
+        const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
+          restaurantUserId: userId,
+          orderPayload: orderData,
+          preferredMethod: paymentMethod
+        })
+        if (!data) {
+          throw new Error(`Erro na conexão com checkout (HTTP ${status})`)
+        }
+        if (!data.ok) {
+          throw new Error(data.error || `Não foi possível iniciar pagamento (HTTP ${status})`)
         }
         if (data.initPoint) {
           window.location.href = data.initPoint;
@@ -573,10 +579,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="space-y-3">
                 <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
                   {paymentMethods.map((option) => (
-                    <Label
+                    <div
                       key={option.id}
-                      htmlFor={option.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-accent transition-colors"
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === option.id ? 'border-boracume-orange bg-orange-50' : 'border-border hover:bg-accent'}`}
+                      onClick={() => setPaymentMethod(option.id)}
                     >
                       <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
                       <span className="flex-1 font-medium">{option.name}</span>
@@ -585,7 +591,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           Taxa {option.extra_fee_percent}%
                         </Badge>
                       )}
-                    </Label>
+                    </div>
                   ))}
                 </RadioGroup>
 

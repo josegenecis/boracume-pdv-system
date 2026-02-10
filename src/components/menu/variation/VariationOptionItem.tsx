@@ -28,7 +28,13 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   const inputId = `${variationId}-${index}`;
 
   return (
-    <div className="flex items-center justify-between">
+    <div
+      className="flex items-center justify-between cursor-pointer select-none"
+      onClick={() => {
+        const el = document.getElementById(inputId) as HTMLElement | null
+        el?.click()
+      }}
+    >
       <div className="flex items-center space-x-2">
         {isRadio ? (
           <RadioGroupItem 
@@ -46,7 +52,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             className="h-5 w-5"
           />
         )}
-        <Label htmlFor={inputId} className="text-sm">
+        <Label className="text-sm cursor-pointer">
           {option.name}
         </Label>
       </div>

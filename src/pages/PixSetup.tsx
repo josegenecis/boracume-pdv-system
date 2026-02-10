@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { CreditCard, Copy, RefreshCw } from 'lucide-react';
 
 export default function PixSetup() {
@@ -131,23 +132,20 @@ export default function PixSetup() {
     setLoading(true);
     try {
       console.log('Iniciando teste Pix...');
-      const { data, error } = await supabase.functions.invoke('pix-start-checkout', {
-        body: { 
-          restaurantUserId: activeUserId, 
-          orderPayload: { total: 1.00, customer_name: 'Teste Admin', payment_method: 'pix' }, 
-          preferredMethod: 'pix' 
-        }
-      });
-
-      if (error) {
-        console.error('Erro na chamada da função:', error);
-        throw new Error(error.message || JSON.stringify(error));
-      }
+      const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
+        restaurantUserId: activeUserId,
+        orderPayload: { total: 1.0, customer_name: 'Teste Admin', payment_method: 'pix' },
+        preferredMethod: 'pix'
+      })
 
       console.log('Resposta do teste:', data);
 
-      if (!data?.ok) {
-        throw new Error(data?.error || 'Erro desconhecido na resposta (ok: false)');
+      if (!data) {
+        throw new Error(`Sem resposta JSON (HTTP ${status})`)
+      }
+
+      if (!data.ok) {
+        throw new Error(data.error || `Erro desconhecido na resposta (HTTP ${status})`)
       }
 
       toast({ 

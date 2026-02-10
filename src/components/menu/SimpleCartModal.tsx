@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -327,17 +328,19 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
 
-      if (paymentMethod !== 'dinheiro') {
-        const { data, error }: any = await supabase.functions.invoke('pix-start-checkout', {
-          body: { restaurantUserId: userId, orderPayload: orderData, preferredMethod: paymentMethod } as any
-        });
+      if (paymentMethod === 'pix') {
+        const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
+          restaurantUserId: userId,
+          orderPayload: orderData,
+          preferredMethod: paymentMethod
+        })
 
-        if (error) {
-          throw new Error('Erro na conexão com checkout: ' + (error.message || error));
+        if (!data) {
+          throw new Error(`Erro na conexão com checkout (HTTP ${status})`)
         }
 
-        if (!data?.ok) {
-          throw new Error(data?.error || 'Erro desconhecido ao iniciar pagamento');
+        if (!data.ok) {
+          throw new Error(data.error || `Não foi possível iniciar pagamento (HTTP ${status})`)
         }
         if (data.initPoint) {
           window.location.href = data.initPoint;
@@ -354,7 +357,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       await onPlaceOrder(orderData);
     } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
-      alert(`Erro ao finalizar pedido: ${error.message || error}. Verifique se a tabela pix_checkouts foi criada no banco.`);
+      alert(`Erro ao finalizar pedido: ${error.message || error}. Se for pagamento online, verifique se o PIX/checkout está configurado para o restaurante.`);
     } finally {
       setIsLoading(false);
     }
@@ -589,10 +592,17 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   const IconComponent = option.icon === 'cartao_credito' || option.icon === 'cartao_debito' ? CreditCard : Banknote;
                   const isSelected = selectedPaymentMethod?.id === option.id;
                   return (
-                    <div key={option.id} className="flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200">
+                    <div
+                      key={option.id}
+                      className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${isSelected ? 'border-boracume-orange bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+                      onClick={() => {
+                        setSelectedPaymentMethod(option as any)
+                        setPaymentMethod(option.id)
+                      }}
+                    >
                       <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
                       <IconComponent className={`h-5 w-5 ${isSelected ? 'text-boracume-orange' : 'text-gray-600'}`} />
-                      <Label htmlFor={option.id} className={`flex-1 font-medium ${isSelected ? 'text-boracume-orange' : 'text-gray-900'}`}>{option.name}</Label>
+                      <Label className={`flex-1 font-medium cursor-pointer ${isSelected ? 'text-boracume-orange' : 'text-gray-900'}`}>{option.name}</Label>
                       {option.is_card && option.extra_fee_percent > 0 && (
                         <span className="ml-2 text-xs text-orange-600 font-bold">+{option.extra_fee_percent}%</span>
                       )}

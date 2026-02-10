@@ -61,6 +61,30 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [soundEnabled, soundType, volume]);
 
   useEffect(() => {
+    try {
+      if (localStorage.getItem('sound_unlocked') === 'true') return;
+    } catch {}
+
+    const unlock = async () => {
+      try {
+        await soundNotifications.enableSound();
+        try { localStorage.setItem('sound_unlocked', 'true'); } catch {}
+      } catch {}
+    };
+
+    const onFirstInteraction = () => {
+      unlock().catch(() => {});
+    };
+
+    window.addEventListener('pointerdown', onFirstInteraction, { passive: true, once: true });
+    window.addEventListener('touchstart', onFirstInteraction, { passive: true, once: true });
+    return () => {
+      window.removeEventListener('pointerdown', onFirstInteraction as any);
+      window.removeEventListener('touchstart', onFirstInteraction as any);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     if (isDigitalMenu) return; // não mostrar para clientes no cardápio digital
 
@@ -129,11 +153,11 @@ const GlobalNotificationSystem: React.FC = () => {
             (newOrder as any).status === 'pending';
           if (!showForInsert) return;
           setPendingOrders(prev => [newOrder, ...prev]);
+          if (soundEnabledRef.current) {
+            await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
+          }
           if (!isOnOrdersPageRef.current) {
             setIsVisible(true);
-            if (soundEnabledRef.current) {
-              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-            }
             if (navigator.vibrate) {
               navigator.vibrate([200, 100, 200]);
             }
@@ -160,11 +184,11 @@ const GlobalNotificationSystem: React.FC = () => {
             || (updatedOrder as any).status === 'pending';
           if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
+            if (soundEnabledRef.current) {
+              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
+            }
             if (!isOnOrdersPageRef.current) {
               setIsVisible(true);
-              if (soundEnabledRef.current) {
-                await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-              }
               if (navigator.vibrate) {
                 navigator.vibrate([200, 100, 200]);
               }
@@ -206,10 +230,18 @@ const GlobalNotificationSystem: React.FC = () => {
         }
       });
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadPendingOrders();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       supabase.removeChannel(channel);
       // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [user, isDigitalMenu, toast]);
 
