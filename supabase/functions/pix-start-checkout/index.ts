@@ -38,13 +38,16 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const ok = (payload: any) =>
+    new Response(JSON.stringify(payload), { status: 200, headers: corsHeaders })
+
   try {
     const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
     const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY', 'BORACUME_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !serviceKey) {
       console.error("Missing environment variables")
-      throw new Error("Missing environment variables SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+      return ok({ ok: false, error: 'missing_env', message: "Missing environment variables SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" })
     }
 
     const supabase = createClient(supabaseUrl, serviceKey)
@@ -54,7 +57,7 @@ Deno.serve(async (req: Request) => {
       body = await req.json()
     } catch (e: any) {
       console.error("Error parsing JSON body:", e)
-      return new Response(JSON.stringify({ ok: false, error: 'invalid_json_body', details: e?.message }), { status: 400, headers: corsHeaders })
+      return ok({ ok: false, error: 'invalid_json_body', details: e?.message })
     }
 
     const restaurantUserId = String(body?.restaurantUserId || '')
@@ -65,7 +68,7 @@ Deno.serve(async (req: Request) => {
     console.log(`Processing request for user: ${restaurantUserId}, total: ${total}`)
 
     if (!restaurantUserId || !orderPayload || !Number.isFinite(total) || total <= 0) {
-      return new Response(JSON.stringify({ ok: false, error: 'invalid_payload' }), { status: 400, headers: corsHeaders })
+      return ok({ ok: false, error: 'invalid_payload' })
     }
 
     const { data: pix, error: pixErr } = await supabase
@@ -76,15 +79,15 @@ Deno.serve(async (req: Request) => {
 
     if (pixErr) {
       console.error("Database error fetching settings:", pixErr)
-      return new Response(JSON.stringify({ ok: false, error: 'db_error', details: pixErr }), { status: 500, headers: corsHeaders })
+      return ok({ ok: false, error: 'db_error', details: pixErr })
     }
     
     if (!pix) {
       console.error("No pix settings found for user")
-      return new Response(JSON.stringify({ ok: false, error: 'pix_not_configured' }), { status: 400, headers: corsHeaders })
+      return ok({ ok: false, error: 'pix_not_configured' })
     }
 
-    if (!pix.enabled) return new Response(JSON.stringify({ ok: false, error: 'pix_disabled' }), { status: 400, headers: corsHeaders })
+    if (!pix.enabled) return ok({ ok: false, error: 'pix_disabled' })
 
     const correlationID = crypto.randomUUID()
     const value = Math.round(total * 100)
@@ -97,7 +100,7 @@ Deno.serve(async (req: Request) => {
     const provider = String(pix.bank || 'mercadopago').toLowerCase()
     const webhookSecret = getEnv('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
     if (!webhookSecret) {
-      return new Response(JSON.stringify({ ok: false, error: 'missing_webhook_secret' }), { status: 400, headers: corsHeaders })
+      return ok({ ok: false, error: 'missing_webhook_secret' })
     }
     const webhookBase = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/pix-webhook`
     const notificationUrl = `${webhookBase}?secret=${encodeURIComponent(webhookSecret)}&cid=${encodeURIComponent(correlationID)}`
@@ -117,12 +120,12 @@ Deno.serve(async (req: Request) => {
       console.error("Error creating pix_checkout record:", insertErr)
       // Não retorna erro fatal, tenta prosseguir com MP, mas idealmente deveria parar.
       // Vamos parar para garantir consistência
-      return new Response(JSON.stringify({ ok: false, error: 'db_insert_error', details: insertErr }), { status: 500, headers: corsHeaders })
+      return ok({ ok: false, error: 'db_insert_error', details: insertErr })
     }
 
     if (provider === 'mercadopago') {
       const accessToken = String(pix.client_id || '')
-      if (!accessToken) return new Response(JSON.stringify({ ok: false, error: 'missing_provider_credentials' }), { status: 400, headers: corsHeaders })
+      if (!accessToken) return ok({ ok: false, error: 'missing_provider_credentials' })
 
       console.log("Calling Mercado Pago API...")
       
@@ -161,7 +164,7 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString()
             })
             .eq('correlation_id', correlationID)
-          return new Response(JSON.stringify({ ok: false, error: 'provider_error', details: mpJson }), { status: 502, headers: corsHeaders })
+          return ok({ ok: false, error: 'provider_error', details: mpJson })
         }
 
         await supabase
@@ -184,7 +187,7 @@ Deno.serve(async (req: Request) => {
         const ticketUrl = mpJson?.point_of_interaction?.transaction_data?.ticket_url || ''
         const qrCodeImage = qrBase64 ? `data:image/png;base64,${qrBase64}` : ''
 
-        return new Response(JSON.stringify({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago' }), { headers: corsHeaders })
+        return ok({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago' })
       }
 
       const preferenceBody = {
@@ -235,7 +238,7 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString()
           })
           .eq('correlation_id', correlationID)
-        return new Response(JSON.stringify({ ok: false, error: 'provider_error', details: prefJson }), { status: 502, headers: corsHeaders })
+        return ok({ ok: false, error: 'provider_error', details: prefJson })
       }
 
       await supabase
@@ -252,13 +255,13 @@ Deno.serve(async (req: Request) => {
         })
         .eq('correlation_id', correlationID)
 
-      return new Response(JSON.stringify({ ok: true, correlationID, initPoint: prefJson?.init_point || '', provider: 'mercadopago' }), { headers: corsHeaders })
+      return ok({ ok: true, correlationID, initPoint: prefJson?.init_point || '', provider: 'mercadopago' })
     }
 
-    return new Response(JSON.stringify({ ok: false, error: 'unsupported_provider' }), { status: 400, headers: corsHeaders })
+    return ok({ ok: false, error: 'unsupported_provider' })
 
   } catch (e: any) {
     console.error("Fatal error in edge function:", e)
-    return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: e?.message }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: e?.message }), { status: 200, headers: corsHeaders })
   }
 })

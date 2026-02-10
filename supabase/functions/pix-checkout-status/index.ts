@@ -19,7 +19,7 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const body = await req.json().catch(() => ({}))
     const correlationID = String(body?.correlationID || '')
-    if (!correlationID) return new Response(JSON.stringify({ ok: false, error: 'missing_correlationID' }), { status: 400, headers: corsHeaders })
+    if (!correlationID) return new Response(JSON.stringify({ ok: false, error: 'missing_correlationID' }), { status: 200, headers: corsHeaders })
 
     const { data, error } = await supabase
       .from('pix_checkouts')
@@ -27,10 +27,9 @@ export default async function handler(req: Request): Promise<Response> {
       .eq('correlation_id', correlationID)
       .maybeSingle()
 
-    if (error || !data) return new Response(JSON.stringify({ ok: false, error: 'not_found' }), { status: 404, headers: corsHeaders })
-    return new Response(JSON.stringify({ ok: true, status: data.status, orderId: data.order_id || null }), { headers: corsHeaders })
+    if (error || !data) return new Response(JSON.stringify({ ok: false, error: 'not_found' }), { status: 200, headers: corsHeaders })
+    return new Response(JSON.stringify({ ok: true, status: data.status, orderId: data.order_id || null }), { status: 200, headers: corsHeaders })
   } catch (e: any) {
-    return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: e?.message }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ ok: false, error: 'internal_error', message: e?.message }), { status: 200, headers: corsHeaders })
   }
 }
-
