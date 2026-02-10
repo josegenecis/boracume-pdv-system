@@ -204,6 +204,8 @@ serve(async (req) => {
         total: payload?.total || 0,
         delivery_fee: payload?.delivery_fee || null,
         payment_method: payload?.payment_method || 'pix',
+        discount: payload?.discount ?? 0,
+        coupon_code: payload?.coupon_code ?? null,
         status: 'pending',
         acceptance_status: 'pending_acceptance',
         change_amount: payload?.change_amount ?? null,
