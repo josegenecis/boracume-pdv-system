@@ -131,6 +131,7 @@ const GlobalNotificationSystem: React.FC = () => {
     };
 
     loadSettings();
+    loadPendingOrders();
 
     // Escutar novos pedidos em tempo real
     const channel = supabase
