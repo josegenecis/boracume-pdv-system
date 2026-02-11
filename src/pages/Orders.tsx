@@ -363,34 +363,50 @@ const Orders = () => {
 
       console.log('✅ Status atualizado no banco de dados:', data);
 
+      setOrders(prev => prev.map(order =>
+        order.id === orderId
+          ? { ...order, ...updateData }
+          : order
+      ));
 
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);
 
       // Se status mudou para 'preparing', enviar para KDS
       if (newStatus === 'preparing' && order) {
-        try {
-          console.log('🔄 Enviando pedido aceito para KDS:', order.order_number);
+        toast({
+          title: "Pedido aceito!",
+          description: "Status atualizado com sucesso.",
+        });
 
-          const orderData = {
-            user_id: order.user_id || user?.id || '',
-            order_number: order.order_number,
+        const orderData = {
+          user_id: order.user_id || user?.id || '',
+          order_number: order.order_number,
+          customer_name: order.customer_name || 'Cliente não informado',
+          customer_phone: order.customer_phone || '',
+          items: order.items,
+          total: order.total,
+          payment_method: order.payment_method,
+          order_type: order.order_type
+        };
 
-            customer_name: order.customer_name || 'Cliente não informado',
-            customer_phone: order.customer_phone || '',
+        sendToKitchen(orderData).catch(() => {
+          toast({
+            title: "Aviso",
+            description: "Pedido aceito, mas não foi possível enviar para a cozinha.",
+            variant: "destructive"
+          });
+        });
 
-            items: order.items,
-            total: order.total,
-            payment_method: order.payment_method,
-            order_type: order.order_type
-          };
-
-        await sendToKitchen(orderData);
-        console.log('✅ Pedido enviado para KDS com sucesso');
-
-        // Notificar cliente via WhatsApp (se configurado)
-        try {
-          if (order.customer_phone) {
+        (async () => {
+          try {
+            if (!order.customer_phone || !user?.id) return;
+            const { data: wa } = await supabase
+              .from('whatsapp_settings')
+              .select('enabled')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            if (!wa?.enabled) return;
             const digits = String(order.customer_phone).replace(/\D/g, '');
             const to = digits.startsWith('55') ? digits : `55${digits}`;
             const trackUrl = `${window.location.origin}/track/${order.id}`;
@@ -400,27 +416,19 @@ const Orders = () => {
                 text: `Seu pedido ${order.order_number} foi aceito e está sendo preparado. Acompanhe: ${trackUrl}`
               }
             });
-          }
-        } catch (waErr) {
-          console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
-        }
-
-          toast({
-            title: "Pedido aceito!",
-            description: "Pedido enviado para a cozinha com sucesso",
-          });
-        } catch (kdsError) {
-          console.error('❌ Erro ao enviar para KDS:', kdsError);
-          toast({
-            title: "Aviso",
-            description: "Pedido aceito, mas houve erro ao enviar para a cozinha. Verifique o sistema KDS.",
-            variant: "destructive"
-          });
-        }
+          } catch {}
+        })();
       } else {
         // Notificar mudanças relevantes
-        try {
-          if (order?.customer_phone) {
+        (async () => {
+          try {
+            if (!order?.customer_phone || !user?.id) return;
+            const { data: wa } = await supabase
+              .from('whatsapp_settings')
+              .select('enabled')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            if (!wa?.enabled) return;
             const digits = String(order.customer_phone).replace(/\D/g, '');
             const to = digits.startsWith('55') ? digits : `55${digits}`;
             const trackUrl = `${window.location.origin}/track/${order.id}`;
@@ -430,27 +438,17 @@ const Orders = () => {
               cancelled: `Seu pedido ${order?.order_number} foi cancelado. Se for engano, entre em contato.`
             };
             const text = msgByStatus[newStatus];
-            if (text) {
-              await supabase.functions.invoke('whatsapp-notify', {
-                body: { to, text }
-              });
-            }
-          }
-        } catch (waErr) {
-          console.warn('⚠️ Falha ao notificar via WhatsApp:', waErr);
-        }
+            if (!text) return;
+            await supabase.functions.invoke('whatsapp-notify', {
+              body: { to, text }
+            });
+          } catch {}
+        })();
         toast({
           title: "Status atualizado",
           description: `Status do pedido atualizado com sucesso.`,
         });
       }
-
-      // Atualizar estado local com todos os campos atualizados
-      setOrders(prev => prev.map(order =>
-        order.id === orderId
-          ? { ...order, ...updateData }
-          : order
-      ));
 
     } catch (error: any) {
 

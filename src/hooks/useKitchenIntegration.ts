@@ -90,40 +90,6 @@ export const useKitchenIntegration = () => {
         console.log('✅ Pedido inserido no kitchen_orders:', kitchenOrder);
       }
       
-      // Enviar notificação em tempo real
-      try {
-        console.log('🔄 Enviando notificação em tempo real...');
-        const channel = supabase.channel('kitchen-notifications');
-        
-        const notificationPayload = {
-          order_number: orderData.order_number,
-          customer_name: orderData.customer_name,
-          user_id: orderData.user_id,
-          status: 'accepted',
-          timestamp: new Date().toISOString()
-        };
-        
-        // Timeout para evitar travamento
-        const notificationPromise = channel.send({
-          type: 'broadcast',
-          event: 'order_accepted',
-          payload: notificationPayload
-        });
-        
-        // Aguardar no máximo 3 segundos pela notificação
-        await Promise.race([
-          notificationPromise,
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout na notificação')), 3000)
-          )
-        ]);
-        
-        console.log('✅ Notificação enviada:', notificationPayload);
-      } catch (notificationError) {
-        console.warn('⚠️ Erro ao enviar notificação (não crítico):', notificationError);
-        // Não propagar o erro, pois a notificação é opcional
-      }
-
       console.log('✅ Integração KDS concluída com sucesso');
       return { success: true, kitchenOrder };
 
