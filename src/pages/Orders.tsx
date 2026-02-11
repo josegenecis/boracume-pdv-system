@@ -18,6 +18,7 @@ import { PrinterService } from '@/utils/printerService';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 interface Order {
   id: string;
@@ -297,13 +298,27 @@ const Orders = () => {
         throw new Error('Sessão expirada. Faça login novamente.');
       }
 
-      const { data, error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', orderId)
-        .eq('user_id', user?.id)
-        .select()
-        .single();
+      let data: any = null;
+      let error: any = null;
+
+      const ef = await invokeEdgeFunction<any>('orders-update-status', { orderId, newStatus });
+      if (ef?.data?.ok && ef?.data?.order) {
+        data = ef.data.order;
+      } else if (ef?.status === 404) {
+        const res = await supabase
+          .from('orders')
+          .update(updateData)
+          .eq('id', orderId)
+          .eq('user_id', user?.id)
+          .select()
+          .single();
+        data = (res as any).data;
+        error = (res as any).error;
+      } else if (ef?.data && ef?.data?.ok === false) {
+        error = { message: ef.data.error || 'edge_function_error', code: 'EDGE_FN', details: ef.data };
+      } else if (!ef?.data && ef?.status) {
+        error = { message: `edge_function_http_${ef.status}`, code: 'EDGE_FN_HTTP' };
+      }
 
       if (error) {
         console.error('❌ Erro detalhado do Supabase:', {
