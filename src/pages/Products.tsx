@@ -32,6 +32,9 @@ interface ProductItem {
   show_in_pdv: boolean;
   show_in_delivery: boolean;
   display_order?: number;
+  track_stock: boolean;
+  stock_quantity: number;
+  low_stock_threshold: number;
 }
 
 interface Category {
@@ -132,7 +135,10 @@ const Products = () => {
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
         show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
         weight_based: product.weight_based !== undefined ? product.weight_based : false,
-        send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false
+        send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false,
+        track_stock: product.track_stock !== undefined ? product.track_stock : false,
+        stock_quantity: product.stock_quantity !== undefined ? product.stock_quantity : 0,
+        low_stock_threshold: product.low_stock_threshold !== undefined ? product.low_stock_threshold : 5
       })) as ProductItem[];
       
       setProducts(transformedProducts);
@@ -447,7 +453,7 @@ const Products = () => {
                               <Draggable key={product.id} draggableId={product.id} index={index}>
                                 {(draggableProvided) => (
                                   <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
-                                    <Card className="overflow-hidden hover:shadow-sm transition-shadow">
+                                    <Card className={`overflow-hidden hover:shadow-sm transition-shadow ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'ring-2 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.75)]' : ''}`}>
                                       <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                                           <button
@@ -478,12 +484,19 @@ const Products = () => {
                                               <h3 className="font-semibold text-sm leading-tight truncate flex-1">
                                                 {product.name}
                                               </h3>
-                                              <Badge 
-                                                variant={product.available ? "default" : "secondary"}
-                                                className="text-xs shrink-0"
-                                              >
-                                                {product.available ? 'Ativo' : 'Inativo'}
-                                              </Badge>
+                                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                                <Badge 
+                                                  variant={product.available ? "default" : "secondary"}
+                                                  className="text-xs"
+                                                >
+                                                  {product.available ? 'Ativo' : 'Inativo'}
+                                                </Badge>
+                                                {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
+                                                  <Badge variant="destructive" className="text-xs">
+                                                    Estoque baixo
+                                                  </Badge>
+                                                )}
+                                              </div>
                                             </div>
                                             
                                             {product.description && (
@@ -571,7 +584,7 @@ const Products = () => {
                         </div>
                       )}
                       {filteredProducts.map((product) => (
-                        <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
+                        <Card key={product.id} className={`overflow-hidden hover:shadow-sm transition-shadow ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'ring-2 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.75)]' : ''}`}>
                           <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                               {product.image_url ? (
@@ -593,12 +606,19 @@ const Products = () => {
                                   <h3 className="font-semibold text-sm leading-tight truncate flex-1">
                                     {product.name}
                                   </h3>
-                                  <Badge 
-                                    variant={product.available ? "default" : "secondary"}
-                                    className="text-xs shrink-0"
-                                  >
-                                    {product.available ? 'Ativo' : 'Inativo'}
-                                  </Badge>
+                                  <div className="flex flex-col items-end gap-1 shrink-0">
+                                    <Badge 
+                                      variant={product.available ? "default" : "secondary"}
+                                      className="text-xs"
+                                    >
+                                      {product.available ? 'Ativo' : 'Inativo'}
+                                    </Badge>
+                                    {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        Estoque baixo
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 {product.description && (

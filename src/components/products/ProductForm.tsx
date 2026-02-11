@@ -31,6 +31,9 @@ interface ProductItem {
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
+  track_stock: boolean;
+  stock_quantity: number;
+  low_stock_threshold: number;
   is_highlight?: boolean;
   original_price?: number;
   discount_percentage?: number;
@@ -57,6 +60,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     send_to_kds: false,
     show_in_pdv: true,
     show_in_delivery: true,
+    track_stock: false,
+    stock_quantity: 0,
+    low_stock_threshold: 5,
     is_highlight: false,
     original_price: 0,
     discount_percentage: 0,
@@ -290,6 +296,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         is_available: formData.available,
         show_in_delivery: formData.show_in_delivery,
         image_url: formData.image_url || null,
+        track_stock: formData.track_stock,
+        stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
+        low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
         is_highlight: formData.is_highlight,
         original_price: formData.original_price,
         discount_percentage: formData.discount_percentage,
@@ -420,6 +429,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               .update({
                 description: formData.description?.trim() || null,
                 image_url: formData.image_url || null,
+                track_stock: formData.track_stock,
+                stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
+                low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
                 is_highlight: formData.is_highlight,
                 original_price: formData.original_price,
                 discount_percentage: formData.discount_percentage,
@@ -439,6 +451,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             image_url: formData.image_url || null,
             is_available: formData.available,
             show_in_delivery: formData.show_in_delivery,
+            track_stock: formData.track_stock,
+            stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
+            low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
             is_highlight: formData.is_highlight,
             original_price: formData.original_price,
             discount_percentage: formData.discount_percentage,
@@ -777,6 +792,46 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               <Label htmlFor="is_highlight">Destaque</Label>
             </div>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Estoque</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="track_stock"
+                  checked={formData.track_stock}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, track_stock: checked }))}
+                />
+                <Label htmlFor="track_stock">Controlar estoque</Label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="stock_quantity">Quantidade em estoque</Label>
+                  <Input
+                    id="stock_quantity"
+                    type="number"
+                    value={String(formData.stock_quantity ?? 0)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+                    disabled={!formData.track_stock}
+                    min={0}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="low_stock_threshold">Alerta de estoque baixo</Label>
+                  <Input
+                    id="low_stock_threshold"
+                    type="number"
+                    value={String(formData.low_stock_threshold ?? 0)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+                    disabled={!formData.track_stock}
+                    min={0}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Seção de Variações Globais */}
           <Card className="mt-4">

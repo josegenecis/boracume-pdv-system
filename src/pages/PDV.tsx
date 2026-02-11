@@ -360,13 +360,32 @@ const PDV = () => {
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
+      let data: any = null;
+      let error: any = null;
+
+      const res1 = await supabase
         .from('products')
         .select('*')
         .eq('user_id', user?.id)
         .eq('available', true)
         .eq('show_in_pdv', true)
-        .order('name');
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      data = res1.data;
+      error = res1.error;
+
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', user?.id)
+          .eq('available', true)
+          .eq('show_in_pdv', true)
+          .order('name', { ascending: true });
+        data = res2.data;
+        error = res2.error;
+      }
 
       if (error) throw error;
       setProducts(data || []);

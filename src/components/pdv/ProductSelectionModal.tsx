@@ -15,6 +15,9 @@ interface Product {
   description?: string;
   image_url?: string;
   category_id?: string;
+  track_stock: boolean;
+  stock_quantity: number;
+  low_stock_threshold: number;
 }
 
 interface ProductVariation {
@@ -56,16 +59,41 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      let data: any = null;
+      let error: any = null;
+
+      const res1 = await supabase
         .from('products')
         .select('*')
         .eq('user_id', user.id)
         .eq('show_in_pdv', true)
         .eq('available', true)
-        .order('name');
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      data = res1.data;
+      error = res1.error;
+
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('show_in_pdv', true)
+          .eq('available', true)
+          .order('name', { ascending: true });
+        data = res2.data;
+        error = res2.error;
+      }
 
       if (error) throw error;
-      setProducts(data || []);
+      const transformed = (data || []).map((p: any) => ({
+        ...p,
+        track_stock: p.track_stock !== undefined ? p.track_stock : false,
+        stock_quantity: p.stock_quantity !== undefined ? p.stock_quantity : 0,
+        low_stock_threshold: p.low_stock_threshold !== undefined ? p.low_stock_threshold : 5,
+      })) as Product[];
+      setProducts(transformed);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
     }
@@ -173,9 +201,12 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => (
+                (() => {
+                  const isLowStock = product.track_stock && product.stock_quantity <= product.low_stock_threshold;
+                  return (
                 <Card 
                   key={product.id} 
-                  className="cursor-pointer hover:shadow-lg transition-shadow"
+                  className={`cursor-pointer hover:shadow-lg transition-shadow ${isLowStock ? 'ring-2 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.75)]' : ''}`}
                   onClick={() => handleProductSelect(product)}
                 >
                   <CardContent className="p-4">
@@ -197,10 +228,17 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                         <Badge variant="secondary" className="text-xs">
                           R$ {product.price.toFixed(2)}
                         </Badge>
+                        {isLowStock && (
+                          <Badge variant="destructive" className="text-xs">
+                            Estoque baixo
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+                  );
+                })()
               ))}
             </div>
           )}
