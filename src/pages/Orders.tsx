@@ -313,7 +313,8 @@ const Orders = () => {
       } else if (ef?.data?.ok && ef?.data?.order) {
         data = ef.data.order;
       } else if (ef?.data?.ok === false) {
-        error = { message: ef.data.error || 'edge_function_error', code: 'EDGE_FN', details: ef.data };
+        const detailsMsg = ef.data?.details?.message ? `: ${ef.data.details.message}` : '';
+        error = { message: `${ef.data.error || 'edge_function_error'}${detailsMsg}`, code: 'EDGE_FN', details: ef.data };
       } else {
         const res = await supabase
           .from('orders')

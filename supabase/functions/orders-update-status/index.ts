@@ -21,6 +21,17 @@ const getEnv = (...keys: string[]) => {
 const ok = (payload: any) =>
   new Response(JSON.stringify(payload), { status: 200, headers: corsHeaders })
 
+const errInfo = (e: any) => {
+  if (!e) return null
+  return {
+    message: e.message,
+    code: e.code,
+    details: e.details,
+    hint: e.hint,
+    status: e.status
+  }
+}
+
 const getAuthUserId = async (req: Request): Promise<string> => {
   const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
   const anonKey = getEnv('SUPABASE_ANON_KEY', 'BORACUME_SUPABASE_ANON_KEY')
@@ -36,6 +47,29 @@ const getAuthUserId = async (req: Request): Promise<string> => {
   const { data, error } = await authClient.auth.getUser()
   if (error) return ''
   return data?.user?.id || ''
+}
+
+const createServiceClient = async (supabaseUrl: string) => {
+  const keys = [
+    getEnv('SUPABASE_SERVICE_ROLE_KEY'),
+    getEnv('BORACUME_SERVICE_ROLE_KEY'),
+    getEnv('SERVICE_ROLE_KEY'),
+  ].filter(Boolean)
+
+  if (!keys.length) return { client: null, error: 'missing_env' }
+
+  for (const key of keys) {
+    const client = createClient(supabaseUrl, String(key), { auth: { persistSession: false } })
+    const { error } = await client.from('orders').select('id').limit(1)
+    if (!error) return { client, error: null }
+    const msg = String(error?.message || '').toLowerCase()
+    if (msg.includes('invalid api key') || msg.includes('jwt') || error?.status === 401 || error?.status === 403) {
+      continue
+    }
+    return { client, error }
+  }
+
+  return { client: null, error: 'invalid_service_key' }
 }
 
 Deno.serve(async (req: Request) => {
@@ -59,7 +93,9 @@ Deno.serve(async (req: Request) => {
       return ok({ ok: false, error: 'invalid_payload' })
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } })
+    const svc = await createServiceClient(supabaseUrl)
+    if (svc.error) return ok({ ok: false, error: 'missing_env', details: svc.error })
+    const supabase = svc.client
 
     const { data: order, error: orderErr } = await supabase
       .from('orders')
@@ -67,7 +103,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', orderId)
       .maybeSingle()
 
-    if (orderErr) return ok({ ok: false, error: 'db_error', details: orderErr })
+    if (orderErr) return ok({ ok: false, error: 'db_error', details: errInfo(orderErr) })
     if (!order) return ok({ ok: false, error: 'not_found' })
 
     if (String(order.user_id) !== userId) {
@@ -88,7 +124,7 @@ Deno.serve(async (req: Request) => {
       .select('*')
       .single()
 
-    if (updateErr) return ok({ ok: false, error: 'db_error', details: updateErr })
+    if (updateErr) return ok({ ok: false, error: 'db_error', details: errInfo(updateErr) })
 
     return ok({ ok: true, order: updated })
   } catch (e: any) {
