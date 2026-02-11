@@ -134,8 +134,9 @@ const CollapsibleSidebar = () => {
   const [openGroup, setOpenGroup] = useState<string>(groupForCurrentPath);
 
   useEffect(() => {
-    if (groupForCurrentPath && groupForCurrentPath !== openGroup) setOpenGroup(groupForCurrentPath);
-  }, [groupForCurrentPath, openGroup]);
+    if (!groupForCurrentPath) return;
+    setOpenGroup(groupForCurrentPath);
+  }, [location.pathname, groupForCurrentPath]);
 
   return (
     <aside className={`
