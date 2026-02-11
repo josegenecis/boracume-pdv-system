@@ -176,7 +176,7 @@ const CollapsibleSidebar = () => {
                     onClick={handleLinkClick}
                     className={`flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors ${
                       isActive
-                        ? 'bg-orange-600 text-white'
+                        ? 'bg-orange-100 text-orange-900'
                         : 'text-gray-700 hover:bg-orange-50'
                     }`}
                     title={link.label}
@@ -213,7 +213,7 @@ const CollapsibleSidebar = () => {
                               onClick={handleLinkClick}
                               className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
                                 isActive
-                                  ? 'bg-orange-600 text-white'
+                                  ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
                                   : 'text-gray-700 hover:bg-orange-100'
                               }`}
                             >
@@ -239,7 +239,7 @@ const CollapsibleSidebar = () => {
                       onClick={handleLinkClick}
                       className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                         isActive
-                          ? 'bg-orange-600 text-white'
+                          ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
                           : 'text-gray-700 hover:bg-orange-50'
                       }`}
                     >
