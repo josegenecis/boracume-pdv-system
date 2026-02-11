@@ -52,6 +52,7 @@ const Orders = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -228,6 +229,7 @@ const Orders = () => {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingOrderIds(prev => new Set([...prev, orderId]));
     try {
 
       console.log('🔄 Iniciando atualização do status do pedido:', { orderId, newStatus });
@@ -445,6 +447,24 @@ const Orders = () => {
         description: `Não foi possível atualizar o status: ${errorMessage}`,
 
         variant: "destructive"
+      });
+
+      if (
+        String(errorMessage).includes('Permissão') ||
+        String(errorMessage).includes('Pedido não encontrado') ||
+        String(errorMessage).includes('RLS')
+      ) {
+        alert(
+          `Não foi possível aceitar o pedido por permissão no banco.\n\n` +
+            `A correção é aplicar as policies de UPDATE/SELECT na tabela orders.\n` +
+            `Rode a migration: supabase/migrations/20260210152000_orders_rls_authenticated_policies.sql`
+        );
+      }
+    } finally {
+      setUpdatingOrderIds(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
       });
     }
   };
@@ -778,8 +798,9 @@ const Orders = () => {
                               updateOrderStatus(order.id, 'preparing');
                             }}
                             className="w-full sm:flex-1 bg-green-600 hover:bg-green-700"
+                            disabled={updatingOrderIds.has(order.id)}
                           >
-                            Aceitar
+                            {updatingOrderIds.has(order.id) ? 'Aceitando...' : 'Aceitar'}
                           </Button>
                           <Button
                             size="sm"
