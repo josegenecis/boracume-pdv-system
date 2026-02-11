@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, FolderPlus } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderPlus, GripVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 interface Category {
   id: string;
@@ -166,6 +167,32 @@ const CategoryManager = () => {
     setEditingCategory(null);
   };
 
+  const persistOrder = async (next: Category[]) => {
+    try {
+      await Promise.all(
+        next.map((c, idx) =>
+          supabase
+            .from('product_categories')
+            .update({ display_order: idx })
+            .eq('id', c.id)
+        )
+      );
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Falha ao salvar ordem', variant: 'destructive' });
+      fetchCategories();
+    }
+  };
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+    const next = Array.from(categories);
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+    setCategories(next.map((c, idx) => ({ ...c, display_order: idx })));
+    persistOrder(next);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -247,6 +274,7 @@ const CategoryManager = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead>Ordem</TableHead>
@@ -254,38 +282,54 @@ const CategoryManager = () => {
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {categories.map((category) => (
-                <TableRow key={category.id}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>{category.description || '-'}</TableCell>
-                  <TableCell>{category.display_order}</TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded text-xs ${category.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                      {category.active ? 'Ativa' : 'Inativa'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(category)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(category.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="categories">
+                {(droppableProvided) => (
+                  <TableBody ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+                    {categories.map((category, index) => (
+                      <Draggable key={category.id} draggableId={category.id} index={index}>
+                        {(draggableProvided) => (
+                          <TableRow ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
+                            <TableCell className="w-10">
+                              <button type="button" {...draggableProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-muted-foreground">
+                                <GripVertical className="h-4 w-4" />
+                              </button>
+                            </TableCell>
+                            <TableCell className="font-medium">{category.name}</TableCell>
+                            <TableCell>{category.description || '-'}</TableCell>
+                            <TableCell>{category.display_order}</TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded text-xs ${category.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {category.active ? 'Ativa' : 'Inativa'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEdit(category)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDelete(category.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Draggable>
+                    ))}
+                    {droppableProvided.placeholder}
+                  </TableBody>
+                )}
+              </Droppable>
+            </DragDropContext>
           </Table>
         )}
       </CardContent>

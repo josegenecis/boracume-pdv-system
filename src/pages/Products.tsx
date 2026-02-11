@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +16,7 @@ import ProductVariationsButton from '@/components/products/ProductVariationsButt
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
 import { useSearchParams } from 'react-router-dom';
+import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 interface ProductItem {
   id: string;
@@ -30,6 +31,7 @@ interface ProductItem {
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
+  display_order?: number;
 }
 
 interface Category {
@@ -99,11 +101,28 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      let data: any = null;
+      let error: any = null;
+
+      const res1 = await supabase
         .from('products')
         .select('*')
         .eq('user_id', user?.id)
-        .order('name');
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      data = res1.data;
+      error = res1.error;
+
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', user?.id)
+          .order('name', { ascending: true });
+        data = res2.data;
+        error = res2.error;
+      }
       
       if (error) throw error;
       
@@ -160,6 +179,45 @@ const Products = () => {
     }
 
     setFilteredProducts(filtered);
+  };
+
+  const canReorderProducts = selectedCategory !== 'all' && !searchQuery;
+
+  const persistProductOrder = async (ordered: ProductItem[]) => {
+    try {
+      await Promise.all(
+        ordered.map((p, idx) =>
+          (supabase as any)
+            .from('products')
+            .update({ display_order: idx })
+            .eq('id', p.id)
+            .eq('user_id', user?.id)
+        )
+      );
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Falha ao salvar ordem', variant: 'destructive' });
+      fetchProducts();
+    }
+  };
+
+  const onProductsDragEnd = (result: DropResult) => {
+    if (!canReorderProducts) return;
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+    const next = Array.from(filteredProducts);
+    const [moved] = next.splice(result.source.index, 1);
+    next.splice(result.destination.index, 0, moved);
+
+    const orderById = new Map(next.map((p, idx) => [p.id, idx]));
+    setProducts(prev =>
+      prev.map(p =>
+        p.category_id === selectedCategory && orderById.has(p.id)
+          ? { ...p, display_order: orderById.get(p.id) }
+          : p
+      )
+    );
+    setFilteredProducts(next.map((p, idx) => ({ ...p, display_order: idx })));
+    persistProductOrder(next);
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -380,106 +438,240 @@ const Products = () => {
                       </CardContent>
                     </Card>
                   )}
-                  {filteredProducts.map((product) => (
-                    <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
-                      <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                          {product.image_url ? (
-                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                              <img 
-                                src={product.image_url} 
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                              <Package className="h-6 w-6 text-gray-400" />
-                            </div>
-                          )}
+                  {canReorderProducts ? (
+                    <DragDropContext onDragEnd={onProductsDragEnd}>
+                      <Droppable droppableId="products">
+                        {(droppableProvided) => (
+                          <div ref={droppableProvided.innerRef} {...droppableProvided.droppableProps} className="space-y-2">
+                            {filteredProducts.map((product, index) => (
+                              <Draggable key={product.id} draggableId={product.id} index={index}>
+                                {(draggableProvided) => (
+                                  <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
+                                    <Card className="overflow-hidden hover:shadow-sm transition-shadow">
+                                      <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                                          <button
+                                            type="button"
+                                            {...draggableProvided.dragHandleProps}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="hidden sm:inline-flex items-center justify-center w-8 h-8 rounded border text-muted-foreground cursor-grab active:cursor-grabbing"
+                                            title="Arraste para reordenar"
+                                          >
+                                            <GripVertical className="h-4 w-4" />
+                                          </button>
+                                          {product.image_url ? (
+                                            <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                                              <img 
+                                                src={product.image_url} 
+                                                alt={product.name}
+                                                className="w-full h-full object-cover"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                              <Package className="h-6 w-6 text-gray-400" />
+                                            </div>
+                                          )}
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <h3 className="font-semibold text-sm leading-tight truncate flex-1">
-                                {product.name}
-                              </h3>
-                              <Badge 
-                                variant={product.available ? "default" : "secondary"}
-                                className="text-xs shrink-0"
-                              >
-                                {product.available ? 'Ativo' : 'Inativo'}
-                              </Badge>
-                            </div>
-                            
-                            {product.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
-                                {product.description}
-                              </p>
-                            )}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-2 mb-1">
+                                              <h3 className="font-semibold text-sm leading-tight truncate flex-1">
+                                                {product.name}
+                                              </h3>
+                                              <Badge 
+                                                variant={product.available ? "default" : "secondary"}
+                                                className="text-xs shrink-0"
+                                              >
+                                                {product.available ? 'Ativo' : 'Inativo'}
+                                              </Badge>
+                                            </div>
+                                            
+                                            {product.description && (
+                                              <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
+                                                {product.description}
+                                              </p>
+                                            )}
 
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-baseline gap-1">
-                                  <span className="text-lg font-bold text-primary">
-                                    {formatCurrency(product.price)}
-                                  </span>
-                                  {product.weight_based && (
-                                    <span className="text-xs text-muted-foreground">/kg</span>
-                                  )}
-                                </div>
-                                <Badge variant="outline" className="text-xs">
-                                  {getCategoryName(product.category_id)}
-                                </Badge>
-                              </div>
+                                            <div className="flex items-center justify-between">
+                                              <div className="flex items-center gap-3">
+                                                <div className="flex items-baseline gap-1">
+                                                  <span className="text-lg font-bold text-primary">
+                                                    {formatCurrency(product.price)}
+                                                  </span>
+                                                  {product.weight_based && (
+                                                    <span className="text-xs text-muted-foreground">/kg</span>
+                                                  )}
+                                                </div>
+                                                <Badge variant="outline" className="text-xs">
+                                                  {getCategoryName(product.category_id)}
+                                                </Badge>
+                                              </div>
 
-                              <div className="flex items-center gap-1">
-                                {product.show_in_delivery && (
-                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                    Delivery
-                                  </Badge>
+                                              <div className="flex items-center gap-1">
+                                                {product.show_in_delivery && (
+                                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                                    Delivery
+                                                  </Badge>
+                                                )}
+                                                {product.show_in_pdv && (
+                                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                                    PDV
+                                                  </Badge>
+                                                )}
+                                                {product.send_to_kds && (
+                                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                                    KDS
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                           <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                                             <Button
+                                               variant="outline"
+                                               size="sm"
+                                               className="h-8 px-3 text-xs"
+                                               onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}
+                                             >
+                                               <Edit className="h-3 w-3 mr-1" />
+                                               <span className="hidden sm:inline">Editar</span>
+                                             </Button>
+                                             <div onClick={(e) => e.stopPropagation()}>
+                                               <ProductVariationsButton productId={product.id} compact />
+                                             </div>
+                                             
+                                             <Button
+                                               variant="outline"
+                                               size="sm"
+                                               className="h-8 px-2"
+                                               onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                                             >
+                                               <Trash2 className="h-3 w-3" />
+                                             </Button>
+                                           </div>
+
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  </div>
                                 )}
-                                {product.show_in_pdv && (
-                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                    PDV
-                                  </Badge>
-                                )}
-                                {product.send_to_kds && (
-                                  <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                    KDS
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                              </Draggable>
+                            ))}
+                            {droppableProvided.placeholder}
                           </div>
-
-                           <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               className="h-8 px-3 text-xs"
-                               onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}
-                             >
-                               <Edit className="h-3 w-3 mr-1" />
-                               <span className="hidden sm:inline">Editar</span>
-                             </Button>
-                             <div onClick={(e) => e.stopPropagation()}>
-                               <ProductVariationsButton productId={product.id} compact />
-                             </div>
-                             
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               className="h-8 px-2"
-                               onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
-                             >
-                               <Trash2 className="h-3 w-3" />
-                             </Button>
-                           </div>
-
+                        )}
+                      </Droppable>
+                    </DragDropContext>
+                  ) : (
+                    <>
+                      {(selectedCategory === 'all' || searchQuery) && (
+                        <div className="text-xs text-muted-foreground px-1">
+                          Para reordenar por arrastar, selecione uma categoria e limpe a busca.
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                      )}
+                      {filteredProducts.map((product) => (
+                        <Card key={product.id} className="overflow-hidden hover:shadow-sm transition-shadow">
+                          <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                              {product.image_url ? (
+                                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+                                  <img 
+                                    src={product.image_url} 
+                                    alt={product.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                  <Package className="h-6 w-6 text-gray-400" />
+                                </div>
+                              )}
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <h3 className="font-semibold text-sm leading-tight truncate flex-1">
+                                    {product.name}
+                                  </h3>
+                                  <Badge 
+                                    variant={product.available ? "default" : "secondary"}
+                                    className="text-xs shrink-0"
+                                  >
+                                    {product.available ? 'Ativo' : 'Inativo'}
+                                  </Badge>
+                                </div>
+                                
+                                {product.description && (
+                                  <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
+                                    {product.description}
+                                  </p>
+                                )}
+
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-baseline gap-1">
+                                      <span className="text-lg font-bold text-primary">
+                                        {formatCurrency(product.price)}
+                                      </span>
+                                      {product.weight_based && (
+                                        <span className="text-xs text-muted-foreground">/kg</span>
+                                      )}
+                                    </div>
+                                    <Badge variant="outline" className="text-xs">
+                                      {getCategoryName(product.category_id)}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    {product.show_in_delivery && (
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                        Delivery
+                                      </Badge>
+                                    )}
+                                    {product.show_in_pdv && (
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                        PDV
+                                      </Badge>
+                                    )}
+                                    {product.send_to_kds && (
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                        KDS
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                               <div className="flex flex-row flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   className="h-8 px-3 text-xs"
+                                   onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}
+                                 >
+                                   <Edit className="h-3 w-3 mr-1" />
+                                   <span className="hidden sm:inline">Editar</span>
+                                 </Button>
+                                 <div onClick={(e) => e.stopPropagation()}>
+                                   <ProductVariationsButton productId={product.id} compact />
+                                 </div>
+                                 
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   className="h-8 px-2"
+                                   onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                                 >
+                                   <Trash2 className="h-3 w-3" />
+                                 </Button>
+                               </div>
+
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </>
