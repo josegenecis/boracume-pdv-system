@@ -120,13 +120,33 @@ const CollapsibleSidebar = () => {
   };
 
   const isActivePath = (to: string) => {
-    const [path] = to.split('?');
-    return location.pathname === path;
+    const [path, search] = to.split('?');
+    if (location.pathname !== path) return false;
+
+    const currentParams = new URLSearchParams(location.search);
+
+    if (!search) {
+      if (path === '/produtos') {
+        const t = currentParams.get('tab');
+        return !t || t === 'products';
+      }
+      if (path === '/configuracoes') {
+        const t = currentParams.get('tab');
+        return !t || t === 'general';
+      }
+      return true;
+    }
+
+    const targetParams = new URLSearchParams(search);
+    for (const [key, value] of targetParams.entries()) {
+      if (currentParams.get(key) !== value) return false;
+    }
+    return true;
   };
 
   const groupForCurrentPath = useMemo(() => {
     for (const group of groups) {
-      if (group.items.some(i => isActivePath(i.to))) return group.id;
+      if (group.items.some(i => i.to.split('?')[0] === location.pathname)) return group.id;
     }
     return '';
   }, [groups, location.pathname]);
