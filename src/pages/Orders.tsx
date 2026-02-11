@@ -18,6 +18,7 @@ import { PrinterService } from '@/utils/printerService';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 interface Order {
   id: string;
@@ -53,6 +54,7 @@ const Orders = () => {
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
+  const [ordersView, setOrdersView] = useState<'list' | 'kanban'>('list');
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -499,6 +501,19 @@ const Orders = () => {
     setAdminPinOpen(true);
   };
 
+  const onKanbanDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+    const orderId = result.draggableId;
+    const dest = result.destination.droppableId;
+    if (dest === result.source.droppableId) return;
+    if (dest === 'pending') return;
+    if (dest === 'cancelled') {
+      await requestCancelOrder(orderId);
+      return;
+    }
+    await updateOrderStatus(orderId, dest);
+  };
+
   const handleBulkAction = async (orderIds: string[], action: string) => {
     try {
       console.log(`🔄 Executando ação em massa: ${action} para ${orderIds.length} pedidos`);
@@ -602,9 +617,11 @@ const Orders = () => {
     return new Date(dateString).toLocaleString('pt-BR');
   };
 
-  const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance');
+  const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance' || order.status === 'pending');
   const activeOrders = filteredOrders.filter(order => order.status === 'preparing');
   const completedOrders = filteredOrders.filter(order => order.status === 'ready');
+  const deliveredOrders = filteredOrders.filter(order => order.status === 'delivered');
+  const cancelledOrders = filteredOrders.filter(order => order.status === 'cancelled');
 
   if (loading) {
     return (
@@ -641,9 +658,17 @@ const Orders = () => {
         />
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
-          <Button onClick={fetchOrders} variant="outline">
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Tabs value={ordersView} onValueChange={(v) => setOrdersView(v as any)}>
+              <TabsList>
+                <TabsTrigger value="list">Lista</TabsTrigger>
+                <TabsTrigger value="kanban">Kanban</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button onClick={fetchOrders} variant="outline">
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -689,6 +714,69 @@ const Orders = () => {
           </CardContent>
         </Card>
 
+        {ordersView === 'kanban' ? (
+          <DragDropContext onDragEnd={(r) => { void onKanbanDragEnd(r); }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {[
+                { id: 'pending', title: 'Novos', items: pendingOrders, headerClass: 'bg-yellow-50 border-yellow-500 text-yellow-800' },
+                { id: 'preparing', title: 'Preparando', items: activeOrders, headerClass: 'bg-blue-50 border-blue-500 text-blue-800' },
+                { id: 'ready', title: 'Prontos', items: completedOrders, headerClass: 'bg-green-50 border-green-500 text-green-800' },
+                { id: 'delivered', title: 'Entregues', items: deliveredOrders, headerClass: 'bg-gray-50 border-gray-400 text-gray-800' },
+                { id: 'cancelled', title: 'Cancelados', items: cancelledOrders, headerClass: 'bg-red-50 border-red-500 text-red-800' },
+              ].map((col) => (
+                <div key={col.id} className="space-y-3">
+                  <div className={`p-3 rounded-lg border-l-4 ${col.headerClass}`}>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold">{col.title}</h2>
+                      <span className="text-sm font-semibold">{col.items.length}</span>
+                    </div>
+                  </div>
+                  <Droppable droppableId={col.id}>
+                    {(droppableProvided) => (
+                      <div
+                        ref={droppableProvided.innerRef}
+                        {...droppableProvided.droppableProps}
+                        className="min-h-[180px] space-y-3"
+                      >
+                        {col.items.map((order, index) => (
+                          <Draggable key={order.id} draggableId={order.id} index={index}>
+                            {(draggableProvided) => (
+                              <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps} {...draggableProvided.dragHandleProps}>
+                                <Card className="cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow">
+                                  <CardContent className="p-3" onClick={() => openOrderDetails(order)}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-sm truncate">Pedido {order.order_number}</div>
+                                        <div className="text-xs text-muted-foreground truncate">{order.customer_name}</div>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-1">
+                                        {getStatusBadge(order.status)}
+                                        <div className="text-xs font-semibold">{formatCurrency(order.total)}</div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                                      <div className="flex items-center gap-1">
+                                        {getOrderTypeIcon(order.order_type)}
+                                        <span>{getOrderTypeLabel(order.order_type)}</span>
+                                      </div>
+                                      <span>{new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {droppableProvided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </div>
+              ))}
+            </div>
+          </DragDropContext>
+        ) : (
+        <>
         {/* Orders Columns */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Novos (Pendentes) */}
@@ -1065,6 +1153,8 @@ const Orders = () => {
             )}
           </div>
         </div>
+        </>
+        )}
 
         {/* Modal de Detalhes */}
         <OrderDetailsModal
