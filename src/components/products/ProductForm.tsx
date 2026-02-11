@@ -81,6 +81,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
+  const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
+  const [stockSchemaChecked, setStockSchemaChecked] = useState(false);
 
   // Formata a string de centavos (somente dígitos) para BRL
   const formatFromRaw = (raw: string) => {
@@ -286,7 +288,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     try {
       setLoading(true);
 
-      const baseData = {
+      const baseData: any = {
         user_id: user.id,
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
@@ -296,13 +298,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         is_available: formData.available,
         show_in_delivery: formData.show_in_delivery,
         image_url: formData.image_url || null,
-        track_stock: formData.track_stock,
-        stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
-        low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
         is_highlight: formData.is_highlight,
         original_price: formData.original_price,
         discount_percentage: formData.discount_percentage,
-      } as const;
+      };
+      if (stockSchemaSupported) {
+        baseData.track_stock = formData.track_stock;
+        baseData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
+        baseData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
+      }
       let productId = product?.id;
 
       if (product?.id) {
@@ -381,6 +385,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       onSave(productId);
 
     } catch (error: any) {
+      const rawMsg = String(error?.message || error?.details || error?.hint || '');
+      if (
+        rawMsg.includes('track_stock') ||
+        rawMsg.includes('stock_quantity') ||
+        rawMsg.includes('low_stock_threshold') ||
+        rawMsg.toLowerCase().includes('schema cache')
+      ) {
+        setStockSchemaSupported(false);
+      }
       console.error('Erro ao salvar produto:', {
         message: error?.message,
         details: error?.details,
@@ -389,7 +402,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       });
       toast({
         title: "Erro",
-        description: error?.message || error?.details || error?.hint || "Erro ao salvar produto.",
+        description: rawMsg.includes('track_stock') || rawMsg.includes('stock_quantity') || rawMsg.includes('low_stock_threshold')
+          ? 'Seu banco ainda não tem o controle de estoque. Rode o SQL de estoque no Supabase (colunas track_stock/stock_quantity/low_stock_threshold) e tente novamente.'
+          : (error?.message || error?.details || error?.hint || "Erro ao salvar produto."),
         variant: "destructive"
       });
     } finally {
@@ -424,51 +439,89 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         if (!insertErr && insertData?.id) {
             setCreatedProductId(insertData.id);
             // atualiza com campos adicionais
+            const additional: any = {
+              description: formData.description?.trim() || null,
+              image_url: formData.image_url || null,
+              is_highlight: formData.is_highlight,
+              original_price: formData.original_price,
+              discount_percentage: formData.discount_percentage,
+              updated_at: new Date().toISOString()
+            };
+            if (stockSchemaSupported) {
+              additional.track_stock = formData.track_stock;
+              additional.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
+              additional.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
+            }
             await supabase
               .from('products')
-              .update({
-                description: formData.description?.trim() || null,
-                image_url: formData.image_url || null,
-                track_stock: formData.track_stock,
-                stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
-                low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
-                is_highlight: formData.is_highlight,
-                original_price: formData.original_price,
-                discount_percentage: formData.discount_percentage,
-                updated_at: new Date().toISOString()
-              })
+              .update(additional)
               .eq('id', insertData.id);
         }
       } else {
+        const updateData: any = {
+          name: formData.name.trim(),
+          price: formData.price,
+          category_id: formData.category_id,
+          category: formData.category,
+          description: formData.description?.trim() || null,
+          image_url: formData.image_url || null,
+          is_available: formData.available,
+          show_in_delivery: formData.show_in_delivery,
+          is_highlight: formData.is_highlight,
+          original_price: formData.original_price,
+          discount_percentage: formData.discount_percentage,
+          updated_at: new Date().toISOString()
+        };
+        if (stockSchemaSupported) {
+          updateData.track_stock = formData.track_stock;
+          updateData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
+          updateData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
+        }
         await supabase
           .from('products')
-          .update({
-            name: formData.name.trim(),
-            price: formData.price,
-            category_id: formData.category_id,
-            category: formData.category,
-            description: formData.description?.trim() || null,
-            image_url: formData.image_url || null,
-            is_available: formData.available,
-            show_in_delivery: formData.show_in_delivery,
-            track_stock: formData.track_stock,
-            stock_quantity: Math.max(0, Math.floor(Number(formData.stock_quantity) || 0)),
-            low_stock_threshold: Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0)),
-            is_highlight: formData.is_highlight,
-            original_price: formData.original_price,
-            discount_percentage: formData.discount_percentage,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', createdProductId);
       }
         } catch (err) {
+          const rawMsg = String((err as any)?.message || (err as any)?.details || '');
+          if (
+            rawMsg.includes('track_stock') ||
+            rawMsg.includes('stock_quantity') ||
+            rawMsg.includes('low_stock_threshold') ||
+            rawMsg.toLowerCase().includes('schema cache')
+          ) {
+            setStockSchemaSupported(false);
+          }
           console.warn('Autosave produto falhou', err);
         }
       }
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price]);
+  }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (stockSchemaChecked) return;
+    const run = async () => {
+      try {
+        const { error } = await (supabase as any)
+          .from('products')
+          .select('id, track_stock')
+          .eq('user_id', user.id)
+          .limit(1);
+        if (error) {
+          const rawMsg = String((error as any)?.message || '');
+          if (rawMsg.includes('track_stock') || rawMsg.toLowerCase().includes('schema cache')) {
+            setStockSchemaSupported(false);
+          }
+        }
+      } finally {
+        setStockSchemaChecked(true);
+      }
+    };
+    run();
+  }, [user?.id, stockSchemaChecked]);
 
 
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations) => {
@@ -798,12 +851,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               <CardTitle className="text-lg">Estoque</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!stockSchemaSupported && (
+                <div className="text-sm text-red-600">
+                  Controle de estoque ainda não está habilitado no banco. Rode o SQL de estoque no Supabase e tente novamente.
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="track_stock"
                     checked={formData.track_stock}
                     onCheckedChange={(checked) => setFormData(prev => ({ ...prev, track_stock: checked }))}
+                    disabled={!stockSchemaSupported}
                   />
                   <Label htmlFor="track_stock">Controlar estoque</Label>
                 </div>
@@ -814,7 +873,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     type="number"
                     value={String(formData.low_stock_threshold ?? 0)}
                     onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                    disabled={!formData.track_stock}
+                    disabled={!stockSchemaSupported || !formData.track_stock}
                     min={0}
                   />
                 </div>
@@ -826,7 +885,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   type="number"
                   value={String(formData.stock_quantity ?? 0)}
                   onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                  disabled={!formData.track_stock}
+                  disabled={!stockSchemaSupported || !formData.track_stock}
                   min={0}
                 />
               </div>
