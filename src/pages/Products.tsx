@@ -590,6 +590,15 @@ const Products = () => {
                         <Card key={product.id} className={`overflow-hidden hover:shadow-sm transition-shadow ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'ring-2 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.75)]' : ''}`}>
                           <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                              <button
+                                type="button"
+                                onClick={(e) => e.stopPropagation()}
+                                disabled
+                                className="inline-flex items-center justify-center w-8 h-8 rounded border text-muted-foreground opacity-40 cursor-not-allowed"
+                                title="Para reordenar: selecione uma categoria e limpe a busca"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </button>
                               {product.image_url ? (
                                 <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                                   <img 
