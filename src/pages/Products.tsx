@@ -449,6 +449,9 @@ const Products = () => {
                       <Droppable droppableId="products">
                         {(droppableProvided) => (
                           <div ref={droppableProvided.innerRef} {...droppableProvided.droppableProps} className="space-y-2">
+                            <div className="text-xs text-muted-foreground px-1">
+                              Arraste os produtos pelo ícone para mudar a ordem.
+                            </div>
                             {filteredProducts.map((product, index) => (
                               <Draggable key={product.id} draggableId={product.id} index={index}>
                                 {(draggableProvided) => (
@@ -460,7 +463,7 @@ const Products = () => {
                                             type="button"
                                             {...draggableProvided.dragHandleProps}
                                             onClick={(e) => e.stopPropagation()}
-                                            className="hidden sm:inline-flex items-center justify-center w-8 h-8 rounded border text-muted-foreground cursor-grab active:cursor-grabbing"
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded border text-muted-foreground cursor-grab active:cursor-grabbing"
                                             title="Arraste para reordenar"
                                           >
                                             <GripVertical className="h-4 w-4" />

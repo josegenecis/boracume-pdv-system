@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer } from 'lucide-react';
+import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer, GripVertical } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -741,8 +741,8 @@ const Orders = () => {
                         {col.items.map((order, index) => (
                           <Draggable key={order.id} draggableId={order.id} index={index}>
                             {(draggableProvided) => (
-                              <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps} {...draggableProvided.dragHandleProps}>
-                                <Card className="cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow">
+                              <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
+                                <Card className="hover:shadow-sm transition-shadow">
                                   <CardContent className="p-3" onClick={() => openOrderDetails(order)}>
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
@@ -750,6 +750,15 @@ const Orders = () => {
                                         <div className="text-xs text-muted-foreground truncate">{order.customer_name}</div>
                                       </div>
                                       <div className="flex flex-col items-end gap-1">
+                                        <button
+                                          type="button"
+                                          {...draggableProvided.dragHandleProps}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="inline-flex items-center justify-center w-7 h-7 rounded border text-muted-foreground cursor-grab active:cursor-grabbing"
+                                          title="Arraste para mudar status"
+                                        >
+                                          <GripVertical className="h-4 w-4" />
+                                        </button>
                                         {getStatusBadge(order.status)}
                                         <div className="text-xs font-semibold">{formatCurrency(order.total)}</div>
                                       </div>
