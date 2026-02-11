@@ -15,6 +15,7 @@ import MenuImportModal from '@/components/products/MenuImportModal';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
 import CategoryManager from '@/components/products/CategoryManager';
+import { useSearchParams } from 'react-router-dom';
 
 interface ProductItem {
   id: string;
@@ -37,17 +38,29 @@ interface Category {
 }
 
 const Products = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [tab, setTab] = useState<string>(() => {
+    const t = searchParams.get('tab');
+    return t === 'categories' || t === 'global-variations' || t === 'products' ? t : 'products';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (!t) return;
+    if (t === tab) return;
+    if (t === 'products' || t === 'categories' || t === 'global-variations') setTab(t);
+  }, [searchParams, tab]);
 
   useEffect(() => {
     try {
@@ -248,7 +261,18 @@ const Products = () => {
         onImportComplete={fetchProducts}
       />
 
-      <Tabs defaultValue="products" className="w-full">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v);
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.set('tab', v);
+            return next;
+          });
+        }}
+        className="w-full"
+      >
         <TabsList className="mb-2 flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide">
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>

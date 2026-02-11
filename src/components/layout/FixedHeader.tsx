@@ -1,13 +1,22 @@
 
 import React from 'react';
 
-import { Bell, User, LogOut, Menu } from 'lucide-react';
+import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 
 import { useNavigate } from 'react-router-dom';
 import Logo from '@/components/Logo';
+import OperatorSwitcher from '@/components/OperatorSwitcher';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 
 const FixedHeader = () => {
   const { signOut, user } = useAuth();
@@ -39,6 +48,49 @@ const FixedHeader = () => {
           <Logo size="sm" />
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="hidden lg:block">
+            <OperatorSwitcher />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="px-3">
+                Gerencial
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Gerencial</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/financeiro')}>
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Financeiro
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/pdv')}>
+                <Wallet className="mr-2 h-4 w-4" />
+                Caixa / PDV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/produtos')}>
+                <Package className="mr-2 h-4 w-4" />
+                Produtos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/produtos?tab=categorias')}>
+                <Layers className="mr-2 h-4 w-4" />
+                Categorias
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/cozinha')}>
+                <CookingPot className="mr-2 h-4 w-4" />
+                Cozinha (KDS)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/financeiro')} title="Caixa">
+            <Wallet size={18} />
+          </Button>
           <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
