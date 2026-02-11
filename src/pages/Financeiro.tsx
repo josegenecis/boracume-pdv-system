@@ -222,24 +222,35 @@ const Financeiro = () => {
     }
     try {
       setLoadingSessionDetails(true);
+      const movementsReq = (supabase as any)
+        .from('cash_movements')
+        .select('id, created_at, type, amount, description')
+        .eq('user_id', user.id)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false });
+
+      const ordersReq = (supabase as any)
+        .from('orders')
+        .select('id, order_number, created_at, total, payment_method, status')
+        .eq('user_id', user.id)
+        .eq('cash_register_session_id', sessionId)
+        .order('created_at', { ascending: false });
+
       const [{ data: orders, error: ordersError }, { data: movements, error: movementsError }] = await Promise.all([
-        (supabase as any)
-          .from('orders')
-          .select('id, order_number, created_at, total, payment_method, status')
-          .eq('user_id', user.id)
-          .eq('cash_register_session_id', sessionId)
-          .order('created_at', { ascending: false }),
-        (supabase as any)
-          .from('cash_movements')
-          .select('id, created_at, type, amount, description')
-          .eq('user_id', user.id)
-          .eq('session_id', sessionId)
-          .order('created_at', { ascending: false }),
+        ordersReq,
+        movementsReq,
       ]);
-      if (ordersError) throw ordersError;
+
       if (movementsError) throw movementsError;
-      setSessionOrders((orders as any) || []);
       setSessionMovements((movements as any) || []);
+
+      if (ordersError && String(ordersError.message || '').includes('cash_register_session_id')) {
+        setSessionOrders([]);
+      } else if (ordersError) {
+        throw ordersError;
+      } else {
+        setSessionOrders((orders as any) || []);
+      }
     } catch (e: any) {
       console.error(e);
       toast({ title: 'Erro', description: e?.message || 'Erro ao carregar sessão', variant: 'destructive' });
@@ -278,12 +289,23 @@ const Financeiro = () => {
 
     try {
       if (cashOperation === 'open') {
+        if (currentSession?.id) {
+          toast({ title: 'Caixa já está aberto' });
+          setIsCashDialogOpen(false);
+          return;
+        }
         const { error } = await (supabase as any).from('cash_register_sessions').insert({
           user_id: user.id,
           initial_amount: amount,
           status: 'open',
           opened_at: new Date().toISOString()
         });
+        if (error && (error.code === '23505' || String(error.message || '').toLowerCase().includes('cash_register_sessions_one_open_per_user'))) {
+          await checkOpenSession();
+          toast({ title: 'Caixa já está aberto' });
+          setIsCashDialogOpen(false);
+          return;
+        }
         if (error) throw error;
         toast({ title: 'Caixa aberto com sucesso' });
       } else if (cashOperation === 'close') {

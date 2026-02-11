@@ -223,20 +223,21 @@ const PDV = () => {
     }
     const operatorSession = getOperatorSession();
     const waiterId = operatorSession?.id || null;
-    if (!operatorSession?.id) {
-      toast({ title: 'Selecione um operador', description: 'Antes de abrir/fechar caixa, selecione um operador.', variant: 'destructive' });
-      return;
-    }
 
     try {
       if (cashDialogMode === 'open') {
+        if (cashSession?.id) {
+          toast({ title: 'Caixa já está aberto' });
+          setCashDialogOpen(false);
+          return;
+        }
         const payload: any = {
           user_id: user.id,
           initial_amount: amount,
           status: 'open',
           opened_at: new Date().toISOString(),
-          opened_by_waiter_id: waiterId,
         };
+        if (waiterId) payload.opened_by_waiter_id = waiterId;
         let error: any = null;
         const res1 = await supabase.from('cash_register_sessions' as any).insert(payload);
         error = (res1 as any).error;
@@ -244,6 +245,12 @@ const PDV = () => {
           const { opened_by_waiter_id, ...fallback } = payload;
           const res2 = await supabase.from('cash_register_sessions' as any).insert(fallback);
           error = (res2 as any).error;
+        }
+        if (error && (error.code === '23505' || String(error.message || '').toLowerCase().includes('cash_register_sessions_one_open_per_user'))) {
+          await fetchOpenCashSession();
+          toast({ title: 'Caixa já está aberto' });
+          setCashDialogOpen(false);
+          return;
         }
         if (error) throw error;
         toast({ title: 'Caixa aberto' });
@@ -258,8 +265,8 @@ const PDV = () => {
           closed_at: new Date().toISOString(),
           final_amount: amount,
           expected_amount: cashCloseSummary?.expectedCash ?? null,
-          closed_by_waiter_id: waiterId,
         };
+        if (waiterId) updatePayload.closed_by_waiter_id = waiterId;
         const res1 = await supabase
           .from('cash_register_sessions' as any)
           .update(updatePayload)
