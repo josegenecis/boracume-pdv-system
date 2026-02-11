@@ -300,7 +300,11 @@ const Orders = () => {
       let data: any = null;
       let error: any = null;
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || '';
+
       const ef = await supabase.functions.invoke('orders-update-status', {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         body: { orderId, newStatus }
       }) as any;
 

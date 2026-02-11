@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-explicit-any
+// @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-export const config = { runtime: 'edge' }
+export const config = { runtime: 'edge', verify_jwt: false }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -94,4 +95,3 @@ Deno.serve(async (req: Request) => {
     return ok({ ok: false, error: 'internal_error', message: String(e?.message || e) })
   }
 })
-
