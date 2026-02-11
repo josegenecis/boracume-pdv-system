@@ -83,6 +83,74 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
   const [stockSchemaError, setStockSchemaError] = useState<string | null>(null);
+  const [unsupportedColumns, setUnsupportedColumns] = useState<string[]>([]);
+
+  const isUnsupported = (column: string) => unsupportedColumns.includes(column);
+  const markUnsupported = (column: string) => {
+    setUnsupportedColumns(prev => (prev.includes(column) ? prev : [...prev, column]));
+  };
+
+  const getMissingColumnFromError = (err: any) => {
+    const msg = String(err?.message || err?.details || err?.hint || '');
+    const m = msg.match(/Could not find the '([^']+)' column/);
+    return m?.[1] || null;
+  };
+
+  const stockColumns = new Set(['track_stock', 'stock_quantity', 'low_stock_threshold']);
+
+  const buildBaseData = () => {
+    const baseData: any = {
+      user_id: user?.id,
+      name: formData.name.trim(),
+      description: formData.description?.trim() || null,
+      price: formData.price,
+      category_id: formData.category_id,
+      category: formData.category,
+      available: formData.available,
+      weight_based: formData.weight_based,
+      send_to_kds: formData.send_to_kds,
+      show_in_pdv: formData.show_in_pdv,
+      show_in_delivery: formData.show_in_delivery,
+      image_url: formData.image_url || null,
+    };
+
+    if (!isUnsupported('is_highlight')) baseData.is_highlight = formData.is_highlight;
+    if (!isUnsupported('original_price')) baseData.original_price = formData.original_price;
+    if (!isUnsupported('discount_percentage')) baseData.discount_percentage = formData.discount_percentage;
+
+    if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
+      baseData.track_stock = formData.track_stock;
+      baseData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
+      baseData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
+    }
+
+    return baseData;
+  };
+
+  const updateProductWithFallback = async (productId: string, data: any) => {
+    let payload: any = { ...data };
+    const removed = new Set<string>();
+    while (true) {
+      const { error } = await supabase
+        .from('products')
+        .update(payload)
+        .eq('id', productId);
+      if (!error) return;
+
+      const missing = getMissingColumnFromError(error);
+      if (String((error as any)?.code || '') === 'PGRST204' && missing && !removed.has(missing)) {
+        removed.add(missing);
+        markUnsupported(missing);
+        if (stockColumns.has(missing)) {
+          setStockSchemaSupported(false);
+          setStockSchemaError(`${(error as any)?.code ? `${(error as any).code}: ` : ''}${String((error as any)?.message || '')}`);
+        }
+        delete payload[missing];
+        continue;
+      }
+      throw error;
+    }
+  };
 
   const checkStockSchema = async () => {
     try {
@@ -96,7 +164,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (error) {
         const msg = String((error as any)?.message || (error as any)?.details || '');
         const code = String((error as any)?.code || '');
-        if (code === 'PGRST204' || (msg.includes('track_stock') && msg.toLowerCase().includes('schema cache'))) {
+        const missing = getMissingColumnFromError(error);
+        if (
+          (code === 'PGRST204' && missing && stockColumns.has(missing)) ||
+          (msg.includes('track_stock') && msg.toLowerCase().includes('schema cache'))
+        ) {
           setStockSchemaSupported(false);
           setStockSchemaError(`${code ? `${code}: ` : ''}${msg}`);
           return false;
@@ -320,25 +392,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     try {
       setLoading(true);
 
-      const baseData: any = {
-        user_id: user.id,
-        name: formData.name.trim(),
-        description: formData.description?.trim() || null,
-        price: formData.price,
-        category_id: formData.category_id,
-        category: formData.category,
-        is_available: formData.available,
-        show_in_delivery: formData.show_in_delivery,
-        image_url: formData.image_url || null,
-        is_highlight: formData.is_highlight,
-        original_price: formData.original_price,
-        discount_percentage: formData.discount_percentage,
-      };
-      if (stockSchemaSupported) {
-        baseData.track_stock = formData.track_stock;
-        baseData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
-        baseData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
-      }
+      const baseData = buildBaseData();
       let productId = product?.id;
 
       if (product?.id) {
@@ -347,16 +401,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           updated_at: new Date().toISOString()
         } as const;
         console.log('Atualizando produto:', product.id, productData);
-        const { error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', product.id);
-
-
-        if (error) {
-          console.error('Erro ao atualizar produto:', error);
-          throw error;
-        }
+        await updateProductWithFallback(product.id, productData);
       } else {
         // Tentativa mínima: apenas campos essenciais
         const minimalData = {
@@ -365,7 +410,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           price: formData.price,
           category_id: formData.category_id,
           category: formData.category,
-          is_available: formData.available,
+          available: formData.available,
+          weight_based: formData.weight_based,
+          send_to_kds: formData.send_to_kds,
+          show_in_pdv: formData.show_in_pdv,
           show_in_delivery: formData.show_in_delivery,
         } as const;
 
@@ -390,14 +438,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             updated_at: new Date().toISOString()
           } as const;
           console.log('Atualizando campos adicionais do produto:', insertResultId, productData);
-          const { error: updateError } = await supabase
-            .from('products')
-            .update(productData)
-            .eq('id', insertResultId);
-          if (updateError) {
-            console.error('Erro ao atualizar campos adicionais:', updateError);
-            throw updateError;
-          }
+          await updateProductWithFallback(insertResultId, productData);
         }
 
         if (insertResultId) {
@@ -418,14 +459,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     } catch (error: any) {
       const rawMsg = String(error?.message || error?.details || error?.hint || '');
-      if (
-        String(error?.code || '') === 'PGRST204' ||
-        (rawMsg.includes('track_stock') && rawMsg.toLowerCase().includes('schema cache')) ||
-        (rawMsg.includes('stock_quantity') && rawMsg.toLowerCase().includes('schema cache')) ||
-        (rawMsg.includes('low_stock_threshold') && rawMsg.toLowerCase().includes('schema cache'))
-      ) {
-        setStockSchemaSupported(false);
-        setStockSchemaError(`${error?.code ? `${error.code}: ` : ''}${rawMsg}`);
+      const missing = getMissingColumnFromError(error);
+      if (String(error?.code || '') === 'PGRST204' && missing) {
+        markUnsupported(missing);
+        if (stockColumns.has(missing)) {
+          setStockSchemaSupported(false);
+          setStockSchemaError(`${error?.code ? `${error.code}: ` : ''}${rawMsg}`);
+        }
       }
       console.error('Erro ao salvar produto:', {
         message: error?.message,
@@ -437,6 +477,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         title: "Erro",
         description: rawMsg.includes('track_stock') || rawMsg.includes('stock_quantity') || rawMsg.includes('low_stock_threshold')
           ? `Seu banco conectado ao app ainda não tem o controle de estoque. Rode o SQL de estoque no Supabase do projeto ${(supabase as any)?.supabaseUrl || ''} e tente novamente.`
+          : (String(error?.code || '') === 'PGRST204' && missing)
+            ? `O banco conectado ao app não tem a coluna "${missing}". Ajuste o banco (ou rode reload schema) e tente novamente.`
           : (error?.message || error?.details || error?.hint || "Erro ao salvar produto."),
         variant: "destructive"
       });
@@ -461,7 +503,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           price: formData.price,
           category_id: formData.category_id,
           category: formData.category,
-          is_available: formData.available,
+          available: formData.available,
+          weight_based: formData.weight_based,
+          send_to_kds: formData.send_to_kds,
+          show_in_pdv: formData.show_in_pdv,
           show_in_delivery: formData.show_in_delivery,
         } as const;
         const { data: insertData, error: insertErr } = await supabase
@@ -473,58 +518,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             setCreatedProductId(insertData.id);
             // atualiza com campos adicionais
             const additional: any = {
-              description: formData.description?.trim() || null,
-              image_url: formData.image_url || null,
-              is_highlight: formData.is_highlight,
-              original_price: formData.original_price,
-              discount_percentage: formData.discount_percentage,
+              ...buildBaseData(),
               updated_at: new Date().toISOString()
             };
-            if (stockSchemaSupported) {
-              additional.track_stock = formData.track_stock;
-              additional.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
-              additional.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
-            }
-            await supabase
-              .from('products')
-              .update(additional)
-              .eq('id', insertData.id);
+            await updateProductWithFallback(insertData.id, additional);
         }
       } else {
         const updateData: any = {
-          name: formData.name.trim(),
-          price: formData.price,
-          category_id: formData.category_id,
-          category: formData.category,
-          description: formData.description?.trim() || null,
-          image_url: formData.image_url || null,
-          is_available: formData.available,
-          show_in_delivery: formData.show_in_delivery,
-          is_highlight: formData.is_highlight,
-          original_price: formData.original_price,
-          discount_percentage: formData.discount_percentage,
+          ...buildBaseData(),
           updated_at: new Date().toISOString()
         };
-        if (stockSchemaSupported) {
-          updateData.track_stock = formData.track_stock;
-          updateData.stock_quantity = Math.max(0, Math.floor(Number(formData.stock_quantity) || 0));
-          updateData.low_stock_threshold = Math.max(0, Math.floor(Number(formData.low_stock_threshold) || 0));
-        }
-        await supabase
-          .from('products')
-          .update(updateData)
-          .eq('id', createdProductId);
+        await updateProductWithFallback(createdProductId, updateData);
       }
         } catch (err) {
           const rawMsg = String((err as any)?.message || (err as any)?.details || '');
-          if (
-            String((err as any)?.code || '') === 'PGRST204' ||
-            (rawMsg.includes('track_stock') && rawMsg.toLowerCase().includes('schema cache')) ||
-            (rawMsg.includes('stock_quantity') && rawMsg.toLowerCase().includes('schema cache')) ||
-            (rawMsg.includes('low_stock_threshold') && rawMsg.toLowerCase().includes('schema cache'))
-          ) {
-            setStockSchemaSupported(false);
-            setStockSchemaError(`${(err as any)?.code ? `${(err as any).code}: ` : ''}${rawMsg}`);
+          const missing = getMissingColumnFromError(err);
+          if (String((err as any)?.code || '') === 'PGRST204' && missing) {
+            markUnsupported(missing);
+            if (stockColumns.has(missing)) {
+              setStockSchemaSupported(false);
+              setStockSchemaError(`${(err as any)?.code ? `${(err as any).code}: ` : ''}${rawMsg}`);
+            }
           }
           console.warn('Autosave produto falhou', err);
         }
