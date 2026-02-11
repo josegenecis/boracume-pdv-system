@@ -82,7 +82,34 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
-  const [stockSchemaChecked, setStockSchemaChecked] = useState(false);
+  const [stockSchemaError, setStockSchemaError] = useState<string | null>(null);
+
+  const checkStockSchema = async () => {
+    try {
+      setStockSchemaError(null);
+      const { error } = await (supabase as any)
+        .from('products')
+        .select('id, track_stock')
+        .eq('user_id', user?.id)
+        .limit(1);
+
+      if (error) {
+        const msg = String((error as any)?.message || (error as any)?.details || '');
+        const code = String((error as any)?.code || '');
+        if (code === 'PGRST204' || (msg.includes('track_stock') && msg.toLowerCase().includes('schema cache'))) {
+          setStockSchemaSupported(false);
+          setStockSchemaError(`${code ? `${code}: ` : ''}${msg}`);
+          return false;
+        }
+      }
+
+      setStockSchemaSupported(true);
+      return true;
+    } catch (e: any) {
+      setStockSchemaSupported(true);
+      return true;
+    }
+  };
 
   // Formata a string de centavos (somente dígitos) para BRL
   const formatFromRaw = (raw: string) => {
@@ -387,12 +414,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     } catch (error: any) {
       const rawMsg = String(error?.message || error?.details || error?.hint || '');
       if (
-        rawMsg.includes('track_stock') ||
-        rawMsg.includes('stock_quantity') ||
-        rawMsg.includes('low_stock_threshold') ||
-        rawMsg.toLowerCase().includes('schema cache')
+        String(error?.code || '') === 'PGRST204' ||
+        (rawMsg.includes('track_stock') && rawMsg.toLowerCase().includes('schema cache')) ||
+        (rawMsg.includes('stock_quantity') && rawMsg.toLowerCase().includes('schema cache')) ||
+        (rawMsg.includes('low_stock_threshold') && rawMsg.toLowerCase().includes('schema cache'))
       ) {
         setStockSchemaSupported(false);
+        setStockSchemaError(`${error?.code ? `${error.code}: ` : ''}${rawMsg}`);
       }
       console.error('Erro ao salvar produto:', {
         message: error?.message,
@@ -403,7 +431,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       toast({
         title: "Erro",
         description: rawMsg.includes('track_stock') || rawMsg.includes('stock_quantity') || rawMsg.includes('low_stock_threshold')
-          ? 'Seu banco ainda não tem o controle de estoque. Rode o SQL de estoque no Supabase (colunas track_stock/stock_quantity/low_stock_threshold) e tente novamente.'
+          ? `Seu banco conectado ao app ainda não tem o controle de estoque. Rode o SQL de estoque no Supabase do projeto ${(supabase as any)?.supabaseUrl || ''} e tente novamente.`
           : (error?.message || error?.details || error?.hint || "Erro ao salvar produto."),
         variant: "destructive"
       });
@@ -485,12 +513,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         } catch (err) {
           const rawMsg = String((err as any)?.message || (err as any)?.details || '');
           if (
-            rawMsg.includes('track_stock') ||
-            rawMsg.includes('stock_quantity') ||
-            rawMsg.includes('low_stock_threshold') ||
-            rawMsg.toLowerCase().includes('schema cache')
+            String((err as any)?.code || '') === 'PGRST204' ||
+            (rawMsg.includes('track_stock') && rawMsg.toLowerCase().includes('schema cache')) ||
+            (rawMsg.includes('stock_quantity') && rawMsg.toLowerCase().includes('schema cache')) ||
+            (rawMsg.includes('low_stock_threshold') && rawMsg.toLowerCase().includes('schema cache'))
           ) {
             setStockSchemaSupported(false);
+            setStockSchemaError(`${(err as any)?.code ? `${(err as any).code}: ` : ''}${rawMsg}`);
           }
           console.warn('Autosave produto falhou', err);
         }
@@ -499,29 +528,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
   }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    if (stockSchemaChecked) return;
-    const run = async () => {
-      try {
-        const { error } = await (supabase as any)
-          .from('products')
-          .select('id, track_stock')
-          .eq('user_id', user.id)
-          .limit(1);
-        if (error) {
-          const rawMsg = String((error as any)?.message || '');
-          if (rawMsg.includes('track_stock') || rawMsg.toLowerCase().includes('schema cache')) {
-            setStockSchemaSupported(false);
-          }
-        }
-      } finally {
-        setStockSchemaChecked(true);
-      }
-    };
-    run();
-  }, [user?.id, stockSchemaChecked]);
 
 
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations) => {
@@ -854,6 +860,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               {!stockSchemaSupported && (
                 <div className="text-sm text-red-600">
                   Controle de estoque ainda não está habilitado no banco. Rode o SQL de estoque no Supabase e tente novamente.
+                  {stockSchemaError && (
+                    <div className="mt-1 text-xs text-red-700 break-words">
+                      {stockSchemaError}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
@@ -861,8 +872,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   <Switch
                     id="track_stock"
                     checked={formData.track_stock}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, track_stock: checked }))}
-                    disabled={!stockSchemaSupported}
+                    onCheckedChange={async (checked) => {
+                      if (checked) {
+                        const ok = await checkStockSchema();
+                        if (!ok) return;
+                      }
+                      setFormData(prev => ({ ...prev, track_stock: checked }));
+                    }}
+                    disabled={false}
                   />
                   <Label htmlFor="track_stock">Controlar estoque</Label>
                 </div>
@@ -873,7 +890,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     type="number"
                     value={String(formData.low_stock_threshold ?? 0)}
                     onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                    disabled={!stockSchemaSupported || !formData.track_stock}
+                    disabled={!formData.track_stock}
                     min={0}
                   />
                 </div>
@@ -885,7 +902,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   type="number"
                   value={String(formData.stock_quantity ?? 0)}
                   onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                  disabled={!stockSchemaSupported || !formData.track_stock}
+                  disabled={!formData.track_stock}
                   min={0}
                 />
               </div>
