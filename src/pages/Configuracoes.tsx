@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
 import ProfileSettings from '@/components/settings/ProfileSettings';
@@ -20,9 +20,11 @@ import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings'
 import HardwareSettings from '@/components/settings/HardwareSettings';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
+import { useSearchParams } from 'react-router-dom';
 
 
 const Configuracoes: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { subscription } = useAuth();
   const { ensureSubscribed } = usePushNotifications();
   
@@ -38,7 +40,45 @@ const Configuracoes: React.FC = () => {
     return false;
   };
 
-  const [tab, setTab] = useState('general');
+  const getInitialTab = () => {
+    const requested = searchParams.get('tab') || 'general';
+    const allowed = [
+      'general',
+      'hardware',
+      'menu',
+      'devices',
+      'profile',
+      'notifications',
+      'appearance',
+      'delivery',
+      'whatsapp',
+      'fiscal',
+      'payment-methods',
+      'pix',
+      'marketing'
+    ];
+    if (!allowed.includes(requested)) return 'general';
+    if (requested === 'marketing' && !hasMarketingFeature()) return 'general';
+    return requested;
+  };
+
+  const [tab, setTab] = useState(getInitialTab);
+
+  const setTabAndUrl = (nextTab: string) => {
+    setTab(nextTab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', nextTab);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const requested = searchParams.get('tab');
+    if (!requested) return;
+    const next = getInitialTab();
+    if (next !== tab) setTab(next);
+  }, [searchParams, tab]);
 
   return (
     <div className="space-y-6">
@@ -46,12 +86,12 @@ const Configuracoes: React.FC = () => {
       
       {/* Seletor mobile */}
       <div className="sm:hidden">
-        <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <Tabs value={tab} onValueChange={setTabAndUrl} className="w-full">
           <div className="mb-3">
             <select
               className="w-full h-10 rounded-md border border-input bg-white px-3 text-sm"
               value={tab}
-              onChange={(e) => setTab(e.target.value)}
+              onChange={(e) => setTabAndUrl(e.target.value)}
             >
               <option value="general">Geral</option>
               <option value="hardware">Impressoras e Balanças</option>
@@ -71,7 +111,7 @@ const Configuracoes: React.FC = () => {
         </Tabs>
       </div>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
+      <Tabs value={tab} onValueChange={setTabAndUrl} className="w-full">
         <TabsList className="mb-4 hidden sm:flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>

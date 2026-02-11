@@ -4,6 +4,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 import { 
   LayoutDashboard, 
@@ -31,24 +32,83 @@ const CollapsibleSidebar = () => {
 
   const location = useLocation();
 
-  const links = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/produtos', icon: ShoppingBag, label: 'Produtos' },
-    { to: '/pedidos', icon: FileText, label: 'Pedidos' },
-    { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
-    { to: '/pix', icon: CreditCard, label: 'Pix' },
-    { to: '/mesas', icon: Utensils, label: 'Mesas' },
-    { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
-    { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },
-    { to: '/entregadores', icon: Users, label: 'Entregadores' },
+  const groups = [
+    {
+      id: 'caixa',
+      icon: CreditCard,
+      label: 'Caixa',
+      items: [
+        { to: '/pdv', label: 'PDV' },
+        { to: '/financeiro', label: 'Financeiro' },
+        { to: '/pix', label: 'PIX' },
+      ]
+    },
+    {
+      id: 'pedidos',
+      icon: FileText,
+      label: 'Pedidos',
+      items: [
+        { to: '/pedidos', label: 'Gestor de pedidos' },
+        { to: '/cozinha', label: 'Cozinha (KDS)' },
+        { to: '/mesas', label: 'Mesas' },
+      ]
+    },
+    {
+      id: 'cardapio',
+      icon: ShoppingBag,
+      label: 'Cardápio',
+      items: [
+        { to: '/produtos', label: 'Produtos' },
+        { to: '/produtos?tab=categories', label: 'Categorias' },
+        { to: '/produtos?tab=global-variations', label: 'Variações' },
+        { to: '/cardapio', label: 'Acessar cardápio' },
+      ]
+    },
+    {
+      id: 'entrega',
+      icon: MapPin,
+      label: 'Entrega',
+      items: [
+        { to: '/entregadores', label: 'Entregadores' },
+        { to: '/bairros-entrega', label: 'Bairros de entrega' },
+      ]
+    },
+    {
+      id: 'relatorios',
+      icon: BarChart3,
+      label: 'Relatórios',
+      items: [
+        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/relatorios', label: 'Relatórios' },
+        { to: '/loyalty', label: 'Fidelização' },
+      ]
+    },
+    {
+      id: 'config',
+      icon: Settings,
+      label: 'Configurações',
+      items: [
+        { to: '/configuracoes?tab=general', label: 'Geral' },
+        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças' },
+        { to: '/configuracoes?tab=menu', label: 'QR Code & Links' },
+        { to: '/configuracoes?tab=devices', label: 'Sessões ativas' },
+        { to: '/configuracoes?tab=profile', label: 'Perfil' },
+        { to: '/configuracoes?tab=notifications', label: 'Notificações' },
+        { to: '/configuracoes?tab=appearance', label: 'Aparência' },
+        { to: '/configuracoes?tab=delivery', label: 'Delivery' },
+        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp' },
+        { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
+        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
+        { to: '/configuracoes?tab=pix', label: 'PIX' },
+      ]
+    },
+  ];
+
+  const standaloneLinks = [
     { to: '/garcons', icon: Users, label: 'Garçons' },
-    { to: '/bairros-entrega', icon: MapPin, label: 'Bairros de Entrega' },
-    { to: '/loyalty', icon: Crown, label: 'Programa de Fidelidade' },
-    { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
-    { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
+    { to: '/agente', icon: Bot, label: 'Assistente' },
     { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
-    { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
   ];
 
@@ -57,6 +117,11 @@ const CollapsibleSidebar = () => {
     if (isMobile) {
       closeSidebar();
     }
+  };
+
+  const isActivePath = (to: string) => {
+    const [path] = to.split('?');
+    return location.pathname === path;
   };
 
   return (
@@ -86,33 +151,97 @@ const CollapsibleSidebar = () => {
       </div>
       
       <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20">
-        <ul className="space-y-1">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const isActive = location.pathname === link.to;
-            
-            return (
-              <li key={link.to}>
-                <Link
-                  to={link.to}
+        {!isOpen && !isMobile ? (
+          <ul className="space-y-1">
+            {[...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
+              const Icon = (link as any).icon;
+              const isActive = isActivePath(link.to);
+              return (
+                <li key={link.to}>
+                  <Link
+                    to={link.to}
+                    onClick={handleLinkClick}
+                    className={`flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-orange-600 text-white'
+                        : 'text-gray-700 hover:bg-orange-50'
+                    }`}
+                    title={link.label}
+                  >
+                    <Icon size={18} className="flex-shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="space-y-2">
+            <Accordion type="multiple" className="w-full space-y-1">
+              {groups.map((group) => {
+                const Icon = group.icon;
+                const hasAnyActive = group.items.some(i => isActivePath(i.to));
+                return (
+                  <AccordionItem key={group.id} value={group.id} className="border-none">
+                    <AccordionTrigger
+                      className={`px-3 py-2 rounded-lg text-sm no-underline hover:no-underline ${
+                        hasAnyActive ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-orange-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon size={18} className="flex-shrink-0" />
+                        <span className="truncate">{group.label}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-0">
+                      <div className="rounded-lg bg-orange-50/80 p-2 space-y-1">
+                        {group.items.map((item) => {
+                          const isActive = isActivePath(item.to);
+                          return (
+                            <Link
+                              key={item.to}
+                              to={item.to}
+                              onClick={handleLinkClick}
+                              className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                                isActive
+                                  ? 'bg-orange-600 text-white'
+                                  : 'text-gray-700 hover:bg-orange-100'
+                              }`}
+                            >
+                              <span className="truncate">{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
 
-                  onClick={handleLinkClick}
-
-                  className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-orange-600 text-white'
-                      : 'text-gray-700 hover:bg-white'
-                  }`}
-                  title={(!isOpen && !isMobile) ? link.label : undefined}
-                >
-                  <Icon size={18} className={`${(!isOpen && !isMobile) ? '' : 'mr-3'} flex-shrink-0`} />
-                  {(isOpen || isMobile) && <span className="truncate">{link.label}</span>}
-
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+            <ul className="space-y-1 pt-2">
+              {standaloneLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = isActivePath(link.to);
+                return (
+                  <li key={link.to}>
+                    <Link
+                      to={link.to}
+                      onClick={handleLinkClick}
+                      className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-orange-600 text-white'
+                          : 'text-gray-700 hover:bg-orange-50'
+                      }`}
+                    >
+                      <Icon size={18} className="mr-3 flex-shrink-0" />
+                      <span className="truncate">{link.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </nav>
     </aside>
   );

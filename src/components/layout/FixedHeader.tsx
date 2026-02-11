@@ -1,8 +1,9 @@
 
 import React from 'react';
 
-import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3 } from 'lucide-react';
+import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 
@@ -35,22 +36,36 @@ const FixedHeader = () => {
 
       <div className="flex items-center justify-between px-3 sm:px-6 py-3">
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {isMobile && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={toggleSidebar}
-              className="p-2"
-            >
-              <Menu size={18} />
-            </Button>
-          )}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={toggleSidebar}
+            className="p-2"
+          >
+            <Menu size={18} />
+          </Button>
           <Logo size="sm" />
+        </div>
+
+        <div className="hidden md:flex flex-1 px-4 max-w-xl">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar (Nome, Telefone ou Código)"
+              className="pl-9 h-9 bg-white"
+            />
+          </div>
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
+          <Button variant="outline" size="sm" className="hidden md:inline-flex h-9" onClick={() => navigate('/relatorios')}>
+            Abrir relatório diário
+          </Button>
+          <Button size="sm" className="hidden sm:inline-flex h-9 bg-red-600 hover:bg-red-700" onClick={() => navigate('/pdv')}>
+            + Novo pedido
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="px-3">
