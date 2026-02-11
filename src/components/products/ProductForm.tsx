@@ -111,6 +111,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   };
 
+  useEffect(() => {
+    if (!user?.id) return;
+    checkStockSchema().catch(() => {});
+  }, [user?.id]);
+
   // Formata a string de centavos (somente dígitos) para BRL
   const formatFromRaw = (raw: string) => {
     const cents = parseInt(raw || '0', 10) || 0;
@@ -860,11 +865,25 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               {!stockSchemaSupported && (
                 <div className="text-sm text-red-600">
                   Controle de estoque ainda não está habilitado no banco. Rode o SQL de estoque no Supabase e tente novamente.
+                  <div className="mt-1 text-xs text-red-700 break-words">
+                    Projeto: {(supabase as any)?.supabaseUrl}
+                  </div>
                   {stockSchemaError && (
                     <div className="mt-1 text-xs text-red-700 break-words">
                       {stockSchemaError}
                     </div>
                   )}
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => checkStockSchema().catch(() => {})}
+                      className="h-8"
+                    >
+                      Revalidar agora
+                    </Button>
+                  </div>
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
