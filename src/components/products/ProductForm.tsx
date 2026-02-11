@@ -798,28 +798,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               <CardTitle className="text-lg">Estoque</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="track_stock"
-                  checked={formData.track_stock}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, track_stock: checked }))}
-                />
-                <Label htmlFor="track_stock">Controlar estoque</Label>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="stock_quantity">Quantidade em estoque</Label>
-                  <Input
-                    id="stock_quantity"
-                    type="number"
-                    value={String(formData.stock_quantity ?? 0)}
-                    onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                    disabled={!formData.track_stock}
-                    min={0}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="track_stock"
+                    checked={formData.track_stock}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, track_stock: checked }))}
                   />
+                  <Label htmlFor="track_stock">Controlar estoque</Label>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="low_stock_threshold">Alerta de estoque baixo</Label>
+                  <Label htmlFor="low_stock_threshold">Estoque mínimo</Label>
                   <Input
                     id="low_stock_threshold"
                     type="number"
@@ -829,6 +818,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     min={0}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock_quantity">Estoque atual</Label>
+                <Input
+                  id="stock_quantity"
+                  type="number"
+                  value={String(formData.stock_quantity ?? 0)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+                  disabled={!formData.track_stock}
+                  min={0}
+                />
               </div>
             </CardContent>
           </Card>

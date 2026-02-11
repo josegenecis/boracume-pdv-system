@@ -1,6 +1,6 @@
 
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -124,6 +124,19 @@ const CollapsibleSidebar = () => {
     return location.pathname === path;
   };
 
+  const groupForCurrentPath = useMemo(() => {
+    for (const group of groups) {
+      if (group.items.some(i => isActivePath(i.to))) return group.id;
+    }
+    return '';
+  }, [groups, location.pathname]);
+
+  const [openGroup, setOpenGroup] = useState<string>(groupForCurrentPath);
+
+  useEffect(() => {
+    if (groupForCurrentPath && groupForCurrentPath !== openGroup) setOpenGroup(groupForCurrentPath);
+  }, [groupForCurrentPath, openGroup]);
+
   return (
     <aside className={`
       bg-white shadow-md fixed left-0 top-16 bottom-0 z-50 transition-all duration-300
@@ -176,16 +189,13 @@ const CollapsibleSidebar = () => {
           </ul>
         ) : (
           <div className="space-y-2">
-            <Accordion type="multiple" className="w-full space-y-1">
+            <Accordion type="single" collapsible value={openGroup} onValueChange={(v) => setOpenGroup(v)} className="w-full space-y-1">
               {groups.map((group) => {
                 const Icon = group.icon;
-                const hasAnyActive = group.items.some(i => isActivePath(i.to));
                 return (
                   <AccordionItem key={group.id} value={group.id} className="border-none">
                     <AccordionTrigger
-                      className={`px-3 py-2 rounded-lg text-sm no-underline hover:no-underline ${
-                        hasAnyActive ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-orange-50'
-                      }`}
+                      className="px-3 py-2 rounded-lg text-sm hover:no-underline data-[state=open]:bg-orange-600 data-[state=open]:text-white text-gray-700 hover:bg-orange-50"
                     >
                       <div className="flex items-center gap-3">
                         <Icon size={18} className="flex-shrink-0" />
@@ -193,7 +203,7 @@ const CollapsibleSidebar = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="pb-0">
-                      <div className="rounded-lg bg-orange-50/80 p-2 space-y-1">
+                      <div className="rounded-lg bg-orange-50 border border-orange-100 p-2 space-y-1">
                         {group.items.map((item) => {
                           const isActive = isActivePath(item.to);
                           return (

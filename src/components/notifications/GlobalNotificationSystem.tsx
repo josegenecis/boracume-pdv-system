@@ -118,8 +118,7 @@ const GlobalNotificationSystem: React.FC = () => {
         .from('orders')
         .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status')
         .eq('user_id', user.id)
-        .in('acceptance_status', ['pending_acceptance', 'awaiting_pix_payment'])
-        .or('status.eq.pending')
+        .or('acceptance_status.in.(pending_acceptance,awaiting_pix_payment),status.eq.pending')
         .order('created_at', { ascending: false });
 
       if (error) {
