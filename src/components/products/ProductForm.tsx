@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 import ProductImageUpload from './ProductImageUpload';
 
@@ -84,6 +85,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
   const [stockSchemaError, setStockSchemaError] = useState<string | null>(null);
   const [unsupportedColumns, setUnsupportedColumns] = useState<string[]>([]);
+  const [isEnhanceOpen, setIsEnhanceOpen] = useState(false);
+  const [enhanceLoading, setEnhanceLoading] = useState(false);
+  const [enhancedPreview, setEnhancedPreview] = useState<string>('');
+  const [generatingDescription, setGeneratingDescription] = useState(false);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -97,6 +102,121 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const stockColumns = new Set(['track_stock', 'stock_quantity', 'low_stock_threshold']);
+
+  const getImageAsDataUrl = async (url: string): Promise<string> => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Não foi possível baixar a imagem');
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+      reader.readAsDataURL(blob);
+    });
+    return dataUrl;
+  };
+
+  const enhanceImageLocal = async (sourceUrl: string): Promise<string> => {
+    const dataUrl = sourceUrl.startsWith('data:') ? sourceUrl : await getImageAsDataUrl(sourceUrl);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Falha ao carregar imagem'));
+      i.src = dataUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas indisponível');
+
+    ctx.filter = 'contrast(1.12) saturate(1.18) brightness(1.03)';
+    ctx.drawImage(img, 0, 0);
+    return canvas.toDataURL('image/png', 0.92);
+  };
+
+  const uploadEnhancedToStorage = async (dataUrl: string): Promise<string> => {
+    const blob = await (await fetch(dataUrl)).blob();
+    const fileName = `ai-enhanced-${Date.now()}.png`;
+    const filePath = `products/${fileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, blob, { contentType: 'image/png', upsert: true } as any);
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  const handleOpenEnhance = async () => {
+    if (!formData.image_url) {
+      toast({ title: 'Sem imagem', description: 'Adicione uma imagem antes de melhorar.', variant: 'destructive' });
+      return;
+    }
+    setIsEnhanceOpen(true);
+    setEnhanceLoading(true);
+    setEnhancedPreview('');
+    try {
+      const { data } = await invokeEdgeFunction<any>('enhance-product-image', { imageUrl: formData.image_url });
+      if (data?.ok && data?.imageBase64) {
+        setEnhancedPreview(String(data.imageBase64));
+        return;
+      }
+      const localEnhanced = await enhanceImageLocal(formData.image_url);
+      setEnhancedPreview(localEnhanced);
+    } catch {
+      const localEnhanced = await enhanceImageLocal(formData.image_url);
+      setEnhancedPreview(localEnhanced);
+    } finally {
+      setEnhanceLoading(false);
+    }
+  };
+
+  const handleUseEnhanced = async () => {
+    if (!enhancedPreview) return;
+    try {
+      setLoading(true);
+      const url = enhancedPreview.startsWith('http') ? enhancedPreview : await uploadEnhancedToStorage(enhancedPreview);
+      setFormData(prev => ({ ...prev, image_url: url }));
+      toast({ title: 'Imagem atualizada', description: 'A imagem aprimorada foi aplicada ao produto.' });
+      setIsEnhanceOpen(false);
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Não foi possível aplicar a imagem.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateDescription = async () => {
+    try {
+      if (!formData.name.trim()) {
+        toast({ title: 'Informe o nome', description: 'Preencha o nome do produto para gerar a descrição.', variant: 'destructive' });
+        return;
+      }
+      setGeneratingDescription(true);
+      const payload = {
+        name: formData.name,
+        category: formData.category,
+        price: formData.price,
+        currentDescription: formData.description || ''
+      };
+      const { data } = await invokeEdgeFunction<any>('generate-product-description', payload);
+      if (data?.ok && data?.description) {
+        setFormData(prev => ({ ...prev, description: String(data.description) }));
+        toast({ title: 'Descrição gerada', description: 'Revise o texto antes de salvar.' });
+        return;
+      }
+      const fallback = formData.description?.trim()
+        ? formData.description
+        : `${formData.name}${formData.category ? ` (${formData.category})` : ''}.`;
+      setFormData(prev => ({ ...prev, description: fallback }));
+      toast({ title: 'Descrição sugerida', description: 'Revise o texto antes de salvar.' });
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Falha ao gerar descrição.', variant: 'destructive' });
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
 
   const buildBaseData = () => {
     const baseData: any = {
@@ -801,7 +921,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descrição</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="description">Descrição</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleGenerateDescription}
+                disabled={generatingDescription}
+              >
+                {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
+              </Button>
+            </div>
             <Textarea
               id="description"
               value={formData.description}
@@ -814,6 +946,52 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
             currentImageUrl={formData.image_url}
           />
+
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={handleOpenEnhance} disabled={loading}>
+              Melhorar imagem
+            </Button>
+          </div>
+
+          <Dialog open={isEnhanceOpen} onOpenChange={setIsEnhanceOpen}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Melhorar imagem com IA</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Imagem atual</div>
+                  <div className="border rounded-lg p-2 bg-white">
+                    {formData.image_url ? (
+                      <img src={formData.image_url} alt="Imagem atual" className="w-full max-h-[320px] object-contain" />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Sem imagem</div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">Imagem aprimorada</div>
+                  <div className="border rounded-lg p-2 bg-white">
+                    {enhanceLoading ? (
+                      <div className="text-sm text-muted-foreground">Processando...</div>
+                    ) : enhancedPreview ? (
+                      <img src={enhancedPreview} alt="Imagem aprimorada" className="w-full max-h-[320px] object-contain" />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Sem prévia</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsEnhanceOpen(false)}>
+                  Voltar
+                </Button>
+                <Button type="button" onClick={handleUseEnhanced} disabled={!enhancedPreview || enhanceLoading}>
+                  Usar imagem com IA
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center space-x-2">

@@ -265,13 +265,8 @@ const Products = () => {
 
   const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
-    if (isMobile) {
-      setShowForm(true);
-      setIsSheetOpen(false);
-    } else {
-      setIsSheetOpen(true);
-      setShowForm(true);
-    }
+    setIsSheetOpen(true);
+    setShowForm(true);
   };
 
 
@@ -319,7 +314,7 @@ const Products = () => {
           <Button onClick={() => {
             setEditingProduct(null);
             setShowForm(true);
-            if (!isMobile) setIsSheetOpen(true);
+            setIsSheetOpen(true);
           }}>
             <Package className="h-4 w-4 mr-2" />
             Novo Produto
@@ -441,17 +436,6 @@ const Products = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {isMobile && showForm && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <ProductForm
-                          product={editingProduct || undefined}
-                          onSave={handleFormSubmit}
-                          onCancel={() => { setShowForm(false); setEditingProduct(null); }}
-                        />
-                      </CardContent>
-                    </Card>
-                  )}
                   <DragDropContext onDragEnd={onProductsDragEnd}>
                     <Droppable droppableId="products">
                       {(droppableProvided) => (
@@ -607,12 +591,11 @@ const Products = () => {
         
       </Tabs>
 
-      {!isMobile && (
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="right" className="sm:max-w-md p-0">
+        <SheetContent side="left" className="w-full sm:max-w-md p-0">
           <div className="sticky top-0 z-10 bg-white border-b p-4">
             <SheetHeader>
-              <SheetTitle>Editar Produto</SheetTitle>
+              <SheetTitle>{editingProduct?.id ? 'Editar produto' : 'Novo produto'}</SheetTitle>
             </SheetHeader>
           </div>
           {showForm && (
@@ -626,7 +609,6 @@ const Products = () => {
           )}
         </SheetContent>
       </Sheet>
-      )}
     </div>
   );
 };
