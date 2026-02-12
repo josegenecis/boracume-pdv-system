@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star } from 'lucide-react';
+import { ChevronDown, ChevronUp, GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
@@ -39,6 +39,9 @@ interface ProductItem {
   is_highlight?: boolean;
   original_price?: number;
   discount_percentage?: number;
+  cost_price?: number;
+  packaging_fee?: number;
+  sku?: string;
 }
 
 interface ProductFormProps {
@@ -68,6 +71,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     is_highlight: false,
     original_price: 0,
     discount_percentage: 0,
+    cost_price: 0,
+    packaging_fee: 0,
+    sku: '',
     ...product
   });
   const [categories, setCategories] = useState([]);
@@ -93,6 +99,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
   const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [showCost, setShowCost] = useState(false);
+  const [showPackaging, setShowPackaging] = useState(false);
+  const [showSku, setShowSku] = useState(false);
+  const [costRaw, setCostRaw] = useState<string>(String(Math.round(((product as any)?.cost_price ?? 0) * 100)));
+  const [packagingRaw, setPackagingRaw] = useState<string>(String(Math.round(((product as any)?.packaging_fee ?? 0) * 100)));
+  const [skuValue, setSkuValue] = useState<string>(String((product as any)?.sku ?? ''));
+  const [priceVariants, setPriceVariants] = useState<Array<{ id: string; name: string; priceRaw: string }>>([]);
+  const [priceVariantVariationId, setPriceVariantVariationId] = useState<string | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -241,6 +256,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('is_highlight')) baseData.is_highlight = formData.is_highlight;
     if (!isUnsupported('original_price')) baseData.original_price = formData.original_price;
     if (!isUnsupported('discount_percentage')) baseData.discount_percentage = formData.discount_percentage;
+    if (!isUnsupported('cost_price')) baseData.cost_price = formData.cost_price;
+    if (!isUnsupported('packaging_fee')) baseData.packaging_fee = formData.packaging_fee;
+    if (!isUnsupported('sku')) baseData.sku = formData.sku;
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
@@ -345,6 +363,107 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }));
   };
 
+  const rawToNumber = (raw: string) => {
+    const cents = parseInt(raw || '0', 10) || 0;
+    return cents / 100;
+  };
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      cost_price: rawToNumber(costRaw),
+      packaging_fee: rawToNumber(packagingRaw),
+      sku: skuValue
+    }));
+  }, [costRaw, packagingRaw, skuValue]);
+
+  useEffect(() => {
+    setShowDiscount(!!(product as any)?.original_price || !!(product as any)?.discount_percentage);
+    setShowCost((product as any)?.cost_price !== undefined && Number((product as any)?.cost_price) > 0);
+    setShowPackaging((product as any)?.packaging_fee !== undefined && Number((product as any)?.packaging_fee) > 0);
+    setShowSku(!!(product as any)?.sku);
+  }, [product?.id]);
+
+  const moveSelectedVariation = (variationId: string, dir: -1 | 1) => {
+    setSelectedVariations(prev => {
+      const idx = prev.indexOf(variationId);
+      if (idx === -1) return prev;
+      const nextIdx = idx + dir;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const tmp = copy[idx];
+      copy[idx] = copy[nextIdx];
+      copy[nextIdx] = tmp;
+      return copy;
+    });
+  };
+
+  const addPriceVariantRow = () => {
+    setPriceVariants(prev => [
+      ...prev,
+      { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name: '', priceRaw: '0' }
+    ]);
+  };
+
+  const movePriceVariantRow = (rowId: string, dir: -1 | 1) => {
+    setPriceVariants(prev => {
+      const idx = prev.findIndex(r => r.id === rowId);
+      if (idx === -1) return prev;
+      const nextIdx = idx + dir;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const tmp = copy[idx];
+      copy[idx] = copy[nextIdx];
+      copy[nextIdx] = tmp;
+      return copy;
+    });
+  };
+
+  useEffect(() => {
+    if (priceMode !== 'variants') return;
+    if (priceVariants.length > 0) return;
+    setPriceVariants([
+      { id: `${Date.now()}-p`, name: 'P', priceRaw: '0' },
+      { id: `${Date.now()}-g`, name: 'G', priceRaw: '0' },
+      { id: `${Date.now()}-gg`, name: 'GG', priceRaw: '0' },
+    ]);
+  }, [priceMode]);
+
+  const loadPriceVariantVariation = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_variations')
+        .select('id, name, options, required, max_selections')
+        .eq('product_id', productId);
+      if (error) return;
+      const list: any[] = Array.isArray(data) ? data : [];
+      const found = list.find((v: any) => {
+        const name = String(v?.name || '').toLowerCase();
+        const rawOpts = v?.options;
+        const opts = Array.isArray(rawOpts) ? rawOpts : (typeof rawOpts === 'string' ? (() => { try { return JSON.parse(rawOpts); } catch { return []; } })() : []);
+        return name === 'tamanho' || (Array.isArray(opts) && opts.some((o: any) => o?.is_price_variant === true));
+      });
+      if (!found) {
+        setPriceVariantVariationId(null);
+        return;
+      }
+      const rawOpts = found.options;
+      const opts = Array.isArray(rawOpts) ? rawOpts : (typeof rawOpts === 'string' ? (() => { try { return JSON.parse(rawOpts); } catch { return []; } })() : []);
+      const base = Number(formData.price) || Number((product as any)?.price) || 0;
+      const rows = (opts || [])
+        .filter((o: any) => o?.name)
+        .map((o: any) => {
+          const abs = base + (Number(o?.price) || 0);
+          return { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name: String(o.name), priceRaw: String(Math.round(abs * 100)) };
+        });
+      if (rows.length > 0) {
+        setPriceVariantVariationId(String(found.id));
+        setPriceVariants(rows);
+        setPriceMode('variants');
+      }
+    } catch {}
+  };
+
   const createCategory = async () => {
     if (!newCategoryName.trim()) {
       toast({
@@ -412,6 +531,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       loadGlobalVariations();
       if (product?.id) {
         loadProductVariations(product.id);
+        loadPriceVariantVariation(product.id);
       }
     }
   }, [product?.id, user?.id]);
@@ -504,7 +624,38 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     e.preventDefault();
 
 
-    if (!user?.id || !formData.name || !formData.category_id || formData.price <= 0) {
+    const hasCategory = !!formData.category_id || !!String(formData.category || '').trim();
+
+    let effectivePrice = formData.price;
+    let priceVariantOptions: any[] | null = null;
+
+    if (priceMode === 'variants') {
+      const cleaned = priceVariants
+        .map(v => ({
+          name: String(v.name || '').trim(),
+          abs: rawToNumber(v.priceRaw)
+        }))
+        .filter(v => v.name && v.abs > 0);
+
+      if (cleaned.length === 0) {
+        toast({
+          title: "Erro",
+          description: "Adicione pelo menos 1 variante com nome e preço.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const base = Math.min(...cleaned.map(v => v.abs));
+      effectivePrice = base;
+      priceVariantOptions = cleaned.map(v => ({
+        name: v.name,
+        price: Math.max(0, Number((v.abs - base).toFixed(2))),
+        is_price_variant: true
+      }));
+    }
+
+    if (!user?.id || !String(formData.name || '').trim() || !hasCategory || effectivePrice <= 0) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios (nome, categoria e preço).",
@@ -517,6 +668,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setLoading(true);
 
       const baseData = buildBaseData();
+      baseData.price = effectivePrice;
       let productId = product?.id;
 
       if (product?.id) {
@@ -528,10 +680,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         await updateProductWithFallback(product.id, productData);
       } else {
         // Tentativa mínima: apenas campos essenciais
+        if (!formData.category_id) {
+          toast({
+            title: "Categoria obrigatória",
+            description: "Selecione uma categoria para criar o produto.",
+            variant: "destructive"
+          });
+          return;
+        }
         const minimalData = {
           user_id: user.id,
           name: formData.name.trim(),
-          price: formData.price,
+          price: effectivePrice,
           category_id: formData.category_id,
           category: formData.category,
           available: formData.available,
@@ -572,6 +732,38 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       // Salvar vínculos de variações globais após salvar produto
       if (productId) {
         await saveProductVariations(productId);
+      }
+
+      if (productId) {
+        if (priceMode === 'variants' && priceVariantOptions) {
+          const rowData: any = {
+            product_id: productId,
+            user_id: user.id,
+            name: 'Tamanho',
+            price: 0,
+            required: true,
+            max_selections: 1,
+            options: priceVariantOptions,
+            updated_at: new Date().toISOString()
+          };
+
+          if (priceVariantVariationId) {
+            await supabase.from('product_variations').update(rowData).eq('id', priceVariantVariationId);
+          } else {
+            const { data: inserted } = await supabase
+              .from('product_variations')
+              .insert([{ ...rowData, created_at: new Date().toISOString() } as any])
+              .select('id')
+              .single();
+            if (inserted?.id) setPriceVariantVariationId(String(inserted.id));
+          }
+        }
+
+        if (priceMode === 'simple' && priceVariantVariationId) {
+          await supabase.from('product_variations').delete().eq('id', priceVariantVariationId);
+          setPriceVariantVariationId(null);
+          setPriceVariants([]);
+        }
       }
 
       toast({
@@ -699,15 +891,31 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (variations.length > 0) {
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
-        const links = variations.map(variationId => ({
+        const linksWithOrder = variations.map((variationId, idx) => ({
           product_id: productId,
-          global_variation_id: variationId
-        }));
+          global_variation_id: variationId,
+          display_order: idx
+        })) as any[];
         
-        console.log('💾 Inserindo vínculos no banco:', links);
-        const { data, error } = await supabase
-          .from('product_global_variation_links')
-          .insert(links);
+        let data: any = null;
+        let error: any = null;
+        console.log('💾 Inserindo vínculos no banco:', linksWithOrder);
+        const r1 = await supabase.from('product_global_variation_links').insert(linksWithOrder);
+        data = (r1 as any).data;
+        error = (r1 as any).error;
+
+        if (error) {
+          const msg = String(error?.message || error?.details || '');
+          if (msg.includes('display_order') || msg.includes("Could not find the 'display_order' column")) {
+            const links = variations.map(variationId => ({
+              product_id: productId,
+              global_variation_id: variationId
+            }));
+            const r2 = await supabase.from('product_global_variation_links').insert(links as any);
+            data = (r2 as any).data;
+            error = (r2 as any).error;
+          }
+        }
           
         console.log('📊 Resultado da inserção:', { data, error });
         
@@ -899,8 +1107,58 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               </div>
             </TabsContent>
             <TabsContent value="variants" className="mt-2">
-              <div className="text-sm text-muted-foreground border rounded-lg p-3">
-                Use variações para configurar opções e adicionais.
+              <div className="space-y-3 border rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Tamanhos / Variantes</div>
+                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={addPriceVariantRow}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {priceVariants.map((row, idx) => (
+                    <div key={row.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
+                      <Input
+                        value={row.name}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setPriceVariants(prev => prev.map(r => r.id === row.id ? { ...r, name: v } : r));
+                        }}
+                        placeholder="Ex: P, G, GG"
+                      />
+                      <Input
+                        value={formatFromRaw(row.priceRaw)}
+                        onChange={(e) => {
+                          const raw = (e.target.value || '').replace(/\D/g, '') || '0';
+                          setPriceVariants(prev => prev.map(r => r.id === row.id ? { ...r, priceRaw: raw } : r));
+                        }}
+                        placeholder="0,00"
+                      />
+                      <div className="flex items-center gap-1">
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === 0} onClick={() => movePriceVariantRow(row.id, -1)}>
+                          <ChevronUp className="h-4 w-4" />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === priceVariants.length - 1} onClick={() => movePriceVariantRow(row.id, 1)}>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setPriceVariants(prev => prev.filter(r => r.id !== row.id))}
+                          disabled={priceVariants.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  O menor preço vira o preço base do produto. Os demais são calculados como diferença.
+                </div>
               </div>
             </TabsContent>
           </Tabs>
@@ -933,11 +1191,64 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Custo</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowDiscount(v => !v)}>+ Desconto</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowCost(v => !v)}>+ Custo</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowPackaging(v => !v)}>+ Embalagem</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setShowSku(v => !v)}>+ SKU</Button>
         </div>
+
+        {showDiscount && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="original_price">Preço original</Label>
+              <Input
+                id="original_price"
+                value={formatFromRaw(originalPriceRaw)}
+                onChange={handleOriginalPriceChange}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Desconto (%)</Label>
+              <Input value={String(formData.discount_percentage ?? 0)} readOnly className="bg-gray-50" />
+            </div>
+          </div>
+        )}
+
+        {showCost && (
+          <div className="space-y-1">
+            <Label>Custo</Label>
+            <Input
+              value={formatFromRaw(costRaw)}
+              onChange={(e) => {
+                const raw = (e.target.value || '').replace(/\D/g, '') || '0';
+                setCostRaw(raw);
+              }}
+              placeholder="0,00"
+            />
+          </div>
+        )}
+
+        {showPackaging && (
+          <div className="space-y-1">
+            <Label>Embalagem</Label>
+            <Input
+              value={formatFromRaw(packagingRaw)}
+              onChange={(e) => {
+                const raw = (e.target.value || '').replace(/\D/g, '') || '0';
+                setPackagingRaw(raw);
+              }}
+              placeholder="0,00"
+            />
+          </div>
+        )}
+
+        {showSku && (
+          <div className="space-y-1">
+            <Label>SKU</Label>
+            <Input value={skuValue} onChange={(e) => setSkuValue(e.target.value)} placeholder="Código interno" />
+          </div>
+        )}
 
         <div className="flex items-center justify-between py-2 border-t">
           <div className="text-sm font-semibold">Controle de estoque</div>
@@ -979,13 +1290,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             </div>
           ) : (
             <div className="border rounded-lg divide-y">
-              {globalVariations
-                .filter((v: any) => selectedVariations.includes(v.id))
-                .map((v: any) => (
+              {selectedVariations
+                .map((id) => globalVariations.find((v: any) => v.id === id))
+                .filter(Boolean)
+                .map((v: any, idx: number) => (
                   <div key={v.id} className="p-3">
                     <div className="flex items-center gap-2">
                       <GripVertical className="h-4 w-4 text-muted-foreground" />
                       <div className="flex-1 text-sm font-medium">{v.name}</div>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === 0} onClick={() => moveSelectedVariation(v.id, -1)}>
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === selectedVariations.length - 1} onClick={() => moveSelectedVariation(v.id, 1)}>
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"

@@ -273,12 +273,30 @@ const Products = () => {
   const handleFormSubmit = async (savedProductId?: string) => {
     await fetchProducts();
     if (savedProductId) {
-      const produtoSalvo = products.find(p => p.id === savedProductId);
-      if (produtoSalvo) {
-        setEditingProduct(produtoSalvo);
-        setShowForm(true);
-        return;
-      }
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', savedProductId)
+          .maybeSingle();
+        if (!error && data) {
+          const produtoSalvo = {
+            ...(data as any),
+            category: (data as any).category || 'Sem categoria',
+            show_in_pdv: (data as any).show_in_pdv !== undefined ? (data as any).show_in_pdv : true,
+            show_in_delivery: (data as any).show_in_delivery !== undefined ? (data as any).show_in_delivery : true,
+            weight_based: (data as any).weight_based !== undefined ? (data as any).weight_based : false,
+            send_to_kds: (data as any).send_to_kds !== undefined ? (data as any).send_to_kds : false,
+            track_stock: (data as any).track_stock !== undefined ? (data as any).track_stock : false,
+            stock_quantity: (data as any).stock_quantity !== undefined ? (data as any).stock_quantity : 0,
+            low_stock_threshold: (data as any).low_stock_threshold !== undefined ? (data as any).low_stock_threshold : 5
+          } as ProductItem;
+          setEditingProduct(produtoSalvo);
+          setShowForm(true);
+          setIsSheetOpen(true);
+          return;
+        }
+      } catch {}
     }
     
     setShowForm(false);
