@@ -502,11 +502,6 @@ const Products = () => {
                                               >
                                                 {product.available ? 'Ativo' : 'Inativo'}
                                               </Badge>
-                                              {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
-                                                <Badge variant="destructive" className="text-xs">
-                                                  Estoque baixo
-                                                </Badge>
-                                              )}
                                             </div>
                                           </div>
                                           
@@ -533,6 +528,11 @@ const Products = () => {
                                               <Badge variant="outline" className="text-xs">
                                                 {getCategoryName(product.category_id)}
                                               </Badge>
+                                              {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
+                                                <Badge variant="destructive" className="text-xs">
+                                                  Estoque baixo
+                                                </Badge>
+                                              )}
                                             </div>
 
                                             <div className="flex items-center gap-1">

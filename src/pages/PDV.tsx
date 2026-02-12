@@ -1135,9 +1135,15 @@ const PDV = () => {
                 ) : (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
                     {filteredProducts.map((product) => (
+                      (() => {
+                        const track = !!(product as any)?.track_stock;
+                        const qty = Number((product as any)?.stock_quantity ?? 0) || 0;
+                        const threshold = Number((product as any)?.low_stock_threshold ?? 0) || 0;
+                        const isLowStock = track && qty <= threshold;
+                        return (
                       <Card 
                         key={product.id} 
-                        className="hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100 flex flex-col overflow-hidden border-gray-200"
+                        className={`hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100 flex flex-col overflow-hidden border-gray-200 ${isLowStock ? 'animate-stock-pulse border-red-500' : ''}`}
                         onClick={(e) => handleProductClick(product, e)}
                       >
                         <div className="aspect-square relative overflow-hidden bg-gray-100">
@@ -1160,6 +1166,11 @@ const PDV = () => {
                           <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold shadow-sm border border-gray-100">
                             {formatCurrency(product.price)}
                           </div>
+                          {isLowStock && (
+                            <div className="absolute top-2 left-2 bg-red-600 text-white rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm">
+                              Estoque baixo
+                            </div>
+                          )}
                         </div>
                         <CardContent className="p-2 flex-1 flex flex-col justify-between bg-white">
                           <h3 className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight mb-2" title={product.name}>
@@ -1174,6 +1185,8 @@ const PDV = () => {
                           </Button>
                         </CardContent>
                       </Card>
+                        );
+                      })()
                     ))}
                   </div>
                 )}
