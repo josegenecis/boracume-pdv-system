@@ -7,12 +7,13 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Plus } from 'lucide-react';
+import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
@@ -89,6 +90,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [enhanceLoading, setEnhanceLoading] = useState(false);
   const [enhancedPreview, setEnhancedPreview] = useState<string>('');
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
+  const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
+  const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -773,15 +777,30 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{product?.id ? 'Editar Produto' : 'Novo Produto'}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
+    <div>
+      <div className="flex items-center gap-2 justify-between px-4 py-3 border-b bg-white">
+        <div className="text-sm font-semibold">{product?.id ? 'Editar produto' : 'Novo produto'}</div>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+            <Star className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
+        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start">
+          <ProductImageUpload
+            compact
+            onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+            currentImageUrl={formData.image_url}
+          />
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="name">Nome</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -789,427 +808,377 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 required
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="description">Descrição</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={2}
+              />
+            </div>
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="price">Preço *</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" className="relative" onClick={handleOpenEnhance} disabled={loading}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Melhorar imagem
+            <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
+          </Button>
+          <Button type="button" variant="outline" className="relative" onClick={handleGenerateDescription} disabled={generatingDescription}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
+            <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
+          </Button>
+        </div>
 
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
-                  R$
-                </span>
+        <Dialog open={isEnhanceOpen} onOpenChange={setIsEnhanceOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Melhorar imagem com IA</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Imagem atual</div>
+                <div className="border rounded-lg p-2 bg-white">
+                  {formData.image_url ? (
+                    <img src={formData.image_url} alt="Imagem atual" className="w-full max-h-[320px] object-contain" />
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Sem imagem</div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Imagem aprimorada</div>
+                <div className="border rounded-lg p-2 bg-white">
+                  {enhanceLoading ? (
+                    <div className="text-sm text-muted-foreground">Processando...</div>
+                  ) : enhancedPreview ? (
+                    <img src={enhancedPreview} alt="Imagem aprimorada" className="w-full max-h-[320px] object-contain" />
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Sem prévia</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsEnhanceOpen(false)}>
+                Voltar
+              </Button>
+              <Button type="button" onClick={handleUseEnhanced} disabled={!enhancedPreview || enhanceLoading}>
+                Usar imagem com IA
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Preço</div>
+            <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
+              <TabsList className="h-8">
+                <TabsTrigger value="simple" className="h-7 text-xs">Simples</TabsTrigger>
+                <TabsTrigger value="variants" className="h-7 text-xs">Variantes</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
+            <TabsContent value="simple" className="mt-2">
+              <div className="space-y-2">
+                <Label htmlFor="price">Preço</Label>
                 <Input
                   id="price"
                   type="text"
                   value={formatFromRaw(priceRaw)}
                   onChange={handlePriceChange}
-                  className="pl-10"
                   placeholder="0,00"
                   required
                 />
               </div>
-
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="original_price">Preço Original (opcional)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
-                  R$
-                </span>
-                <Input
-                  id="original_price"
-                  type="text"
-                  value={formatFromRaw(originalPriceRaw)}
-                  onChange={handleOriginalPriceChange}
-                  className="pl-10"
-                  placeholder="0,00"
-                />
+            </TabsContent>
+            <TabsContent value="variants" className="mt-2">
+              <div className="text-sm text-muted-foreground border rounded-lg p-3">
+                Use variações para configurar opções e adicionais.
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="discount_percentage">Desconto Calculado (%)</Label>
-              <Input
-                id="discount_percentage"
-                type="number"
-                value={formData.discount_percentage}
-                readOnly
-                className="bg-gray-50"
-                placeholder="0"
-              />
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="category">Categoria *</Label>
-
-            <div className="flex gap-2">
-              <Select 
-                value={formData.category} 
-                onValueChange={(value) => {
-                  const category = categories.find((cat: any) => cat.name === value);
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    category: value,
-                    category_id: category?.id || null
-                  }));
-                }}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Selecione uma categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category: any) => (
-                    <SelectItem key={category.id} value={category.name}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline" size="icon">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Criar Nova Categoria</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-category">Nome da Categoria</Label>
-                      <Input
-                        id="new-category"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        placeholder="Digite o nome da categoria"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            createCategory();
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => {
-                          setShowCreateCategory(false);
-                          setNewCategoryName('');
-                        }}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button 
-                        type="button" 
-                        onClick={createCategory}
-                        disabled={creatingCategory || !newCategoryName.trim()}
-                      >
-                        {creatingCategory ? 'Criando...' : 'Criar'}
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="description">Descrição</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={handleGenerateDescription}
-                disabled={generatingDescription}
-              >
-                {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
-              </Button>
-            </div>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              rows={3}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="stock_quantity" className="text-boracume-orange">Estoque</Label>
+            <Input
+              id="stock_quantity"
+              type="number"
+              value={String(formData.stock_quantity ?? 0)}
+              onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+              className="border-boracume-orange"
+              disabled={!formData.track_stock}
+              min={0}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="low_stock_threshold">Estoque mín.</Label>
+            <Input
+              id="low_stock_threshold"
+              type="number"
+              value={String(formData.low_stock_threshold ?? 0)}
+              onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+              disabled={!formData.track_stock}
+              min={0}
+            />
+          </div>
+        </div>
 
-          <ProductImageUpload
-            onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
-            currentImageUrl={formData.image_url}
+        <div className="flex gap-2 flex-wrap">
+          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Custo</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
+        </div>
+
+        <div className="flex items-center justify-between py-2 border-t">
+          <div className="text-sm font-semibold">Controle de estoque</div>
+          <Switch
+            id="track_stock"
+            checked={formData.track_stock}
+            onCheckedChange={async (checked) => {
+              if (checked) {
+                const ok = await checkStockSchema();
+                if (!ok) return;
+              }
+              setFormData(prev => ({ ...prev, track_stock: checked }));
+            }}
+            disabled={false}
           />
+        </div>
 
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={handleOpenEnhance} disabled={loading}>
-              Melhorar imagem
+        {!stockSchemaSupported && (
+          <div className="text-sm text-red-600 border rounded-lg p-3">
+            Controle de estoque ainda não está habilitado no banco.
+          </div>
+        )}
+
+        <div className="space-y-3 border-t pt-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold">Adicionar variações</div>
+              <Badge variant="secondary">{selectedVariations.length}</Badge>
+            </div>
+            <Button type="button" variant="outline" size="icon" onClick={() => setVariationsDialogOpen(true)} className="h-9 w-9">
+              <Plus className="h-4 w-4" />
             </Button>
           </div>
+          <div className="text-xs text-muted-foreground">Ingredientes, sabores, talheres...</div>
 
-          <Dialog open={isEnhanceOpen} onOpenChange={setIsEnhanceOpen}>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Melhorar imagem com IA</DialogTitle>
-              </DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Imagem atual</div>
-                  <div className="border rounded-lg p-2 bg-white">
-                    {formData.image_url ? (
-                      <img src={formData.image_url} alt="Imagem atual" className="w-full max-h-[320px] object-contain" />
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Sem imagem</div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Imagem aprimorada</div>
-                  <div className="border rounded-lg p-2 bg-white">
-                    {enhanceLoading ? (
-                      <div className="text-sm text-muted-foreground">Processando...</div>
-                    ) : enhancedPreview ? (
-                      <img src={enhancedPreview} alt="Imagem aprimorada" className="w-full max-h-[320px] object-contain" />
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Sem prévia</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setIsEnhanceOpen(false)}>
-                  Voltar
-                </Button>
-                <Button type="button" onClick={handleUseEnhanced} disabled={!enhancedPreview || enhanceLoading}>
-                  Usar imagem com IA
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="available"
-                checked={formData.available}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
-              />
-              <Label htmlFor="available">Disponível</Label>
+          {selectedVariations.length === 0 ? (
+            <div className="text-sm text-muted-foreground border rounded-lg p-3">
+              Nenhuma variação selecionada.
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="weight_based"
-                checked={formData.weight_based}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, weight_based: checked }))}
-              />
-              <Label htmlFor="weight_based">Vendido por peso</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="send_to_kds"
-                checked={formData.send_to_kds}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, send_to_kds: checked }))}
-              />
-              <Label htmlFor="send_to_kds">Enviar para cozinha</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="show_in_pdv"
-                checked={formData.show_in_pdv}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_pdv: checked }))}
-              />
-              <Label htmlFor="show_in_pdv">Mostrar no PDV</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="show_in_delivery"
-                checked={formData.show_in_delivery}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
-              />
-              <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="is_highlight"
-                checked={formData.is_highlight}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
-              />
-              <Label htmlFor="is_highlight">Destaque</Label>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Estoque</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!stockSchemaSupported && (
-                <div className="text-sm text-red-600">
-                  Controle de estoque ainda não está habilitado no banco. Rode o SQL de estoque no Supabase e tente novamente.
-                  <div className="mt-1 text-xs text-red-700 break-words">
-                    Projeto: {(supabase as any)?.supabaseUrl}
-                  </div>
-                  {stockSchemaError && (
-                    <div className="mt-1 text-xs text-red-700 break-words">
-                      {stockSchemaError}
+          ) : (
+            <div className="border rounded-lg divide-y">
+              {globalVariations
+                .filter((v: any) => selectedVariations.includes(v.id))
+                .map((v: any) => (
+                  <div key={v.id} className="p-3">
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex-1 text-sm font-medium">{v.name}</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                     </div>
-                  )}
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => checkStockSchema().catch(() => {})}
-                      className="h-8"
+                    {expandedVariationId === v.id && (
+                      <div className="mt-3 flex gap-4 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`required-${v.id}`}
+                            checked={variationSettings[v.id]?.required || false}
+                            onCheckedChange={(checked) => handleVariationSettingChange(v.id, 'required', checked as boolean)}
+                          />
+                          <Label htmlFor={`required-${v.id}`}>Obrigatório</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
+                          <Input
+                            id={`min-selections-${v.id}`}
+                            type="number"
+                            min="0"
+                            value={variationSettings[v.id]?.min_selections ?? 0}
+                            onChange={e => handleVariationSettingChange(v.id, 'min_selections', parseInt(e.target.value) || 0)}
+                            className="w-14 min-w-[56px] text-center appearance-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
+                          <Input
+                            id={`max-selections-${v.id}`}
+                            type="number"
+                            min="1"
+                            value={variationSettings[v.id]?.max_selections ?? 1}
+                            onChange={e => handleVariationSettingChange(v.id, 'max_selections', parseInt(e.target.value) || 1)}
+                            className="w-14 min-w-[56px] text-center appearance-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+
+        <Dialog open={variationsDialogOpen} onOpenChange={setVariationsDialogOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Selecionar variações</DialogTitle>
+            </DialogHeader>
+            {globalVariations.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhuma variação global cadastrada.</div>
+            ) : (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                {globalVariations.map((variation: any) => (
+                  <div key={variation.id} className="flex items-start space-x-3">
+                    <Checkbox
+                      id={`variation-${variation.id}`}
+                      checked={selectedVariations.includes(variation.id)}
+                      onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor={`variation-${variation.id}`} className="font-medium cursor-pointer">
+                        {variation.name}
+                      </Label>
+                      {variation.description && (
+                        <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => setVariationsDialogOpen(false)}>
+                Concluir
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <div className="space-y-2">
+          <Label htmlFor="category">Categoria</Label>
+          <div className="flex gap-2">
+            <Select 
+              value={formData.category} 
+              onValueChange={(value) => {
+                const category = categories.find((cat: any) => cat.name === value);
+                setFormData(prev => ({ 
+                  ...prev, 
+                  category: value,
+                  category_id: category?.id || null
+                }));
+              }}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Selecione uma categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category: any) => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
+              <DialogTrigger asChild>
+                <Button type="button" variant="outline" size="icon">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Criar Nova Categoria</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-category">Nome da Categoria</Label>
+                    <Input
+                      id="new-category"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Digite o nome da categoria"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          createCategory();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        setShowCreateCategory(false);
+                        setNewCategoryName('');
+                      }}
                     >
-                      Revalidar agora
+                      Cancelar
+                    </Button>
+                    <Button 
+                      type="button" 
+                      onClick={createCategory}
+                      disabled={creatingCategory || !newCategoryName.trim()}
+                    >
+                      {creatingCategory ? 'Criando...' : 'Criar'}
                     </Button>
                   </div>
                 </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="track_stock"
-                    checked={formData.track_stock}
-                    onCheckedChange={async (checked) => {
-                      if (checked) {
-                        const ok = await checkStockSchema();
-                        if (!ok) return;
-                      }
-                      setFormData(prev => ({ ...prev, track_stock: checked }));
-                    }}
-                    disabled={false}
-                  />
-                  <Label htmlFor="track_stock">Controlar estoque</Label>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="low_stock_threshold">Estoque mínimo</Label>
-                  <Input
-                    id="low_stock_threshold"
-                    type="number"
-                    value={String(formData.low_stock_threshold ?? 0)}
-                    onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                    disabled={!formData.track_stock}
-                    min={0}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="stock_quantity">Estoque atual</Label>
-                <Input
-                  id="stock_quantity"
-                  type="number"
-                  value={String(formData.stock_quantity ?? 0)}
-                  onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-                  disabled={!formData.track_stock}
-                  min={0}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Seção de Variações Globais */}
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-lg">Variações Globais</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Selecione as variações globais que se aplicam a este produto
-              </p>
-            </CardHeader>
-            <CardContent>
-              {globalVariations.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-muted-foreground mb-3">Nenhuma variação global encontrada</p>
-                  <p className="text-sm text-muted-foreground">
-                    Para usar variações globais, crie-as primeiro na aba "Variações Globais" da página de Produtos.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {globalVariations.map((variation: any) => (
-                    <div key={variation.id} className="flex items-start space-x-3">
-                      <Checkbox
-                        id={`variation-${variation.id}`}
-                        checked={selectedVariations.includes(variation.id)}
-
-                        onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
-                      />
-                      <div className="flex-1">
-                        <Label htmlFor={`variation-${variation.id}`} className="font-medium cursor-pointer">
-                          {variation.name}
-                        </Label>
-                        {variation.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-muted-foreground">{variation.options?.length || 0} opções</span>
-                        </div>
-                        {selectedVariations.includes(variation.id) && (
-                          <div className="flex gap-4 mt-2 flex-wrap sm:flex-nowrap">
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                id={`required-${variation.id}`}
-                                checked={variationSettings[variation.id]?.required || false}
-                                onCheckedChange={(checked) => handleVariationSettingChange(variation.id, 'required', checked as boolean)}
-                              />
-                              <Label htmlFor={`required-${variation.id}`}>Obrigatório</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label htmlFor={`min-selections-${variation.id}`}>Mín.</Label>
-                              <Input
-                                id={`min-selections-${variation.id}`}
-                                type="number"
-                                min="0"
-                                value={variationSettings[variation.id]?.min_selections ?? 0}
-                                onChange={e => handleVariationSettingChange(variation.id, 'min_selections', parseInt(e.target.value) || 0)}
-                                className="w-14 min-w-[56px] text-center appearance-none"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Label htmlFor={`max-selections-${variation.id}`}>Máx.</Label>
-                              <Input
-                                id={`max-selections-${variation.id}`}
-                                type="number"
-                                min="1"
-                                value={variationSettings[variation.id]?.max_selections ?? 1}
-                                onChange={e => handleVariationSettingChange(variation.id, 'max_selections', parseInt(e.target.value) || 1)}
-                                className="w-14 min-w-[56px] text-center appearance-none"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Salvando...' : 'Salvar Produto'}
-            </Button>
+              </DialogContent>
+            </Dialog>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="available"
+              checked={formData.available}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
+            />
+            <Label htmlFor="available">Disponível</Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="show_in_delivery"
+              checked={formData.show_in_delivery}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
+            />
+            <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Salvando...' : 'Salvar Produto'}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 };
 

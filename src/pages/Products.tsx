@@ -592,7 +592,7 @@ const Products = () => {
       </Tabs>
 
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="left" className="w-full sm:max-w-md p-0">
+        <SheetContent side="right" className="w-full sm:max-w-md p-0">
           <div className="sticky top-0 z-10 bg-white border-b p-4">
             <SheetHeader>
               <SheetTitle>{editingProduct?.id ? 'Editar produto' : 'Novo produto'}</SheetTitle>
