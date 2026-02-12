@@ -190,7 +190,18 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
         if (deliveryZonesError) throw deliveryZonesError;
 
         // Processar dados
-        const processedProducts = (productsData || []) as any[];
+        const processedProducts = ((productsData || []) as any[]).map((p: any) => {
+          const price = Number(p?.price) || 0;
+          const original = p?.original_price !== undefined && p?.original_price !== null ? Number(p.original_price) : null;
+          const discountPct = p?.discount_percentage !== undefined && p?.discount_percentage !== null ? Number(p.discount_percentage) : null;
+          if (original && discountPct && discountPct > 0) {
+            const expectedDiscounted = Number((original * (1 - discountPct / 100)).toFixed(2));
+            if (price >= original - 0.009) {
+              return { ...p, price: expectedDiscounted };
+            }
+          }
+          return p;
+        });
         const highlights = processedProducts
           .filter(p => p.is_highlight)
           .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))

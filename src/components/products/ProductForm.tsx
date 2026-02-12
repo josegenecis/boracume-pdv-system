@@ -37,8 +37,8 @@ interface ProductItem {
   stock_quantity: number;
   low_stock_threshold: number;
   is_highlight?: boolean;
-  original_price?: number;
-  discount_percentage?: number;
+  original_price?: number | null;
+  discount_percentage?: number | null;
   cost_price?: number;
   packaging_fee?: number;
   sku?: string;
@@ -86,7 +86,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
-  const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
+  const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round((((product as any)?.original_price ?? product?.price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
@@ -99,7 +99,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
   const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
-  const [showDiscount, setShowDiscount] = useState(false);
   const [showCost, setShowCost] = useState(false);
   const [showPackaging, setShowPackaging] = useState(false);
   const [showSku, setShowSku] = useState(false);
@@ -341,32 +340,31 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const digitsOnly = e.target.value.replace(/\D/g, '');
     const raw = digitsOnly === '' ? '0' : digitsOnly;
     setPriceRaw(raw);
-    setFormData(prev => ({ ...prev, price: (parseInt(raw, 10) || 0) / 100 }));
   };
 
   const handleOriginalPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '');
     const raw = digitsOnly === '' ? '0' : digitsOnly;
     setOriginalPriceRaw(raw);
-    const originalPrice = (parseInt(raw, 10) || 0) / 100;
-    
-    // Auto calculate discount percentage if price is set
-    let discount = 0;
-    if (originalPrice > 0 && formData.price > 0 && originalPrice > formData.price) {
-      discount = Math.round(((originalPrice - formData.price) / originalPrice) * 100);
-    }
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      original_price: originalPrice,
-      discount_percentage: discount
-    }));
   };
 
   const rawToNumber = (raw: string) => {
     const cents = parseInt(raw || '0', 10) || 0;
     return cents / 100;
   };
+
+  useEffect(() => {
+    const discounted = rawToNumber(priceRaw);
+    const original = rawToNumber(originalPriceRaw);
+    const hasDiscount = original > 0 && discounted > 0 && original > discounted;
+    const discountPct = hasDiscount ? Math.round(((original - discounted) / original) * 100) : null;
+    setFormData(prev => ({
+      ...prev,
+      price: discounted,
+      original_price: hasDiscount ? original : null,
+      discount_percentage: hasDiscount ? discountPct : null
+    }));
+  }, [priceRaw, originalPriceRaw]);
 
   useEffect(() => {
     setFormData(prev => ({
@@ -378,7 +376,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   }, [costRaw, packagingRaw, skuValue]);
 
   useEffect(() => {
-    setShowDiscount(!!(product as any)?.original_price || !!(product as any)?.discount_percentage);
     setShowCost((product as any)?.cost_price !== undefined && Number((product as any)?.cost_price) > 0);
     setShowPackaging((product as any)?.packaging_fee !== undefined && Number((product as any)?.packaging_fee) > 0);
     setShowSku(!!(product as any)?.sku);
@@ -582,10 +579,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     console.log('🔍 Carregando variações do produto:', productId);
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+      const r1 = await (supabase as any)
         .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
+        .select('global_variation_id, display_order, created_at')
+        .eq('product_id', productId)
+        .order('display_order', { ascending: true });
+      data = r1.data;
+      error = r1.error;
+      if (error) {
+        const msg = String(error?.message || error?.details || '');
+        if (msg.includes('display_order') || msg.includes("Could not find the 'display_order' column")) {
+          const r2 = await (supabase as any)
+            .from('product_global_variation_links')
+            .select('global_variation_id, created_at')
+            .eq('product_id', productId)
+            .order('created_at', { ascending: true });
+          data = r2.data;
+          error = r2.error;
+        }
+      }
 
       console.log('📊 Resultado da consulta de variações:', { data, error });
 
@@ -1094,16 +1108,28 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
           <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
             <TabsContent value="simple" className="mt-2">
-              <div className="space-y-2">
-                <Label htmlFor="price">Preço</Label>
-                <Input
-                  id="price"
-                  type="text"
-                  value={formatFromRaw(priceRaw)}
-                  onChange={handlePriceChange}
-                  placeholder="0,00"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="original_price">Preço</Label>
+                  <Input
+                    id="original_price"
+                    type="text"
+                    value={formatFromRaw(originalPriceRaw)}
+                    onChange={handleOriginalPriceChange}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="price">Preço com desconto</Label>
+                  <Input
+                    id="price"
+                    type="text"
+                    value={formatFromRaw(priceRaw)}
+                    onChange={handlePriceChange}
+                    placeholder="0,00"
+                    required
+                  />
+                </div>
               </div>
             </TabsContent>
             <TabsContent value="variants" className="mt-2">
@@ -1191,29 +1217,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowDiscount(v => !v)}>+ Desconto</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setShowCost(v => !v)}>+ Custo</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setShowPackaging(v => !v)}>+ Embalagem</Button>
           <Button type="button" variant="outline" size="sm" onClick={() => setShowSku(v => !v)}>+ SKU</Button>
         </div>
-
-        {showDiscount && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="original_price">Preço original</Label>
-              <Input
-                id="original_price"
-                value={formatFromRaw(originalPriceRaw)}
-                onChange={handleOriginalPriceChange}
-                placeholder="0,00"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Desconto (%)</Label>
-              <Input value={String(formData.discount_percentage ?? 0)} readOnly className="bg-gray-50" />
-            </div>
-          </div>
-        )}
 
         {showCost && (
           <div className="space-y-1">
