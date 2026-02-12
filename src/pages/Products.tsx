@@ -463,10 +463,7 @@ const Products = () => {
                             <Draggable key={product.id} draggableId={product.id} index={index} isDragDisabled={!canReorderProducts}>
                               {(draggableProvided) => (
                                 <div ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
-                                  <Card className="overflow-hidden hover:shadow-sm transition-shadow relative">
-                                    {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
-                                      <div className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-red-500 shadow-[0_0_18px_rgba(255,0,0,0.9)] animate-pulse" />
-                                    )}
+                                  <Card className={`overflow-hidden hover:shadow-sm transition-shadow ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'animate-stock-pulse border-red-500' : ''}`}>
                                     <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                                       <div className="flex items-center gap-3">
                                         <button

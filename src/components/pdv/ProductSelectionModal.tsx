@@ -206,12 +206,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
                   return (
                 <Card 
                   key={product.id} 
-                  className="cursor-pointer hover:shadow-lg transition-shadow relative"
+                  className={`cursor-pointer hover:shadow-lg transition-shadow ${isLowStock ? 'animate-stock-pulse border-red-500' : ''}`}
                   onClick={() => handleProductSelect(product)}
                 >
-                  {isLowStock && (
-                    <div className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-red-500 shadow-[0_0_18px_rgba(255,0,0,0.9)] animate-pulse" />
-                  )}
                   <CardContent className="p-4">
                     {product.image_url && (
                       <img
