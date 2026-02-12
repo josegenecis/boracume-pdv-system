@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Plus, Trash2, Save, Map } from 'lucide-react';
+import { CircleOff, DollarSign, MapPin, Plus, Route, Shapes, ShoppingBag, Store, Trash2, Truck, Save, Map } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -324,11 +324,11 @@ const DeliverySettings = () => {
 
   const pricingCards = useMemo(() => {
     return [
-      { id: 'free', title: 'Sem preço', subtitle: 'Ofereça frete grátis aos seus clientes' },
-      { id: 'fixed', title: 'Preço fixo', subtitle: 'O mesmo preço de envio se aplica a todos os pedidos' },
-      { id: 'neighborhood', title: 'Bairro de destino', subtitle: 'O preço varia de acordo com o bairro' },
-      { id: 'distance_km', title: 'Distância percorrida', subtitle: 'O cliente paga de acordo com os quilômetros' },
-      { id: 'polygon', title: 'Áreas personalizadas', subtitle: 'Defina áreas no mapa para cálculo do preço' },
+      { id: 'free', title: 'Sem preço', subtitle: 'Ofereça frete grátis aos seus clientes', Icon: CircleOff },
+      { id: 'fixed', title: 'Preço fixo', subtitle: 'O mesmo preço de envio se aplica a todos os pedidos', Icon: DollarSign },
+      { id: 'neighborhood', title: 'Bairro de destino', subtitle: 'O preço varia de acordo com o bairro', Icon: MapPin },
+      { id: 'distance_km', title: 'Distância percorrida', subtitle: 'O cliente paga de acordo com os quilômetros', Icon: Route },
+      { id: 'polygon', title: 'Áreas personalizadas', subtitle: 'Defina áreas no mapa para cálculo do preço', Icon: Shapes },
     ] as const;
   }, []);
 
@@ -409,10 +409,17 @@ const DeliverySettings = () => {
                   className={`w-full text-left p-3 border rounded-lg transition-colors ${pricingMode === c.id ? 'border-boracume-orange bg-boracume-orange/5' : 'hover:bg-gray-50'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{c.title}</div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-9 h-9 rounded-md border bg-white flex items-center justify-center shrink-0">
+                        <c.Icon className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium">{c.title}</div>
+                        <div className="text-sm text-muted-foreground">{c.subtitle}</div>
+                      </div>
+                    </div>
                     {pricingMode === c.id && <Badge>Selecionado</Badge>}
                   </div>
-                  <div className="text-sm text-muted-foreground">{c.subtitle}</div>
                 </button>
               ))}
             </div>
@@ -420,16 +427,26 @@ const DeliverySettings = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">Delivery</div>
-                <div className="text-xs text-muted-foreground">Atender pedidos com entrega</div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md border bg-white flex items-center justify-center">
+                  <Truck className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Delivery</div>
+                  <div className="text-xs text-muted-foreground">Atender pedidos com entrega</div>
+                </div>
               </div>
               <Switch checked={modalities.delivery} onCheckedChange={(v) => setModalities(prev => ({ ...prev, delivery: v }))} />
             </div>
             <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">Retirada</div>
-                <div className="text-xs text-muted-foreground">Cliente retira no balcão</div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md border bg-white flex items-center justify-center">
+                  <Store className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Retirada</div>
+                  <div className="text-xs text-muted-foreground">Cliente retira no balcão</div>
+                </div>
               </div>
               <Switch checked={modalities.pickup} onCheckedChange={(v) => setModalities(prev => ({ ...prev, pickup: v }))} />
             </div>
