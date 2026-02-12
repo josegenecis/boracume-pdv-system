@@ -13,6 +13,39 @@ export function useSimpleVariations() {
     setIsLoading(true);
     
     try {
+      let isAuthenticated = false;
+      try {
+        const { data } = await supabase.auth.getSession();
+        isAuthenticated = !!data?.session?.access_token;
+      } catch {}
+
+      if (!isAuthenticated) {
+        try {
+          const { data: j } = await invokeEdgeFunction<any>('product-variations-public', { productId });
+          if (j?.ok && Array.isArray(j.variations)) {
+            const variations = j.variations.map((item: any) => ({
+              id: String(item.id),
+              name: String(item.name || ''),
+              required: Boolean(item.required ?? false),
+              max_selections: Math.max(1, Number(item.max_selections ?? 1)),
+              options: (() => {
+                const raw = item.options;
+                if (!raw) return [];
+                if (typeof raw === 'string') {
+                  try { return JSON.parse(raw); } catch { return String(raw).split(/[,;\n]/).map((name: string) => ({ name: name.trim(), price: 0 })); }
+                }
+                if (Array.isArray(raw)) return raw;
+                if (typeof raw === 'object') return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }));
+                return [];
+              })()
+            }));
+            return variations as any[];
+          }
+        } catch (e) {
+          console.warn('Fallback público (edge) de variações falhou', e);
+        }
+      }
+
       // Buscar variações específicas do produto
       console.log('📡 CARDÁPIO DIGITAL - Executando query variações específicas...');
 
@@ -33,7 +66,7 @@ export function useSimpleVariations() {
       console.log('🔍 CARDÁPIO DIGITAL - Buscando links de variações globais...');
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id, required, min_selections, max_selections')
+        .select('global_variation_id')
         .eq('product_id', productId) as any;
 
       if (globalError) {
@@ -64,12 +97,11 @@ export function useSimpleVariations() {
           // Mesclar configurações do vínculo nas variações globais
           const globalsArr: any[] = Array.isArray(globalVars) ? globalVars as any[] : [];
           globalVariations = globalsArr.map((globalVar: any) => {
-            const link = linksArr.find((l: any) => l.global_variation_id === globalVar.id);
             const mergedVariation = {
               ...globalVar,
-              required: link?.required ?? false,
-              min_selections: link?.min_selections ?? 0,
-              max_selections: link?.max_selections ?? 1
+              required: globalVar?.required ?? false,
+              min_selections: 0,
+              max_selections: globalVar?.max_selections ?? 1
             };
             console.log('🔧 CARDÁPIO DIGITAL - Variação global mesclada:', mergedVariation);
             return mergedVariation;
@@ -252,30 +284,6 @@ export function useSimpleVariations() {
       return formatted as any[];
     } catch (error) {
       console.error('💥 CARDÁPIO DIGITAL - Erro geral ao carregar variações:', error);
-      try {
-        const { data: j } = await invokeEdgeFunction<any>('product-variations-public', { productId })
-        if (j?.ok && Array.isArray(j.variations)) {
-          const variations = j.variations.map((item: any) => ({
-            id: String(item.id),
-            name: String(item.name || ''),
-            required: Boolean(item.required ?? false),
-            max_selections: Math.max(1, Number(item.max_selections ?? 1)),
-            options: (() => {
-              const raw = item.options
-              if (!raw) return []
-              if (typeof raw === 'string') {
-                try { return JSON.parse(raw) } catch { return String(raw).split(/[,;\n]/).map((name: string) => ({ name: name.trim(), price: 0 })) }
-              }
-              if (Array.isArray(raw)) return raw
-              if (typeof raw === 'object') return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }))
-              return []
-            })()
-          }))
-          return variations as any[]
-        }
-      } catch (e) {
-        console.warn('Fallback público de variações falhou', e)
-      }
       return [];
     } finally {
       setIsLoading(false);

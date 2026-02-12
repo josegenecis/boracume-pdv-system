@@ -1,4 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
+// @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 export const config = { runtime: 'edge' }
@@ -16,7 +17,7 @@ const corsHeaders = {
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const { searchParams } = new URL(req.url)
+const { searchParams } = new URL(req.url)
   let productId = searchParams.get('productId') || ''
   if (!productId) {
     const body = await req.json().catch(() => ({}))
@@ -31,7 +32,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     const { data: links } = await supabase
       .from('product_global_variation_links')
-      .select('global_variation_id, required, min_selections, max_selections')
+      .select('global_variation_id')
       .eq('product_id', productId)
 
     let globals: any[] = []
@@ -41,9 +42,8 @@ export default async function handler(req: Request): Promise<Response> {
         .from('global_variations')
         .select('*')
         .in('id', ids)
-      globals = (globalVars || []).map(v => {
-        const link = links.find(l => l.global_variation_id === v.id)
-        return { ...v, required: !!link?.required, min_selections: link?.min_selections ?? 0, max_selections: link?.max_selections ?? 1 }
+      globals = (globalVars || []).map((v: any) => {
+        return { ...v, required: !!(v as any)?.required, min_selections: 0, max_selections: (v as any)?.max_selections ?? 1 }
       })
     }
 

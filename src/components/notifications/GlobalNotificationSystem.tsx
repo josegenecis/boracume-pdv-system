@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { soundNotifications } from '@/utils/soundUtils';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 interface PendingOrder {
   id: string;
@@ -30,6 +31,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundType, setSoundType] = useState('bell');
   const [volume, setVolume] = useState(0.8);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('dismissedOrders');
@@ -47,10 +49,16 @@ const GlobalNotificationSystem: React.FC = () => {
   const soundEnabledRef = useRef(soundEnabled);
   const soundTypeRef = useRef(soundType);
   const volumeRef = useRef(volume);
+  const pendingOrdersRef = useRef<PendingOrder[]>([]);
+  const pollingRef = useRef<number | null>(null);
 
   useEffect(() => {
     isOnOrdersPageRef.current = isOnOrdersPage;
   }, [isOnOrdersPage]);
+
+  useEffect(() => {
+    pendingOrdersRef.current = pendingOrders;
+  }, [pendingOrders]);
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
@@ -112,8 +120,7 @@ const GlobalNotificationSystem: React.FC = () => {
       } catch {}
     };
 
-    // Carregar pedidos pendentes iniciais
-    const loadPendingOrders = async () => {
+    const loadPendingOrders = async (): Promise<PendingOrder[]> => {
       const { data, error } = await supabase
         .from('orders')
         .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status')
@@ -123,15 +130,16 @@ const GlobalNotificationSystem: React.FC = () => {
 
       if (error) {
         console.error('❌ GlobalNotification - Erro ao carregar pedidos pendentes:', error);
-        return;
+        return [];
       }
 
-      if (data && data.length > 0) {
-        setPendingOrders(data);
-        if (!isOnOrdersPageRef.current) {
-          setIsVisible(true);
-        }
+      const list = (data || []) as PendingOrder[];
+      setPendingOrders(list);
+      if (list.length > 0 && !isOnOrdersPageRef.current) {
+        setIsAnimatingOut(false);
+        setIsVisible(true);
       }
+      return list;
     };
 
     loadSettings();
@@ -157,12 +165,13 @@ const GlobalNotificationSystem: React.FC = () => {
             newOrder.acceptance_status === 'awaiting_pix_payment' ||
             (newOrder as any).status === 'pending';
           if (!showForInsert) return;
-          setPendingOrders(prev => [newOrder, ...prev]);
-          if (soundEnabledRef.current) {
-            await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-          }
+          setPendingOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
           if (!isOnOrdersPageRef.current) {
+            setIsAnimatingOut(false);
             setIsVisible(true);
+            if (soundEnabledRef.current) {
+              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
+            }
             if (navigator.vibrate) {
               navigator.vibrate([200, 100, 200]);
             }
@@ -189,11 +198,12 @@ const GlobalNotificationSystem: React.FC = () => {
             || (updatedOrder as any).status === 'pending';
           if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
-            if (soundEnabledRef.current) {
-              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-            }
             if (!isOnOrdersPageRef.current) {
+              setIsAnimatingOut(false);
               setIsVisible(true);
+              if (soundEnabledRef.current) {
+                await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
+              }
               if (navigator.vibrate) {
                 navigator.vibrate([200, 100, 200]);
               }
@@ -242,11 +252,35 @@ const GlobalNotificationSystem: React.FC = () => {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    if (pollingRef.current) window.clearInterval(pollingRef.current);
+    pollingRef.current = window.setInterval(async () => {
+      if (!user?.id) return;
+      if (document.visibilityState !== 'visible') return;
+      const next = await loadPendingOrders();
+      const prev = pendingOrdersRef.current || [];
+      const prevIds = new Set(prev.map(o => o.id));
+      const newOnes = next.filter(o => !prevIds.has(o.id));
+      if (newOnes.length > 0 && !isOnOrdersPageRef.current) {
+        setIsAnimatingOut(false);
+        setIsVisible(true);
+        if (soundEnabledRef.current) {
+          await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
+        }
+        toast({
+          title: "🔔 Novo Pedido Recebido!",
+          description: `Você tem ${newOnes.length} novo${newOnes.length > 1 ? 's' : ''} pedido${newOnes.length > 1 ? 's' : ''}.`,
+          duration: 5000,
+        });
+      }
+    }, 8000);
+
     return () => {
       supabase.removeChannel(channel);
       // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (pollingRef.current) window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
     };
   }, [user, isDigitalMenu, toast]);
 
@@ -272,8 +306,11 @@ const GlobalNotificationSystem: React.FC = () => {
       localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
       return newDismissed;
     });
-    setIsVisible(false);
-    navigate('/pedidos');
+    setIsAnimatingOut(true);
+    window.setTimeout(() => {
+      setIsVisible(false);
+      navigate('/pedidos');
+    }, 220);
   };
 
   const handleDismiss = () => {
@@ -287,7 +324,27 @@ const GlobalNotificationSystem: React.FC = () => {
       localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
       return newDismissed;
     });
-    setIsVisible(false);
+    setIsAnimatingOut(true);
+    window.setTimeout(() => {
+      setIsVisible(false);
+    }, 220);
+  };
+
+  const handleAcceptFirst = async () => {
+    const order = visibleOrders[0];
+    if (!order) return;
+    try {
+      soundNotifications.stopAllSounds();
+      const { data } = await invokeEdgeFunction<any>('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
+      if (!data?.ok) throw new Error(data?.error || 'Falha ao aceitar');
+      setIsAnimatingOut(true);
+      window.setTimeout(() => {
+        setPendingOrders(prev => prev.filter(o => o.id !== order.id));
+        setIsVisible(false);
+      }, 220);
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Falha ao aceitar pedido', variant: 'destructive' });
+    }
   };
 
   const getOrderTypeIcon = (type: string) => {
@@ -325,7 +382,7 @@ const GlobalNotificationSystem: React.FC = () => {
   }
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-sm">
+    <div className={`fixed top-4 right-4 z-50 max-w-sm transition-all duration-200 ${isAnimatingOut ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'}`}>
       <Card className="border border-gray-200 bg-white shadow-lg">
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
@@ -378,6 +435,13 @@ const GlobalNotificationSystem: React.FC = () => {
               size="sm"
             >
               Ver Pedidos
+            </Button>
+            <Button
+              onClick={handleAcceptFirst}
+              className="bg-green-600 hover:bg-green-700"
+              size="sm"
+            >
+              Aceitar
             </Button>
             <Button 
               variant="outline" 
