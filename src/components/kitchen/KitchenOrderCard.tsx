@@ -1,10 +1,9 @@
 import React from 'react';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Clock, RotateCcw, Package, User, CheckCircle, Truck, Phone, MapPin } from 'lucide-react';
-import { OrderStatusType } from '@/components/orders/OrderStatusBadge';
 
 interface OrderItem {
   id: string;
@@ -59,12 +58,12 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   const timePassed = getTimePassed(order.created_at);
   const isHighPriority = order.priority === 'high' || (order.items.length > 5);
 
-  const getStatusColor = (status: string) => {
+  const getHeaderColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'preparing': return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'ready': return 'bg-green-100 text-green-800 border-green-300';
-      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+      case 'pending': return 'bg-red-600';
+      case 'preparing': return 'bg-red-600';
+      case 'ready': return 'bg-green-600';
+      default: return 'bg-gray-700';
     }
   };
 
@@ -97,37 +96,28 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   return (
-    <Card className={`w-full max-w-sm hover:shadow-md transition-shadow ${isHighPriority ? 'border-red-500 border-2' : 'border-gray-200'}`}>
-      <CardHeader className="pb-3 bg-gray-50/50">
-        <div className="flex justify-between items-start">
-          <div className="flex flex-col gap-1">
-            <CardTitle className="text-lg font-bold text-primary flex items-center gap-2">
-              #{order.order_number}
-              {isHighPriority && (
-                <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] h-5 px-1.5 animate-pulse">
-                  URGENTE
-                </Badge>
-              )}
-            </CardTitle>
-            <div className="flex flex-col gap-1">
-               <Badge className={`text-xs w-fit ${getOrderTypeColor(order.order_type)}`} variant="outline">
-                  {getOrderTypeLabel(order.order_type)}
-               </Badge>
-            </div>
-          </div>
-          
-          <div className="flex flex-col items-end gap-1">
-            <Badge className={`text-xs ${getStatusColor(order.status)}`} variant="outline">
-              {getStatusLabel(order.status)}
-            </Badge>
-            <div className={`flex items-center text-xs font-medium ${parseInt(timePassed) > 20 ? 'text-red-600' : 'text-muted-foreground'}`}>
+    <Card className={`w-[280px] shrink-0 border ${isHighPriority ? 'border-red-500' : 'border-gray-200'} shadow-sm`}>
+      <div className={`px-3 py-2 text-white ${getHeaderColor(order.status)}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-sm truncate">#{order.order_number}</div>
+          <div className="flex items-center gap-2">
+            {isHighPriority && (
+              <Badge className="bg-white/20 text-white text-[10px] h-5 px-1.5">
+                Urgente
+              </Badge>
+            )}
+            <div className="flex items-center text-[11px] font-medium">
               <Clock size={12} className="mr-1" />
               {timePassed}
             </div>
           </div>
         </div>
-      </CardHeader>
-      
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <div className="text-[11px] opacity-95">{getStatusLabel(order.status)}</div>
+          <div className="text-[11px] opacity-95">{getOrderTypeLabel(order.order_type)}</div>
+        </div>
+      </div>
+
       <CardContent className="py-3 space-y-3">
         {/* Customer Info */}
         <div className="text-sm space-y-1">
@@ -152,16 +142,18 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <Separator />
 
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <Package size={16} />
-            <span>Itens do Pedido ({order.items.length})</span>
+          <div className="flex items-center justify-between text-xs font-medium text-gray-700">
+            <div className="flex items-center gap-2">
+              <Package size={14} />
+              <span>Itens ({order.items.length})</span>
+            </div>
           </div>
-          
+
           <div className="space-y-2">
             {order.items.map((item, idx) => (
-              <div key={idx} className="text-sm bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+              <div key={idx} className="text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
                 <div className="flex justify-between items-start">
-                  <span className="font-bold text-gray-900 text-base">{item.quantity}x {item.name}</span>
+                  <span className="font-bold text-gray-900 text-sm">{item.quantity}x {item.name}</span>
                 </div>
 
                 {item.variations && item.variations.length > 0 && (
