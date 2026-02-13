@@ -15,6 +15,7 @@ import WhatsAppIntegration from '@/components/whatsapp/WhatsAppIntegration';
 import FiscalSettings from '@/components/fiscal/FiscalSettings';
 import { useAuth } from '@/contexts/AuthContext';
 
+import IfoodSettings from '@/components/settings/IfoodSettings';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
 import HardwareSettings from '@/components/settings/HardwareSettings';
@@ -56,6 +57,7 @@ const Configuracoes: React.FC = () => {
       'fiscal',
       'payment-methods',
       'pix',
+      'ifood',
       'users',
       'marketing'
     ];
@@ -107,6 +109,7 @@ const Configuracoes: React.FC = () => {
               <option value="fiscal">Fiscal</option>
               <option value="payment-methods">Formas de Pagamento</option>
               <option value="pix">PIX</option>
+              <option value="ifood">iFood</option>
               <option value="users">Usuários e Equipe</option>
               {hasMarketingFeature() && (<option value="marketing">Marketing</option>)}
             </select>
@@ -129,6 +132,7 @@ const Configuracoes: React.FC = () => {
 
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
+          <TabsTrigger value="ifood">iFood</TabsTrigger>
           <TabsTrigger value="users">Usuários e Equipe</TabsTrigger>
 
           {hasMarketingFeature() && (
@@ -257,6 +261,10 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="pix">
           <PixIntegrationSettings />
+        </TabsContent>
+
+        <TabsContent value="ifood">
+          <IfoodSettings />
         </TabsContent>
 
         <TabsContent value="users">

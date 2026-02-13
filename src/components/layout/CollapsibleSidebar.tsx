@@ -1,10 +1,12 @@
 
-
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 import { 
   LayoutDashboard, 
@@ -29,8 +31,46 @@ import {
 
 const CollapsibleSidebar = () => {
   const { isOpen, isMobile, toggleSidebar, closeSidebar } = useSidebar();
+  const { profile, user } = useAuth();
+  const [ifoodStatus, setIfoodStatus] = useState<'online' | 'offline' | 'paused' | null>(null);
 
   const location = useLocation();
+
+  useEffect(() => {
+    if (user) {
+      const checkIfoodStatus = async () => {
+        const { data } = await supabase
+          .from('ifood_settings')
+          .select('status')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (data) {
+          setIfoodStatus(data.status as any);
+        }
+      };
+      
+      checkIfoodStatus();
+
+      // Subscribe to changes
+      const channel = supabase
+        .channel('sidebar-ifood-status')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'ifood_settings', filter: `user_id=eq.${user.id}` },
+          (payload: any) => {
+            if (payload.new && payload.new.status) {
+              setIfoodStatus(payload.new.status);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user]);
 
   const mainLinks = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial' },
@@ -103,6 +143,7 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
         { to: '/configuracoes?tab=pix', label: 'PIX' },
+        { to: '/configuracoes?tab=ifood', label: 'iFood' },
         { to: '/configuracoes?tab=users', label: 'Usuários e Equipe' },
       ]
     },
@@ -170,24 +211,47 @@ const CollapsibleSidebar = () => {
       }
     `}>
 
-      <div className="p-2 border-b">
+      <div className={`p-2 border-b flex items-center ${isOpen ? 'justify-between px-3' : 'justify-center'}`}>
+        {isOpen && (
+           <div className="flex items-center gap-2 overflow-hidden mr-2 animate-in fade-in duration-300">
+             <Avatar className="h-8 w-8 border-2 border-orange-100 flex-shrink-0">
+               <AvatarImage src={profile?.logo_url} />
+               <AvatarFallback className="bg-orange-50 text-orange-700 font-bold text-xs">
+                 {profile?.restaurant_name?.substring(0, 2).toUpperCase() || 'BC'}
+               </AvatarFallback>
+             </Avatar>
+             <div className="flex flex-col overflow-hidden min-w-0">
+               <span className="text-sm font-semibold truncate leading-tight text-gray-800" title={profile?.restaurant_name}>
+                 {profile?.restaurant_name || 'Seu Restaurante'}
+               </span>
+               {ifoodStatus && (
+                 <span className="text-[10px] flex items-center gap-1.5 text-muted-foreground leading-tight mt-0.5">
+                   <span className="relative flex h-2 w-2">
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${ifoodStatus === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                      <span className={`relative inline-flex rounded-full h-2 w-2 ${ifoodStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    </span>
+                   iFood {ifoodStatus === 'online' ? 'ON' : 'OFF'}
+                 </span>
+               )}
+             </div>
+           </div>
+        )}
+
         <Button
           variant="ghost"
           size="sm"
-
           onClick={toggleSidebar}
-          className="w-full flex justify-center hover:bg-white text-gray-400 hover:text-gray-600"
+          className={`${isOpen ? '' : 'w-full'} flex justify-center hover:bg-orange-50 text-gray-400 hover:text-orange-600 transition-colors`}
         >
           {isMobile ? (
             <X size={16} />
           ) : (
             isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />
           )}
-
         </Button>
       </div>
       
-      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20">
+      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
             {[...mainLinks, ...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
