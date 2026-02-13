@@ -632,7 +632,7 @@ const Orders = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-120px)] overflow-y-auto">
+    <div className="h-full overflow-y-auto pb-6">
       <div className="space-y-6">
         <AdminPinDialog
           open={adminPinOpen}
