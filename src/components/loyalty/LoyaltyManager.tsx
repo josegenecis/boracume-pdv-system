@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Gift, Star, Users, Trophy, Plus, Trash2, Tag, Percent, Truck } from 'lucide-react';
+import { Gift, Star, Users, Trophy, Plus, Trash2, Tag, Percent, Truck, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,7 @@ interface LoyaltyProgram {
   reward_type: 'percent' | 'fixed_amount' | 'free_product' | 'free_shipping';
   reward_value: number;
   active: boolean;
+  notify_whatsapp: boolean;
 }
 
 interface Coupon {
@@ -45,7 +46,8 @@ const LoyaltyManager = () => {
     goal_value: 10,
     reward_type: 'percent',
     reward_value: 10,
-    active: true
+    active: true,
+    notify_whatsapp: false
   });
 
   // New Coupon State
@@ -70,8 +72,9 @@ const LoyaltyManager = () => {
         supabase.from('coupons').select('*').eq('user_id', user?.id)
       ]);
 
-      if (progRes.error) throw progRes.error;
-      if (coupRes.error) throw coupRes.error;
+      // Don't throw error if tables don't exist yet, just empty list
+      if (progRes.error && progRes.error.code !== '42P01') console.error(progRes.error);
+      if (coupRes.error && coupRes.error.code !== '42P01') console.error(coupRes.error);
 
       setPrograms(progRes.data as any || []);
       setCoupons(coupRes.data as any || []);
@@ -92,8 +95,14 @@ const LoyaltyManager = () => {
       if (error) throw error;
       setPrograms([...programs, data as any]);
       toast({ title: 'Programa criado com sucesso!' });
-    } catch (error) {
-      toast({ title: 'Erro ao criar programa', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro ao criar programa', 
+        description: error.message?.includes('relation "public.loyalty_programs" does not exist') 
+          ? 'A tabela de fidelidade ainda não foi criada no banco.' 
+          : error.message,
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -120,8 +129,14 @@ const LoyaltyManager = () => {
       setCoupons([...coupons, data as any]);
       setNewCoupon({ ...newCoupon, code: '' }); // Reset code
       toast({ title: 'Cupom criado!' });
-    } catch (error) {
-      toast({ title: 'Erro ao criar cupom', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ 
+        title: 'Erro ao criar cupom',
+        description: error.message?.includes('relation "public.coupons" does not exist') 
+          ? 'A tabela de cupons ainda não foi criada no banco.' 
+          : error.message, 
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -207,6 +222,21 @@ const LoyaltyManager = () => {
                   </div>
                 )}
 
+                <div className="flex items-center space-x-2 border p-3 rounded-lg bg-gray-50">
+                  <Switch 
+                    id="whatsapp-notify" 
+                    checked={newProgram.notify_whatsapp}
+                    onCheckedChange={(c) => setNewProgram({...newProgram, notify_whatsapp: c})}
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="whatsapp-notify" className="cursor-pointer flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-green-600" />
+                      Notificar Cliente via WhatsApp
+                    </Label>
+                    <p className="text-xs text-gray-500">Envia mensagem automática quando atingir a meta.</p>
+                  </div>
+                </div>
+
                 <Button onClick={createProgram} className="w-full bg-green-600 hover:bg-green-700">
                   <Plus className="mr-2 h-4 w-4" /> Criar Regra Automática
                 </Button>
@@ -219,8 +249,9 @@ const LoyaltyManager = () => {
                 <Card key={prog.id}>
                   <CardContent className="pt-6 flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-lg">
+                      <h3 className="font-bold text-lg flex items-center gap-2">
                         {prog.type === 'visits' ? `A cada ${prog.goal_value} Pedidos` : `A cada R$ ${prog.goal_value} Gastos`}
+                        {prog.notify_whatsapp && <MessageCircle className="h-4 w-4 text-green-500" title="Notifica via WhatsApp" />}
                       </h3>
                       <p className="text-gray-500">
                         Ganha: {prog.reward_type === 'free_shipping' ? 'Frete Grátis' : 
