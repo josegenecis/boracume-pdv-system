@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { AlertCircle, CheckCircle2, RefreshCw, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { IfoodLogo } from '@/components/icons/IfoodLogo';
 
 const IfoodSettings = () => {
   const { user } = useAuth();
@@ -115,8 +116,8 @@ const IfoodSettings = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <img src="https://portal.ifood.com.br/favicon.ico" className="w-6 h-6" alt="iFood" />
-            Integração iFood
+            <IfoodLogo className="h-8 w-auto" />
+            <span className="ml-2">Integração</span>
           </CardTitle>
           <CardDescription>
             Configure suas credenciais para receber pedidos do iFood diretamente no PDV.

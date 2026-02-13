@@ -7,6 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { IfoodLogo } from '@/components/icons/IfoodLogo';
 
 import { 
   LayoutDashboard, 
@@ -230,7 +231,8 @@ const CollapsibleSidebar = () => {
                       <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${ifoodStatus === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></span>
                       <span className={`relative inline-flex rounded-full h-2 w-2 ${ifoodStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
                     </span>
-                   iFood {ifoodStatus === 'online' ? 'ON' : 'OFF'}
+                   <IfoodLogo className="h-3 w-auto" />
+                   {ifoodStatus === 'online' ? 'ON' : 'OFF'}
                  </span>
                )}
              </div>
