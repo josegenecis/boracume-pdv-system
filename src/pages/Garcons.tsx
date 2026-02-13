@@ -6,55 +6,89 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { UserPlus, Link as LinkIcon, Trash2, Key, Copy, Eye, EyeOff, ExternalLink, Shield, Settings } from 'lucide-react';
+import { UserPlus, Trash2, Key, Shield, Eye, EyeOff, Check, User, Lock, Mail, CreditCard, Box, FileText, Settings, BadgePercent } from 'lucide-react';
 
 interface Waiter {
   id: string;
   name: string;
+  email?: string;
+  password?: string;
   pin: string;
   active: boolean;
-  role?: 'admin' | 'cashier' | string;
-  permissions?: {
-    pos_access?: boolean;
-    pos_open_close?: boolean;
-    pos_discount?: boolean;
-    orders_manage?: boolean;
-    menu_manage?: boolean;
-    financial_view?: boolean;
-    settings_manage?: boolean;
-    users_manage?: boolean;
-    [key: string]: boolean | undefined;
-  };
+  role: 'admin' | 'cashier';
+  permissions: Record<string, boolean>;
 }
 
-const PERMISSIONS_LIST = [
-  { id: 'pos_access', label: 'Acesso ao PDV', description: 'Pode acessar a tela de vendas' },
-  { id: 'pos_open_close', label: 'Abrir/Fechar Caixa', description: 'Pode abrir e fechar o turno' },
-  { id: 'pos_discount', label: 'Dar Descontos', description: 'Pode aplicar descontos no PDV' },
-  { id: 'orders_manage', label: 'Gerenciar Pedidos', description: 'Aceitar, cancelar e alterar status' },
-  { id: 'menu_manage', label: 'Gerenciar Cardápio', description: 'Criar/Editar produtos e categorias' },
-  { id: 'financial_view', label: 'Ver Financeiro', description: 'Acesso a relatórios de vendas' },
-  { id: 'settings_manage', label: 'Configurações', description: 'Acesso às configurações gerais' },
-  { id: 'users_manage', label: 'Gerenciar Equipe', description: 'Criar e editar outros usuários' },
+const PERMISSIONS_GROUPS = [
+  {
+    id: 'sales',
+    label: 'Vendas e PDV',
+    icon: <CreditCard className="w-4 h-4" />,
+    permissions: [
+      { id: 'pos_access', label: 'Acessar PDV', description: 'Pode entrar na tela de vendas' },
+      { id: 'pos_discount', label: 'Aplicar Descontos', description: 'Pode dar descontos manuais' },
+      { id: 'pos_cancel_item', label: 'Cancelar Itens', description: 'Pode remover itens do pedido' },
+    ]
+  },
+  {
+    id: 'cashier',
+    label: 'Caixa',
+    icon: <Lock className="w-4 h-4" />,
+    permissions: [
+      { id: 'pos_open_close', label: 'Abrir/Fechar Caixa', description: 'Gestão de turnos' },
+      { id: 'cash_movement', label: 'Sangria/Suprimento', description: 'Movimentar dinheiro do caixa' },
+    ]
+  },
+  {
+    id: 'management',
+    label: 'Gestão',
+    icon: <Box className="w-4 h-4" />,
+    permissions: [
+      { id: 'orders_manage', label: 'Gerenciar Pedidos', description: 'Ver e editar pedidos ativos' },
+      { id: 'menu_manage', label: 'Gerenciar Cardápio', description: 'Criar/Editar produtos' },
+      { id: 'stock_manage', label: 'Gerenciar Estoque', description: 'Ajustar quantidades' },
+    ]
+  },
+  {
+    id: 'admin',
+    label: 'Administrativo',
+    icon: <Settings className="w-4 h-4" />,
+    permissions: [
+      { id: 'financial_view', label: 'Ver Financeiro', description: 'Relatórios de faturamento' },
+      { id: 'users_manage', label: 'Gerenciar Equipe', description: 'Criar e editar usuários' },
+      { id: 'settings_manage', label: 'Configurações', description: 'Configurações do sistema' },
+    ]
+  }
 ];
 
 const Garcons = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [waiters, setWaiters] = useState<Waiter[]>([]);
-  const [form, setForm] = useState({ name: '', pin: '', role: 'cashier' as 'admin' | 'cashier' });
-  const [loading, setLoading] = useState(false);
-  const [showPins, setShowPins] = useState<Record<string, boolean>>({});
   
-  // State for Permissions Modal
-  const [selectedWaiter, setSelectedWaiter] = useState<Waiter | null>(null);
-  const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
-  const [editingPermissions, setEditingPermissions] = useState<Record<string, boolean>>({});
+  // Data State
+  const [waiters, setWaiters] = useState<Waiter[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Modal State
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'data' | 'permissions'>('data');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+
+  // Form State
+  const [formData, setFormData] = useState<Partial<Waiter>>({
+    name: '',
+    email: '',
+    password: '',
+    pin: '',
+    role: 'cashier',
+    active: true,
+    permissions: {}
+  });
 
   useEffect(() => {
     if (user) loadWaiters();
@@ -62,339 +96,390 @@ const Garcons = () => {
 
   const loadWaiters = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('waiters')
         .select('*')
         .eq('user_id', user?.id)
         .order('name');
+      
       if (error) throw error;
-      setWaiters(data || []);
+      setWaiters((data as any) || []);
     } catch (e: any) {
-      console.warn('Erro ao carregar garçons:', e?.message);
+      console.error('Erro ao carregar:', e);
     }
   };
 
-  const addWaiter = async () => {
-    if (!form.name.trim() || !form.pin.trim()) return;
-    
-    if (form.pin.length < 4) {
-      toast({ title: 'PIN inválido', description: 'O PIN deve ter pelo menos 4 dígitos', variant: 'destructive' });
+  const handleOpenDialog = (waiter?: Waiter) => {
+    if (waiter) {
+      setFormData({ ...waiter, password: '' }); // Don't show existing password
+    } else {
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        pin: '',
+        role: 'cashier',
+        active: true,
+        permissions: { pos_access: true }
+      });
+    }
+    setActiveTab('data');
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name?.trim() || !formData.pin?.trim()) {
+      toast({ title: 'Campos obrigatórios', description: 'Nome e PIN são obrigatórios.', variant: 'destructive' });
       return;
     }
 
     try {
       setLoading(true);
-      const defaultPermissions = form.role === 'admin' 
-        ? PERMISSIONS_LIST.reduce((acc, curr) => ({ ...acc, [curr.id]: true }), {})
-        : { pos_access: true }; // Default for cashier
+      
+      // If admin, grant all permissions
+      const permissions = formData.role === 'admin' 
+        ? PERMISSIONS_GROUPS.flatMap(g => g.permissions).reduce((acc, p) => ({ ...acc, [p.id]: true }), {})
+        : formData.permissions;
 
-      const payload: any = {
+      const payload = {
         user_id: user?.id,
-        name: form.name.trim(),
-        pin: form.pin.trim(),
-        active: true,
-        role: form.role,
-        permissions: defaultPermissions,
+        name: formData.name,
+        email: formData.email,
+        pin: formData.pin,
+        role: formData.role,
+        active: formData.active,
+        permissions,
+        // Only include password if it was typed (for edits) or is new
+        ...(formData.password ? { password: formData.password } : {})
       };
 
-      const res1 = await (supabase as any).from('waiters').insert(payload);
-      let error: any = (res1 as any).error;
-      if (error && String(error.message || '').includes('role')) {
-        const { role, permissions, ...fallback } = payload;
-        const res2 = await (supabase as any).from('waiters').insert(fallback);
-        error = (res2 as any).error;
+      let error;
+      if (formData.id) {
+        const { error: updateError } = await supabase
+          .from('waiters')
+          .update(payload)
+          .eq('id', formData.id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('waiters')
+          .insert(payload);
+        error = insertError;
       }
+
       if (error) throw error;
 
-      setForm({ name: '', pin: '', role: 'cashier' });
+      toast({ title: 'Sucesso!', description: 'Usuário salvo com sucesso.' });
+      setIsDialogOpen(false);
       loadWaiters();
-      
-      const link = `${window.location.origin}/waiter-login`;
-      
-      toast({ 
-        title: 'Usuário cadastrado!', 
-        description: `Link de acesso: ${link}`,
-        action: (
-            <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(link)}>
-                Copiar
-            </Button>
-        ),
-        duration: 8000
-      });
     } catch (e: any) {
-      toast({ title: 'Erro ao cadastrar', description: e?.message, variant: 'destructive' });
-    } finally { setLoading(false); }
-  };
-
-  const updateWaiter = async (id: string, patch: Partial<Waiter>) => {
-    try {
-      const payload: any = { ...patch };
-      const res1 = await (supabase as any).from('waiters').update(payload).eq('id', id);
-      const error: any = (res1 as any).error;
-      if (error) throw error;
-      loadWaiters();
-      toast({ title: 'Atualizado com sucesso' });
-    } catch (e: any) {
-      toast({ title: 'Erro ao atualizar', description: e?.message, variant: 'destructive' });
+      toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const removeWaiter = async (id: string) => {
-    try {
-      const { error } = await (supabase as any).from('waiters').delete().eq('id', id);
-      if (error) throw error;
-      loadWaiters();
-      toast({ title: 'Usuário removido' });
-    } catch (e) {
-      toast({ title: 'Erro ao remover', variant: 'destructive' });
-    }
-  };
-
-  const togglePinVisibility = (id: string) => {
-    setShowPins(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const copyLink = async () => {
-    const link = `${window.location.origin}/waiter-login`;
-    await navigator.clipboard.writeText(link);
-    toast({ title: 'Link copiado!', description: 'Envie este link para a equipe acessar o sistema.' });
-  };
-
-  const openPermissionsModal = (waiter: Waiter) => {
-    setSelectedWaiter(waiter);
-    setEditingPermissions(waiter.permissions || {});
-    setIsPermissionsOpen(true);
-  };
-
-  const savePermissions = async () => {
-    if (!selectedWaiter) return;
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja remover este usuário?')) return;
     
-    await updateWaiter(selectedWaiter.id, { permissions: editingPermissions });
-    setIsPermissionsOpen(false);
+    try {
+      const { error } = await supabase.from('waiters').delete().eq('id', id);
+      if (error) throw error;
+      toast({ title: 'Usuário removido' });
+      loadWaiters();
+    } catch (e: any) {
+      toast({ title: 'Erro ao remover', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const togglePermission = (permId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        [permId]: !prev.permissions?.[permId]
+      }
+    }));
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5" /> 
-            Novo Usuário
-          </CardTitle>
-          <CardDescription>
-            Crie usuários para acessar o sistema (Garçons, Caixas, Gerentes).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="name">Nome</Label>
-              <Input 
-                id="name"
-                placeholder="Ex: João Silva"
-                value={form.name} 
-                onChange={(e) => setForm({ ...form, name: e.target.value })} 
-              />
-            </div>
-            <div>
-              <Label htmlFor="pin">PIN de Acesso (4-6 dígitos)</Label>
-              <Input 
-                id="pin"
-                type="text" 
-                maxLength={6}
-                placeholder="Ex: 1234"
-                value={form.pin} 
-                onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} 
-              />
-            </div>
-            <div>
-              <Label>Perfil Inicial</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as any })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cashier">Operador (Básico)</SelectItem>
-                  <SelectItem value="admin">Administrador (Total)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button onClick={addWaiter} disabled={loading || !form.name.trim() || !form.pin.trim()} className="w-full">
-                <Key className="mr-2 h-4 w-4" />
-                Criar Usuário
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-6 max-w-6xl mx-auto p-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gerenciar Equipe</h1>
+          <p className="text-muted-foreground mt-1">Controle de acesso, usuários e permissões do sistema.</p>
+        </div>
+        <Button onClick={() => handleOpenDialog()} className="bg-primary hover:bg-primary/90">
+          <UserPlus className="mr-2 h-4 w-4" />
+          Novo Usuário
+        </Button>
+      </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Gerenciar Equipe</CardTitle>
-            <CardDescription>Configure permissões detalhadas para cada usuário</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => window.open(`${window.location.origin}/waiter-login`, '_blank')}>
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Testar Acesso
-            </Button>
-            <Button variant="outline" onClick={copyLink}>
-              <Copy className="mr-2 h-4 w-4" />
-              Copiar Link
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {waiters.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground bg-gray-50 rounded-lg border border-dashed">
-              Nenhum usuário cadastrado. Adicione alguém acima para começar.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>PIN</TableHead>
-                  <TableHead>Perfil</TableHead>
-                  <TableHead>Permissões</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50/50">
+                <TableHead>Nome</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Perfil</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {waiters.map((waiter) => (
+                <TableRow key={waiter.id} className="hover:bg-gray-50/50 transition-colors">
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                        {waiter.name.charAt(0).toUpperCase()}
+                      </div>
+                      {waiter.name}
+                    </div>
+                  </TableCell>
+                  <TableCell>{waiter.email || '-'}</TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      waiter.role === 'admin' 
+                        ? 'bg-purple-100 text-purple-800' 
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {waiter.role === 'admin' ? 'Administrador' : 'Operador'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      waiter.active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${waiter.active ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {waiter.active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(waiter)}>
+                        <Settings className="h-4 w-4 text-gray-500" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(waiter.id)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {waiters.map(w => (
-                  <TableRow key={w.id}>
-                    <TableCell className="font-medium">{w.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                          {showPins[w.id] ? w.pin : '••••'}
-                        </span>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => togglePinVisibility(w.id)}>
-                          {showPins[w.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={(w.role as any) || 'cashier'}
-                        onValueChange={(v) => updateWaiter(w.id, { 
-                          role: v as any, 
-                          permissions: v === 'admin' 
-                            ? PERMISSIONS_LIST.reduce((acc, curr) => ({ ...acc, [curr.id]: true }), {}) 
-                            : { pos_access: true }
-                        })}
-                      >
-                        <SelectTrigger className="h-8 w-[160px]">
-                          <SelectValue placeholder="Perfil" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cashier">Operador</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {w.role === 'admin' ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800">
-                            Acesso Total
-                          </span>
-                        ) : (
-                          <div className="flex gap-1 flex-wrap">
-                            {Object.entries(w.permissions || {}).filter(([_, v]) => v).slice(0, 3).map(([k]) => (
-                               <span key={k} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 border">
-                                 {PERMISSIONS_LIST.find(p => p.id === k)?.label || k}
-                               </span>
-                            ))}
-                            {Object.values(w.permissions || {}).filter(v => v).length > 3 && (
-                               <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-500 border">
-                                 +{Object.values(w.permissions || {}).filter(v => v).length - 3}
-                               </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={w.active}
-                        onCheckedChange={(checked) => updateWaiter(w.id, { active: checked })}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openPermissionsModal(w)}
-                        >
-                          <Shield className="h-4 w-4 mr-2" />
-                          Permissões
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => removeWaiter(w.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              ))}
+              {waiters.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    Nenhum usuário encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      <Dialog open={isPermissionsOpen} onOpenChange={setIsPermissionsOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Permissões de Acesso</DialogTitle>
+            <DialogTitle>{formData.id ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
             <DialogDescription>
-              Configurando acesso para: <strong>{selectedWaiter?.name}</strong>
+              Preencha os dados abaixo para {formData.id ? 'editar' : 'criar'} o acesso.
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="py-4">
-            {selectedWaiter?.role === 'admin' && (
-               <div className="mb-4 bg-yellow-50 p-3 rounded-md border border-yellow-200 text-yellow-800 text-sm">
-                 Este usuário é <strong>Administrador</strong> e tem acesso total. Mude o perfil para "Operador" se quiser restringir acessos.
-               </div>
-            )}
-            
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${selectedWaiter?.role === 'admin' ? 'opacity-50 pointer-events-none' : ''}`}>
-              {PERMISSIONS_LIST.map((permission) => (
-                <div key={permission.id} className="flex items-start space-x-3 space-y-0 rounded-md border p-3 hover:bg-accent">
-                  <Checkbox
-                    id={permission.id}
-                    checked={editingPermissions[permission.id] === true}
-                    onCheckedChange={(checked) => {
-                      setEditingPermissions(prev => ({
-                        ...prev,
-                        [permission.id]: checked === true
-                      }));
-                    }}
-                  />
-                  <div className="grid gap-1.5 leading-none">
-                    <Label
-                      htmlFor={permission.id}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                    >
-                      {permission.label}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {permission.description}
-                    </p>
+
+          <div className="mt-4">
+            <div className="flex border-b mb-6">
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'data' 
+                    ? 'border-primary text-primary' 
+                    : 'border-transparent text-muted-foreground hover:text-gray-700'
+                }`}
+                onClick={() => setActiveTab('data')}
+              >
+                Dados Pessoais
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'permissions' 
+                    ? 'border-primary text-primary' 
+                    : 'border-transparent text-muted-foreground hover:text-gray-700'
+                }`}
+                onClick={() => setActiveTab('permissions')}
+              >
+                Permissões de Acesso
+              </button>
+            </div>
+
+            {activeTab === 'data' ? (
+              <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome Completo *</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="name" 
+                        className="pl-9" 
+                        placeholder="Ex: João Silva"
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email (Opcional)</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="email" 
+                        className="pl-9" 
+                        placeholder="joao@email.com"
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pin">PIN de Acesso (PDV) *</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="pin" 
+                        type={showPin ? "text" : "password"}
+                        className="pl-9 pr-9" 
+                        placeholder="Ex: 1234"
+                        maxLength={6}
+                        value={formData.pin}
+                        onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '') })}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShowPin(!showPin)}
+                        className="absolute right-3 top-3 text-muted-foreground hover:text-gray-700"
+                      >
+                        {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha (Login Web)</Label>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="password" 
+                        type={showPassword ? "text" : "password"}
+                        className="pl-9 pr-9" 
+                        placeholder={formData.id ? "Deixe em branco para manter" : "Senha segura"}
+                        value={formData.password}
+                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 text-muted-foreground hover:text-gray-700"
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <Label>Perfil de Acesso</Label>
+                    <Select 
+                      value={formData.role} 
+                      onValueChange={(v: any) => setFormData({ ...formData, role: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cashier">Operador (Básico)</SelectItem>
+                        <SelectItem value="admin">Administrador (Total)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Administradores têm acesso irrestrito a todas as funções.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status da Conta</Label>
+                    <div className="flex items-center space-x-2 border p-2 rounded-md">
+                      <Switch 
+                        checked={formData.active}
+                        onCheckedChange={(c) => setFormData({ ...formData, active: c })}
+                      />
+                      <span className="text-sm font-medium">
+                        {formData.active ? 'Ativo - Pode acessar' : 'Inativo - Acesso bloqueado'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 h-[400px] overflow-y-auto pr-2">
+                {formData.role === 'admin' && (
+                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-md flex items-start gap-3">
+                    <Shield className="w-5 h-5 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-sm">Acesso de Administrador</h4>
+                      <p className="text-sm mt-1">
+                        Usuários com perfil Administrador possuem todas as permissões habilitadas automaticamente. 
+                        Para personalizar, altere o perfil para "Operador".
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className={formData.role === 'admin' ? 'opacity-50 pointer-events-none grayscale' : ''}>
+                  {PERMISSIONS_GROUPS.map((group) => (
+                    <div key={group.id} className="mb-6">
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                        <div className="p-1.5 bg-primary/10 rounded-md text-primary">
+                          {group.icon}
+                        </div>
+                        <h3 className="font-semibold text-gray-900">{group.label}</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {group.permissions.map((perm) => (
+                          <div key={perm.id} className="flex items-center justify-between p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors">
+                            <div className="space-y-0.5">
+                              <Label htmlFor={perm.id} className="text-base font-medium cursor-pointer">
+                                {perm.label}
+                              </Label>
+                              <p className="text-sm text-muted-foreground">
+                                {perm.description}
+                              </p>
+                            </div>
+                            <Switch
+                              id={perm.id}
+                              checked={formData.permissions?.[perm.id] === true}
+                              onCheckedChange={() => togglePermission(perm.id)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPermissionsOpen(false)}>Cancelar</Button>
-            <Button onClick={savePermissions}>Salvar Alterações</Button>
+          <DialogFooter className="mt-6 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={loading} className="min-w-[120px]">
+              {loading ? 'Salvando...' : 'Salvar Usuário'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
