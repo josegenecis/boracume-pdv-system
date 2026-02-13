@@ -773,14 +773,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{product?.id ? 'Editar Produto' : 'Novo Produto'}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
               <Label htmlFor="name">Nome *</Label>
               <Input
                 id="name"
@@ -1199,17 +1194,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             </CardContent>
           </Card>
 
-          <div className="flex gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Salvando...' : 'Salvar Produto'}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      <div className="flex gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Salvando...' : 'Salvar Produto'}
+        </Button>
+      </div>
+    </form>
   );
 };
 

@@ -103,12 +103,12 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
         { to: '/configuracoes?tab=pix', label: 'PIX' },
+        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe' },
       ]
     },
   ];
 
   const standaloneLinks = [
-    { to: '/garcons', icon: Users, label: 'Garçons' },
     { to: '/agente', icon: Bot, label: 'Assistente' },
     { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },

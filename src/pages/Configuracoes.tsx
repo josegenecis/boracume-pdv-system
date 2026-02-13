@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
 import HardwareSettings from '@/components/settings/HardwareSettings';
+import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
@@ -55,6 +56,7 @@ const Configuracoes: React.FC = () => {
       'fiscal',
       'payment-methods',
       'pix',
+      'users',
       'marketing'
     ];
     if (!allowed.includes(requested)) return 'general';
@@ -105,6 +107,7 @@ const Configuracoes: React.FC = () => {
               <option value="fiscal">Fiscal</option>
               <option value="payment-methods">Formas de Pagamento</option>
               <option value="pix">PIX</option>
+              <option value="users">Usuários e Equipe</option>
               {hasMarketingFeature() && (<option value="marketing">Marketing</option>)}
             </select>
           </div>
@@ -126,6 +129,7 @@ const Configuracoes: React.FC = () => {
 
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
+          <TabsTrigger value="users">Usuários e Equipe</TabsTrigger>
 
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
@@ -253,6 +257,10 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="pix">
           <PixIntegrationSettings />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <Garcons />
         </TabsContent>
 
         {hasMarketingFeature() && (

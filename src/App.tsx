@@ -77,7 +77,6 @@ function AppContent() {
       {/* Landing Page - Rota pública */}
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/debug-pix" element={<DebugPix />} /> {/* Debug Público */}
-      <Route path="/pix" element={<PixSetup />} /> {/* Acesso Temporário Sem Login */}
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />
@@ -111,7 +110,7 @@ function AppContent() {
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
-          {/* <Route path="/pix" element={<PixSetup />} /> MOVIDO PARA PÚBLICO */}
+          <Route path="/pix" element={<PixSetup />} />
           {/* <Route path="/debug-pix" element={<DebugPix />} /> MOVIDO PARA PÚBLICO */}
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />
