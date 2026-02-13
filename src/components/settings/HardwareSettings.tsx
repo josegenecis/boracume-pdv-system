@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Printer, Scale, AlertTriangle, CheckCircle, RefreshCw, Usb } from 'lucide-react';
+import { Printer, Scale, AlertTriangle, CheckCircle, RefreshCw, Usb, Wifi } from 'lucide-react';
 import { scaleService, ScaleData } from '@/utils/scaleService';
 import { PrinterService } from '@/utils/printerService';
 import { PrinterConfig } from '@/components/printer/PrinterConfig';
@@ -131,6 +131,33 @@ const HardwareSettings = () => {
               <Button onClick={handleTestPrint} className="w-full" variant="outline">
                 Imprimir Nota de Teste
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wifi className="h-5 w-5" /> Impressoras de Rede (Wi-Fi/Ethernet)
+              </CardTitle>
+              <CardDescription>Como usar impressoras sem fio</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-md border border-blue-200 text-sm text-blue-800">
+                  <p className="font-bold mb-2">Como configurar:</p>
+                  <p className="mb-2">
+                    Navegadores web não podem escanear a rede Wi-Fi diretamente. Para usar uma impressora de rede:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Instale o driver da impressora no seu computador.</li>
+                    <li>Certifique-se de que ela aparece no Painel de Controle do sistema.</li>
+                    <li>Ao clicar em imprimir, o sistema abrirá a janela padrão onde você poderá selecioná-la.</li>
+                  </ul>
+                </div>
+                <Button onClick={() => handleTestPrint()} variant="secondary" className="w-full">
+                  Testar Impressão (Janela do Sistema)
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

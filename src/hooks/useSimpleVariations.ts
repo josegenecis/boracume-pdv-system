@@ -64,26 +64,10 @@ export function useSimpleVariations() {
 
       // Buscar variações globais associadas ao produto
       console.log('🔍 CARDÁPIO DIGITAL - Buscando links de variações globais...');
-      let globalVariationLinks: any[] | null = null;
-      let globalError: any = null;
-      const r1 = await (supabase as any)
+      const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id, display_order')
-        .eq('product_id', productId)
-        .order('display_order', { ascending: true });
-      globalVariationLinks = r1.data;
-      globalError = r1.error;
-      if (globalError) {
-        const msg = String(globalError?.message || globalError?.details || '');
-        if (msg.includes('display_order') || msg.includes("Could not find the 'display_order' column")) {
-          const r2 = await (supabase as any)
-            .from('product_global_variation_links')
-            .select('global_variation_id')
-            .eq('product_id', productId);
-          globalVariationLinks = r2.data;
-          globalError = r2.error;
-        }
-      }
+        .select('global_variation_id')
+        .eq('product_id', productId) as any;
 
       if (globalError) {
         console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar links de variações globais:', globalError);

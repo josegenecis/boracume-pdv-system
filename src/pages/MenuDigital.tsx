@@ -111,16 +111,22 @@ const MenuDigital = () => {
     }
   }, [categories, activeCategory]);
 
-  const handleProductClick = (product: Product) => {
+  const handleProductClick = async (product: Product) => {
     if (!finalUserId) {
       console.error('❌ MenuDigital - userId não encontrado');
       return;
     }
-    setSelectedProduct(product);
-    setShowVariationModal(true);
-    fetchVariations(product.id).catch((error) => {
+
+    try {
+      const variations = await fetchVariations(product.id);
+      setSelectedProduct(product);
+      setShowVariationModal(true);
+    } catch (error) {
       console.error('❌ Erro ao buscar variações:', error);
-    });
+      // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
+      setSelectedProduct(product);
+      setShowVariationModal(true);
+    }
   };
 
   const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => {
@@ -239,14 +245,14 @@ const MenuDigital = () => {
       } else {
         // Push para o restaurante
         try {
-          const { data: subs } = await (supabase as any)
+          const { data: subs } = await supabase
             .from('push_subscriptions')
             .select('endpoint, keys')
-            .eq('user_id', orderData.user_id);
+            .eq('user_id', orderData.user_id)
           if (Array.isArray(subs) && subs.length > 0) {
             await supabase.functions.invoke('send-push', {
               body: {
-                subscriptions: subs.map((s: any) => ({ endpoint: s.endpoint, keys: s.keys })),
+                subscriptions: subs.map(s => ({ endpoint: s.endpoint, keys: s.keys })),
                 title: 'Novo Pedido!',
                 body: `Pedido ${orderData.order_number} recebido`,
                 url: '/pedidos'

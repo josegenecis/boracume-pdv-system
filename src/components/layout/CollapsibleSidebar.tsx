@@ -32,6 +32,10 @@ const CollapsibleSidebar = () => {
 
   const location = useLocation();
 
+  const mainLinks = [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial' },
+  ];
+
   const groups = [
     {
       id: 'caixa',
@@ -78,7 +82,6 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Relatórios',
       items: [
-        { to: '/dashboard', label: 'Dashboard' },
         { to: '/relatorios', label: 'Relatórios' },
         { to: '/loyalty', label: 'Fidelização' },
       ]
@@ -187,7 +190,7 @@ const CollapsibleSidebar = () => {
       <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
-            {[...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
+            {[...mainLinks, ...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
               const Icon = (link as any).icon;
               const isActive = isActivePath(link.to);
               return (
@@ -210,6 +213,29 @@ const CollapsibleSidebar = () => {
           </ul>
         ) : (
           <div className="space-y-2">
+            <ul className="space-y-1 pb-2">
+              {mainLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = isActivePath(link.to);
+                return (
+                  <li key={link.to}>
+                    <Link
+                      to={link.to}
+                      onClick={handleLinkClick}
+                      className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
+                          : 'text-gray-700 hover:bg-orange-50'
+                      }`}
+                    >
+                      <Icon size={18} className="mr-3 flex-shrink-0" />
+                      <span className="truncate">{link.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+
             <Accordion type="single" collapsible value={openGroup} onValueChange={(v) => setOpenGroup(v)} className="w-full space-y-1">
               {groups.map((group) => {
                 const Icon = group.icon;

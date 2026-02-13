@@ -20,8 +20,6 @@ interface CartItem {
     id: string;
     name: string;
     price: number;
-    original_price?: number;
-    discount_percentage?: number;
     image_url?: string;
   };
   quantity: number;
@@ -419,22 +417,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         Obs: {item.notes}
                       </p>
                     )}
-                    <div className="mt-2">
-                      {item.product.original_price && item.product.original_price > item.product.price ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500 line-through">
-                            R$ {item.product.original_price.toFixed(2)}
-                          </span>
-                          <span className="text-sm font-bold text-boracume-orange">
-                            R$ {item.totalPrice.toFixed(2)}
-                          </span>
-                        </div>
-                      ) : (
-                        <p className="text-sm font-bold text-boracume-orange">
-                          R$ {item.totalPrice.toFixed(2)}
-                        </p>
-                      )}
-                    </div>
+                    <p className="text-sm font-bold text-boracume-orange mt-2">
+                      R$ {item.totalPrice.toFixed(2)}
+                    </p>
                   </div>
                   
                   <div className="flex items-center gap-2">

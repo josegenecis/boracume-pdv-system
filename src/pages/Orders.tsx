@@ -65,6 +65,9 @@ const Orders = () => {
   const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
+    // Tentar reconectar impressora automaticamente ao abrir a página de pedidos
+    PrinterService.tryAutoReconnect();
+
     if (user) {
       fetchOrders();
 
@@ -374,11 +377,22 @@ const Orders = () => {
       // Buscar o pedido para enviar para KDS quando aceito
       const order = orders.find(o => o.id === orderId);
 
-      // Se status mudou para 'preparing', enviar para KDS
+      // Se status mudou para 'preparing', enviar para KDS e Imprimir Automaticamente
       if (newStatus === 'preparing' && order) {
         toast({
           title: "Pedido aceito!",
-          description: "Status atualizado com sucesso.",
+          description: "Status atualizado com sucesso. Imprimindo pedido...",
+        });
+
+        // Impressão Automática
+        console.log('🖨️ Iniciando impressão automática para pedido:', order.order_number);
+        PrinterService.printOrder(order).catch(err => {
+          console.error('❌ Erro na impressão automática:', err);
+          toast({
+            title: "Erro na impressão",
+            description: "Não foi possível imprimir automaticamente.",
+            variant: "destructive"
+          });
         });
 
         const orderData = {

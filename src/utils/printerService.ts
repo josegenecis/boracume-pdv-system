@@ -42,11 +42,37 @@ export const PrinterService = {
     }
   },
 
+  // Tentar reconectar automaticamente a uma impressora já permitida
+  async tryAutoReconnect() {
+    if (!('usb' in navigator)) return false;
+    
+    try {
+      const devices = await (navigator as any).usb.getDevices();
+      // Procura por dispositivos que pareçam impressoras (interface class 7)
+      // Ou simplesmente pega o primeiro disponível se houver
+      if (devices.length > 0) {
+        console.log('🔄 Tentando reconectar dispositivo USB conhecido:', devices[0].productName);
+        const device = devices[0];
+        
+        await device.open();
+        await device.selectConfiguration(1);
+        await device.claimInterface(0);
+        
+        usbDevice = device;
+        console.log('✅ Impressora reconectada automaticamente:', usbDevice.productName);
+        return true;
+      }
+    } catch (error) {
+      console.error('❌ Falha na reconexão automática:', error);
+    }
+    return false;
+  },
+
   // Método principal de impressão
   async printOrder(order: any) {
     // 1. Buscar configurações
     const { data: settings } = await supabase
-      .from('printer_settings')
+      .from('printer_settings' as any)
       .select('*')
       .eq('user_id', order.user_id)
       .maybeSingle();

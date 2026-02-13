@@ -13,13 +13,11 @@ import { ensureStorageSetup } from '@/utils/storageSetup';
 interface ProductImageUploadProps {
   onImageUploaded: (url: string) => void;
   currentImageUrl?: string;
-  compact?: boolean;
 }
 
 const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
   onImageUploaded,
-  currentImageUrl,
-  compact = false
+  currentImageUrl
 }) => {
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState(currentImageUrl || '');
@@ -206,32 +204,6 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
     setUploadSuccess(false);
 
   };
-
-  if (compact) {
-    return (
-      <div className="relative">
-        <div className="w-20 h-20 rounded-lg border bg-white overflow-hidden flex items-center justify-center">
-          {imagePreview ? (
-            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-          ) : (
-            <Image className="h-8 w-8 text-gray-300" />
-          )}
-        </div>
-        <Label htmlFor="image-upload-compact" className="cursor-pointer">
-          <div className="absolute -right-2 -bottom-2 w-9 h-9 rounded-full border bg-white shadow flex items-center justify-center">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          </div>
-        </Label>
-        <input
-          id="image-upload-compact"
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">

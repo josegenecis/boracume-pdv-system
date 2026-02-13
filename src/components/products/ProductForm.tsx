@@ -7,13 +7,12 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { ChevronDown, ChevronUp, GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
@@ -37,11 +36,8 @@ interface ProductItem {
   stock_quantity: number;
   low_stock_threshold: number;
   is_highlight?: boolean;
-  original_price?: number | null;
-  discount_percentage?: number | null;
-  cost_price?: number;
-  packaging_fee?: number;
-  sku?: string;
+  original_price?: number;
+  discount_percentage?: number;
 }
 
 interface ProductFormProps {
@@ -71,9 +67,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     is_highlight: false,
     original_price: 0,
     discount_percentage: 0,
-    cost_price: 0,
-    packaging_fee: 0,
-    sku: '',
     ...product
   });
   const [categories, setCategories] = useState([]);
@@ -86,7 +79,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
-  const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round((((product as any)?.original_price ?? product?.price ?? 0) * 100))));
+  const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
@@ -96,17 +89,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [enhanceLoading, setEnhanceLoading] = useState(false);
   const [enhancedPreview, setEnhancedPreview] = useState<string>('');
   const [generatingDescription, setGeneratingDescription] = useState(false);
-  const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
-  const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
-  const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
-  const [showCost, setShowCost] = useState(false);
-  const [showPackaging, setShowPackaging] = useState(false);
-  const [showSku, setShowSku] = useState(false);
-  const [costRaw, setCostRaw] = useState<string>(String(Math.round(((product as any)?.cost_price ?? 0) * 100)));
-  const [packagingRaw, setPackagingRaw] = useState<string>(String(Math.round(((product as any)?.packaging_fee ?? 0) * 100)));
-  const [skuValue, setSkuValue] = useState<string>(String((product as any)?.sku ?? ''));
-  const [priceVariants, setPriceVariants] = useState<Array<{ id: string; name: string; priceRaw: string }>>([]);
-  const [priceVariantVariationId, setPriceVariantVariationId] = useState<string | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -255,9 +237,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!isUnsupported('is_highlight')) baseData.is_highlight = formData.is_highlight;
     if (!isUnsupported('original_price')) baseData.original_price = formData.original_price;
     if (!isUnsupported('discount_percentage')) baseData.discount_percentage = formData.discount_percentage;
-    if (!isUnsupported('cost_price')) baseData.cost_price = formData.cost_price;
-    if (!isUnsupported('packaging_fee')) baseData.packaging_fee = formData.packaging_fee;
-    if (!isUnsupported('sku')) baseData.sku = formData.sku;
 
     if (stockSchemaSupported && !isUnsupported('track_stock') && !isUnsupported('stock_quantity') && !isUnsupported('low_stock_threshold')) {
       baseData.track_stock = formData.track_stock;
@@ -340,125 +319,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const digitsOnly = e.target.value.replace(/\D/g, '');
     const raw = digitsOnly === '' ? '0' : digitsOnly;
     setPriceRaw(raw);
+    setFormData(prev => ({ ...prev, price: (parseInt(raw, 10) || 0) / 100 }));
   };
 
   const handleOriginalPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '');
     const raw = digitsOnly === '' ? '0' : digitsOnly;
     setOriginalPriceRaw(raw);
-  };
-
-  const rawToNumber = (raw: string) => {
-    const cents = parseInt(raw || '0', 10) || 0;
-    return cents / 100;
-  };
-
-  useEffect(() => {
-    const discounted = rawToNumber(priceRaw);
-    const original = rawToNumber(originalPriceRaw);
-    const hasDiscount = original > 0 && discounted > 0 && original > discounted;
-    const discountPct = hasDiscount ? Math.round(((original - discounted) / original) * 100) : null;
-    setFormData(prev => ({
-      ...prev,
-      price: discounted,
-      original_price: hasDiscount ? original : null,
-      discount_percentage: hasDiscount ? discountPct : null
+    const originalPrice = (parseInt(raw, 10) || 0) / 100;
+    
+    // Auto calculate discount percentage if price is set
+    let discount = 0;
+    if (originalPrice > 0 && formData.price > 0 && originalPrice > formData.price) {
+      discount = Math.round(((originalPrice - formData.price) / originalPrice) * 100);
+    }
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      original_price: originalPrice,
+      discount_percentage: discount
     }));
-  }, [priceRaw, originalPriceRaw]);
-
-  useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      cost_price: rawToNumber(costRaw),
-      packaging_fee: rawToNumber(packagingRaw),
-      sku: skuValue
-    }));
-  }, [costRaw, packagingRaw, skuValue]);
-
-  useEffect(() => {
-    setShowCost((product as any)?.cost_price !== undefined && Number((product as any)?.cost_price) > 0);
-    setShowPackaging((product as any)?.packaging_fee !== undefined && Number((product as any)?.packaging_fee) > 0);
-    setShowSku(!!(product as any)?.sku);
-  }, [product?.id]);
-
-  const moveSelectedVariation = (variationId: string, dir: -1 | 1) => {
-    setSelectedVariations(prev => {
-      const idx = prev.indexOf(variationId);
-      if (idx === -1) return prev;
-      const nextIdx = idx + dir;
-      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
-      const copy = [...prev];
-      const tmp = copy[idx];
-      copy[idx] = copy[nextIdx];
-      copy[nextIdx] = tmp;
-      return copy;
-    });
-  };
-
-  const addPriceVariantRow = () => {
-    setPriceVariants(prev => [
-      ...prev,
-      { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name: '', priceRaw: '0' }
-    ]);
-  };
-
-  const movePriceVariantRow = (rowId: string, dir: -1 | 1) => {
-    setPriceVariants(prev => {
-      const idx = prev.findIndex(r => r.id === rowId);
-      if (idx === -1) return prev;
-      const nextIdx = idx + dir;
-      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
-      const copy = [...prev];
-      const tmp = copy[idx];
-      copy[idx] = copy[nextIdx];
-      copy[nextIdx] = tmp;
-      return copy;
-    });
-  };
-
-  useEffect(() => {
-    if (priceMode !== 'variants') return;
-    if (priceVariants.length > 0) return;
-    setPriceVariants([
-      { id: `${Date.now()}-p`, name: 'P', priceRaw: '0' },
-      { id: `${Date.now()}-g`, name: 'G', priceRaw: '0' },
-      { id: `${Date.now()}-gg`, name: 'GG', priceRaw: '0' },
-    ]);
-  }, [priceMode]);
-
-  const loadPriceVariantVariation = async (productId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('product_variations')
-        .select('id, name, options, required, max_selections')
-        .eq('product_id', productId);
-      if (error) return;
-      const list: any[] = Array.isArray(data) ? data : [];
-      const found = list.find((v: any) => {
-        const name = String(v?.name || '').toLowerCase();
-        const rawOpts = v?.options;
-        const opts = Array.isArray(rawOpts) ? rawOpts : (typeof rawOpts === 'string' ? (() => { try { return JSON.parse(rawOpts); } catch { return []; } })() : []);
-        return name === 'tamanho' || (Array.isArray(opts) && opts.some((o: any) => o?.is_price_variant === true));
-      });
-      if (!found) {
-        setPriceVariantVariationId(null);
-        return;
-      }
-      const rawOpts = found.options;
-      const opts = Array.isArray(rawOpts) ? rawOpts : (typeof rawOpts === 'string' ? (() => { try { return JSON.parse(rawOpts); } catch { return []; } })() : []);
-      const base = Number(formData.price) || Number((product as any)?.price) || 0;
-      const rows = (opts || [])
-        .filter((o: any) => o?.name)
-        .map((o: any) => {
-          const abs = base + (Number(o?.price) || 0);
-          return { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name: String(o.name), priceRaw: String(Math.round(abs * 100)) };
-        });
-      if (rows.length > 0) {
-        setPriceVariantVariationId(String(found.id));
-        setPriceVariants(rows);
-        setPriceMode('variants');
-      }
-    } catch {}
   };
 
   const createCategory = async () => {
@@ -528,7 +408,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       loadGlobalVariations();
       if (product?.id) {
         loadProductVariations(product.id);
-        loadPriceVariantVariation(product.id);
       }
     }
   }, [product?.id, user?.id]);
@@ -579,27 +458,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     console.log('🔍 Carregando variações do produto:', productId);
     try {
-      let data: any[] | null = null;
-      let error: any = null;
-      const r1 = await (supabase as any)
+      const { data, error } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id, display_order, created_at')
-        .eq('product_id', productId)
-        .order('display_order', { ascending: true });
-      data = r1.data;
-      error = r1.error;
-      if (error) {
-        const msg = String(error?.message || error?.details || '');
-        if (msg.includes('display_order') || msg.includes("Could not find the 'display_order' column")) {
-          const r2 = await (supabase as any)
-            .from('product_global_variation_links')
-            .select('global_variation_id, created_at')
-            .eq('product_id', productId)
-            .order('created_at', { ascending: true });
-          data = r2.data;
-          error = r2.error;
-        }
-      }
+        .select('global_variation_id')
+        .eq('product_id', productId);
 
       console.log('📊 Resultado da consulta de variações:', { data, error });
 
@@ -638,38 +500,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     e.preventDefault();
 
 
-    const hasCategory = !!formData.category_id || !!String(formData.category || '').trim();
-
-    let effectivePrice = formData.price;
-    let priceVariantOptions: any[] | null = null;
-
-    if (priceMode === 'variants') {
-      const cleaned = priceVariants
-        .map(v => ({
-          name: String(v.name || '').trim(),
-          abs: rawToNumber(v.priceRaw)
-        }))
-        .filter(v => v.name && v.abs > 0);
-
-      if (cleaned.length === 0) {
-        toast({
-          title: "Erro",
-          description: "Adicione pelo menos 1 variante com nome e preço.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const base = Math.min(...cleaned.map(v => v.abs));
-      effectivePrice = base;
-      priceVariantOptions = cleaned.map(v => ({
-        name: v.name,
-        price: Math.max(0, Number((v.abs - base).toFixed(2))),
-        is_price_variant: true
-      }));
-    }
-
-    if (!user?.id || !String(formData.name || '').trim() || !hasCategory || effectivePrice <= 0) {
+    if (!user?.id || !formData.name || !formData.category_id || formData.price <= 0) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios (nome, categoria e preço).",
@@ -682,7 +513,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setLoading(true);
 
       const baseData = buildBaseData();
-      baseData.price = effectivePrice;
       let productId = product?.id;
 
       if (product?.id) {
@@ -694,18 +524,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         await updateProductWithFallback(product.id, productData);
       } else {
         // Tentativa mínima: apenas campos essenciais
-        if (!formData.category_id) {
-          toast({
-            title: "Categoria obrigatória",
-            description: "Selecione uma categoria para criar o produto.",
-            variant: "destructive"
-          });
-          return;
-        }
         const minimalData = {
           user_id: user.id,
           name: formData.name.trim(),
-          price: effectivePrice,
+          price: formData.price,
           category_id: formData.category_id,
           category: formData.category,
           available: formData.available,
@@ -746,38 +568,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       // Salvar vínculos de variações globais após salvar produto
       if (productId) {
         await saveProductVariations(productId);
-      }
-
-      if (productId) {
-        if (priceMode === 'variants' && priceVariantOptions) {
-          const rowData: any = {
-            product_id: productId,
-            user_id: user.id,
-            name: 'Tamanho',
-            price: 0,
-            required: true,
-            max_selections: 1,
-            options: priceVariantOptions,
-            updated_at: new Date().toISOString()
-          };
-
-          if (priceVariantVariationId) {
-            await supabase.from('product_variations').update(rowData).eq('id', priceVariantVariationId);
-          } else {
-            const { data: inserted } = await supabase
-              .from('product_variations')
-              .insert([{ ...rowData, created_at: new Date().toISOString() } as any])
-              .select('id')
-              .single();
-            if (inserted?.id) setPriceVariantVariationId(String(inserted.id));
-          }
-        }
-
-        if (priceMode === 'simple' && priceVariantVariationId) {
-          await supabase.from('product_variations').delete().eq('id', priceVariantVariationId);
-          setPriceVariantVariationId(null);
-          setPriceVariants([]);
-        }
       }
 
       toast({
@@ -905,31 +695,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (variations.length > 0) {
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
-        const linksWithOrder = variations.map((variationId, idx) => ({
+        const links = variations.map(variationId => ({
           product_id: productId,
-          global_variation_id: variationId,
-          display_order: idx
-        })) as any[];
+          global_variation_id: variationId
+        }));
         
-        let data: any = null;
-        let error: any = null;
-        console.log('💾 Inserindo vínculos no banco:', linksWithOrder);
-        const r1 = await supabase.from('product_global_variation_links').insert(linksWithOrder);
-        data = (r1 as any).data;
-        error = (r1 as any).error;
-
-        if (error) {
-          const msg = String(error?.message || error?.details || '');
-          if (msg.includes('display_order') || msg.includes("Could not find the 'display_order' column")) {
-            const links = variations.map(variationId => ({
-              product_id: productId,
-              global_variation_id: variationId
-            }));
-            const r2 = await supabase.from('product_global_variation_links').insert(links as any);
-            data = (r2 as any).data;
-            error = (r2 as any).error;
-          }
-        }
+        console.log('💾 Inserindo vínculos no banco:', links);
+        const { data, error } = await supabase
+          .from('product_global_variation_links')
+          .insert(links);
           
         console.log('📊 Resultado da inserção:', { data, error });
         
@@ -999,30 +773,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
 
   return (
-    <div>
-      <div className="flex items-center gap-2 justify-between px-4 py-3 border-b bg-white">
-        <div className="text-sm font-semibold">{product?.id ? 'Editar produto' : 'Novo produto'}</div>
-        <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
-            <Star className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
-        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start">
-          <ProductImageUpload
-            compact
-            onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
-            currentImageUrl={formData.image_url}
-          />
-
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="name">Nome</Label>
+    <Card>
+      <CardHeader>
+        <CardTitle>{product?.id ? 'Editar Produto' : 'Novo Produto'}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome *</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -1030,480 +789,427 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 required
               />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="description">Descrição</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={2}
+
+            <div className="space-y-2">
+              <Label htmlFor="price">Preço *</Label>
+
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
+                  R$
+                </span>
+                <Input
+                  id="price"
+                  type="text"
+                  value={formatFromRaw(priceRaw)}
+                  onChange={handlePriceChange}
+                  className="pl-10"
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="original_price">Preço Original (opcional)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">
+                  R$
+                </span>
+                <Input
+                  id="original_price"
+                  type="text"
+                  value={formatFromRaw(originalPriceRaw)}
+                  onChange={handleOriginalPriceChange}
+                  className="pl-10"
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="discount_percentage">Desconto Calculado (%)</Label>
+              <Input
+                id="discount_percentage"
+                type="number"
+                value={formData.discount_percentage}
+                readOnly
+                className="bg-gray-50"
+                placeholder="0"
               />
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="relative" onClick={handleOpenEnhance} disabled={loading}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Melhorar imagem
-            <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
-          </Button>
-          <Button type="button" variant="outline" className="relative" onClick={handleGenerateDescription} disabled={generatingDescription}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
-            <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
-          </Button>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="category">Categoria *</Label>
 
-        <Dialog open={isEnhanceOpen} onOpenChange={setIsEnhanceOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Melhorar imagem com IA</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Imagem atual</div>
-                <div className="border rounded-lg p-2 bg-white">
-                  {formData.image_url ? (
-                    <img src={formData.image_url} alt="Imagem atual" className="w-full max-h-[320px] object-contain" />
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Sem imagem</div>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Imagem aprimorada</div>
-                <div className="border rounded-lg p-2 bg-white">
-                  {enhanceLoading ? (
-                    <div className="text-sm text-muted-foreground">Processando...</div>
-                  ) : enhancedPreview ? (
-                    <img src={enhancedPreview} alt="Imagem aprimorada" className="w-full max-h-[320px] object-contain" />
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Sem prévia</div>
-                  )}
-                </div>
-              </div>
+            <div className="flex gap-2">
+              <Select 
+                value={formData.category} 
+                onValueChange={(value) => {
+                  const category = categories.find((cat: any) => cat.name === value);
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    category: value,
+                    category_id: category?.id || null
+                  }));
+                }}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Selecione uma categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category: any) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="outline" size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Criar Nova Categoria</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-category">Nome da Categoria</Label>
+                      <Input
+                        id="new-category"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Digite o nome da categoria"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            createCategory();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          setShowCreateCategory(false);
+                          setNewCategoryName('');
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button 
+                        type="button" 
+                        onClick={createCategory}
+                        disabled={creatingCategory || !newCategoryName.trim()}
+                      >
+                        {creatingCategory ? 'Criando...' : 'Criar'}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEnhanceOpen(false)}>
-                Voltar
-              </Button>
-              <Button type="button" onClick={handleUseEnhanced} disabled={!enhancedPreview || enhanceLoading}>
-                Usar imagem com IA
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Preço</div>
-            <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
-              <TabsList className="h-8">
-                <TabsTrigger value="simple" className="h-7 text-xs">Simples</TabsTrigger>
-                <TabsTrigger value="variants" className="h-7 text-xs">Variantes</TabsTrigger>
-              </TabsList>
-            </Tabs>
           </div>
 
-          <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
-            <TabsContent value="simple" className="mt-2">
-              <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="description">Descrição</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={handleGenerateDescription}
+                disabled={generatingDescription}
+              >
+                {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
+              </Button>
+            </div>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              rows={3}
+            />
+          </div>
+
+          <ProductImageUpload
+            onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
+            currentImageUrl={formData.image_url}
+          />
+
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={handleOpenEnhance} disabled={loading}>
+              Melhorar imagem
+            </Button>
+          </div>
+
+          <Dialog open={isEnhanceOpen} onOpenChange={setIsEnhanceOpen}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Melhorar imagem com IA</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="original_price">Preço</Label>
-                  <Input
-                    id="original_price"
-                    type="text"
-                    value={formatFromRaw(originalPriceRaw)}
-                    onChange={handleOriginalPriceChange}
-                    placeholder="0,00"
-                  />
+                  <div className="text-sm font-medium">Imagem atual</div>
+                  <div className="border rounded-lg p-2 bg-white">
+                    {formData.image_url ? (
+                      <img src={formData.image_url} alt="Imagem atual" className="w-full max-h-[320px] object-contain" />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Sem imagem</div>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="price">Preço com desconto</Label>
+                  <div className="text-sm font-medium">Imagem aprimorada</div>
+                  <div className="border rounded-lg p-2 bg-white">
+                    {enhanceLoading ? (
+                      <div className="text-sm text-muted-foreground">Processando...</div>
+                    ) : enhancedPreview ? (
+                      <img src={enhancedPreview} alt="Imagem aprimorada" className="w-full max-h-[320px] object-contain" />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Sem prévia</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsEnhanceOpen(false)}>
+                  Voltar
+                </Button>
+                <Button type="button" onClick={handleUseEnhanced} disabled={!enhancedPreview || enhanceLoading}>
+                  Usar imagem com IA
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="available"
+                checked={formData.available}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
+              />
+              <Label htmlFor="available">Disponível</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="weight_based"
+                checked={formData.weight_based}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, weight_based: checked }))}
+              />
+              <Label htmlFor="weight_based">Vendido por peso</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="send_to_kds"
+                checked={formData.send_to_kds}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, send_to_kds: checked }))}
+              />
+              <Label htmlFor="send_to_kds">Enviar para cozinha</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="show_in_pdv"
+                checked={formData.show_in_pdv}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_pdv: checked }))}
+              />
+              <Label htmlFor="show_in_pdv">Mostrar no PDV</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="show_in_delivery"
+                checked={formData.show_in_delivery}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
+              />
+              <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_highlight"
+                checked={formData.is_highlight}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
+              />
+              <Label htmlFor="is_highlight">Destaque</Label>
+            </div>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Estoque</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!stockSchemaSupported && (
+                <div className="text-sm text-red-600">
+                  Controle de estoque ainda não está habilitado no banco. Rode o SQL de estoque no Supabase e tente novamente.
+                  <div className="mt-1 text-xs text-red-700 break-words">
+                    Projeto: {(supabase as any)?.supabaseUrl}
+                  </div>
+                  {stockSchemaError && (
+                    <div className="mt-1 text-xs text-red-700 break-words">
+                      {stockSchemaError}
+                    </div>
+                  )}
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => checkStockSchema().catch(() => {})}
+                      className="h-8"
+                    >
+                      Revalidar agora
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="track_stock"
+                    checked={formData.track_stock}
+                    onCheckedChange={async (checked) => {
+                      if (checked) {
+                        const ok = await checkStockSchema();
+                        if (!ok) return;
+                      }
+                      setFormData(prev => ({ ...prev, track_stock: checked }));
+                    }}
+                    disabled={false}
+                  />
+                  <Label htmlFor="track_stock">Controlar estoque</Label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="low_stock_threshold">Estoque mínimo</Label>
                   <Input
-                    id="price"
-                    type="text"
-                    value={formatFromRaw(priceRaw)}
-                    onChange={handlePriceChange}
-                    placeholder="0,00"
-                    required
+                    id="low_stock_threshold"
+                    type="number"
+                    value={String(formData.low_stock_threshold ?? 0)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+                    disabled={!formData.track_stock}
+                    min={0}
                   />
                 </div>
               </div>
-            </TabsContent>
-            <TabsContent value="variants" className="mt-2">
-              <div className="space-y-3 border rounded-lg p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Tamanhos / Variantes</div>
-                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={addPriceVariantRow}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock_quantity">Estoque atual</Label>
+                <Input
+                  id="stock_quantity"
+                  type="number"
+                  value={String(formData.stock_quantity ?? 0)}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+                  disabled={!formData.track_stock}
+                  min={0}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-                <div className="space-y-2">
-                  {priceVariants.map((row, idx) => (
-                    <div key={row.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
-                      <Input
-                        value={row.name}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setPriceVariants(prev => prev.map(r => r.id === row.id ? { ...r, name: v } : r));
-                        }}
-                        placeholder="Ex: P, G, GG"
+          {/* Seção de Variações Globais */}
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-lg">Variações Globais</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Selecione as variações globais que se aplicam a este produto
+              </p>
+            </CardHeader>
+            <CardContent>
+              {globalVariations.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground mb-3">Nenhuma variação global encontrada</p>
+                  <p className="text-sm text-muted-foreground">
+                    Para usar variações globais, crie-as primeiro na aba "Variações Globais" da página de Produtos.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {globalVariations.map((variation: any) => (
+                    <div key={variation.id} className="flex items-start space-x-3">
+                      <Checkbox
+                        id={`variation-${variation.id}`}
+                        checked={selectedVariations.includes(variation.id)}
+
+                        onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
                       />
-                      <Input
-                        value={formatFromRaw(row.priceRaw)}
-                        onChange={(e) => {
-                          const raw = (e.target.value || '').replace(/\D/g, '') || '0';
-                          setPriceVariants(prev => prev.map(r => r.id === row.id ? { ...r, priceRaw: raw } : r));
-                        }}
-                        placeholder="0,00"
-                      />
-                      <div className="flex items-center gap-1">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === 0} onClick={() => movePriceVariantRow(row.id, -1)}>
-                          <ChevronUp className="h-4 w-4" />
-                        </Button>
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === priceVariants.length - 1} onClick={() => movePriceVariantRow(row.id, 1)}>
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setPriceVariants(prev => prev.filter(r => r.id !== row.id))}
-                          disabled={priceVariants.length <= 1}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <div className="flex-1">
+                        <Label htmlFor={`variation-${variation.id}`} className="font-medium cursor-pointer">
+                          {variation.name}
+                        </Label>
+                        {variation.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">{variation.options?.length || 0} opções</span>
+                        </div>
+                        {selectedVariations.includes(variation.id) && (
+                          <div className="flex gap-4 mt-2 flex-wrap sm:flex-nowrap">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id={`required-${variation.id}`}
+                                checked={variationSettings[variation.id]?.required || false}
+                                onCheckedChange={(checked) => handleVariationSettingChange(variation.id, 'required', checked as boolean)}
+                              />
+                              <Label htmlFor={`required-${variation.id}`}>Obrigatório</Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`min-selections-${variation.id}`}>Mín.</Label>
+                              <Input
+                                id={`min-selections-${variation.id}`}
+                                type="number"
+                                min="0"
+                                value={variationSettings[variation.id]?.min_selections ?? 0}
+                                onChange={e => handleVariationSettingChange(variation.id, 'min_selections', parseInt(e.target.value) || 0)}
+                                className="w-14 min-w-[56px] text-center appearance-none"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`max-selections-${variation.id}`}>Máx.</Label>
+                              <Input
+                                id={`max-selections-${variation.id}`}
+                                type="number"
+                                min="1"
+                                value={variationSettings[variation.id]?.max_selections ?? 1}
+                                onChange={e => handleVariationSettingChange(variation.id, 'max_selections', parseInt(e.target.value) || 1)}
+                                className="w-14 min-w-[56px] text-center appearance-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  O menor preço vira o preço base do produto. Os demais são calculados como diferença.
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+              )}
+            </CardContent>
+          </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="stock_quantity" className="text-boracume-orange">Estoque</Label>
-            <Input
-              id="stock_quantity"
-              type="number"
-              value={String(formData.stock_quantity ?? 0)}
-              onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-              className="border-boracume-orange"
-              disabled={!formData.track_stock}
-              min={0}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="low_stock_threshold">Estoque mín.</Label>
-            <Input
-              id="low_stock_threshold"
-              type="number"
-              value={String(formData.low_stock_threshold ?? 0)}
-              onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-              disabled={!formData.track_stock}
-              min={0}
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowCost(v => !v)}>+ Custo</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowPackaging(v => !v)}>+ Embalagem</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowSku(v => !v)}>+ SKU</Button>
-        </div>
-
-        {showCost && (
-          <div className="space-y-1">
-            <Label>Custo</Label>
-            <Input
-              value={formatFromRaw(costRaw)}
-              onChange={(e) => {
-                const raw = (e.target.value || '').replace(/\D/g, '') || '0';
-                setCostRaw(raw);
-              }}
-              placeholder="0,00"
-            />
-          </div>
-        )}
-
-        {showPackaging && (
-          <div className="space-y-1">
-            <Label>Embalagem</Label>
-            <Input
-              value={formatFromRaw(packagingRaw)}
-              onChange={(e) => {
-                const raw = (e.target.value || '').replace(/\D/g, '') || '0';
-                setPackagingRaw(raw);
-              }}
-              placeholder="0,00"
-            />
-          </div>
-        )}
-
-        {showSku && (
-          <div className="space-y-1">
-            <Label>SKU</Label>
-            <Input value={skuValue} onChange={(e) => setSkuValue(e.target.value)} placeholder="Código interno" />
-          </div>
-        )}
-
-        <div className="flex items-center justify-between py-2 border-t">
-          <div className="text-sm font-semibold">Controle de estoque</div>
-          <Switch
-            id="track_stock"
-            checked={formData.track_stock}
-            onCheckedChange={async (checked) => {
-              if (checked) {
-                const ok = await checkStockSchema();
-                if (!ok) return;
-              }
-              setFormData(prev => ({ ...prev, track_stock: checked }));
-            }}
-            disabled={false}
-          />
-        </div>
-
-        {!stockSchemaSupported && (
-          <div className="text-sm text-red-600 border rounded-lg p-3">
-            Controle de estoque ainda não está habilitado no banco.
-          </div>
-        )}
-
-        <div className="space-y-3 border-t pt-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold">Adicionar variações</div>
-              <Badge variant="secondary">{selectedVariations.length}</Badge>
-            </div>
-            <Button type="button" variant="outline" size="icon" onClick={() => setVariationsDialogOpen(true)} className="h-9 w-9">
-              <Plus className="h-4 w-4" />
+          <div className="flex gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Salvando...' : 'Salvar Produto'}
             </Button>
           </div>
-          <div className="text-xs text-muted-foreground">Ingredientes, sabores, talheres...</div>
-
-          {selectedVariations.length === 0 ? (
-            <div className="text-sm text-muted-foreground border rounded-lg p-3">
-              Nenhuma variação selecionada.
-            </div>
-          ) : (
-            <div className="border rounded-lg divide-y">
-              {selectedVariations
-                .map((id) => globalVariations.find((v: any) => v.id === id))
-                .filter(Boolean)
-                .map((v: any, idx: number) => (
-                  <div key={v.id} className="p-3">
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1 text-sm font-medium">{v.name}</div>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === 0} onClick={() => moveSelectedVariation(v.id, -1)}>
-                        <ChevronUp className="h-4 w-4" />
-                      </Button>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={idx === selectedVariations.length - 1} onClick={() => moveSelectedVariation(v.id, 1)}>
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {expandedVariationId === v.id && (
-                      <div className="mt-3 flex gap-4 flex-wrap sm:flex-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`required-${v.id}`}
-                            checked={variationSettings[v.id]?.required || false}
-                            onCheckedChange={(checked) => handleVariationSettingChange(v.id, 'required', checked as boolean)}
-                          />
-                          <Label htmlFor={`required-${v.id}`}>Obrigatório</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
-                          <Input
-                            id={`min-selections-${v.id}`}
-                            type="number"
-                            min="0"
-                            value={variationSettings[v.id]?.min_selections ?? 0}
-                            onChange={e => handleVariationSettingChange(v.id, 'min_selections', parseInt(e.target.value) || 0)}
-                            className="w-14 min-w-[56px] text-center appearance-none"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
-                          <Input
-                            id={`max-selections-${v.id}`}
-                            type="number"
-                            min="1"
-                            value={variationSettings[v.id]?.max_selections ?? 1}
-                            onChange={e => handleVariationSettingChange(v.id, 'max_selections', parseInt(e.target.value) || 1)}
-                            className="w-14 min-w-[56px] text-center appearance-none"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-
-        <Dialog open={variationsDialogOpen} onOpenChange={setVariationsDialogOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Selecionar variações</DialogTitle>
-            </DialogHeader>
-            {globalVariations.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhuma variação global cadastrada.</div>
-            ) : (
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                {globalVariations.map((variation: any) => (
-                  <div key={variation.id} className="flex items-start space-x-3">
-                    <Checkbox
-                      id={`variation-${variation.id}`}
-                      checked={selectedVariations.includes(variation.id)}
-                      onCheckedChange={(checked) => handleVariationToggle(variation.id, checked as boolean)}
-                    />
-                    <div className="flex-1">
-                      <Label htmlFor={`variation-${variation.id}`} className="font-medium cursor-pointer">
-                        {variation.name}
-                      </Label>
-                      {variation.description && (
-                        <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex justify-end">
-              <Button type="button" onClick={() => setVariationsDialogOpen(false)}>
-                Concluir
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <div className="space-y-2">
-          <Label htmlFor="category">Categoria</Label>
-          <div className="flex gap-2">
-            <Select 
-              value={formData.category} 
-              onValueChange={(value) => {
-                const category = categories.find((cat: any) => cat.name === value);
-                setFormData(prev => ({ 
-                  ...prev, 
-                  category: value,
-                  category_id: category?.id || null
-                }));
-              }}
-            >
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category: any) => (
-                  <SelectItem key={category.id} value={category.name}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
-              <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="icon">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Criar Nova Categoria</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-category">Nome da Categoria</Label>
-                    <Input
-                      id="new-category"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      placeholder="Digite o nome da categoria"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          createCategory();
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => {
-                        setShowCreateCategory(false);
-                        setNewCategoryName('');
-                      }}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button 
-                      type="button" 
-                      onClick={createCategory}
-                      disabled={creatingCategory || !newCategoryName.trim()}
-                    >
-                      {creatingCategory ? 'Criando...' : 'Criar'}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="available"
-              checked={formData.available}
-              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
-            />
-            <Label htmlFor="available">Disponível</Label>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="show_in_delivery"
-              checked={formData.show_in_delivery}
-              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
-            />
-            <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
-          </div>
-        </div>
-
-        <div className="flex gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar Produto'}
-          </Button>
-        </div>
-      </form>
-    </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 };
 
