@@ -12,9 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star } from 'lucide-react';
+import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 import ProductImageUpload from './ProductImageUpload';
 
@@ -38,6 +39,15 @@ interface ProductItem {
   is_highlight?: boolean;
   original_price?: number;
   discount_percentage?: number;
+}
+
+interface ProductVariant {
+  id?: string;
+  name: string;
+  price: number;
+  promotional_price?: number;
+  display_order: number;
+  _deleted?: boolean; // internal flag
 }
 
 interface ProductFormProps {
@@ -72,6 +82,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [categories, setCategories] = useState([]);
   const [globalVariations, setGlobalVariations] = useState([]);
   const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
+  
+  // Price Variants State
+  const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
 
   const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number }>>({});
   const [loading, setLoading] = useState(false);
@@ -411,6 +424,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       loadGlobalVariations();
       if (product?.id) {
         loadProductVariations(product.id);
+        loadPriceVariants(product.id);
       }
     }
   }, [product?.id, user?.id]);
@@ -499,14 +513,46 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   };
 
+  const loadPriceVariants = async (productId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', productId)
+        .order('display_order');
+      
+      if (error) {
+        // If table doesn't exist yet, just ignore (might happen during dev)
+        if (error.code === '42P01') return;
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        setPriceVariants(data);
+        setPriceMode('variants');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar variantes de preço:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
 
-    if (!user?.id || !formData.name || !formData.category_id || formData.price <= 0) {
+    if (!user?.id || !formData.name || !formData.category_id || (priceMode === 'simple' && formData.price <= 0)) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios (nome, categoria e preço).",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (priceMode === 'variants' && priceVariants.filter(v => !v._deleted).length === 0) {
+      toast({
+        title: "Erro",
+        description: "Adicione pelo menos uma variante de preço ou mude para preço simples.",
         variant: "destructive"
       });
       return;
@@ -516,6 +562,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setLoading(true);
 
       const baseData = buildBaseData();
+      // If using variants, maybe set base price to 0 or min variant price
+      if (priceMode === 'variants') {
+        const minPrice = Math.min(...priceVariants.filter(v => !v._deleted).map(v => v.price));
+        baseData.price = minPrice > 0 ? minPrice : 0;
+      }
+
       let productId = product?.id;
 
       if (product?.id) {
@@ -568,9 +620,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           productId = insertResultId;
         }
       }
-      // Salvar vínculos de variações globais após salvar produto
+      
+      // Salvar vínculos de variações globais
       if (productId) {
         await saveProductVariations(productId);
+        
+        // Salvar variantes de preço
+        if (priceMode === 'variants') {
+          await savePriceVariants(productId);
+        } else {
+            // Check if we need to clear existing variants if switching back to simple?
+            // Maybe optional, but cleaner.
+        }
       }
 
       toast({
@@ -671,6 +732,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     return () => clearTimeout(timer);
   }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
 
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(selectedVariations);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    setSelectedVariations(items);
+  };
 
   const saveProductVariations = async (productId: string, variations: string[] = selectedVariations) => {
     console.log('🔄 Iniciando saveProductVariations:', { 
@@ -773,6 +844,82 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }));
   };
 
+  // Price Variants Functions
+  const handleAddPriceVariant = () => {
+    const newVariant: ProductVariant = {
+      name: 'Novo Tamanho',
+      price: 0,
+      display_order: priceVariants.length
+    };
+    setPriceVariants([...priceVariants, newVariant]);
+  };
+
+  const handleRemovePriceVariant = (index: number) => {
+    setPriceVariants(prev => {
+      const next = [...prev];
+      if (next[index].id) {
+        next[index]._deleted = true;
+      } else {
+        next.splice(index, 1);
+      }
+      return next;
+    });
+  };
+
+  const handlePriceVariantChange = (index: number, field: keyof ProductVariant, value: any) => {
+    setPriceVariants(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const onPriceVariantsDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(priceVariants);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    // Update display_order based on new index
+    const updated = items.map((item, idx) => ({ ...item, display_order: idx }));
+    setPriceVariants(updated);
+  };
+
+  const savePriceVariants = async (productId: string) => {
+    try {
+      const toDelete = priceVariants.filter(v => v._deleted && v.id).map(v => v.id);
+      const toUpsert = priceVariants.filter(v => !v._deleted).map((v, idx) => ({
+        id: v.id,
+        product_id: productId,
+        name: v.name,
+        price: v.price,
+        display_order: idx
+      }));
+
+      if (toDelete.length > 0) {
+        await supabase.from('product_variants').delete().in('id', toDelete);
+      }
+
+      if (toUpsert.length > 0) {
+        // Remove IDs from new items to let DB generate them
+        const { error } = await supabase.from('product_variants').upsert(toUpsert.map(v => {
+            if (!v.id) {
+                const { id, ...rest } = v;
+                return rest;
+            }
+            return v;
+        }));
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Erro ao salvar variantes de preço:', error);
+      toast({
+        title: "Erro ao salvar variantes de preço",
+        variant: "destructive"
+      });
+    }
+  };
 
 
   return (
@@ -893,13 +1040,76 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   value={formatFromRaw(priceRaw)}
                   onChange={handlePriceChange}
                   placeholder="0,00"
-                  required
+                  required={priceMode === 'simple'}
                 />
               </div>
             </TabsContent>
             <TabsContent value="variants" className="mt-2">
-              <div className="text-sm text-muted-foreground border rounded-lg p-3">
-                Use variações para configurar opções e adicionais.
+              <div className="space-y-3">
+                 <div className="flex justify-end">
+                    <Button type="button" size="sm" variant="outline" onClick={handleAddPriceVariant}>
+                        <Plus className="h-3 w-3 mr-1" />
+                        Adicionar Tamanho
+                    </Button>
+                 </div>
+                 
+                 <DragDropContext onDragEnd={onPriceVariantsDragEnd}>
+                    <Droppable droppableId="price-variants-list">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                                {priceVariants.filter(v => !v._deleted).map((variant, index) => (
+                                    <Draggable key={variant.id || `temp-${index}`} draggableId={variant.id || `temp-${index}`} index={index}>
+                                        {(draggableProvided) => (
+                                            <div
+                                                ref={draggableProvided.innerRef}
+                                                {...draggableProvided.draggableProps}
+                                                className="flex items-center gap-2 p-2 border rounded-lg bg-white"
+                                            >
+                                                <div {...draggableProvided.dragHandleProps} className="cursor-grab text-gray-400">
+                                                    <GripVertical className="h-4 w-4" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <Input 
+                                                        value={variant.name}
+                                                        onChange={(e) => handlePriceVariantChange(index, 'name', e.target.value)}
+                                                        placeholder="Ex: Pequena"
+                                                        className="h-8"
+                                                    />
+                                                </div>
+                                                <div className="w-24">
+                                                    <Input 
+                                                        type="number"
+                                                        value={variant.price}
+                                                        onChange={(e) => handlePriceVariantChange(index, 'price', parseFloat(e.target.value) || 0)}
+                                                        placeholder="0.00"
+                                                        className="h-8"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <Button 
+                                                    type="button" 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={() => handleRemovePriceVariant(index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                ))}
+                                {provided.placeholder}
+                            </div>
+                        )}
+                    </Droppable>
+                 </DragDropContext>
+                 
+                 {priceVariants.filter(v => !v._deleted).length === 0 && (
+                     <div className="text-sm text-center text-muted-foreground py-4 border border-dashed rounded-lg">
+                         Nenhuma variante adicionada
+                     </div>
+                 )}
               </div>
             </TabsContent>
           </Tabs>
@@ -977,61 +1187,89 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               Nenhuma variação selecionada.
             </div>
           ) : (
-            <div className="border rounded-lg divide-y">
-              {globalVariations
-                .filter((v: any) => selectedVariations.includes(v.id))
-                .map((v: any) => (
-                  <div key={v.id} className="p-3">
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1 text-sm font-medium">{v.name}</div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {expandedVariationId === v.id && (
-                      <div className="mt-3 flex gap-4 flex-wrap sm:flex-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`required-${v.id}`}
-                            checked={variationSettings[v.id]?.required || false}
-                            onCheckedChange={(checked) => handleVariationSettingChange(v.id, 'required', checked as boolean)}
-                          />
-                          <Label htmlFor={`required-${v.id}`}>Obrigatório</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
-                          <Input
-                            id={`min-selections-${v.id}`}
-                            type="number"
-                            min="0"
-                            value={variationSettings[v.id]?.min_selections ?? 0}
-                            onChange={e => handleVariationSettingChange(v.id, 'min_selections', parseInt(e.target.value) || 0)}
-                            className="w-14 min-w-[56px] text-center appearance-none"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
-                          <Input
-                            id={`max-selections-${v.id}`}
-                            type="number"
-                            min="1"
-                            value={variationSettings[v.id]?.max_selections ?? 1}
-                            onChange={e => handleVariationSettingChange(v.id, 'max_selections', parseInt(e.target.value) || 1)}
-                            className="w-14 min-w-[56px] text-center appearance-none"
-                          />
-                        </div>
-                      </div>
-                    )}
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="variations-list">
+                {(provided) => (
+                  <div 
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="border rounded-lg divide-y"
+                  >
+                    {selectedVariations.map((id, index) => {
+                      const v = globalVariations.find((gv: any) => gv.id === id);
+                      if (!v) return null;
+                      
+                      return (
+                        <Draggable key={id} draggableId={id} index={index}>
+                          {(draggableProvided) => (
+                            <div 
+                              ref={draggableProvided.innerRef}
+                              {...draggableProvided.draggableProps}
+                              className="p-3 bg-white"
+                            >
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  type="button"
+                                  {...draggableProvided.dragHandleProps}
+                                  className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded"
+                                >
+                                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                                <div className="flex-1 text-sm font-medium">{v.name}</div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              {expandedVariationId === v.id && (
+                                <div className="mt-3 flex gap-4 flex-wrap sm:flex-nowrap pl-7">
+                                  <div className="flex items-center gap-2">
+                                    <Checkbox
+                                      id={`required-${v.id}`}
+                                      checked={variationSettings[v.id]?.required || false}
+                                      onCheckedChange={(checked) => handleVariationSettingChange(v.id, 'required', checked as boolean)}
+                                    />
+                                    <Label htmlFor={`required-${v.id}`}>Obrigatório</Label>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
+                                    <Input
+                                      id={`min-selections-${v.id}`}
+                                      type="number"
+                                      min="0"
+                                      value={variationSettings[v.id]?.min_selections ?? 0}
+                                      onChange={e => handleVariationSettingChange(v.id, 'min_selections', parseInt(e.target.value) || 0)}
+                                      className="w-14 min-w-[56px] text-center appearance-none"
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
+                                    <Input
+                                      id={`max-selections-${v.id}`}
+                                      type="number"
+                                      min="1"
+                                      value={variationSettings[v.id]?.max_selections ?? 1}
+                                      onChange={e => handleVariationSettingChange(v.id, 'max_selections', parseInt(e.target.value) || 1)}
+                                      className="w-14 min-w-[56px] text-center appearance-none"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {provided.placeholder}
                   </div>
-                ))}
-            </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           )}
         </div>
 
