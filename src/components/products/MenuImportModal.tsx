@@ -26,6 +26,7 @@ interface ImportedProduct {
   name: string;
   price: number;
   description?: string;
+  image_url?: string;
   variants?: ImportedVariant[];
 }
 
@@ -198,6 +199,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     name: product.name,
                     price: product.price,
                     description: product.description || '',
+                    image_url: product.image_url,
                     category: category.name || 'Geral',
                     category_id: categoryId,
                     available: true

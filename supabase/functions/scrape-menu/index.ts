@@ -33,6 +33,7 @@ serve(async (req) => {
               "name": "Nome do Produto",
               "description": "Descrição detalhada",
               "price": 10.50,
+              "image_url": "URL da imagem (se encontrada no site)",
               "variants": [
                 { "name": "Variação (Ex: Lata 350ml)", "price": 5.00 },
                 { "name": "Variação (Ex: 600ml)", "price": 7.00 }
@@ -103,7 +104,8 @@ serve(async (req) => {
     2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants". O "price" do item principal pode ser o menor preço.
     3. Se não houver variações, deixe o array "variants" vazio ou null.
     4. Converta preços para número (ponto flutuante).
-    5. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
+    5. IMPORTANTE: Tente extrair URLs de imagens dos produtos se estiver analisando um site ou HTML. Se for imagem enviada pelo usuário, ignore image_url.
+    6. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
     `;
 
     if (imageBase64) {
