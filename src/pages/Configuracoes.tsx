@@ -25,6 +25,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams } from 'react-router-dom';
 
 
+import { IfoodLogo } from '@/components/icons/IfoodLogo';
+
 const Configuracoes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { subscription } = useAuth();
@@ -132,7 +134,11 @@ const Configuracoes: React.FC = () => {
 
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
-          <TabsTrigger value="ifood">iFood</TabsTrigger>
+          <TabsTrigger value="ifood">
+            <div className="flex items-center gap-2">
+              <IfoodLogo className="h-4 w-auto" />
+            </div>
+          </TabsTrigger>
           <TabsTrigger value="users">Usuários e Equipe</TabsTrigger>
 
           {hasMarketingFeature() && (

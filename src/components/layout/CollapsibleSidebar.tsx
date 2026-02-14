@@ -144,7 +144,7 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
         { to: '/configuracoes?tab=pix', label: 'PIX' },
-        { to: '/configuracoes?tab=ifood', label: 'iFood' },
+        { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div> },
         { to: '/configuracoes?tab=users', label: 'Usuários e Equipe' },
       ]
     },
@@ -269,7 +269,7 @@ const CollapsibleSidebar = () => {
                         ? 'bg-orange-100 text-orange-900'
                         : 'text-gray-700 hover:bg-orange-50'
                     }`}
-                    title={link.label}
+                    title={typeof link.label === 'string' ? link.label : ''}
                   >
                     <Icon size={18} className="flex-shrink-0" />
                   </Link>
@@ -295,7 +295,7 @@ const CollapsibleSidebar = () => {
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
-                      <span className="truncate">{link.label}</span>
+                      <span className="truncate flex items-center">{link.label}</span>
                     </Link>
                   </li>
                 );
@@ -330,7 +330,7 @@ const CollapsibleSidebar = () => {
                                   : 'text-gray-700 hover:bg-orange-100'
                               }`}
                             >
-                              <span className="truncate">{item.label}</span>
+                              <span className="truncate flex items-center">{item.label}</span>
                             </Link>
                           );
                         })}
