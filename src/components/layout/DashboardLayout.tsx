@@ -16,9 +16,8 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   const { isOpen, isMobile, closeSidebar } = useSidebar();
   const { user, profile, loading, refreshUser } = useAuth();
 
-  // Se estiver carregando ou tiver usuário mas ainda não carregou o perfil
-  // Exibe um loader centralizado para evitar "flickering" da tela de onboarding
-  if (loading || (user && !profile)) {
+  // Se estiver carregando
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
@@ -30,8 +29,8 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   }
 
   // Verifica se o usuário precisa passar pelo onboarding
-  // Se o perfil existe mas onboarding_completed é falso, mostra o Wizard
-  if (user && profile && !profile.onboarding_completed) {
+  // Se o perfil não existe OU onboarding_completed é falso, mostra o Wizard
+  if (user && (!profile || !profile.onboarding_completed)) {
     return <OnboardingWizard onComplete={refreshUser} />;
   }
 

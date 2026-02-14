@@ -63,10 +63,11 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
     setIsLoading(true);
     try {
-      // Update profile with restaurant info
+      // Update or Create profile with restaurant info
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: user.id,
           restaurant_name: values.restaurantName,
           address: values.address,
           phone: values.phone,
@@ -75,7 +76,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           onboarding_completed: true,
           updated_at: new Date().toISOString()
         })
-        .eq('id', user.id);
+        .select();
 
       if (profileError) throw profileError;
 
