@@ -99,7 +99,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           opening_hours: openingHoursFinal,
           description: values.description,
           onboarding_completed: true,
-          updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .select();
 
