@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,8 @@ import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ChefHat, Store, CheckCircle } from 'lucide-react';
+import { ChefHat, Store, CheckCircle, Utensils, Wand2, Plus } from 'lucide-react';
+import MenuImportModal from '../products/MenuImportModal';
 
 const onboardingSchema = z.object({
   restaurantType: z.string().min(1, 'Tipo de restaurante é obrigatório'),
@@ -31,7 +32,9 @@ interface OnboardingWizardProps {
 }
 
 const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
+  const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const { user, profile } = useAuth();
   const { toast } = useToast();
 
@@ -72,7 +75,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
     { value: 'dom', label: 'Domingo' },
   ];
 
-  const onSubmit = async (values: OnboardingFormValues) => {
+  const handleStep1Submit = async (values: OnboardingFormValues) => {
     if (!user) return;
 
     setIsLoading(true);
@@ -91,8 +94,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         .from('profiles')
         .upsert({
           id: user.id,
-          // restaurant_name is removed as per request, using existing profile name or keeping it as is
-          // If no restaurant name exists, fallback to 'Restaurante' to satisfy constraints if any
           restaurant_name: profile?.restaurant_name || 'Restaurante',
           address: values.address,
           phone: values.phone,
@@ -105,9 +106,44 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       if (profileError) throw profileError;
 
-      // Force profile refresh immediately after update
-      await onComplete();
+      // Create default WhatsApp settings immediately
+      await supabase
+        .from('whatsapp_settings')
+        .upsert({
+          user_id: user.id,
+          phone_number: values.phone,
+          default_message: `Olá! Bem-vindo ao ${profile?.restaurant_name || 'Restaurante'}. Como posso ajudar você hoje?`,
+          enabled: true
+        });
+
+      // Move to Step 2
+      setStep(2);
       
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: 'Erro na configuração',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const finishWizard = async () => {
+    try {
+       await onComplete();
+       window.location.reload();
+    } catch (error) {
+       console.error(error);
+    }
+  };
+
+  const createSampleProducts = async (type: string) => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
       // Create default categories using product_categories table
       const defaultCategories = [
         { name: 'Pratos Principais', description: 'Pratos principais do cardápio' },
@@ -144,84 +180,85 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           active: true
         });
 
-      // Create sample products based on restaurant type
-      if (values.restaurantType === 'Pizzaria') {
-        await createSampleProducts(user.id, 'pizza', categoryIds);
-      } else if (values.restaurantType === 'Hamburgueria') {
-        await createSampleProducts(user.id, 'burger', categoryIds);
-      } else {
-        await createSampleProducts(user.id, 'general', categoryIds);
+      // Sample Data Logic
+      const sampleProducts = {
+        pizza: [
+          { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão', category: 'Pratos Principais' },
+          { name: 'Pizza Pepperoni', price: 29.90, description: 'Molho de tomate, mussarela e pepperoni', category: 'Pratos Principais' },
+          { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
+        ],
+        burger: [
+          { name: 'Hambúrguer Clássico', price: 18.90, description: 'Pão, carne, queijo, alface e tomate', category: 'Pratos Principais' },
+          { name: 'Batata Frita', price: 8.90, description: 'Porção de batata frita crocante', category: 'Pratos Principais' },
+          { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
+        ],
+        general: [
+          { name: 'Prato do Dia', price: 15.90, description: 'Prato especial do dia', category: 'Pratos Principais' },
+          { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
+          { name: 'Pudim', price: 6.90, description: 'Pudim de leite condensado', category: 'Sobremesas' },
+        ]
+      };
+
+      // Determine key for sample products
+      let typeKey = 'general';
+      if (type.toLowerCase().includes('pizza')) typeKey = 'pizza';
+      if (type.toLowerCase().includes('hamburguer') || type.toLowerCase().includes('burger')) typeKey = 'burger';
+
+      const products = sampleProducts[typeKey as keyof typeof sampleProducts] || sampleProducts.general;
+      
+      for (const product of products) {
+        const categoryId = categoryIds[product.category];
+        if (!categoryId) continue;
+
+        const { category, ...productData } = product;
+
+        await supabase
+          .from('products')
+          .insert({
+            ...productData,
+            category: product.category,
+            category_id: categoryId,
+            user_id: user.id,
+            available: true,
+            show_in_delivery: true,
+            show_in_pdv: true,
+          });
       }
 
-      // Create default WhatsApp settings
-      await supabase
-        .from('whatsapp_settings')
-        .insert({
-          user_id: user.id,
-          phone_number: values.phone,
-          default_message: `Olá! Bem-vindo ao ${profile?.restaurant_name || 'Restaurante'}. Como posso ajudar você hoje?`,
-          enabled: true
-        });
-
       toast({
-        title: 'Configuração concluída!',
-        description: 'Seu restaurante foi configurado com sucesso. Você já pode começar a receber pedidos!',
+        title: 'Cardápio criado!',
+        description: 'Produtos de exemplo foram adicionados.',
       });
       
-      // onComplete already called above before reload
-      // Force reload only after all operations are complete
-      window.location.reload();
+      await finishWizard();
+
     } catch (error: any) {
       toast({
-        title: 'Erro na configuração',
+        title: 'Erro ao criar cardápio',
         description: error.message,
         variant: 'destructive',
       });
-    } finally {
       setIsLoading(false);
     }
   };
 
-  const createSampleProducts = async (userId: string, type: string, categoryIds: Record<string, string>) => {
-    const sampleProducts = {
-      pizza: [
-        { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão', category: 'Pratos Principais' },
-        { name: 'Pizza Pepperoni', price: 29.90, description: 'Molho de tomate, mussarela e pepperoni', category: 'Pratos Principais' },
-        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
-      ],
-      burger: [
-        { name: 'Hambúrguer Clássico', price: 18.90, description: 'Pão, carne, queijo, alface e tomate', category: 'Pratos Principais' },
-        { name: 'Batata Frita', price: 8.90, description: 'Porção de batata frita crocante', category: 'Pratos Principais' },
-        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
-      ],
-      general: [
-        { name: 'Prato do Dia', price: 15.90, description: 'Prato especial do dia', category: 'Pratos Principais' },
-        { name: 'Refrigerante Lata', price: 4.50, description: 'Refrigerante gelado 350ml', category: 'Bebidas' },
-        { name: 'Pudim', price: 6.90, description: 'Pudim de leite condensado', category: 'Sobremesas' },
-      ]
-    };
-
-    const products = sampleProducts[type as keyof typeof sampleProducts] || sampleProducts.general;
-    
-    for (const product of products) {
-      const categoryId = categoryIds[product.category];
-      if (!categoryId) continue;
-
-      // Remove category string field and use category_id
-      const { category, ...productData } = product;
-
-      await supabase
-        .from('products')
-        .insert({
-          ...productData,
-          category: product.category, // Keep original category name as string for compatibility
-          category_id: categoryId,
-          user_id: userId,
-          available: true,
-          show_in_delivery: true,
-          show_in_pdv: true,
-        });
-    }
+  const handleManualStart = async () => {
+     // Just create basic categories but no products, or simply finish
+     // Let's create basic categories to help user
+     if (!user) return;
+     setIsLoading(true);
+     try {
+        const defaultCategories = [
+            { name: 'Pratos Principais', description: 'Pratos principais do cardápio' },
+            { name: 'Bebidas', description: 'Bebidas variadas' },
+        ];
+        for (const category of defaultCategories) {
+            await supabase.from('product_categories').insert({ ...category, user_id: user.id });
+        }
+        await finishWizard();
+     } catch (error) {
+        await finishWizard();
+     }
   };
 
   return (
@@ -233,165 +270,236 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           </div>
           <CardTitle className="text-2xl">Bem-vindo ao BoraCumê!</CardTitle>
           <CardDescription>
-            Vamos configurar seu restaurante em alguns passos simples
+            {step === 1 ? 'Vamos configurar seu restaurante em alguns passos simples' : 'Como você deseja montar seu cardápio?'}
           </CardDescription>
         </CardHeader>
 
-        <CardContent>
-          <div className="mb-8">
-            <div className="flex items-center justify-center mb-2">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-boracume-orange text-white">
-                <Store className="w-5 h-5" />
+        <CardContent className="pt-6">
+          {step === 1 ? (
+            <>
+              <div className="mb-8">
+                <div className="flex items-center justify-center mb-2">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-boracume-orange text-white">
+                    <Store className="w-5 h-5" />
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h3 className="font-semibold">Informações do Restaurante</h3>
+                  <p className="text-sm text-gray-600">Passo 1 de 2</p>
+                </div>
               </div>
-            </div>
-            <div className="text-center">
-              <h3 className="font-semibold">Informações do Restaurante</h3>
-              <p className="text-sm text-gray-600">Vamos começar com as informações básicas</p>
-            </div>
-          </div>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-4">
-                
-                <FormField
-                  control={form.control}
-                  name="restaurantType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tipo de Restaurante</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o tipo" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {restaurantTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleStep1Submit)} className="space-y-6">
+                  <div className="space-y-4">
+                    
+                    <FormField
+                      control={form.control}
+                      name="restaurantType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Restaurante</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o tipo" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {restaurantTypes.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Endereço</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Endereço completo do restaurante" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Telefone</FormLabel>
-                      <FormControl>
-                        <Input placeholder="(11) 99999-9999" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <FormField
-                    control={form.control}
-                    name="openingHours"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Horário de Funcionamento</FormLabel>
-                        <FormControl>
-                          <Input placeholder="10:00 - 22:00" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="applyToAllDays"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-2 shadow-sm bg-white">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>
-                            Aplicar este horário para todos os dias
-                          </FormLabel>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="closedDay"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Dia de Folga (Loja Fechada)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormField
+                      control={form.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Endereço</FormLabel>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o dia de folga" />
-                            </SelectTrigger>
+                            <Input placeholder="Endereço completo do restaurante" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            {daysOfWeek.map((day) => (
-                              <SelectItem key={day.value} value={day.value}>
-                                {day.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone</FormLabel>
+                          <FormControl>
+                            <Input placeholder="(11) 99999-9999" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <FormField
+                        control={form.control}
+                        name="openingHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Horário de Funcionamento</FormLabel>
+                            <FormControl>
+                              <Input placeholder="10:00 - 22:00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="applyToAllDays"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-2 shadow-sm bg-white">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>
+                                Aplicar este horário para todos os dias
+                              </FormLabel>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="closedDay"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Dia de Folga (Loja Fechada)</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o dia de folga" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {daysOfWeek.map((day) => (
+                                  <SelectItem key={day.value} value={day.value}>
+                                    {day.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Descrição (Opcional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Breve descrição do seu restaurante" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="flex justify-end">
+                      <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
+                        {isLoading ? 'Salvando...' : 'Próximo Passo'}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              </Form>
+            </>
+          ) : (
+            <div className="space-y-6">
+               <div className="mb-8">
+                <div className="flex items-center justify-center mb-2">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-600 text-white">
+                    <Utensils className="w-5 h-5" />
+                  </div>
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descrição (Opcional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Breve descrição do seu restaurante" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
-                    {isLoading ? 'Configurando...' : 'Concluir Configuração'}
-                  </Button>
+                <div className="text-center">
+                  <h3 className="font-semibold">Configuração do Cardápio</h3>
+                  <p className="text-sm text-gray-600">Escolha como deseja começar</p>
                 </div>
               </div>
-            </form>
-          </Form>
+
+              <div className="grid gap-4">
+                <Button 
+                  variant="outline" 
+                  className="h-auto p-4 flex items-center justify-start gap-4 hover:bg-orange-50 border-2 hover:border-orange-200 transition-all"
+                  onClick={() => createSampleProducts(form.getValues('restaurantType'))}
+                  disabled={isLoading}
+                >
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                    <CheckCircle className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="font-semibold text-gray-900">Criar Cardápio Automático</h4>
+                    <p className="text-sm text-gray-500">Gera categorias e produtos de exemplo baseados no seu tipo de negócio.</p>
+                  </div>
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  className="h-auto p-4 flex items-center justify-start gap-4 hover:bg-purple-50 border-2 hover:border-purple-200 transition-all"
+                  onClick={() => setShowImportModal(true)}
+                  disabled={isLoading}
+                >
+                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                    <Wand2 className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="font-semibold text-gray-900">Importar com Inteligência Artificial</h4>
+                    <p className="text-sm text-gray-500">Envie uma foto do seu cardápio ou um link (iFood/Goomer) e a IA cria tudo pra você.</p>
+                  </div>
+                </Button>
+
+                <Button 
+                  variant="ghost" 
+                  className="h-auto p-4 flex items-center justify-start gap-4 hover:bg-gray-50"
+                  onClick={handleManualStart}
+                  disabled={isLoading}
+                >
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                    <Plus className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="font-semibold text-gray-900">Começar do Zero</h4>
+                    <p className="text-sm text-gray-500">Quero cadastrar meus produtos manualmente depois.</p>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <MenuImportModal 
+        isOpen={showImportModal} 
+        onClose={() => setShowImportModal(false)} 
+        onImportComplete={finishWizard}
+      />
     </div>
   );
 };
