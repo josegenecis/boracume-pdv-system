@@ -87,13 +87,21 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         { name: 'Sobremesas', description: 'Doces e sobremesas' },
       ];
 
+      const categoryIds: Record<string, string> = {};
+
       for (const category of defaultCategories) {
-        await supabase
+        const { data: newCat } = await supabase
           .from('product_categories')
           .insert({
             ...category,
             user_id: user.id,
-          });
+          })
+          .select('id')
+          .single();
+        
+        if (newCat) {
+          categoryIds[category.name] = newCat.id;
+        }
       }
 
       // Create default delivery zone
@@ -110,11 +118,11 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       // Create sample products based on restaurant type
       if (values.restaurantType === 'Pizzaria') {
-        await createSampleProducts(user.id, 'pizza');
+        await createSampleProducts(user.id, 'pizza', categoryIds);
       } else if (values.restaurantType === 'Hamburgueria') {
-        await createSampleProducts(user.id, 'burger');
+        await createSampleProducts(user.id, 'burger', categoryIds);
       } else {
-        await createSampleProducts(user.id, 'general');
+        await createSampleProducts(user.id, 'general', categoryIds);
       }
 
       // Create default WhatsApp settings
@@ -144,7 +152,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
     }
   };
 
-  const createSampleProducts = async (userId: string, type: string) => {
+  const createSampleProducts = async (userId: string, type: string, categoryIds: Record<string, string>) => {
     const sampleProducts = {
       pizza: [
         { name: 'Pizza Margherita', price: 25.90, description: 'Molho de tomate, mussarela e manjericão', category: 'Pratos Principais' },
@@ -166,10 +174,18 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
     const products = sampleProducts[type as keyof typeof sampleProducts] || sampleProducts.general;
     
     for (const product of products) {
+      const categoryId = categoryIds[product.category];
+      if (!categoryId) continue;
+
+      // Remove category string field and use category_id
+      const { category, ...productData } = product;
+
       await supabase
         .from('products')
         .insert({
-          ...product,
+          ...productData,
+          category: product.category, // Keep original category name as string for compatibility
+          category_id: categoryId,
           user_id: userId,
           available: true,
           show_in_delivery: true,
