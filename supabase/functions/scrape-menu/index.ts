@@ -31,9 +31,10 @@ serve(async (req) => {
           "items": [
             {
               "name": "Nome do Produto",
-              "description": "Descrição detalhada",
+              "description": "Descrição detalhada (incluindo acompanhamentos)",
               "price": 10.50,
-              "image_url": "URL da imagem (se encontrada no site)",
+              "image_url": "URL da imagem (se site)",
+              "image_prompt": "Descrição visual em inglês para gerar imagem (se foto)",
               "variants": [
                 { "name": "Variação (Ex: Lata 350ml)", "price": 5.00 },
                 { "name": "Variação (Ex: 600ml)", "price": 7.00 }
@@ -80,7 +81,12 @@ serve(async (req) => {
       }
       
     } else if (imageBase64) {
-      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços, organizados por CATEGORIAS.`;
+      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços, organizados por CATEGORIAS.
+      
+      IMPORTANTE SOBRE IMAGENS:
+      1. Se o cardápio tiver fotos dos pratos, você deve GERAR uma descrição visual detalhada para cada item no campo "image_prompt".
+      2. Exemplo de image_prompt: "A delicious X-Bacon burger with melted cheese, crispy bacon, lettuce, and tomato on a sesame bun, professional food photography style."
+      3. Se o produto tiver acompanhamentos listados (ex: "acompanha fritas"), inclua no "description" ou crie uma variação se tiver preço extra.`;
 
       contentPayload = [
         {
@@ -101,11 +107,12 @@ serve(async (req) => {
     1. Retorne APENAS um JSON válido seguindo estritamente esta estrutura:
     ${jsonStructure}
     
-    2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants". O "price" do item principal pode ser o menor preço.
-    3. Se não houver variações, deixe o array "variants" vazio ou null.
+    2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants".
+    3. Se houver opcionais ou acompanhamentos com preço (ex: "Adicional de Bacon +R$2"), trate como variação.
     4. Converta preços para número (ponto flutuante).
-    5. IMPORTANTE: Tente extrair URLs de imagens dos produtos se estiver analisando um site ou HTML. Se for imagem enviada pelo usuário, ignore image_url.
-    6. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
+    5. IMPORTANTE: Tente extrair URLs de imagens dos produtos se estiver analisando um site ou HTML.
+    6. Se for imagem enviada pelo usuário, PREENCHA o campo "image_prompt" com uma descrição rica em inglês para gerar a imagem depois.
+    7. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
     `;
 
     if (imageBase64) {
