@@ -106,9 +106,6 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       // Force profile refresh immediately after update
       await onComplete();
       
-      // Additional check to ensure we break the loop
-      window.location.reload();
-
       // Create default categories using product_categories table
       const defaultCategories = [
         { name: 'Pratos Principais', description: 'Pratos principais do cardápio' },
@@ -170,6 +167,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       });
       
       // onComplete already called above before reload
+      // Force reload only after all operations are complete
+      window.location.reload();
     } catch (error: any) {
       toast({
         title: 'Erro na configuração',
