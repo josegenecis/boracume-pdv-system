@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
 
+import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -25,6 +26,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Bot,
+  User,
+  LogOut,
 
   Download,
   X
@@ -32,8 +35,14 @@ import {
 
 const CollapsibleSidebar = () => {
   const { isOpen, isMobile, toggleSidebar, closeSidebar } = useSidebar();
-  const { profile, user } = useAuth();
+  const { profile, user, signOut } = useAuth();
   const [ifoodStatus, setIfoodStatus] = useState<'online' | 'offline' | 'paused' | null>(null);
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   const location = useLocation();
 
@@ -60,7 +69,7 @@ const CollapsibleSidebar = () => {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'ifood_settings', filter: `user_id=eq.${user.id}` },
           (payload: any) => {
-            if (payload.new && payload.new.status) {
+            if (payload.new) {
               setIfoodStatus(payload.new.status);
             }
           }
@@ -253,7 +262,8 @@ const CollapsibleSidebar = () => {
         </Button>
       </div>
       
-      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide">
+      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide flex flex-col justify-between">
+        <div className="flex-1">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
             {[...mainLinks, ...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
@@ -365,6 +375,61 @@ const CollapsibleSidebar = () => {
             </ul>
           </div>
         )}
+        </div>
+
+        <div className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2' : 'px-0'}`}>
+          {isOpen ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-semibold">
+                  {user?.email?.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate" title={user?.email}>
+                    {user?.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {profile?.restaurant_name || 'Usuário'}
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={handleSignOut}
+              >
+                <LogOut size={18} className="mr-2" />
+                Sair do sistema
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full h-10 p-0 rounded-none text-gray-500 hover:text-gray-900"
+                onClick={() => {
+                  if (isMobile) {
+                    closeSidebar();
+                  }
+                  navigate('/configuracoes?tab=profile');
+                }}
+                title={user?.email}
+              >
+                <User size={18} />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full h-10 p-0 rounded-none text-red-500 hover:text-red-700 hover:bg-red-50"
+                onClick={handleSignOut}
+                title="Sair"
+              >
+                <LogOut size={18} />
+              </Button>
+            </div>
+          )}
+        </div>
       </nav>
     </aside>
   );

@@ -109,14 +109,6 @@ const FixedHeader = () => {
           <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
-          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/configuracoes')}>
-            <User size={16} />
-            <span className="hidden md:inline truncate max-w-32 ml-2">{user?.email}</span>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleSignOut} className="p-2">
-
-            <LogOut size={18} />
-          </Button>
         </div>
       </div>
     </header>
