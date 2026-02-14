@@ -17,11 +17,31 @@ serve(async (req) => {
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openAiKey) {
-      throw new Error('Chave da API OpenAI não configurada.');
+      throw new Error('Chave da API OpenAI não configurada. Configure a chave OPENAI_API_KEY nos segredos do Supabase.');
     }
 
     let userPrompt = '';
     let contentPayload: any[] = [];
+
+    const jsonStructure = `
+    {
+      "categories": [
+        {
+          "name": "Nome da Categoria (Ex: Bebidas, Lanches)",
+          "items": [
+            {
+              "name": "Nome do Produto",
+              "description": "Descrição detalhada",
+              "price": 10.50,
+              "variants": [
+                { "name": "Variação (Ex: Lata 350ml)", "price": 5.00 },
+                { "name": "Variação (Ex: 600ml)", "price": 7.00 }
+              ]
+            }
+          ]
+        }
+      ]
+    }`;
 
     if (url) {
       try {
@@ -32,7 +52,6 @@ serve(async (req) => {
 
       console.log(`Fetching URL via Jina Reader: ${url}`);
       
-      // Use jina.ai reader to convert complex SPA sites (like iFood) to LLM-friendly markdown
       const jinaUrl = `https://r.jina.ai/${url}`;
       
       const response = await fetch(jinaUrl, {
@@ -44,47 +63,25 @@ serve(async (req) => {
       });
 
       if (!response.ok) {
-        // Fallback to direct fetch if Jina fails
         console.log('Jina Reader failed, falling back to direct fetch...');
         const directResponse = await fetch(url);
         if (!directResponse.ok) throw new Error(`Falha ao acessar o site: ${response.status}`);
         const html = await directResponse.text();
-        // Simple HTML cleanup
-        userPrompt = `Analise o HTML bruto abaixo. Tente encontrar produtos e preços. Texto: ${html.slice(0, 15000)}`;
+        userPrompt = `Analise o HTML bruto abaixo. Extraia o cardápio completo. Texto: ${html.slice(0, 15000)}`;
       } else {
         const markdown = await response.text();
-        // Limit context to avoid token limits, but keep enough for menu
-        const cleanMarkdown = markdown.slice(0, 25000); 
+        const cleanMarkdown = markdown.slice(0, 35000); 
         
-        userPrompt = `Analise este cardápio (formato Markdown). Extraia TODOS os produtos alimentícios e bebidas com seus preços.
-        Retorne APENAS um JSON válido com a lista de produtos.
-        Formato: { "products": [{ "name": "...", "price": 10.50, "description": "..." }] }
+        userPrompt = `Analise este cardápio (formato Markdown). Extraia TODOS os produtos, organizados por CATEGORIAS.
         
         Cardápio:
         ${cleanMarkdown}`;
       }
       
-      contentPayload = [{ type: "text", text: userPrompt }];
-
     } else if (imageBase64) {
-      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços.
-      Retorne APENAS um JSON válido.
-      Exemplo de retorno esperado:
-      {
-        "products": [
-          { "name": "Coca Cola", "price": 5.00, "description": "Lata 350ml" },
-          { "name": "X-Burger", "price": 20.00 }
-        ]
-      }
-      
-      REGRAS:
-      1. Se houver múltiplos preços, crie variações no nome.
-      2. Converta preços para número (ponto flutuante).
-      3. Se a imagem estiver ruim ou não tiver produtos, retorne { "products": [] }.
-      4. NÃO adicione texto antes ou depois do JSON. Apenas o JSON puro.`;
+      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços, organizados por CATEGORIAS.`;
 
       contentPayload = [
-        { type: "text", text: userPrompt },
         {
           type: "image_url",
           image_url: {
@@ -94,6 +91,25 @@ serve(async (req) => {
       ];
     } else {
       throw new Error('URL ou Imagem é obrigatório.');
+    }
+
+    // Append instructions to prompt
+    userPrompt += `
+    
+    REGRAS ESTRITAS DE SAÍDA:
+    1. Retorne APENAS um JSON válido seguindo estritamente esta estrutura:
+    ${jsonStructure}
+    
+    2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants". O "price" do item principal pode ser o menor preço.
+    3. Se não houver variações, deixe o array "variants" vazio ou null.
+    4. Converta preços para número (ponto flutuante).
+    5. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
+    `;
+
+    if (imageBase64) {
+      contentPayload.unshift({ type: "text", text: userPrompt });
+    } else {
+      contentPayload = [{ type: "text", text: userPrompt }];
     }
 
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -107,7 +123,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'Você é um assistente JSON. Retorne apenas JSON.'
+            content: 'Você é um assistente especialista em estruturar dados de cardápios. Retorne apenas JSON.'
           },
           {
             role: 'user',
@@ -132,16 +148,12 @@ serve(async (req) => {
 
     let parsedData;
     try {
-      // Try parsing pure JSON
       parsedData = JSON.parse(rawContent);
     } catch (e) {
-      // Try cleaning markdown
       try {
         const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
         parsedData = JSON.parse(cleanJson);
       } catch (e2) {
-        console.error('JSON Parse Error:', e2);
-        // Return the raw text so the user can see what happened
         return new Response(
           JSON.stringify({ 
             success: false, 
@@ -156,14 +168,22 @@ serve(async (req) => {
       }
     }
 
-    const products = Array.isArray(parsedData) ? parsedData : (parsedData.products || parsedData.items || []);
+    // Normalize response
+    let categories = [];
+    if (parsedData.categories) {
+      categories = parsedData.categories;
+    } else if (parsedData.products) {
+      // If AI returned flat list, group into "Geral"
+      categories = [{ name: "Geral", items: parsedData.products }];
+    } else if (Array.isArray(parsedData)) {
+       categories = [{ name: "Geral", items: parsedData }];
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        products: products,
-        count: products.length,
-        raw_response: rawContent // Return this for debugging
+        categories: categories,
+        raw_response: rawContent
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -177,7 +197,7 @@ serve(async (req) => {
       JSON.stringify({ success: false, error: error.message }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 // Return 200 to prevent CORS errors masking the real error
+        status: 200 
       }
     )
   }

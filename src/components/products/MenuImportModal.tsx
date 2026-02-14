@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -5,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, AlertTriangle, CheckCircle2, Wand2 } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +15,23 @@ interface MenuImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete: () => void;
+}
+
+interface ImportedVariant {
+  name: string;
+  price: number;
+}
+
+interface ImportedProduct {
+  name: string;
+  price: number;
+  description?: string;
+  variants?: ImportedVariant[];
+}
+
+interface ImportedCategory {
+  name: string;
+  items: ImportedProduct[];
 }
 
 const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete }) => {
@@ -29,7 +47,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
   const parseMenuText = (text: string) => {
     const lines = text.split('\n');
-    const products = [];
+    const products: ImportedProduct[] = [];
     
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -46,7 +64,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       }
     }
     
-    return products;
+    return [{ name: "Geral", items: products }];
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,7 +90,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Resize to max 1600px (increased from 1024px for better OCR)
           const MAX_SIZE = 1600;
           let width = img.width;
           let height = img.height;
@@ -93,7 +110,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Compress to JPEG 0.85 quality (better text clarity)
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
           resolve(compressedBase64);
         };
@@ -106,107 +122,109 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const handleImport = async () => {
     setLoading(true);
     try {
-      let productsToImport: { name: string; price: number, description?: string }[] = [];
+      let categoriesToImport: ImportedCategory[] = [];
 
       if (activeTab === 'text') {
         if (!textInput.trim()) throw new Error('Cole o texto do cardápio.');
-        productsToImport = parseMenuText(textInput);
+        categoriesToImport = parseMenuText(textInput);
       } 
-      else if (activeTab === 'link') {
-        if (!urlInput.trim()) throw new Error('Insira um link válido.');
+      else if (activeTab === 'link' || activeTab === 'image') {
+        let payload = {};
         
-        console.log('Enviando requisição para scrape-menu (Link)...');
-        
-        // Direct fetch to bypass potential client lib issues
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        
-        const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/scrape-menu', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({ url: urlInput })
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erro no servidor (${response.status}): ${errorText}`);
+        if (activeTab === 'link') {
+            if (!urlInput.trim()) throw new Error('Insira um link válido.');
+            payload = { url: urlInput };
+        } else {
+            if (!selectedImage) throw new Error('Selecione uma imagem.');
+            const base64 = await convertFileToBase64(selectedImage);
+            payload = { imageBase64: base64 };
         }
 
-        const data = await response.json();
-
-        if (!data.success) throw new Error(data.error || 'Falha ao ler o site.');
-        
-        productsToImport = data.products;
-      } 
-      else if (activeTab === 'image') {
-        if (!selectedImage) throw new Error('Selecione uma imagem do cardápio.');
-
-        console.log('Processando imagem...');
-        // Convert image to base64
-        const base64Image = await convertFileToBase64(selectedImage);
-        console.log('Imagem convertida, enviando para API...');
-
-        // Direct fetch
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-
-        const response = await fetch('https://gcfyrcpugmducptktjic.supabase.co/functions/v1/scrape-menu', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({ imageBase64: base64Image })
+        console.log('Enviando para IA...');
+        const { data, error } = await supabase.functions.invoke('scrape-menu', {
+            body: payload
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erro no servidor (${response.status}): ${errorText}`);
+        if (error) {
+            console.error('Erro Function:', error);
+            throw new Error('Falha ao conectar com a IA. Verifique se a chave OPENAI_API_KEY está configurada no Supabase.');
         }
-
-        const data = await response.json();
 
         if (!data.success) {
-          console.error('Erro Backend:', data);
-          // Show raw response if available to help debugging
-          if (data.raw_response) {
-            console.log('Resposta Crua da IA:', data.raw_response);
-            throw new Error(`Erro na leitura da IA: ${data.error}. Veja o console para detalhes.`);
-          }
-          throw new Error(data.error || 'Falha ao processar imagem.');
+            throw new Error(data.error || 'A IA não conseguiu ler os dados.');
         }
 
-        if (data.products.length === 0) {
-           console.warn('Resposta vazia da IA. Raw:', data.raw_response);
-           throw new Error('A IA não encontrou produtos. Tente uma foto mais clara ou com menos itens.');
+        categoriesToImport = data.categories || [];
+      }
+
+      if (categoriesToImport.length === 0) {
+        throw new Error('Nenhum produto encontrado.');
+      }
+
+      let totalProducts = 0;
+
+      // Process Categories and Products
+      for (const category of categoriesToImport) {
+        let categoryId: string | null = null;
+
+        // 1. Create/Get Category
+        if (category.name && category.name !== 'Geral') {
+            const { data: existingCat } = await supabase
+                .from('product_categories')
+                .select('id')
+                .eq('user_id', user?.id)
+                .eq('name', category.name)
+                .maybeSingle();
+            
+            if (existingCat) {
+                categoryId = existingCat.id;
+            } else {
+                const { data: newCat, error: catError } = await supabase
+                    .from('product_categories')
+                    .insert({ user_id: user?.id, name: category.name })
+                    .select('id')
+                    .single();
+                
+                if (!catError && newCat) categoryId = newCat.id;
+            }
         }
 
-        productsToImport = data.products;
+        // 2. Insert Products
+        for (const product of category.items) {
+            const { data: newProduct, error: prodError } = await supabase
+                .from('products')
+                .insert({
+                    user_id: user?.id,
+                    name: product.name,
+                    price: product.price,
+                    description: product.description || '',
+                    category: category.name || 'Geral',
+                    category_id: categoryId,
+                    available: true
+                })
+                .select('id')
+                .single();
+
+            if (!prodError && newProduct) {
+                totalProducts++;
+
+                // 3. Insert Variants if any
+                if (product.variants && product.variants.length > 0) {
+                    const variantsData = product.variants.map(v => ({
+                        product_id: newProduct.id,
+                        name: v.name,
+                        price: v.price
+                    }));
+
+                    await (supabase as any).from('product_variants').insert(variantsData);
+                }
+            }
+        }
       }
-
-      if (productsToImport.length === 0) {
-        throw new Error('Nenhum produto identificado. Tente novamente ou verifique a imagem/link.');
-      }
-
-      const productsData = productsToImport.map(p => ({
-        user_id: user?.id,
-        name: p.name,
-        price: p.price,
-        description: p.description || '',
-        available: true,
-        category_id: null
-      }));
-
-      const { error } = await supabase.from('products').insert(productsData);
-      
-      if (error) throw error;
 
       toast({
         title: 'Importação Concluída!',
-        description: `${productsToImport.length} produtos foram importados com Inteligência Artificial.`,
+        description: `${totalProducts} produtos importados com sucesso.`,
       });
       
       onImportComplete();
@@ -218,14 +236,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       
     } catch (error: any) {
       console.error(error);
-      let errorMessage = error.message;
-      if (errorMessage.includes('OPENAI_API_KEY')) {
-        errorMessage = "Configuração necessária: Adicione a chave OPENAI_API_KEY nos segredos do Supabase.";
-      }
-      
       toast({
         title: 'Erro na importação',
-        description: errorMessage,
+        description: error.message,
         variant: 'destructive'
       });
     } finally {
@@ -313,7 +326,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
                 <Wand2 className="w-4 h-4" />
                 <span>O GPT-4o Vision analisará a foto e identificará os itens.</span>
-            </div>
+              </div>
           </TabsContent>
         </Tabs>
 
