@@ -201,9 +201,9 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-boracume-orange to-amber-500 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="text-center">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-300">
+        <CardHeader className="text-center sticky top-0 bg-white z-10 border-b">
           <div className="flex items-center justify-center mb-4">
             <ChefHat className="w-12 h-12 text-boracume-orange" />
           </div>

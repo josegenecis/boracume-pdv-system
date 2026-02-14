@@ -30,9 +30,9 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
 
   // Verifica se o usuário precisa passar pelo onboarding
   // Se o perfil não existe OU onboarding_completed é falso, mostra o Wizard
-  // if (user && (!profile || !profile.onboarding_completed)) {
-  //   return <OnboardingWizard onComplete={refreshUser} />;
-  // }
+  if (user && (!profile || !profile.onboarding_completed)) {
+    return <OnboardingWizard onComplete={refreshUser} />;
+  }
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden">
