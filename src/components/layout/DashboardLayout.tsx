@@ -3,17 +3,37 @@ import React from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
-
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
-
+import { useAuth } from '@/contexts/AuthContext';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import { Loader2 } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-
 const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { isOpen, isMobile, closeSidebar } = useSidebar();
+  const { user, profile, loading, refreshUser } = useAuth();
+
+  // Se estiver carregando ou tiver usuário mas ainda não carregou o perfil
+  // Exibe um loader centralizado para evitar "flickering" da tela de onboarding
+  if (loading || (user && !profile)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500 mx-auto mb-4" />
+          <p className="text-gray-500 text-sm">Carregando informações...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Verifica se o usuário precisa passar pelo onboarding
+  // Se o perfil existe mas onboarding_completed é falso, mostra o Wizard
+  if (user && profile && !profile.onboarding_completed) {
+    return <OnboardingWizard onComplete={refreshUser} />;
+  }
 
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden">
