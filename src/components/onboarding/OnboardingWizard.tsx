@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,11 +15,12 @@ import { useToast } from '@/hooks/use-toast';
 import { ChefHat, Store, CheckCircle } from 'lucide-react';
 
 const onboardingSchema = z.object({
-  restaurantName: z.string().min(2, 'Nome do restaurante é obrigatório'),
   restaurantType: z.string().min(1, 'Tipo de restaurante é obrigatório'),
   address: z.string().min(5, 'Endereço é obrigatório'),
   phone: z.string().min(10, 'Telefone é obrigatório'),
   openingHours: z.string().min(1, 'Horário de funcionamento é obrigatório'),
+  applyToAllDays: z.boolean().default(true),
+  closedDay: z.string().optional(),
   description: z.string().optional(),
 });
 
@@ -30,17 +32,18 @@ interface OnboardingWizardProps {
 
 const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
-      restaurantName: '',
       restaurantType: '',
       address: '',
       phone: '',
       openingHours: '10:00 - 22:00',
+      applyToAllDays: true,
+      closedDay: 'none',
       description: '',
     },
   });
@@ -58,20 +61,40 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
     'Outro'
   ];
 
+  const daysOfWeek = [
+    { value: 'none', label: 'Não fecho (Aberto todos os dias)' },
+    { value: 'seg', label: 'Segunda-feira' },
+    { value: 'ter', label: 'Terça-feira' },
+    { value: 'qua', label: 'Quarta-feira' },
+    { value: 'qui', label: 'Quinta-feira' },
+    { value: 'sex', label: 'Sexta-feira' },
+    { value: 'sab', label: 'Sábado' },
+    { value: 'dom', label: 'Domingo' },
+  ];
+
   const onSubmit = async (values: OnboardingFormValues) => {
     if (!user) return;
 
     setIsLoading(true);
     try {
+      // Build opening hours string based on selection
+      let openingHoursFinal = values.openingHours;
+      if (values.applyToAllDays) {
+        openingHoursFinal = `Seg-Dom: ${values.openingHours}`;
+        if (values.closedDay && values.closedDay !== 'none') {
+           openingHoursFinal += ` (Fechado: ${daysOfWeek.find(d => d.value === values.closedDay)?.label})`;
+        }
+      }
+
       // Update or Create profile with restaurant info
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          restaurant_name: values.restaurantName,
+          // restaurant_name is removed as per request, using existing profile name or keeping it as is
           address: values.address,
           phone: values.phone,
-          opening_hours: values.openingHours,
+          opening_hours: openingHoursFinal,
           description: values.description,
           onboarding_completed: true,
           updated_at: new Date().toISOString()
@@ -137,7 +160,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         .insert({
           user_id: user.id,
           phone_number: values.phone,
-          default_message: `Olá! Bem-vindo ao ${values.restaurantName}. Como posso ajudar você hoje?`,
+          default_message: `Olá! Bem-vindo ao ${profile?.restaurant_name || 'Restaurante'}. Como posso ajudar você hoje?`,
           enabled: true
         });
 
@@ -229,20 +252,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="restaurantName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome do Restaurante</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Digite o nome do seu restaurante" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
+                
                 <FormField
                   control={form.control}
                   name="restaurantType"
@@ -296,19 +306,66 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="openingHours"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Horário de Funcionamento</FormLabel>
-                      <FormControl>
-                        <Input placeholder="10:00 - 22:00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <FormField
+                    control={form.control}
+                    name="openingHours"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Horário de Funcionamento</FormLabel>
+                        <FormControl>
+                          <Input placeholder="10:00 - 22:00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="applyToAllDays"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-2 shadow-sm bg-white">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>
+                            Aplicar este horário para todos os dias
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="closedDay"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dia de Folga (Loja Fechada)</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o dia de folga" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {daysOfWeek.map((day) => (
+                              <SelectItem key={day.value} value={day.value}>
+                                {day.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}
@@ -325,7 +382,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                 />
 
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={isLoading}>
+                  <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
                     {isLoading ? 'Configurando...' : 'Concluir Configuração'}
                   </Button>
                 </div>
