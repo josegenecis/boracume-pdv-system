@@ -92,6 +92,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         .upsert({
           id: user.id,
           // restaurant_name is removed as per request, using existing profile name or keeping it as is
+          // If no restaurant name exists, fallback to 'Restaurante' to satisfy constraints if any
+          restaurant_name: profile?.restaurant_name || 'Restaurante',
           address: values.address,
           phone: values.phone,
           opening_hours: openingHoursFinal,
