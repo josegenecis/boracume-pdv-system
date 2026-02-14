@@ -99,7 +99,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           phone: values.phone,
           opening_hours: openingHoursFinal,
           description: values.description,
-          onboarding_completed: true,
+          // Don't set onboarding_completed yet, wait for step 2
           updated_at: new Date().toISOString()
         })
         .select();
@@ -133,6 +133,11 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
   const finishWizard = async () => {
     try {
+       // Mark onboarding as completed in DB
+       if (user) {
+         await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
+       }
+       
        await onComplete();
        window.location.reload();
     } catch (error) {
@@ -423,7 +428,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
                     <div className="flex justify-end">
                       <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
-                        {isLoading ? 'Salvando...' : 'Próximo Passo'}
+                        {isLoading ? 'Salvando...' : 'Continuar para Cardápio >'}
                       </Button>
                     </div>
                   </div>
