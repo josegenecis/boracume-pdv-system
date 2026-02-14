@@ -80,6 +80,12 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       if (profileError) throw profileError;
 
+      // Force profile refresh immediately after update
+      await onComplete();
+      
+      // Additional check to ensure we break the loop
+      window.location.reload();
+
       // Create default categories using product_categories table
       const defaultCategories = [
         { name: 'Pratos Principais', description: 'Pratos principais do cardápio' },
@@ -139,8 +145,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
         title: 'Configuração concluída!',
         description: 'Seu restaurante foi configurado com sucesso. Você já pode começar a receber pedidos!',
       });
-
-      onComplete();
+      
+      // onComplete already called above before reload
     } catch (error: any) {
       toast({
         title: 'Erro na configuração',
