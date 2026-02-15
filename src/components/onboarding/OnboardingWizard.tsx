@@ -106,15 +106,20 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
 
       if (profileError) throw profileError;
 
-      // Create default WhatsApp settings immediately
-      await supabase
-        .from('whatsapp_settings')
-        .upsert({
-          user_id: user.id,
-          phone_number: values.phone,
-          default_message: `Olá! Bem-vindo ao ${profile?.restaurant_name || 'Restaurante'}. Como posso ajudar você hoje?`,
-          enabled: true
-        });
+      // Create default WhatsApp settings immediately (Non-blocking)
+      try {
+        await supabase
+          .from('whatsapp_settings')
+          .upsert({
+            user_id: user.id,
+            phone_number: values.phone,
+            default_message: `Olá! Bem-vindo ao ${profile?.restaurant_name || 'Restaurante'}. Como posso ajudar você hoje?`,
+            enabled: true
+          });
+      } catch (wsError) {
+        console.error('Error creating whatsapp settings:', wsError);
+        // Continue anyway
+      }
 
       // Move to Step 2
       setStep(2);
@@ -123,12 +128,21 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       console.error(error);
       toast({
         title: 'Erro na configuração',
-        description: error.message,
+        description: error.message || 'Verifique os campos obrigatórios',
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const onInvalid = (errors: any) => {
+    console.error("Form errors:", errors);
+    toast({
+      title: 'Campos inválidos',
+      description: 'Por favor, preencha todos os campos obrigatórios.',
+      variant: 'destructive',
+    });
   };
 
   const finishWizard = async () => {
@@ -295,7 +309,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
               </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleStep1Submit)} className="space-y-6">
+                <form onSubmit={form.handleSubmit(handleStep1Submit, onInvalid)} className="space-y-6">
                   <div className="space-y-4">
                     
                     <FormField
