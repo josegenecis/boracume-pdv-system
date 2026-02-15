@@ -109,9 +109,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             }
           }
           
+          // CROP AUTOMÁTICO: Pegar apenas a metade superior para testar velocidade e evitar timeout
+          // Em um segundo momento, podemos fazer um loop para enviar a metade inferior
           canvas.width = width;
-          canvas.height = height;
-          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.height = height / 2; // Corta na metade!
+          
+          // Desenha apenas a metade de cima
+          // Parâmetros: img, sx, sy, sw, sh, dx, dy, dw, dh
+          ctx?.drawImage(img, 0, 0, width, height / 2, 0, 0, width, height / 2);
           
           // Qualidade reduzida para 0.7 para gerar um base64 menor e mais rápido
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
