@@ -95,7 +95,9 @@ serve(async (req) => {
 
     console.log("Enviando para OpenAI...");
 
-    // 2. Chamada para OpenAI (GPT-4o para tudo, para garantir inteligência)
+    // 2. Chamada para OpenAI (GPT-4o-mini para TUDO, inclusive Visão)
+    // Motivo: O GPT-4o padrão é lento demais e causa timeout na Edge Function.
+    // O mini é rápido o suficiente e tem visão competente.
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -103,7 +105,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // Usando o modelo mais inteligente para garantir que leia pizzas complexas
+        model: 'gpt-4o-mini', 
         messages: messages,
         temperature: 0.1,
         max_tokens: 4000,
