@@ -66,13 +66,15 @@ serve(async (req) => {
 
       if (!response.ok) {
         console.log('Jina Reader failed, falling back to direct fetch...');
+        // Fallback robusto: se Jina falhar, tentar buscar o HTML e extrair apenas o BODY para economizar tokens
         const directResponse = await fetch(url);
         if (!directResponse.ok) throw new Error(`Falha ao acessar o site: ${response.status}`);
         const html = await directResponse.text();
-        userPrompt = `Analise o HTML bruto abaixo. Extraia o cardápio completo. Texto: ${html.slice(0, 15000)}`;
+        // Limitar tamanho do HTML para não estourar tokens de entrada
+        userPrompt = `Analise o HTML bruto abaixo. Extraia o cardápio completo. Texto: ${html.slice(0, 30000)}`;
       } else {
         const markdown = await response.text();
-        const cleanMarkdown = markdown.slice(0, 35000); 
+        const cleanMarkdown = markdown.slice(0, 50000); 
         
         userPrompt = `Analise este cardápio (formato Markdown). Extraia TODOS os produtos, organizados por CATEGORIAS.
         
