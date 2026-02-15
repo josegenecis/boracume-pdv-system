@@ -232,8 +232,18 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             }
         }
 
-        // 2. Insert Products
+          // 3. Insert Products
         for (const product of category.items) {
+            // First check if product already exists to avoid duplicates
+            const { data: existingProduct } = await supabase
+                .from('products')
+                .select('id')
+                .eq('user_id', user?.id)
+                .eq('name', product.name)
+                .maybeSingle();
+            
+            if (existingProduct) continue;
+
             const { data: newProduct, error: prodError } = await supabase
                 .from('products')
                 .insert({
@@ -244,7 +254,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     image_url: product.image_url,
                     category: category.name || 'Geral',
                     category_id: categoryId,
-                    available: true
+                    available: true,
+                    show_in_pdv: true,
+                    show_in_delivery: true
                 })
                 .select('id')
                 .single();
@@ -259,8 +271,13 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                         name: v.name,
                         price: v.price
                     }));
-
-                    await (supabase as any).from('product_variants').insert(variantsData);
+                    
+                    try {
+                        // Cast to any to bypass strict type checking for now if table missing in types
+                        await (supabase as any).from('product_variants').insert(variantsData);
+                    } catch (varError) {
+                        console.error('Error inserting variants:', varError);
+                    }
                 }
             }
         }
