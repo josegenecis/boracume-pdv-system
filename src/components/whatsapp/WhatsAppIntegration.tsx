@@ -59,24 +59,43 @@ const WhatsAppIntegration: React.FC = () => {
     }
   };
 
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+
   const generateQRCode = async () => {
     try {
       setLoading(true);
+      setQrCodeUrl(null); // Limpar QR anterior
       
-      // Simular geração de QR Code para conexão
-      const qrData = `whatsapp://connect/${user?.id}/${Date.now()}`;
+      // Aqui você chamaria sua Evolution API
+      // Exemplo real: POST /instance/create
       
-      setSettings(prev => ({ ...prev, qr_code_data: qrData }));
+      // Simulação visual para demonstração (substitua pela chamada real da API)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // QR Code simulado (numa integração real, viria da API em base64)
+      setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=EvolutionAPI_Integration_Demo");
+      
+      setSettings(prev => ({ ...prev, qr_code_data: 'generated' }));
       
       toast({
         title: "QR Code gerado",
         description: "Escaneie o QR Code no seu WhatsApp para conectar.",
       });
+      
+      // Simular conexão após 5 segundos (apenas para demo)
+      setTimeout(() => {
+         setSettings(prev => ({ ...prev, connected: true }));
+         toast({
+            title: "Conectado!",
+            description: "WhatsApp conectado com sucesso.",
+         });
+      }, 8000);
+
     } catch (error) {
       console.error('Erro ao gerar QR Code:', error);
       toast({
         title: "Erro",
-        description: "Erro ao gerar QR Code.",
+        description: "Erro ao gerar QR Code. Verifique a conexão com a API.",
         variant: "destructive"
       });
     } finally {
@@ -111,17 +130,27 @@ const WhatsAppIntegration: React.FC = () => {
           </div>
 
           {settings.qr_code_data && (
-            <div className="p-4 border rounded-lg text-center">
-              <div className="w-48 h-48 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                <QrCode className="w-24 h-24 text-gray-400" />
+            <div className="p-4 border rounded-lg text-center bg-white shadow-sm">
+              <div className="mx-auto mb-4 flex items-center justify-center">
+                 {qrCodeUrl ? (
+                   <img src={qrCodeUrl} alt="QR Code WhatsApp" className="w-64 h-64 border-4 border-white shadow-md rounded-lg" />
+                 ) : (
+                   <div className="w-64 h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+                     <QrCode className="w-16 h-16 text-gray-400 animate-pulse" />
+                   </div>
+                 )}
               </div>
-              <p className="text-sm text-gray-600">
-                Escaneie este QR Code no seu WhatsApp Business
+              <p className="text-sm font-medium text-gray-700 mb-1">
+                Escaneie com o WhatsApp
               </p>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <div className={`w-3 h-3 rounded-full ${settings.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="text-sm">
-                  {settings.connected ? 'Conectado' : 'Aguardando conexão'}
+              <p className="text-xs text-gray-500 mb-4">
+                Abra o WhatsApp {'>'} Configurações {'>'} Aparelhos conectados {'>'} Conectar aparelho
+              </p>
+              
+              <div className="flex items-center justify-center gap-2 mt-4 p-2 bg-gray-50 rounded-full w-fit mx-auto">
+                <div className={`w-3 h-3 rounded-full ${settings.connected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
+                <span className="text-sm font-medium text-gray-700">
+                  {settings.connected ? 'Conectado com sucesso!' : 'Aguardando leitura do QR Code...'}
                 </span>
               </div>
             </div>

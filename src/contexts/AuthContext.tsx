@@ -167,33 +167,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     debugLogger.auth('initialization_started', { timestamp: Date.now() });
 
-    // Timeout de segurança REDUZIDO para 2 segundos
+    // Timeout de segurança para garantir que o loading não fique travado para sempre
     const safetyTimeout = setTimeout(() => {
       if (isMountedRef.current && loading) {
         debugLogger.auth('safety_timeout_triggered', { 
-          timeout: 2000,
+          timeout: 12000,
           loading,
           mounted: isMountedRef.current 
         }, 'warn');
         setLoading(false);
         initializationInProgress = false;
       }
-    }, 2000);
+    }, 12000);
 
     initializationPromise = (async () => {
       try {
         debugLogger.auth('checking_existing_session', { timestamp: Date.now() });
         // Verificar e atualizar token se necessário antes de consultar a sessão
         try {
-          await checkAndRefreshToken();
+          // Temporarily disabled checkAndRefreshToken to prevent potential loops
+          // await checkAndRefreshToken();
         } catch (e: any) {
           console.warn('⚠️ [AUTH] Falha ao verificar/atualizar token:', e?.message || e);
         }
         
-        // Verificação de sessão com timeout REDUZIDO para 1.5 segundos
+        // Verificação de sessão com timeout AUMENTADO para 10 segundos para evitar falsos negativos
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 1500)
+          setTimeout(() => reject(new Error('Timeout na verificação de sessão')), 10000)
         );
         
         let sessionData: any = null;
@@ -202,43 +203,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sessionData = await Promise.race([sessionPromise, timeoutPromise]);
         } catch (timeoutError) {
           debugLogger.auth('session_check_timeout', { 
-            timeout: 2000,
+            timeout: 10000,
             error: timeoutError.message 
           }, 'error');
-          if (isMountedRef.current) {
-            setLoading(false);
-          }
-          return;
         }
         
-        const { data: { session }, error } = sessionData;
-        
-        if (error) {
-          debugLogger.auth('session_check_error', { error: error.message }, 'error');
-          if (isMountedRef.current) {
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (session?.user && isMountedRef.current) {
-          debugLogger.auth('session_found', { 
-            userId: session.user.id,
-            email: session.user.email 
-          });
-          setUser(session.user);
-          setSession(session);
-          // Iniciar auto-refresh de token para evitar expiração silenciosa
-          try {
-            startTokenAutoRefresh(session);
-          } catch (e: any) {
-            console.warn('⚠️ [AUTH] Falha ao iniciar auto-refresh:', e?.message || e);
-          }
+        if (sessionData) {
+          const { data: { session }, error } = sessionData;
           
-          // Carregar dados do usuário em background - NÃO BLOQUEAR
-          loadUserDataInBackground(session.user.id);
-        } else {
-          console.log('ℹ️ [AUTH] Nenhuma sessão encontrada');
+          if (error) {
+            debugLogger.auth('session_check_error', { error: error.message }, 'error');
+            // Continuamos mesmo com erro, pois o onAuthStateChange pode recuperar
+          }
+
+          if (session?.user && isMountedRef.current) {
+            debugLogger.auth('session_found', { 
+              userId: session.user.id,
+              email: session.user.email 
+            });
+            setUser(session.user);
+            setSession(session);
+            
+            // Carregar dados do usuário em background - NÃO BLOQUEAR
+            loadUserDataInBackground(session.user.id);
+          } else {
+            console.log('ℹ️ [AUTH] Nenhuma sessão encontrada via getSession');
+          }
         }
         
         if (isMountedRef.current) {
@@ -253,16 +243,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             console.log('🔄 [AUTH] Auth state changed:', event, session?.user?.email);
             
+            // Ignore TOKEN_REFRESHED events to prevent loops if they are firing too often
+            if (event === 'TOKEN_REFRESHED') return;
+
             if (event === 'SIGNED_IN' && session?.user) {
               console.log('✅ [AUTH] SIGNED_IN - Processando nova autenticação');
               setUser(session.user);
               setSession(session);
               // Reiniciar auto-refresh quando um novo login ocorrer
+              /*
               try {
                 startTokenAutoRefresh(session);
               } catch (e: any) {
                 console.warn('⚠️ [AUTH] Falha ao reiniciar auto-refresh:', e?.message || e);
               }
+              */
               loadUserDataInBackground(session.user.id);
               
             } else if (event === 'SIGNED_OUT') {
@@ -271,7 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setSession(null);
               setProfile(null);
               setSubscription(null);
-              stopTokenAutoRefresh();
+              // stopTokenAutoRefresh();
             }
           });
         }

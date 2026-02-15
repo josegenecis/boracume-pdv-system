@@ -9,44 +9,6 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    // Process generated prompts to create images
-    // Note: We do this sequentially to avoid rate limits and costs, but for a real product you might want a queue.
-    for (const category of categories) {
-      for (const product of category.items) {
-        if (product.image_prompt && !product.image_url) {
-          try {
-            console.log(`Generating image for: ${product.name}`);
-            const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${openAiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: "dall-e-3",
-                prompt: `Professional food photography of ${product.name}. ${product.image_prompt}. High resolution, studio lighting, appetizing, 4k.`,
-                n: 1,
-                size: "1024x1024",
-                quality: "standard",
-                response_format: "url"
-              }),
-            });
-
-            if (imageResponse.ok) {
-              const imageData = await imageResponse.json();
-              if (imageData.data && imageData.data[0] && imageData.data[0].url) {
-                product.image_url = imageData.data[0].url;
-              }
-            } else {
-               console.error(`Failed to generate image for ${product.name}:`, await imageResponse.text());
-            }
-          } catch (imgError) {
-            console.error(`Error generating image for ${product.name}:`, imgError);
-          }
-        }
-      }
-    }
-
     return new Response('ok', { headers: corsHeaders })
   }
 
