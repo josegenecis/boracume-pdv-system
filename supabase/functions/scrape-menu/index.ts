@@ -83,18 +83,29 @@ serve(async (req) => {
       }
       
     } else if (imageBase64) {
-      userPrompt = `Analise esta imagem de cardápio. Extraia TODOS os produtos e preços, organizados por CATEGORIAS.
+      // MELHORIA CRÍTICA DE PROMPT PARA VISÃO
+      userPrompt = `Analise esta imagem de cardápio com EXTREMA ATENÇÃO. Sua tarefa é extrair TODOS os produtos visíveis.
       
-      IMPORTANTE SOBRE IMAGENS:
-      1. Se o cardápio tiver fotos dos pratos, você deve GERAR uma descrição visual detalhada para cada item no campo "image_prompt".
-      2. Exemplo de image_prompt: "A delicious X-Bacon burger with melted cheese, crispy bacon, lettuce, and tomato on a sesame bun, professional food photography style."
-      3. Se o produto tiver acompanhamentos listados (ex: "acompanha fritas"), inclua no "description" ou crie uma variação se tiver preço extra.`;
+      INSTRUÇÕES DE ALTA PRECISÃO:
+      1. Leia linha por linha, coluna por coluna. NÃO PULE NENHUM ITEM.
+      2. Se for um cardápio de pizza, extraia TODOS os sabores listados (ex: Calabresa, Mussarela, Portuguesa).
+      3. Se houver tamanhos (Pequena, Média, Grande), crie um produto para cada tamanho OU use o array "variants" se o nome for o mesmo.
+      4. Se o preço não estiver claro, use 0.00.
+      5. NÃO invente produtos. Apenas o que está na imagem.
+      
+      FORMATO DE RESPOSTA OBRIGATÓRIO (JSON):
+      ${jsonStructure}`;
 
       contentPayload = [
+        {
+          type: "text",
+          text: userPrompt
+        },
         {
           type: "image_url",
           image_url: {
             url: imageBase64,
+            detail: "high" // Forçar modo de alta resolução para ler textos pequenos
           },
         },
       ];
@@ -102,23 +113,26 @@ serve(async (req) => {
       throw new Error('URL ou Imagem é obrigatório.');
     }
 
-    // Append instructions to prompt
-    userPrompt += `
-    
-    REGRAS ESTRITAS DE SAÍDA:
-    1. Retorne APENAS um JSON válido seguindo estritamente esta estrutura:
-    ${jsonStructure}
-    
-    2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants".
-    3. Se houver opcionais ou acompanhamentos com preço (ex: "Adicional de Bacon +R$2"), trate como variação.
-    4. Converta preços para número (ponto flutuante).
-    5. IMPORTANTE: Tente extrair URLs de imagens dos produtos se estiver analisando um site ou HTML.
-    6. Se for imagem enviada pelo usuário, PREENCHA o campo "image_prompt" com uma descrição rica em inglês para gerar a imagem depois.
-    7. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
-    `;
+    // Apenas adicione instruções extras se for texto, pois para imagem já colocamos no contentPayload
+    if (!imageBase64) {
+      userPrompt += `
+      
+      REGRAS ESTRITAS DE SAÍDA:
+      1. Retorne APENAS um JSON válido seguindo estritamente esta estrutura:
+      ${jsonStructure}
+      
+      2. Se um produto tiver variações de tamanho/tipo com preços diferentes, use o array "variants".
+      3. Se houver opcionais ou acompanhamentos com preço (ex: "Adicional de Bacon +R$2"), trate como variação.
+      4. Converta preços para número (ponto flutuante).
+      5. IMPORTANTE: Tente extrair URLs de imagens dos produtos se estiver analisando um site ou HTML.
+      6. Se for imagem enviada pelo usuário, PREENCHA o campo "image_prompt" com uma descrição rica em inglês para gerar a imagem depois.
+      7. NÃO adicione texto markdown (\`\`\`json) antes ou depois. Apenas o JSON puro.
+      `;
+    }
 
     if (imageBase64) {
-      contentPayload.unshift({ type: "text", text: userPrompt });
+      // Para imagens, o prompt já está no contentPayload estruturado acima
+      // contentPayload já está pronto
     } else {
       contentPayload = [{ type: "text", text: userPrompt }];
     }
