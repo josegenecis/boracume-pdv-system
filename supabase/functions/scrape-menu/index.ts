@@ -145,6 +145,13 @@ serve(async (req) => {
       contentPayload = [{ type: "text", text: userPrompt }];
     }
 
+    // MODO DE DIAGNÓSTICO ATIVADO TEMPORARIAMENTE
+    if (imageBase64) {
+      console.log('Recebida imagem, tamanho:', imageBase64.length);
+      // Se a imagem for muito grande, o problema pode ser esse.
+      // Vamos tentar processar com GPT-4o mas com um timeout menor para falhar rápido se for o caso
+    }
+
     // Selecionar modelo mais adequado: GPT-4o (Standard) para Imagens (mais rápido no visual)
     // GPT-4o-mini para Texto/URL (mais barato e eficiente para texto)
     const aiModel = imageBase64 ? 'gpt-4o' : 'gpt-4o-mini';
