@@ -1,0 +1,6 @@
+supabase/functions/
+scripts/
+*.js
+dist/
+dist-electron/
+electron/
