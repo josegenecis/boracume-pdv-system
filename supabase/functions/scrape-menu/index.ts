@@ -121,6 +121,7 @@ serve(async (req) => {
       contentPayload = [{ type: "text", text: userPrompt }];
     }
 
+    // Aumentar o limite de tokens para suportar cardápios longos
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -128,7 +129,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini', // Usar modelo mini para rapidez e contexto maior
         messages: [
           {
             role: 'system',
@@ -140,7 +141,7 @@ serve(async (req) => {
           }
         ],
         temperature: 0.1,
-        max_tokens: 4000,
+        max_tokens: 12000, // Aumentado de 4000 para 12000
         response_format: { type: "json_object" }
       }),
     });
@@ -194,13 +195,17 @@ serve(async (req) => {
        categories = [{ name: "Geral", items: parsedData }];
     }
 
-    // Process generated prompts to create images
-    // Note: We do this sequentially to avoid rate limits and costs, but for a real product you might want a queue.
-    for (const category of categories) {
-      for (const product of category.items) {
-        if (product.image_prompt && !product.image_url) {
-          try {
-            console.log(`Generating image for: ${product.name}`);
+    // Limitar o processamento de imagem para não estourar o tempo limite da Edge Function (60s)
+     // IMPORTANTE: Só gerar imagens se não veio URL do produto na importação (ex: iFood já traz imagem)
+     let imagesGenerated = 0;
+     const MAX_IMAGES_PER_REQUEST = 3; 
+ 
+     for (const category of categories) {
+       for (const product of category.items || []) {
+         // Se já tem image_url (veio do link), NÃO gera imagem nova com IA. Economiza tempo e dinheiro.
+         if (product.image_prompt && !product.image_url && imagesGenerated < MAX_IMAGES_PER_REQUEST) {
+            try {
+              console.log(`Generating image for: ${product.name}`);
             const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
               method: 'POST',
               headers: {
@@ -221,6 +226,7 @@ serve(async (req) => {
               const imageData = await imageResponse.json();
               if (imageData.data && imageData.data[0] && imageData.data[0].url) {
                 product.image_url = imageData.data[0].url;
+                imagesGenerated++;
               }
             } else {
                console.error(`Failed to generate image for ${product.name}:`, await imageResponse.text());
