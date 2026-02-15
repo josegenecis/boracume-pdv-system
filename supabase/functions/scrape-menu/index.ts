@@ -23,37 +23,33 @@ serve(async (req) => {
     // 1. Definição Simplificada do Payload para a IA
     let messages = [];
 
-    // Estrutura de saída desejada (SIMPLIFICADA)
-    const systemPrompt = `Você é um assistente de extração de cardápios.
-    Sua única tarefa é extrair os produtos e retornar um JSON puro.
+    // Estrutura de saída desejada (SIMPLIFICADA AO EXTREMO)
+    const systemPrompt = `Você é um especialista em ler cardápios.
+    Sua tarefa é extrair TODOS os produtos da imagem e retornar um JSON.
     
-    ESTRUTURA OBRIGATÓRIA DO JSON:
+    ATENÇÃO MÁXIMA PARA PIZZARIAS E PREÇOS:
+    - Se encontrar algo como "Mussarela ... P 20 / M 30 / G 40", isso é UM produto com 3 variações.
+    - Estruture assim:
+      {
+        "name": "Mussarela",
+        "price": 20.00, // Menor preço
+        "variants": [
+           { "name": "Pequena (P)", "price": 20.00 },
+           { "name": "Média (M)", "price": 30.00 },
+           { "name": "Grande (G)", "price": 40.00 }
+        ]
+      }
+    - Leia todas as colunas. Não ignore nada.
+    
+    FORMATO JSON DE RESPOSTA:
     {
       "categories": [
         {
-          "name": "Nome da Categoria (ex: Pizzas, Bebidas)",
-          "items": [
-            {
-              "name": "Nome do Produto",
-              "description": "Ingredientes ou descrição",
-              "price": 0.00, // Use ponto para decimais
-              "image_url": "", // Se encontrar URL de imagem no texto, coloque aqui. Se for foto, deixe vazio.
-              "variants": [ // Opcional: Se houver tamanhos/sabores com preços diferentes
-                 { "name": "Pequena", "price": 20.00 },
-                 { "name": "Grande", "price": 30.00 }
-              ]
-            }
-          ]
+          "name": "Categoria",
+          "items": [ { "name": "X", "price": 0, "description": "", "variants": [] } ]
         }
       ]
-    }
-
-    REGRAS:
-    - Se for imagem de pizzaria com múltiplos preços (P, M, G), CRIE VARIAÇÕES.
-    - Se for site (texto), extraia tudo que parecer produto.
-    - NÃO INVENTE DADOS.
-    - Retorne APENAS o JSON, sem markdown (\`\`\`).
-    `;
+    }`;
 
     if (imageBase64) {
       // Fluxo de Imagem

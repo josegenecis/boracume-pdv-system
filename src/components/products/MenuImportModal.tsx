@@ -92,8 +92,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Reduzir ainda mais para garantir velocidade no upload e processamento
-          const MAX_SIZE = 800; // Reduzido de 1024 para 800
+          // Tamanho padrão de alta qualidade que o GPT-4o Vision processa bem
+          const MAX_SIZE = 1200; 
           let width = img.width;
           let height = img.height;
           
@@ -109,17 +109,13 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             }
           }
           
-          // CROP AUTOMÁTICO: Pegar apenas a metade superior para testar velocidade e evitar timeout
-          // Em um segundo momento, podemos fazer um loop para enviar a metade inferior
+          // SEM CROP - Enviar imagem inteira redimensionada
           canvas.width = width;
-          canvas.height = height / 2; // Corta na metade!
+          canvas.height = height;
+          ctx?.drawImage(img, 0, 0, width, height);
           
-          // Desenha apenas a metade de cima
-          // Parâmetros: img, sx, sy, sw, sh, dx, dy, dw, dh
-          ctx?.drawImage(img, 0, 0, width, height / 2, 0, 0, width, height / 2);
-          
-          // Qualidade reduzida para 0.7 para gerar um base64 menor e mais rápido
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          // Qualidade balanceada
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
           resolve(compressedBase64);
         };
         img.onerror = (error) => reject(error);
