@@ -145,6 +145,12 @@ serve(async (req) => {
       contentPayload = [{ type: "text", text: userPrompt }];
     }
 
+    // Selecionar modelo mais adequado: GPT-4o (Standard) para Imagens (mais rápido no visual)
+    // GPT-4o-mini para Texto/URL (mais barato e eficiente para texto)
+    const aiModel = imageBase64 ? 'gpt-4o' : 'gpt-4o-mini';
+    
+    console.log(`Using AI Model: ${aiModel}`);
+
     // Aumentar o limite de tokens para suportar cardápios longos
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -153,7 +159,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Usar modelo mini para rapidez e contexto maior
+        model: aiModel,
         messages: [
           {
             role: 'system',
@@ -165,7 +171,7 @@ serve(async (req) => {
           }
         ],
         temperature: 0.1,
-        max_tokens: 12000, // Aumentado de 4000 para 12000
+        max_tokens: 4096, // Reduzido de 12000 para evitar timeout na resposta
         response_format: { type: "json_object" }
       }),
     });

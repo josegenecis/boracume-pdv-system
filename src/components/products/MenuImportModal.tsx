@@ -92,8 +92,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Reduzir drasticamente o tamanho para acelerar o envio e processamento
-          const MAX_SIZE = 1024; // Reduzido de 1600 para 1024
+          // Reduzir ainda mais para garantir velocidade no upload e processamento
+          const MAX_SIZE = 800; // Reduzido de 1024 para 800
           let width = img.width;
           let height = img.height;
           
