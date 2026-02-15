@@ -56,18 +56,9 @@ serve(async (req) => {
     if (!plan) throw new Error("Plan not found");
 
     // Create subscription session
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig = {
       customer: customerId,
       line_items: [{
-        price_data: {
-          currency: "brl",
-          product_data: { 
-            name: `BoraCumê ${plan.name}`,
-            description: plan.description
-          },
-          unit_amount: Math.round(plan.price * 100),
-          recurring: { interval: "month" }
-        },
         quantity: 1,
       }],
       mode: "subscription",
@@ -77,7 +68,24 @@ serve(async (req) => {
         user_id: user.id,
         plan_id: planId.toString()
       }
-    });
+    };
+
+    // Use stripe_price_id if available, otherwise fallback to dynamic price
+    if (plan.stripe_price_id) {
+      sessionConfig.line_items[0].price = plan.stripe_price_id;
+    } else {
+      sessionConfig.line_items[0].price_data = {
+        currency: "brl",
+        product_data: { 
+          name: `BoraCumê ${plan.name}`,
+          description: plan.description
+        },
+        unit_amount: Math.round(plan.price * 100),
+        recurring: { interval: "month" }
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

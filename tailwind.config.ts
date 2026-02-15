@@ -106,12 +106,12 @@ export default {
 				},
 				'stock-pulse': {
 					'0%, 100%': { 
-						boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.5), 0 0 10px rgba(255, 0, 0, 0.4)',
+						boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.3), 0 0 8px rgba(255, 0, 0, 0.2)',
 						opacity: '1'
 					},
 					'50%': { 
-						boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.2), 0 0 4px rgba(255, 0, 0, 0.2)',
-						opacity: '0.8'
+						boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.1), 0 0 2px rgba(255, 0, 0, 0.1)',
+						opacity: '0.6'
 					}
 				}
 			},
@@ -121,7 +121,7 @@ export default {
 				'fade-in': 'fade-in 0.3s ease-out',
 				'fade-out': 'fade-out 0.3s ease-out',
 				'slide-in': 'slide-in 0.3s ease-out',
-				'stock-pulse': 'stock-pulse 2.5s ease-in-out infinite'
+				'stock-pulse': 'stock-pulse 4s ease-in-out infinite'
 			},
 			fontFamily: {
 				'montserrat': ['Montserrat', 'sans-serif'],
