@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, imageBase64 } = await req.json()
+    const { url, imageBase64, isImageUpload } = await req.json()
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openAiKey) {
@@ -25,7 +25,7 @@ serve(async (req) => {
 
     // Estrutura de saída desejada (SIMPLIFICADA AO EXTREMO)
     const systemPrompt = `Você é um especialista em ler cardápios.
-    Sua tarefa é extrair TODOS os produtos da imagem e retornar um JSON.
+    Sua tarefa é extrair TODOS os produtos da imagem/texto e retornar um JSON.
     
     ATENÇÃO MÁXIMA PARA PIZZARIAS E PREÇOS:
     - Se encontrar algo como "Mussarela ... P 20 / M 30 / G 40", isso é UM produto com 3 variações.
@@ -51,20 +51,28 @@ serve(async (req) => {
       ]
     }`;
 
-    if (imageBase64) {
-      // Fluxo de Imagem
+    // DETECÇÃO INTELIGENTE DE TIPO
+    // Se for upload de imagem OU url de imagem (termina em jpg/png/webp)
+    const isImage = imageBase64 || isImageUpload || (url && /\.(jpg|jpeg|png|webp|gif)$/i.test(url));
+
+    if (isImage) {
+      // Fluxo de Imagem (Vision)
+      const imageUrl = url || imageBase64; // Agora suporta URL direta para Vision!
+      
+      console.log(`Processando Imagem via Vision (URL: ${!!url}, Base64: ${!!imageBase64})`);
+
       messages = [
         { role: 'system', content: systemPrompt },
         { 
           role: 'user', 
           content: [
             { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
-            { type: "image_url", image_url: { url: imageBase64, detail: "high" } } // High detail para ler preços pequenos
+            { type: "image_url", image_url: { url: imageUrl, detail: "high" } } 
           ] 
         }
       ];
     } else if (url) {
-      // Fluxo de URL (Simplificado: Tenta Jina, se falhar, tenta fetch direto)
+      // Fluxo de Site (Texto)
       console.log(`Lendo URL: ${url}`);
       
       let textContent = "";

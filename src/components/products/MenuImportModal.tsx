@@ -151,15 +151,40 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       } 
       else if (activeTab === 'link' || activeTab === 'image') {
         let payload = {};
+        let finalUrl = '';
         
         if (activeTab === 'link') {
-            payload = { url: urlInput };
+            finalUrl = urlInput;
         } else {
-            const base64 = await convertFileToBase64(selectedImage!);
-            payload = { imageBase64: base64 };
+            if (!selectedImage) throw new Error('Selecione uma imagem.');
+            
+            // 1. Upload para Storage (Lógica Profissional: Upload Primeiro, Processa Depois)
+            const fileExt = selectedImage.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+            const filePath = `${user?.id}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('menu-imports')
+                .upload(filePath, selectedImage);
+
+            if (uploadError) {
+                 // Tenta criar o bucket se não existir (fallback manual, idealmente via migration)
+                 if (uploadError.message.includes('bucket not found')) {
+                     throw new Error('Erro de configuração: Bucket menu-imports não encontrado. Contate o suporte.');
+                 }
+                 throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
+            }
+
+            // 2. Pega URL Pública
+            const { data: { publicUrl } } = supabase.storage
+                .from('menu-imports')
+                .getPublicUrl(filePath);
+
+            finalUrl = publicUrl;
         }
 
-        console.log('[Import] Payload preparado, chamando Edge Function...');
+        console.log('[Import] Processando URL:', finalUrl);
+        payload = { url: finalUrl, isImageUpload: activeTab === 'image' };
         
         // Use the utility function that handles authentication and environment variables correctly
         try {
