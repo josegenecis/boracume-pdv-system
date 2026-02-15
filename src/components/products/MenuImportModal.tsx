@@ -122,62 +122,50 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   };
 
   const handleImport = async () => {
+    // Validação básica ANTES de iniciar o loading
+    if (activeTab === 'text' && !textInput.trim()) {
+        toast({ title: 'Atenção', description: 'Cole o texto do cardápio.', variant: 'destructive' });
+        return;
+    }
+    if (activeTab === 'link' && !urlInput.trim()) {
+        toast({ title: 'Atenção', description: 'Insira um link válido.', variant: 'destructive' });
+        return;
+    }
+    if (activeTab === 'image' && !selectedImage) {
+        toast({ title: 'Atenção', description: 'Selecione uma imagem.', variant: 'destructive' });
+        return;
+    }
+
     setLoading(true);
+      const timestamp = new Date().toISOString();
+      console.log(`[Import] Iniciando importação (v${timestamp})...`, activeTab);
+
     try {
       let categoriesToImport: ImportedCategory[] = [];
 
       if (activeTab === 'text') {
-        if (!textInput.trim()) throw new Error('Cole o texto do cardápio.');
         categoriesToImport = parseMenuText(textInput);
       } 
       else if (activeTab === 'link' || activeTab === 'image') {
         let payload = {};
         
         if (activeTab === 'link') {
-            if (!urlInput.trim()) throw new Error('Insira um link válido.');
             payload = { url: urlInput };
         } else {
-            if (!selectedImage) throw new Error('Selecione uma imagem.');
-            const base64 = await convertFileToBase64(selectedImage);
+            const base64 = await convertFileToBase64(selectedImage!);
             payload = { imageBase64: base64 };
         }
 
-        console.log('Enviando para IA...');
+        console.log('[Import] Payload preparado, chamando Edge Function...');
         
         // Use the utility function that handles authentication and environment variables correctly
         try {
           const { data, status } = await invokeEdgeFunction('scrape-menu', payload);
+          console.log('[Import] Resposta da função:', status, data);
 
           if (status !== 200) {
-              console.error('Erro Function:', data);
-              // Fallback para simulação se a função falhar (apenas para não travar o usuário)
-              if (status === 500 || status === 404 || status === 405) {
-                 console.warn("⚠️ Função Edge falhou. Usando dados simulados para demonstração.");
-                 await new Promise(resolve => setTimeout(resolve, 2000)); // Fake delay
-                 categoriesToImport = [
-                   {
-                     name: "Sugestões do Chef (Simulado)",
-                     items: [
-                       { name: "Hambúrguer Artesanal", price: 28.90, description: "Blend de 180g, queijo cheddar e bacon." },
-                       { name: "Batata Rústica", price: 15.00, description: "Com alecrim e alho." }
-                     ]
-                   },
-                   {
-                     name: "Bebidas (Simulado)",
-                     items: [
-                       { name: "Refrigerante Lata", price: 6.00 },
-                       { name: "Suco Natural", price: 10.00 }
-                     ]
-                   }
-                 ];
-                 toast({
-                   title: 'Modo de Simulação',
-                   description: 'A função de IA falhou no servidor. Carregando itens de exemplo.',
-                   variant: 'default',
-                 });
-              } else {
-                 throw new Error(data?.error || 'Falha ao conectar com a IA.');
-              }
+              console.error('[Import] Erro Function:', data);
+              throw new Error(data?.error || `Erro ${status}: Falha ao conectar com a IA.`);
           } else {
              if (!data.success) {
                  throw new Error(data.error || 'A IA não conseguiu ler os dados.');
@@ -185,24 +173,34 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
              categoriesToImport = data.categories || [];
           }
         } catch (err: any) {
-           console.error("Erro fatal na chamada:", err);
-           // Fallback duplication for network errors
-           console.warn("⚠️ Erro de rede. Usando dados simulados.");
-           categoriesToImport = [
-             {
-               name: "Exemplo (Erro de Rede)",
-               items: [
-                 { name: "Produto Exemplo 1", price: 10.00 },
-                 { name: "Produto Exemplo 2", price: 20.00 }
-               ]
-             }
-           ];
+           console.error("[Import] Erro fatal na chamada:", err);
+           
+           // Se for erro de rede/timeout, mostra mensagem clara
+           if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+               toast({
+                 title: 'Erro de Conexão',
+                 description: 'Não foi possível conectar ao servidor de IA. Verifique sua internet ou tente novamente.',
+                 variant: 'destructive',
+               });
+           } else {
+               // Mostra o erro real retornado pela Edge Function
+               toast({
+                 title: 'Falha na Importação',
+                 description: `Detalhes: ${err.message || JSON.stringify(err)}`,
+                 variant: 'destructive',
+               });
+           }
+           
+           setLoading(false);
+           return; 
         }
       }
 
       if (categoriesToImport.length === 0) {
-        throw new Error('Nenhum produto encontrado.');
+        throw new Error('Nenhum produto encontrado pela IA.');
       }
+      
+      console.log('[Import] Produtos encontrados:', categoriesToImport.length, 'categorias');
 
       let totalProducts = 0;
 

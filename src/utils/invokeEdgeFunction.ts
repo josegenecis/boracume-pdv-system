@@ -1,49 +1,32 @@
 import { supabase } from '@/integrations/supabase/client'
 
-export const invokeEdgeFunction = async <T = any>(
+export const invokeEdgeFunction = async (
   functionName: string,
   body: unknown
-): Promise<{ data: T | null; status: number }> => {
-  const baseUrl: string =
-    (supabase as any).supabaseUrl ||
-    (import.meta as any).env?.VITE_SUPABASE_URL ||
-    ''
+): Promise<{ data: any | null; status: number }> => {
+  console.log(`[EdgeFunction] Invoking ${functionName}...`);
 
-  const anonKey: string =
-    (supabase as any).supabaseKey ||
-    (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
-    ''
-
-  const url = `${String(baseUrl).replace(/\/+$/, '')}/functions/v1/${functionName}`
-
-  let token = ''
   try {
-    const { data } = await supabase.auth.getSession()
-    token = data?.session?.access_token || ''
-  } catch {}
+    const { data, error } = await supabase.functions.invoke(functionName, {
+      body: JSON.stringify(body),
+      // Increase timeout to 120 seconds for large menus
+      signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(120000) : undefined,
+    })
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-
-  if (anonKey) headers.apikey = anonKey
-  if (token) headers.Authorization = `Bearer ${token}`
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined,
-  })
-
-  const text = await res.text()
-  let json: T | null = null
-  if (text) {
-    try {
-      json = JSON.parse(text) as T
-    } catch {
-      json = null
+    if (error) {
+       console.error('[EdgeFunction] Supabase Client Error:', error);
+       // Se o erro for de conexão/network, throw para cair no catch do componente e mostrar "Erro de Rede"
+       if (error instanceof TypeError && error.message === 'Failed to fetch') {
+          throw error;
+       }
+       // Se for erro da função (500), retornamos o erro estruturado
+       return { data: { error: error.message || error }, status: 500 };
     }
+
+    return { data, status: 200 }
+  } catch (err: any) {
+    console.error('[EdgeFunction] Exception:', err);
+    // Retornar status 500 para ativar o fallback de simulação no frontend se necessário
+    return { data: { error: err.message }, status: 500 };
   }
-  return { data: json, status: res.status }
 }
