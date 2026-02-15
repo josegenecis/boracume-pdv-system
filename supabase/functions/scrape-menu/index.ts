@@ -151,6 +151,12 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
+    console.log('OpenAI Response:', aiData);
+
+    if (!aiData.choices || !aiData.choices[0]) {
+      throw new Error('No response from OpenAI');
+    }
+
     const rawContent = aiData.choices[0].message.content;
     
     console.log('AI Raw Response:', rawContent);
