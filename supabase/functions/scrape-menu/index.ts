@@ -83,17 +83,23 @@ serve(async (req) => {
       }
       
     } else if (imageBase64) {
-      // Prompt Simplificado para Velocidade
-      userPrompt = `Analise esta imagem. Liste os produtos do cardápio.
-      Para cada produto visível:
-      - Nome
-      - Preço (se não tiver, 0.00)
-      - Categoria (ex: Pizza, Bebida)
-      - Variações (tamanhos/sabores)
+      // Prompt Avançado para Cardápios Densos (Pizzarias)
+      userPrompt = `Analise esta imagem de cardápio.
+      Sua missão é extrair TODOS os produtos e suas variações de preço.
       
-      IMPORTANTE:
-      - Seja RÁPIDO.
-      - NÃO invente nada.
+      REGRAS PARA PIZZAS E VARIAÇÕES (CRUCIAL):
+      1. Se um produto tiver vários preços na mesma linha (ex: "PP. 10,00 - P. 20,00 - M. 30,00"), você DEVE criar VARIAÇÕES no array "variants".
+      2. Exemplo de saída correta para "Calabresa ... P 20,00 / G 30,00":
+         {
+           "name": "Calabresa",
+           "price": 20.00, // Preço da menor variação como base
+           "variants": [
+             { "name": "Pequena (P)", "price": 20.00 },
+             { "name": "Grande (G)", "price": 30.00 }
+           ]
+         }
+      3. NÃO IGNORE NENHUM SABOR. Leia a lista completa de cima a baixo.
+      4. Extraia a descrição dos ingredientes (ex: "molho, mussarela, cebola") para o campo "description".
       
       Saída JSON:
       ${jsonStructure}`;
@@ -107,7 +113,7 @@ serve(async (req) => {
           type: "image_url",
           image_url: {
             url: imageBase64,
-            detail: "low" // Usar low detail para ser MUITO mais rápido e barato
+            detail: "high" // Voltamos para HIGH para ler letras pequenas de preços
           },
         },
       ];
