@@ -92,7 +92,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          const MAX_SIZE = 1600;
+          // Reduzir drasticamente o tamanho para acelerar o envio e processamento
+          const MAX_SIZE = 1024; // Reduzido de 1600 para 1024
           let width = img.width;
           let height = img.height;
           
@@ -112,7 +113,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
           
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          // Qualidade reduzida para 0.7 para gerar um base64 menor e mais rápido
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
           resolve(compressedBase64);
         };
         img.onerror = (error) => reject(error);

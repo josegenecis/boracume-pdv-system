@@ -83,17 +83,19 @@ serve(async (req) => {
       }
       
     } else if (imageBase64) {
-      // MELHORIA CRÍTICA DE PROMPT PARA VISÃO
-      userPrompt = `Analise esta imagem de cardápio com EXTREMA ATENÇÃO. Sua tarefa é extrair TODOS os produtos visíveis.
+      // Prompt Simplificado para Velocidade
+      userPrompt = `Analise esta imagem. Liste os produtos do cardápio.
+      Para cada produto visível:
+      - Nome
+      - Preço (se não tiver, 0.00)
+      - Categoria (ex: Pizza, Bebida)
+      - Variações (tamanhos/sabores)
       
-      INSTRUÇÕES DE ALTA PRECISÃO:
-      1. Leia linha por linha, coluna por coluna. NÃO PULE NENHUM ITEM.
-      2. Se for um cardápio de pizza, extraia TODOS os sabores listados (ex: Calabresa, Mussarela, Portuguesa).
-      3. Se houver tamanhos (Pequena, Média, Grande), crie um produto para cada tamanho OU use o array "variants" se o nome for o mesmo.
-      4. Se o preço não estiver claro, use 0.00.
-      5. NÃO invente produtos. Apenas o que está na imagem.
+      IMPORTANTE:
+      - Seja RÁPIDO.
+      - NÃO invente nada.
       
-      FORMATO DE RESPOSTA OBRIGATÓRIO (JSON):
+      Saída JSON:
       ${jsonStructure}`;
 
       contentPayload = [
@@ -105,7 +107,7 @@ serve(async (req) => {
           type: "image_url",
           image_url: {
             url: imageBase64,
-            detail: "high" // Forçar modo de alta resolução para ler textos pequenos
+            detail: "low" // Usar low detail para ser MUITO mais rápido e barato
           },
         },
       ];
