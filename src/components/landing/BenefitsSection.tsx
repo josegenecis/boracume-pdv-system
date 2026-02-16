@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Zap, TrendingUp, BarChart3, Clock, Shield } from 'lucide-react';
+import { Star, Zap, TrendingUp, BarChart3, Clock, Shield, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const BenefitsSection = () => {
@@ -11,7 +11,8 @@ const BenefitsSection = () => {
       metric: 'Zero',
       metricLabel: 'Erros nos pedidos',
       color: 'text-yellow-500',
-      bgColor: 'bg-yellow-100',
+      bgColor: 'bg-yellow-50',
+      borderColor: 'border-yellow-200'
     },
     {
       icon: TrendingUp,
@@ -20,7 +21,8 @@ const BenefitsSection = () => {
       metric: '2x Mais',
       metricLabel: 'Giros de mesa',
       color: 'text-green-600',
-      bgColor: 'bg-green-100',
+      bgColor: 'bg-green-50',
+      borderColor: 'border-green-200'
     },
     {
       icon: Zap,
@@ -29,153 +31,103 @@ const BenefitsSection = () => {
       metric: '-15 min',
       metricLabel: 'Tempo de espera',
       color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-    },
-  ];
-
-  const additionalBenefits = [
-    {
-      icon: BarChart3,
-      title: 'Relatórios Inteligentes',
-      description: 'Dashboards em tempo real com insights acionáveis para tomada de decisões estratégicas.',
-    },
-    {
-      icon: Clock,
-      title: 'Economia de Tempo',
-      description: 'Automatize tarefas repetitivas e foque no que realmente importa: seus clientes.',
-    },
-    {
-      icon: Shield,
-      title: 'Segurança Total',
-      description: 'Dados protegidos com criptografia de ponta e conformidade com LGPD.',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200'
     },
   ];
 
   return (
-    <section className="py-20 bg-white">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-24 bg-slate-50 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+      
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="text-center mb-20"
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-            O <span className="text-boracume-orange">Salvador da Pátria</span> do seu Restaurante
+          <span className="text-boracume-orange font-semibold tracking-wider uppercase text-sm mb-2 block">Por que escolher o BoraCumê?</span>
+          <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 tracking-tight">
+            Os 3 Pilares do <span className="text-transparent bg-clip-text bg-gradient-to-r from-boracume-orange to-red-600">Sucesso</span>
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Chega de caos. Implemente os 3 Qs (Qualidade, Quantidade e Rapidez) e veja seu lucro decolar.
+          <p className="text-xl text-slate-600 max-w-3xl mx-auto font-light">
+            Nossa metodologia exclusiva dos 3 Qs (Qualidade, Quantidade e Rapidez) transforma a gestão do seu restaurante.
           </p>
         </motion.div>
 
         {/* Benefícios Principais */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
           {benefits.map((benefit, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: index * 0.2 }}
+              transition={{ duration: 0.6, delay: index * 0.2 }}
               viewport={{ once: true }}
-              className="relative bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100"
+              className={`group relative bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 border ${benefit.borderColor} hover:-translate-y-2`}
             >
               {/* Ícone */}
-              <div className={`w-16 h-16 ${benefit.bgColor} rounded-2xl flex items-center justify-center mb-6`}>
+              <div className={`w-16 h-16 ${benefit.bgColor} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
                 <benefit.icon className={`w-8 h-8 ${benefit.color}`} />
               </div>
 
               {/* Conteúdo */}
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">
+              <h3 className="text-2xl font-bold text-slate-900 mb-4">
                 {benefit.title}
               </h3>
-              <p className="text-gray-600 mb-6 leading-relaxed">
+              <p className="text-slate-600 mb-8 leading-relaxed">
                 {benefit.description}
               </p>
 
               {/* Métrica */}
-              <div className="border-t border-gray-100 pt-6">
-                <div className={`text-3xl font-bold ${benefit.color} mb-1`}>
-                  {benefit.metric}
+              <div className="border-t border-slate-100 pt-6 flex items-center justify-between">
+                <div>
+                  <div className={`text-3xl font-bold ${benefit.color} mb-1`}>
+                    {benefit.metric}
+                  </div>
+                  <div className="text-sm text-slate-500 font-medium uppercase tracking-wide">
+                    {benefit.metricLabel}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500">
-                  {benefit.metricLabel}
+                <div className={`w-10 h-10 rounded-full ${benefit.bgColor} flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}>
+                   <Check className={`w-5 h-5 ${benefit.color}`} />
                 </div>
               </div>
-
-              {/* Elemento decorativo */}
-              <div className={`absolute top-4 right-4 w-20 h-20 ${benefit.bgColor} rounded-full opacity-10`}></div>
             </motion.div>
           ))}
         </div>
 
-        {/* Benefícios Adicionais */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="bg-gray-50 rounded-3xl p-8 md:p-12"
-        >
-          <div className="text-center mb-12">
-            <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
-              E muito mais...
-            </h3>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Uma plataforma completa com tudo que você precisa para gerenciar seu restaurante
-            </p>
-          </div>
+        {/* Feature Grid Compact */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+           {[
+             { icon: BarChart3, title: "Dashboards", desc: "Visão em tempo real" },
+             { icon: Clock, title: "Automação", desc: "Menos tarefas manuais" },
+             { icon: Shield, title: "Segurança", desc: "Dados criptografados" },
+             { icon: Star, title: "Suporte VIP", desc: "Atendimento prioritário" }
+           ].map((item, idx) => (
+             <motion.div
+               key={idx}
+               initial={{ opacity: 0, scale: 0.9 }}
+               whileInView={{ opacity: 1, scale: 1 }}
+               transition={{ delay: 0.4 + (idx * 0.1) }}
+               viewport={{ once: true }}
+               className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:border-boracume-orange/30 transition-colors"
+             >
+               <div className="bg-slate-50 p-3 rounded-xl text-slate-700">
+                 <item.icon className="w-6 h-6" />
+               </div>
+               <div>
+                 <h4 className="font-bold text-slate-900">{item.title}</h4>
+                 <p className="text-sm text-slate-500">{item.desc}</p>
+               </div>
+             </motion.div>
+           ))}
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {additionalBenefits.map((benefit, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="text-center"
-              >
-                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <benefit.icon className="w-6 h-6 text-gray-700" />
-                </div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                  {benefit.title}
-                </h4>
-                <p className="text-gray-600 text-sm">
-                  {benefit.description}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* CTA Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          viewport={{ once: true }}
-          className="text-center mt-16"
-        >
-          <div className="bg-boracume-orange rounded-2xl p-8 md:p-12 text-white">
-            <h3 className="text-2xl md:text-3xl font-bold mb-4">
-              Pronto para transformar seu restaurante?
-            </h3>
-            <p className="text-white/80 mb-8 max-w-2xl mx-auto">
-              Junte-se a mais de 1.000 restaurantes que já aumentaram suas vendas com o BoraCumê
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="bg-white text-boracume-orange px-8 py-4 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
-                Começar Teste Grátis
-              </button>
-              <button className="border-2 border-white text-white px-8 py-4 rounded-xl font-semibold hover:bg-white/10 transition-colors">
-                Agendar Demonstração
-              </button>
-            </div>
-          </div>
-        </motion.div>
       </div>
     </section>
   );
