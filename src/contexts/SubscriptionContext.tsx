@@ -28,43 +28,74 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     console.log('🔍 [SUBSCRIPTION] useEffect executado, user:', user?.id);
     
     const fetchPlans = async () => {
-      console.log('🔍 [SUBSCRIPTION] Iniciando fetchPlans...');
       setIsLoading(true);
-      
       try {
-        console.log('🔍 [SUBSCRIPTION] Executando query no Supabase...');
-        
-        // Implementar timeout para a query do Supabase
-        const queryPromise = supabase
+        const { data, error } = await supabase
           .from('subscription_plans')
           .select('*')
-          .order('price', { ascending: true });
-          
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na query de subscription_plans')), 5000)
-        );
-        
-        console.log('🔍 [SUBSCRIPTION] Aguardando resultado da query com timeout...');
-        const result = await Promise.race([queryPromise, timeoutPromise]);
-        const { data, error } = result as any;
-
-        console.log('🔍 [SUBSCRIPTION] Resultado da query - data:', data, 'error:', error);
+          .order('price');
 
         if (error) {
-          console.error('❌ [SUBSCRIPTION] Erro na query:', error);
+          console.error('Error fetching plans:', error);
           throw error;
         }
         
-        console.log('✅ [SUBSCRIPTION] Plans carregados:', data?.length || 0);
-        setPlans(data as Plan[]);
+        // FALLBACK SE O BANCO ESTIVER VAZIO
+        if (!data || data.length === 0) {
+            console.warn('⚠️ Banco de dados vazio. Usando planos padrão locais.');
+            setPlans([
+              {
+                  id: 1,
+                  name: 'Essencial',
+                  description: 'Para quem está começando',
+                  price: 89.00,
+                  features: ["Cardápio Digital", "PDV Frente de Caixa", "Gestão de Pedidos", "Até 100 Produtos", "Relatórios Básicos", "1 Usuário"]
+              },
+              {
+                  id: 2,
+                  name: 'Profissional',
+                  description: 'Para restaurantes em crescimento',
+                  price: 169.00,
+                  features: ["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários", "WhatsApp Bot (Cardápio)"]
+              },
+              {
+                  id: 3,
+                  name: 'Enterprise',
+                  description: 'Para redes e franquias',
+                  price: 229.00,
+                  features: ["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca", "Agente de Voz IA", "Importação de Cardápio com IA"]
+              }
+            ]);
+        } else {
+            setPlans(data);
+        }
       } catch (error) {
-        console.error('❌ [SUBSCRIPTION] Error fetching subscription plans:', error);
-        console.error('❌ [SUBSCRIPTION] Stack trace:', error.stack);
-        
-        // Em caso de erro, definir plans vazio para não travar a aplicação
-        setPlans([]);
+        console.error('Error fetching plans:', error);
+        // Fallback em caso de erro de conexão também
+        setPlans([
+              {
+                  id: 1,
+                  name: 'Essencial',
+                  description: 'Para quem está começando',
+                  price: 89.00,
+                  features: ["Cardápio Digital", "PDV Frente de Caixa", "Gestão de Pedidos", "Até 100 Produtos", "Relatórios Básicos", "1 Usuário"]
+              },
+              {
+                  id: 2,
+                  name: 'Profissional',
+                  description: 'Para restaurantes em crescimento',
+                  price: 169.00,
+                  features: ["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários", "WhatsApp Bot (Cardápio)"]
+              },
+              {
+                  id: 3,
+                  name: 'Enterprise',
+                  description: 'Para redes e franquias',
+                  price: 229.00,
+                  features: ["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca", "Agente de Voz IA", "Importação de Cardápio com IA"]
+              }
+        ]);
       } finally {
-        console.log('🔍 [SUBSCRIPTION] Finalizando loading...');
         setIsLoading(false);
       }
     };
