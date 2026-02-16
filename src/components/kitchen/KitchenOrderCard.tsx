@@ -106,11 +106,33 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
     }
   };
 
+  const getDisplayName = (name: string, type?: string) => {
+      // Se for mesa ou tipo dine_in
+      if (type === 'dine_in' || name.toLowerCase().includes('mesa')) {
+          const mesaMatch = name.match(/mesa\s*(\d+)/i);
+          if (mesaMatch) return `MESA ${mesaMatch[1]}`;
+          if (name.length > 15 && name.toLowerCase().includes('mesa')) return "MESA";
+      }
+      return name;
+  };
+
+  const getPaymentStatus = (order: KitchenOrder) => {
+      // Lógica simples: Se for delivery/pickup online = PAGO. Se for mesa = A PAGAR.
+      // Idealmente viria do banco (payment_status).
+      // Vou assumir que 'pending_payment' é o status do pagamento, mas aqui só temos order.status.
+      // Vou usar uma lógica baseada no tipo por enquanto.
+      if (order.order_type === 'dine_in') return { label: 'A PAGAR', color: 'bg-red-100 text-red-700' };
+      if (order.order_type === 'delivery') return { label: 'PAGO', color: 'bg-green-100 text-green-700' }; 
+      return { label: 'PENDENTE', color: 'bg-yellow-100 text-yellow-700' };
+  };
+  
+  const paymentInfo = getPaymentStatus(order);
+
   return (
     <Card className={`w-full max-w-[400px] shrink-0 border-0 ${isHighPriority ? 'ring-4 ring-red-500 shadow-2xl' : 'ring-1 ring-gray-200'} shadow-lg transition-all hover:scale-[1.01] hover:shadow-xl rounded-2xl overflow-hidden`}>
       <div className={`px-5 py-4 text-white ${getHeaderColor(order.status)} bg-gradient-to-r from-transparent via-white/5 to-transparent`}>
         <div className="flex items-center justify-between gap-2">
-          <div className="font-black text-2xl tracking-tight">#{order.order_number}</div>
+          <div className="font-black text-3xl tracking-tight">#{order.order_number.slice(-4)}</div>
           <div className="flex items-center gap-2">
             {isHighPriority && (
               <Badge className="bg-white text-red-600 font-bold animate-pulse">
@@ -127,9 +149,14 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
           <Badge variant="outline" className="text-white border-white/40 bg-white/10 text-xs uppercase tracking-wider">
             {getStatusLabel(order.status)}
           </Badge>
-          <Badge variant="secondary" className="bg-white text-black font-bold text-xs">
-            {getOrderTypeLabel(order.order_type)}
-          </Badge>
+          <div className="flex gap-2">
+             <Badge className={`text-[10px] font-bold ${paymentInfo.color}`}>
+                {paymentInfo.label}
+             </Badge>
+             <Badge variant="secondary" className="bg-white text-black font-bold text-xs">
+                {getOrderTypeLabel(order.order_type)}
+             </Badge>
+          </div>
         </div>
       </div>
 
@@ -138,7 +165,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
             <div className="flex items-center gap-3 mb-1">
               <User size={18} className="text-gray-500" />
-              <span className="font-bold text-lg text-gray-800 truncate">{order.customer_name}</span>
+              <span className="font-bold text-2xl text-gray-800 truncate">{getDisplayName(order.customer_name, order.order_type)}</span>
             </div>
              {order.customer_phone && (
               <div className="flex items-center gap-3 text-sm text-gray-600 pl-1">

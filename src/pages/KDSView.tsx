@@ -80,30 +80,30 @@ const KDSView = () => {
       {/* Kanban Board */}
       <div className="flex-1 p-4 overflow-x-auto">
         <div className="flex gap-4 h-full min-w-[1000px]">
-          {/* Coluna 1: Pendentes (Entrada) */}
+          {/* Coluna 1: Pendentes (Vermelho - Atenção!) */}
           {renderColumn(
-            'Novos Pedidos', 
+            'Fila de Produção', 
             <Clock className="h-6 w-6" />, 
             columns.pending, 
-            'bg-gray-600',
+            'bg-red-600', // Vermelho para chamar atenção
             'preparing'
           )}
 
-          {/* Coluna 2: Em Preparo (Produção) */}
+          {/* Coluna 2: Em Preparo (Amarelo - Atenção/Processo) */}
           {renderColumn(
             'Em Preparo', 
             <ChefHat className="h-6 w-6" />, 
             columns.preparing, 
-            'bg-orange-500',
+            'bg-yellow-500', // Amarelo
             'ready'
           )}
 
-          {/* Coluna 3: Prontos (Saída) */}
+          {/* Coluna 3: Prontos (Verde - Sucesso) */}
           {renderColumn(
             'Prontos para Entrega', 
             <CheckCircle className="h-6 w-6" />, 
             columns.ready, 
-            'bg-green-600',
+            'bg-green-600', // Verde
             'delivered'
           )}
         </div>
