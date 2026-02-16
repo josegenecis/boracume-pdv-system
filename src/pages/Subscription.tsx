@@ -246,77 +246,99 @@ const Subscription = () => {
         {subscription?.status === 'active' && renderCurrentPlan()}
         
         {/* Available Plans */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {plans.map((plan) => {
             const isCurrentPlan = subscription?.plan_id === plan.id;
+            const isProfessional = plan.name === 'Profissional';
+            const isEnterprise = plan.name === 'Enterprise';
+            const isEssencial = plan.name === 'Essencial';
 
-            const isPro = plan.name === 'Pro' || plan.name === 'Profissional';
+            let borderColor = "border-gray-200";
+            let bgColor = "bg-white";
+            let headerColor = "";
+            let buttonVariant = "outline" as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 
-            
+            if (isProfessional) {
+               borderColor = "border-amber-400";
+               bgColor = "bg-gradient-to-b from-amber-50 to-white";
+               headerColor = "bg-amber-500 text-white";
+               buttonVariant = "default";
+            } else if (isEnterprise) {
+               borderColor = "border-purple-400";
+               bgColor = "bg-gradient-to-b from-purple-50 to-white";
+               headerColor = "bg-purple-600 text-white";
+               buttonVariant = "default";
+            }
+
+            if (isCurrentPlan) {
+                borderColor = "border-boracume-green";
+                buttonVariant = "outline";
+            }
+
             return (
               <Card 
                 key={plan.id} 
-
-                className={`relative ${isCurrentPlan ? "border-2 border-boracume-green" : ""} ${isPro || plan.name === 'Profissional' ? "border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50" : ""}`}
-
+                className={`relative flex flex-col h-full border-2 ${borderColor} ${bgColor} transition-all duration-200 hover:shadow-lg`}
               >
                 {isCurrentPlan && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-boracume-green text-white px-4 py-1 rounded-full text-xs font-bold">
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-boracume-green text-white px-4 py-1 rounded-full text-xs font-bold z-10">
                     Plano Atual
                   </div>
                 )}
 
-                {(isPro || plan.name === 'Profissional') && !isCurrentPlan && (
-
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                {isProfessional && !isCurrentPlan && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-amber-500 text-white px-4 py-1 rounded-full text-xs font-bold z-10 flex items-center gap-1 shadow-md">
                     <Crown size={12} />
                     Mais Popular
                   </div>
                 )}
                 
-                <CardHeader className={isPro ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-t-lg" : ""}>
-                  <CardTitle className="flex items-center gap-2">
-                    {getPlanIcon(plan.name)}
+                <CardHeader className={`rounded-t-lg pb-6 ${headerColor}`}>
+                  <CardTitle className="flex items-center justify-center gap-2 text-xl">
+                    {isProfessional && <Crown size={24} />}
+                    {isEnterprise && <Zap size={24} />}
+                    {isEssencial && <Clock size={24} />}
                     {plan.name}
                   </CardTitle>
-                  <CardDescription className={isPro ? "text-amber-100" : ""}>
+                  <CardDescription className={`text-center ${isProfessional || isEnterprise ? "text-white/90" : ""}`}>
                     {plan.description}
                   </CardDescription>
-                  <div className="mt-4">
-                    <span className={`text-4xl font-bold ${isPro ? "text-white" : "text-boracume-orange"}`}>
+                  <div className="mt-4 text-center">
+                    <span className={`text-4xl font-bold ${!headerColor ? "text-boracume-orange" : "text-white"}`}>
                       R$ {plan.price.toFixed(2)}
                     </span>
-                    <span className={`text-sm ${isPro ? "text-amber-100" : "text-muted-foreground"}`}>
+                    <span className={`text-sm ${!headerColor ? "text-muted-foreground" : "text-white/80"}`}>
                       /mês
                     </span>
                   </div>
                 </CardHeader>
                 
-                <CardContent className="pt-6 space-y-4">
-                  <h4 className="font-medium text-lg">Recursos incluídos:</h4>
+                <CardContent className="pt-6 space-y-4 flex-grow">
+                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider text-center mb-4">O que está incluído</h4>
                   <ul className="space-y-3">
                     {getPlanFeatures(plan.name).map((feature, index) => (
                       <li key={index} className="flex items-start">
-                        <Check className="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm">{feature}</span>
+                        <Check className={`h-5 w-5 mr-3 mt-0.5 flex-shrink-0 ${isProfessional ? "text-amber-500" : isEnterprise ? "text-purple-500" : "text-green-500"}`} />
+                        <span className="text-sm text-gray-700">{feature}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
                 
-                <CardFooter>
+                <CardFooter className="pt-2 pb-6">
                   <Button
-                    className={`w-full ${isPro ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600" : ""}`}
+                    className={`w-full ${isProfessional ? "bg-amber-600 hover:bg-amber-700" : isEnterprise ? "bg-purple-600 hover:bg-purple-700" : ""}`}
                     onClick={() => handleSubscribeStripe(plan.id)}
                     disabled={loading || isCurrentPlan}
-                    variant={isPro && !isCurrentPlan ? "default" : isCurrentPlan ? "outline" : "outline"}
+                    variant={isCurrentPlan ? "outline" : buttonVariant}
+                    size="lg"
                   >
                     {isCurrentPlan ? (
                       "Plano Atual"
                     ) : (
                       <>
-                        {isPro && <Crown size={16} className="mr-2" />}
-                        {loading ? "Processando..." : `Escolher ${plan.name}`}
+                        {isProfessional && <Crown size={16} className="mr-2" />}
+                        {loading ? "Processando..." : `Assinar ${plan.name}`}
                       </>
                     )}
                   </Button>
