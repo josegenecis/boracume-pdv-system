@@ -107,7 +107,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   return (
-    <Card className={`w-full min-w-[300px] shrink-0 border-2 ${isHighPriority ? 'border-red-500 shadow-red-100' : 'border-gray-200'} shadow-md transition-all hover:shadow-lg`}>
+    <Card className={`w-full max-w-[400px] shrink-0 border-2 ${isHighPriority ? 'border-red-500 shadow-red-100' : 'border-gray-200'} shadow-md transition-all hover:shadow-lg`}>
       <div className={`px-4 py-3 text-white ${getHeaderColor(order.status)}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="font-black text-2xl tracking-tight">#{order.order_number}</div>

@@ -62,7 +62,7 @@ const KDSView = () => {
       <header className="bg-gray-900 text-white p-4 shadow-md flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
           <ChefHat className="h-8 w-8 text-orange-500" />
-          <h1 className="text-2xl font-bold tracking-tight">KDS - Cozinha</h1>
+          <h1 className="text-2xl font-bold tracking-tight">KDS - Cozinha <span className="text-xs text-gray-500 ml-2">(v2.1)</span></h1>
         </div>
         
         <div className="flex items-center gap-4">
