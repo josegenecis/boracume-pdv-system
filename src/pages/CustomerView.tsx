@@ -14,31 +14,36 @@ const CustomerView = () => {
   }, [orders]);
 
   return (
-    <div className="h-screen w-screen bg-gray-900 text-white flex flex-col overflow-hidden font-sans">
-      <header className="bg-black/50 p-6 text-center border-b border-gray-800">
-        <h1 className="text-4xl font-bold tracking-widest uppercase text-yellow-500">Acompanhe seu Pedido</h1>
+    <div className="h-screen w-screen bg-[#0f172a] text-white flex flex-col overflow-hidden font-sans">
+      <header className="bg-black/80 p-6 text-center border-b border-gray-800 shadow-xl z-10">
+        <h1 className="text-5xl font-black tracking-widest uppercase text-yellow-400 drop-shadow-md">
+          Acompanhe seu Pedido
+        </h1>
       </header>
 
-      <div className="flex-1 flex p-8 gap-8">
+      <div className="flex-1 flex p-6 gap-6 overflow-hidden">
         {/* Preparing Column */}
-        <div className="flex-1 bg-gray-800/50 rounded-3xl border border-gray-700 flex flex-col overflow-hidden">
-          <div className="bg-orange-600/20 p-6 border-b border-orange-600/30 flex items-center justify-center gap-4">
-            <Clock className="h-10 w-10 text-orange-500" />
-            <h2 className="text-3xl font-bold text-orange-500 uppercase">Preparando</h2>
+        <div className="flex-[0.4] bg-gray-900/80 rounded-3xl border-2 border-yellow-600/30 flex flex-col overflow-hidden shadow-2xl">
+          <div className="bg-yellow-600 p-5 flex items-center justify-center gap-3 shadow-lg">
+            <Clock className="h-8 w-8 text-black" />
+            <h2 className="text-3xl font-black text-black uppercase tracking-wider">Preparando</h2>
           </div>
-          <div className="flex-1 p-6 overflow-y-auto">
-            <div className="grid grid-cols-1 gap-4">
+          <div className="flex-1 p-4 overflow-y-auto scrollbar-hide">
+            <div className="grid grid-cols-1 gap-3">
               {preparing.length === 0 ? (
-                <p className="text-gray-500 text-center text-xl mt-10">A cozinha está tranquila...</p>
+                <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
+                   <Clock className="h-20 w-20 mb-4" />
+                   <p className="text-2xl font-bold">Aguardando pedidos...</p>
+                </div>
               ) : (
                 preparing.map(order => (
-                  <div key={order.id} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex justify-between items-center animate-fade-in">
+                  <div key={order.id} className="bg-gray-800/80 p-4 rounded-xl border-l-8 border-yellow-500 flex justify-between items-center animate-fade-in shadow-md">
                     <div>
-                      <span className="text-gray-400 text-sm block mb-1">Senha/Pedido</span>
-                      <span className="text-4xl font-bold text-white tracking-wider">#{order.order_number}</span>
+                      <span className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-0.5">Senha</span>
+                      <span className="text-4xl font-black text-white tracking-widest font-mono">#{order.order_number}</span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-xl text-gray-300 font-medium">{order.customer_name.split(' ')[0]}</span>
+                    <div className="text-right max-w-[50%]">
+                      <span className="text-xl text-yellow-100 font-bold truncate block">{order.customer_name.split(' ')[0]}</span>
                     </div>
                   </div>
                 ))
@@ -47,26 +52,40 @@ const CustomerView = () => {
           </div>
         </div>
 
-        {/* Ready Column */}
-        <div className="flex-1 bg-green-900/20 rounded-3xl border border-green-800 flex flex-col overflow-hidden">
-          <div className="bg-green-600 p-6 flex items-center justify-center gap-4 shadow-lg shadow-green-900/50">
-            <CheckCircle className="h-10 w-10 text-white" />
-            <h2 className="text-4xl font-black text-white uppercase tracking-wider">PRONTO</h2>
+        {/* Ready Column - MAIOR DESTAQUE */}
+        <div className="flex-[0.6] bg-green-900/20 rounded-3xl border-4 border-green-500 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.2)]">
+          <div className="bg-green-600 p-6 flex items-center justify-center gap-4 shadow-lg animate-pulse-slow">
+            <CheckCircle className="h-12 w-12 text-white" />
+            <h2 className="text-5xl font-black text-white uppercase tracking-widest drop-shadow-md">PRONTO</h2>
           </div>
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-6 overflow-y-auto scrollbar-hide bg-gradient-to-b from-green-900/10 to-transparent">
             <div className="grid grid-cols-1 gap-4">
               {ready.length === 0 ? (
-                <p className="text-gray-500 text-center text-xl mt-10">Aguardando novos pedidos...</p>
+                 <div className="h-full flex flex-col items-center justify-center text-green-500/30">
+                   <CheckCircle className="h-32 w-32 mb-6" />
+                   <p className="text-3xl font-black uppercase">Nenhum pedido pronto</p>
+                 </div>
               ) : (
                 ready.map(order => (
-                  <div key={order.id} className="bg-green-600 p-8 rounded-2xl shadow-xl transform transition-all hover:scale-105 animate-pulse-slow">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="text-green-100 text-sm block mb-1 font-bold uppercase">Retirar no Balcão</span>
-                        <span className="text-6xl font-black text-white tracking-widest">#{order.order_number}</span>
+                  <div key={order.id} className="bg-green-600 p-6 rounded-2xl shadow-2xl transform transition-all hover:scale-[1.02] border-4 border-white/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <CheckCircle className="h-32 w-32 text-white" />
+                    </div>
+                    
+                    <div className="flex justify-between items-center relative z-10">
+                      <div className="flex flex-col">
+                        <span className="text-green-100 text-sm font-black uppercase tracking-[0.2em] mb-1 bg-green-800/30 px-2 py-1 rounded w-fit">Retirar no Balcão</span>
+                        <span className="text-[5rem] leading-none font-black text-white tracking-tighter font-mono drop-shadow-lg">
+                            #{order.order_number}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-3xl text-white font-bold block">{order.customer_name.split(' ')[0]}</span>
+                      <div className="text-right max-w-[40%]">
+                        <span className="text-4xl text-white font-bold block truncate drop-shadow-md">
+                            {order.customer_name.split(' ')[0]}
+                        </span>
+                        <span className="text-lg text-green-100 font-medium opacity-90 mt-1 block">
+                            {order.customer_name.split(' ').slice(1).join(' ')}
+                        </span>
                       </div>
                     </div>
                   </div>

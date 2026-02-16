@@ -96,93 +96,81 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   return (
-    <Card className={`w-[280px] shrink-0 border ${isHighPriority ? 'border-red-500' : 'border-gray-200'} shadow-sm`}>
-      <div className={`px-3 py-2 text-white ${getHeaderColor(order.status)}`}>
+    <Card className={`w-full min-w-[300px] shrink-0 border-2 ${isHighPriority ? 'border-red-500 shadow-red-100' : 'border-gray-200'} shadow-md transition-all hover:shadow-lg`}>
+      <div className={`px-4 py-3 text-white ${getHeaderColor(order.status)}`}>
         <div className="flex items-center justify-between gap-2">
-          <div className="font-bold text-sm truncate">#{order.order_number}</div>
+          <div className="font-black text-2xl tracking-tight">#{order.order_number}</div>
           <div className="flex items-center gap-2">
             {isHighPriority && (
-              <Badge className="bg-white/20 text-white text-[10px] h-5 px-1.5">
-                Urgente
+              <Badge className="bg-white text-red-600 font-bold animate-pulse">
+                URGENTE
               </Badge>
             )}
-            <div className="flex items-center text-[11px] font-medium">
-              <Clock size={12} className="mr-1" />
+            <div className="flex items-center bg-black/20 px-2 py-1 rounded text-sm font-bold backdrop-blur-sm">
+              <Clock size={14} className="mr-1.5" />
               {timePassed}
             </div>
           </div>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <div className="text-[11px] opacity-95">{getStatusLabel(order.status)}</div>
-          <div className="text-[11px] opacity-95">{getOrderTypeLabel(order.order_type)}</div>
+        <div className="mt-2 flex items-center justify-between">
+          <Badge variant="outline" className="text-white border-white/40 bg-white/10 text-xs uppercase tracking-wider">
+            {getStatusLabel(order.status)}
+          </Badge>
+          <Badge variant="secondary" className="bg-white text-black font-bold text-xs">
+            {getOrderTypeLabel(order.order_type)}
+          </Badge>
         </div>
       </div>
 
-      <CardContent className="py-3 space-y-3">
+      <CardContent className="p-4 space-y-4">
         {/* Customer Info */}
-        <div className="text-sm space-y-1">
-            <div className="flex items-center gap-2">
-              <User size={14} className="text-muted-foreground" />
-              <span className="font-medium truncate">{order.customer_name}</span>
+        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+            <div className="flex items-center gap-3 mb-1">
+              <User size={18} className="text-gray-500" />
+              <span className="font-bold text-lg text-gray-800 truncate">{order.customer_name}</span>
             </div>
              {order.customer_phone && (
-              <div className="flex items-center gap-2">
-                <Phone size={14} className="text-muted-foreground" />
-                <span className="text-muted-foreground">{order.customer_phone}</span>
-              </div>
-            )}
-             {order.customer_address && (
-              <div className="flex items-start gap-2">
-                <MapPin size={14} className="text-muted-foreground mt-0.5" />
-                <span className="text-muted-foreground text-xs leading-tight">{order.customer_address}</span>
+              <div className="flex items-center gap-3 text-sm text-gray-600 pl-1">
+                <Phone size={14} />
+                <span>{order.customer_phone}</span>
               </div>
             )}
         </div>
 
         <Separator />
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs font-medium text-gray-700">
-            <div className="flex items-center gap-2">
-              <Package size={14} />
-              <span>Itens ({order.items.length})</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
+        <div className="space-y-2">
             {order.items.map((item, idx) => (
-              <div key={idx} className="text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
+              <div key={idx} className="flex flex-col gap-1 py-1 border-b border-gray-100 last:border-0">
                 <div className="flex justify-between items-start">
-                  <span className="font-bold text-gray-900 text-sm">{item.quantity}x {item.name}</span>
+                   <div className="flex gap-2">
+                      <span className="font-black text-lg text-gray-900 min-w-[24px]">{item.quantity}x</span>
+                      <span className="font-bold text-gray-800 text-lg leading-tight">{item.name}</span>
+                   </div>
                 </div>
 
-                {item.variations && item.variations.length > 0 && (
-                  <ul className="mt-1 space-y-0.5">
-                    {item.variations.map((variation, index) => {
-                      if (!variation.selectedOptions || variation.selectedOptions.length === 0) return null;
-                      return variation.selectedOptions.map((option, optIndex) => (
-                        <li key={`${index}-${optIndex}`} className="text-xs text-blue-600 font-medium pl-2 border-l-2 border-blue-200">
-                          {option}
-                        </li>
-                      ));
-                    })}
-                  </ul>
-                )}
+                {/* Variações e Opcionais */}
+                {item.variations?.map((v, i) => (
+                   <div key={i} className="pl-8 text-sm text-gray-600">
+                      <span className="font-medium text-blue-600">{v.name}:</span> {v.selectedOptions.join(', ')}
+                   </div>
+                ))}
                 
+                {/* Observações em DESTAQUE */}
                 {item.notes && (
-                  <div className="mt-2 text-xs italic text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-100">
-                    <span className="font-semibold">Obs:</span> {item.notes}
+                  <div className="mt-1 ml-8 text-sm font-bold text-red-600 bg-red-50 p-2 rounded border border-red-100 flex items-start gap-2">
+                    <span className="uppercase text-[10px] bg-red-100 px-1 rounded text-red-700 mt-0.5">Obs</span>
+                    {item.notes}
                   </div>
                 )}
               </div>
             ))}
-          </div>
         </div>
       </CardContent>
       
       <Separator />
       
-      <CardFooter className="pt-3 pb-3 bg-gray-50/30">
+      <CardFooter className="p-4 bg-gray-50">
         <div className="flex w-full gap-2">
           {order.status === 'pending' && (
             <Button
