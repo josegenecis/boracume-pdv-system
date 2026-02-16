@@ -168,36 +168,35 @@ const Subscription = () => {
 
       case 'Essencial':
         return [
-          'Cardápio digital completo',
+          'Cardápio digital',
           'PDV básico',
-          'Recebimento de pedidos online',
-          'Gestão de produtos (até 100 itens)',
-          'Relatórios básicos',
-          'Suporte por email',
-          '1 usuário',
-          'Backup semanal'
+          'Gestão de Pedidos',
+          'Até 100 Produtos',
+          'Relatórios Básicos',
+          '1 Usuário'
         ];
       case 'Profissional':
         return [
-          'Tudo do plano Essencial',
-          'Produtos ilimitados',
-          'Gestão de entregadores',
-          'Sistema KDS (Kitchen Display)',
-          'Relatórios avançados e analytics',
-          'Sistema financeiro completo',
-          'Marketing e promoções',
-          'Integração com balanças',
-          'QR Code personalizado',
-          'Gestão de mesas',
-          'Sistema de fidelidade',
-          'WhatsApp Bot integrado',
-          'Suporte prioritário',
-          'Backup diário automático',
-          'Até 5 usuários',
-          'API para integrações',
-          'Relatórios fiscais (NFCe)'
+          'Tudo do Essencial',
+          'Produtos Ilimitados',
+          'Gestão de Entregadores',
+          'KDS (Tela de Cozinha)',
+          'Controle de Estoque',
+          'Gestão Financeira',
+          'Até 5 Usuários',
+          'WhatsApp Bot (Cardápio)'
         ];
-
+      case 'Enterprise':
+        return [
+          'Tudo do Profissional',
+          'Múltiplas Lojas',
+          'API de Integração',
+          'Suporte Prioritário',
+          'Gerente de Contas',
+          'Customização de Marca',
+          'Agente de Voz IA',
+          'Importação de Cardápio com IA'
+        ];
       case 'Basic':
         return [
           'Cardápio digital',

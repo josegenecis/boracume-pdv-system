@@ -12,21 +12,21 @@ VALUES
   (
     'Essencial', 
     'Para quem está começando', 
-    49.90, 
+    89.00, 
     '["Cardápio Digital", "PDV Frente de Caixa", "Gestão de Pedidos", "Até 100 Produtos", "Relatórios Básicos", "1 Usuário"]'::jsonb,
-    'price_H5ggYJDqQq' -- Placeholder, user must update
+    'price_H5ggYJDqQq' 
   ),
   (
     'Profissional', 
     'Para restaurantes em crescimento', 
-    99.90, 
-    '["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários"]'::jsonb,
-    'price_H5ggYJDqQr' -- Placeholder, user must update
+    169.00, 
+    '["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários", "WhatsApp Bot (Cardápio)"]'::jsonb,
+    'price_H5ggYJDqQr' 
   ),
   (
     'Enterprise', 
     'Para redes e franquias', 
-    199.90, 
-    '["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca"]'::jsonb,
-    'price_H5ggYJDqQs' -- Placeholder, user must update
+    229.00, 
+    '["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca", "Agente de Voz IA", "Importação de Cardápio com IA"]'::jsonb,
+    'price_H5ggYJDqQs' 
   );
