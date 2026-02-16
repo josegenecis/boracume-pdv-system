@@ -275,6 +275,16 @@ export class SoundNotifications {
   isAudioSupported(): boolean {
     return typeof Audio !== 'undefined';
   }
+
+  // Helper específico para cozinha (Sino alto)
+  async playKitchenBell() {
+    await this.playSound('bell');
+  }
+
+  // Helper específico para delivery (Notificação suave)
+  async playDeliverySound() {
+    await this.playSound('notification');
+  }
 }
 
 // Singleton instance

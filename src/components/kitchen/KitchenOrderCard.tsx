@@ -7,9 +7,12 @@ import { Clock, RotateCcw, Package, User, CheckCircle, Truck, Phone, MapPin } fr
 
 interface OrderItem {
   id: string;
-  name: string;
+  name?: string;
+  product_name?: string;
+  title?: string;
   quantity: number;
   notes?: string;
+  observation?: string;
   options?: string[];
   variations?: {
     name: string;
@@ -39,6 +42,14 @@ interface KitchenOrderCardProps {
 }
 
 const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChange, onRecall }) => {
+
+  const getItemName = (item: any) => {
+    return item.name || item.product_name || item.title || "Item sem nome";
+  };
+
+  const getItemNotes = (item: any) => {
+    return item.notes || item.observation || "";
+  };
 
   const handleStatusChange = (newStatus: string) => {
     onStatusChange(order.id, newStatus);
@@ -145,7 +156,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 <div className="flex justify-between items-start">
                    <div className="flex gap-2">
                       <span className="font-black text-lg text-gray-900 min-w-[24px]">{item.quantity}x</span>
-                      <span className="font-bold text-gray-800 text-lg leading-tight">{item.name}</span>
+                      <span className="font-bold text-gray-800 text-lg leading-tight">{getItemName(item)}</span>
                    </div>
                 </div>
 
@@ -157,10 +168,10 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 ))}
                 
                 {/* Observações em DESTAQUE */}
-                {item.notes && (
+                {getItemNotes(item) && (
                   <div className="mt-1 ml-8 text-sm font-bold text-red-600 bg-red-50 p-2 rounded border border-red-100 flex items-start gap-2">
                     <span className="uppercase text-[10px] bg-red-100 px-1 rounded text-red-700 mt-0.5">Obs</span>
-                    {item.notes}
+                    {getItemNotes(item)}
                   </div>
                 )}
               </div>
@@ -172,23 +183,23 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
       
       <CardFooter className="p-4 bg-gray-50">
         <div className="flex w-full gap-2">
-          {order.status === 'pending' && (
+          {(order.status === 'pending' || order.status === 'accepted') && (
             <Button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-bold text-lg h-12"
               onClick={() => handleStatusChange('preparing')}
             >
-              <Package className="mr-2 h-4 w-4" />
-              Iniciar Preparo
+              <Package className="mr-2 h-5 w-5" />
+              INICIAR PREPARO
             </Button>
           )}
           
           {order.status === 'preparing' && (
             <Button
-              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-sm"
+              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold text-lg h-12"
               onClick={() => handleStatusChange('ready')}
             >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Marcar Pronto
+              <CheckCircle className="mr-2 h-5 w-5" />
+              MARCAR PRONTO
             </Button>
           )}
           

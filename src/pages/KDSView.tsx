@@ -10,7 +10,7 @@ const KDSView = () => {
 
   // Categorize orders
   const columns = useMemo(() => {
-    const pending = orders.filter(o => o.status === 'pending');
+    const pending = orders.filter(o => o.status === 'pending' || o.status === 'accepted');
     const preparing = orders.filter(o => o.status === 'preparing');
     const ready = orders.filter(o => o.status === 'ready');
 

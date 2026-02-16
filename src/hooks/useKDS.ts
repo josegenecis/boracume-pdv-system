@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { loadPrinterConfig } from '@/services/printerConfig';
 import { enqueuePrintJob } from '@/services/printRelay';
+import { soundNotifications } from '@/utils/soundUtils';
 
 export interface KitchenOrder {
   id: string;
@@ -72,12 +73,12 @@ export const useKDS = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      // Fetch orders relevant to the kitchen: pending, preparing, ready
+      // Fetch orders relevant to the kitchen: pending, accepted, preparing, ready
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .eq('user_id', user?.id)
-        .in('status', ['pending', 'preparing', 'ready']) 
+        .in('status', ['pending', 'accepted', 'preparing', 'ready']) 
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -111,10 +112,15 @@ export const useKDS = () => {
           
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as KitchenOrder;
-            if (['pending', 'preparing', 'ready'].includes(newOrder.status)) {
+            if (['pending', 'accepted', 'preparing', 'ready'].includes(newOrder.status)) {
               setOrders(prev => [...prev, newOrder]);
-              playNotificationSound();
-              // Auto-print logic if needed
+              
+              // Som diferenciado por tipo
+              if (newOrder.order_type === 'dine_in') {
+                  soundNotifications.playKitchenBell();
+              } else {
+                  soundNotifications.playDeliverySound();
+              }
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as KitchenOrder;
