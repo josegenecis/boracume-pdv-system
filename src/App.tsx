@@ -50,6 +50,8 @@ import MpCallback from '@/pages/MpCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
+import KDSView from '@/pages/KDSView';
+import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
@@ -74,9 +76,21 @@ function AppContent() {
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
       
-      {/* Landing Page - Rota pública */}
+      {/* Rotas Públicas/Standalone */}
       <Route path="/landing" element={<LandingPage />} />
-      <Route path="/debug-pix" element={<DebugPix />} /> {/* Debug Público */}
+      <Route path="/debug-pix" element={<DebugPix />} />
+      
+      {/* KDS e TV Standalone (Sem Menu Lateral) */}
+      <Route path="/kds-view" element={
+        <RouteGuard>
+          <KDSView />
+        </RouteGuard>
+      } />
+      <Route path="/tv-view" element={
+        <RouteGuard>
+          <CustomerView />
+        </RouteGuard>
+      } />
       
       {/* Rotas que precisam de autenticação */}
       <Route path="/" element={<Index />} />

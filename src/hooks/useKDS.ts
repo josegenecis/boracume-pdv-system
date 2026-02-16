@@ -72,13 +72,12 @@ export const useKDS = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      // Fetch orders that are relevant to the kitchen (preparing or ready)
-      // We also fetch pending to show new arrivals if needed, but typically KDS shows 'preparing'
+      // Fetch orders relevant to the kitchen: pending, preparing, ready
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .eq('user_id', user?.id)
-        .in('status', ['preparing', 'ready']) 
+        .in('status', ['pending', 'preparing', 'ready']) 
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -112,18 +111,16 @@ export const useKDS = () => {
           
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as KitchenOrder;
-            if (['preparing', 'ready'].includes(newOrder.status)) {
+            if (['pending', 'preparing', 'ready'].includes(newOrder.status)) {
               setOrders(prev => [...prev, newOrder]);
               playNotificationSound();
-              if (newOrder.status === 'preparing') {
-                tryAutoPrint(newOrder);
-              }
+              // Auto-print logic if needed
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as KitchenOrder;
             
             // If status changed to something not in KDS (e.g. delivered/cancelled), remove it
-            if (!['preparing', 'ready'].includes(updatedOrder.status)) {
+            if (!['pending', 'preparing', 'ready'].includes(updatedOrder.status)) {
               setOrders(prev => prev.filter(o => o.id !== updatedOrder.id));
             } else {
               // Update existing or add if it wasn't there (e.g. moved from pending -> preparing)
