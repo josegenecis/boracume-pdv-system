@@ -13,6 +13,28 @@ const CustomerView = () => {
     };
   }, [orders]);
 
+  const getDisplayName = (order: any) => {
+      // Se tiver 'Mesa' no nome ou for tipo dine_in, priorizar Mesa
+      if (order.order_type === 'dine_in' || order.customer_name.toLowerCase().includes('mesa')) {
+          // Tenta extrair número da mesa se estiver no nome
+          const mesaMatch = order.customer_name.match(/mesa\s*(\d+)/i);
+          if (mesaMatch) return `MESA ${mesaMatch[1]}`;
+          return order.customer_name.length > 15 ? order.customer_name.substring(0, 15) : order.customer_name;
+      }
+      // Se for nome de pessoa, pega primeiro nome + inicial do segundo
+      const parts = order.customer_name.split(' ');
+      if (parts.length > 1) return `${parts[0]} ${parts[1][0]}.`;
+      return parts[0];
+  };
+
+  const getDisplayNumber = (order: any) => {
+      // Se for UUID longo, pega os últimos 4 dígitos. Se for curto, mostra tudo.
+      if (order.order_number.length > 8) {
+          return `#${order.order_number.slice(-4)}`;
+      }
+      return `#${order.order_number}`;
+  };
+
   return (
     <div className="h-screen w-screen bg-[#0f172a] text-white flex flex-col overflow-hidden font-sans">
       <header className="bg-black/80 p-6 text-center border-b border-gray-800 shadow-xl z-10">
@@ -40,10 +62,10 @@ const CustomerView = () => {
                   <div key={order.id} className="bg-gray-800/80 p-4 rounded-xl border-l-8 border-yellow-500 flex justify-between items-center animate-fade-in shadow-md">
                     <div>
                       <span className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-0.5">Senha</span>
-                      <span className="text-4xl font-black text-white tracking-widest font-mono">#{order.order_number}</span>
+                      <span className="text-4xl font-black text-white tracking-widest font-mono">{getDisplayNumber(order)}</span>
                     </div>
                     <div className="text-right max-w-[50%]">
-                      <span className="text-xl text-yellow-100 font-bold truncate block">{order.customer_name.split(' ')[0]}</span>
+                      <span className="text-2xl text-yellow-100 font-bold truncate block">{getDisplayName(order)}</span>
                     </div>
                   </div>
                 ))
@@ -74,17 +96,16 @@ const CustomerView = () => {
                     
                     <div className="flex justify-between items-center relative z-10">
                       <div className="flex flex-col">
-                        <span className="text-green-100 text-sm font-black uppercase tracking-[0.2em] mb-1 bg-green-800/30 px-2 py-1 rounded w-fit">Retirar no Balcão</span>
+                        <span className="text-green-100 text-sm font-black uppercase tracking-[0.2em] mb-1 bg-green-800/30 px-2 py-1 rounded w-fit">
+                            {order.order_type === 'dine_in' ? 'Levar à Mesa' : 'Retirar no Balcão'}
+                        </span>
                         <span className="text-[5rem] leading-none font-black text-white tracking-tighter font-mono drop-shadow-lg">
-                            #{order.order_number}
+                            {getDisplayNumber(order)}
                         </span>
                       </div>
-                      <div className="text-right max-w-[40%]">
-                        <span className="text-4xl text-white font-bold block truncate drop-shadow-md">
-                            {order.customer_name.split(' ')[0]}
-                        </span>
-                        <span className="text-lg text-green-100 font-medium opacity-90 mt-1 block">
-                            {order.customer_name.split(' ').slice(1).join(' ')}
+                      <div className="text-right max-w-[50%]">
+                        <span className="text-5xl text-white font-bold block truncate drop-shadow-md leading-tight">
+                            {getDisplayName(order)}
                         </span>
                       </div>
                     </div>

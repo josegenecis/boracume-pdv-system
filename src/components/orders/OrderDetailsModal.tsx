@@ -195,6 +195,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const getStatusIcon = (status: string) => {
       switch (status) {
         case 'pending': return <Clock className="h-3 w-3" />;
+        case 'accepted': return <Check className="h-3 w-3" />;
         case 'preparing': return <Package className="h-3 w-3" />;
         case 'ready': return <CheckCircle className="h-3 w-3" />;
         case 'delivered': return <Truck className="h-3 w-3" />;
@@ -206,6 +207,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const getStatusLabel = (status: string) => {
       switch (status) {
         case 'pending': return 'Pendente';
+        case 'accepted': return 'Aceito (Cozinha)';
         case 'preparing': return 'Preparando';
         case 'ready': return 'Pronto';
         case 'delivered': return 'Entregue';
@@ -217,6 +219,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const getStatusColor = (status: string) => {
       switch (status) {
         case 'pending': return 'bg-yellow-100 text-yellow-800';
+        case 'accepted': return 'bg-orange-100 text-orange-800';
         case 'preparing': return 'bg-blue-100 text-blue-800';
         case 'ready': return 'bg-green-100 text-green-800';
         case 'delivered': return 'bg-gray-100 text-gray-800';
@@ -497,7 +500,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   {order.status === 'pending' && (
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => handleStatusUpdate('preparing')}
+                        onClick={() => handleStatusUpdate('accepted')}
                         className="flex-1 bg-green-600 hover:bg-green-700 h-8 text-xs"
                       >
                         <Check className="h-3 w-3 mr-1" />
