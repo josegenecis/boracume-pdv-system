@@ -29,70 +29,68 @@ const PricingSection = () => {
 
   const plans = [
     {
-      name: 'Starter',
-      description: 'Perfeito para restaurantes pequenos',
-      monthlyPrice: 199,
-      annualPrice: 1990,
+      name: 'Essencial',
+      description: 'Perfeito para quem está começando',
+      monthlyPrice: 89,
+      annualPrice: 890,
       icon: Users,
       color: 'boracume-blue',
       popular: false,
       features: [
-        'Até 10 mesas',
-        'Cardápio digital básico',
-        'Relatórios essenciais',
-        'Suporte por email',
-        'Integração PIX',
-        'App mobile básico'
+        'Até 100 Produtos',
+        'Cardápio Digital',
+        'PDV Frente de Caixa',
+        'Gestão de Pedidos',
+        'Relatórios Básicos',
+        '1 Usuário'
       ],
       notIncluded: [
-        'Analytics avançado',
-        'Integração delivery',
-        'Suporte 24/7',
-        'Personalização avançada'
+        'WhatsApp Bot',
+        'KDS (Cozinha)',
+        'Controle de Estoque',
+        'Gestão Financeira'
       ]
     },
     {
-      name: 'Professional',
+      name: 'Profissional',
       description: 'Ideal para restaurantes em crescimento',
-      monthlyPrice: 399,
-      annualPrice: 3990,
+      monthlyPrice: 169,
+      annualPrice: 1690,
       icon: TrendingUp,
       color: 'boracume-green',
       popular: true,
       features: [
-        'Até 30 mesas',
-        'Cardápio digital completo',
-        'Analytics avançado',
-        'Suporte prioritário',
-        'Todas as integrações de pagamento',
-        'Delivery integrado',
-        'Controle de estoque',
-        'Relatórios personalizados'
+        'Tudo do Essencial',
+        'Produtos Ilimitados',
+        'Gestão de Entregadores',
+        'KDS (Tela de Cozinha)',
+        'Controle de Estoque',
+        'Gestão Financeira',
+        'Até 5 Usuários',
+        'WhatsApp Bot (Cardápio)'
       ],
       notIncluded: [
-        'Suporte 24/7',
-        'Personalização total'
+        'Multi-lojas',
+        'Agente de Voz IA'
       ]
     },
     {
       name: 'Enterprise',
-      description: 'Para redes e grandes restaurantes',
-      monthlyPrice: 799,
-      annualPrice: 7990,
+      description: 'Para redes e grandes operações',
+      monthlyPrice: 229,
+      annualPrice: 2290,
       icon: Crown,
       color: 'boracume-orange',
       popular: false,
       features: [
-        'Mesas ilimitadas',
-        'Todas as funcionalidades',
-        'Suporte 24/7 dedicado',
-        'Personalização total',
-        'API completa',
-        'Treinamento presencial',
-        'Gerente de conta dedicado',
-        'Relatórios executivos',
-        'Integração ERP',
-        'Multi-unidades'
+        'Tudo do Profissional',
+        'Múltiplas Lojas',
+        'API de Integração',
+        'Suporte Prioritário',
+        'Gerente de Contas',
+        'Customização de Marca',
+        'Agente de Voz IA',
+        'Importação de Cardápio com IA'
       ],
       notIncluded: []
     }
@@ -261,9 +259,9 @@ const PricingSection = () => {
                 {plan.popular ? 'Começar Agora' : 'Escolher Plano'}
               </button>
 
-              {plan.name === 'Professional' && (
-                <p className="text-center text-sm text-gray-500 mt-3">
-                  14 dias grátis • Sem cartão de crédito
+              {plan.name === 'Profissional' && (
+                <p className="text-center text-sm text-gray-500 mt-3 font-semibold text-boracume-green">
+                  30 dias grátis • Sem cartão de crédito
                 </p>
               )}
             </motion.div>

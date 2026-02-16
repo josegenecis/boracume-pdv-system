@@ -46,12 +46,12 @@ const HeroSection = () => {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.8 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-bold text-boracume-blue leading-tight"
+              className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight"
             >
-              Transforme seu{' '}
-              <span className="text-boracume-orange">restaurante</span>{' '}
-              em uma{' '}
-              <span className="text-boracume-green">máquina de vendas</span>
+              Chega de Caos. <br/>
+              Sua Cozinha Precisa de{' '}
+              <span className="text-boracume-orange">Paz</span> e{' '}
+              <span className="text-boracume-green">Lucro</span>.
             </motion.h1>
 
             {/* Subtítulo */}
@@ -59,11 +59,10 @@ const HeroSection = () => {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.8 }}
-              className="text-xl text-boracume-gray leading-relaxed"
+              className="text-xl text-gray-600 leading-relaxed"
             >
-              A plataforma completa de gestão que aumenta suas vendas em{' '}
-              <strong className="text-boracume-green">40%</strong>, reduz custos operacionais e 
-              melhora a experiência do cliente com tecnologia de ponta.
+              O sistema que organiza seus pedidos, agiliza a cozinha e coloca dinheiro no seu bolso.
+              Sem gritaria, sem erros, sem dor de cabeça.
             </motion.p>
 
             {/* Estatísticas */}

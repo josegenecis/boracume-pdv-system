@@ -1,35 +1,35 @@
 import React from 'react';
-import { TrendingUp, DollarSign, Heart, BarChart3, Clock, Shield } from 'lucide-react';
+import { Star, Zap, TrendingUp, BarChart3, Clock, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const BenefitsSection = () => {
   const benefits = [
     {
+      icon: Star,
+      title: 'Qualidade (Quality)',
+      description: 'Garanta pratos perfeitos e atendimento impecável. Elimine erros de anotação e garanta que o cliente receba exatamente o que pediu, sempre.',
+      metric: 'Zero',
+      metricLabel: 'Erros nos pedidos',
+      color: 'text-yellow-500',
+      bgColor: 'bg-yellow-100',
+    },
+    {
       icon: TrendingUp,
-      title: 'Aumente vendas em 40%',
-      description: 'Cardápio digital otimizado, upselling automático e análises de performance que impulsionam suas receitas.',
-      metric: '+40%',
-      metricLabel: 'Aumento médio em vendas',
-      color: 'text-boracume-green',
-      bgColor: 'bg-boracume-green/10',
+      title: 'Quantidade (Quantity)',
+      description: 'Atenda mais mesas com a mesma equipe. Nossa automação permite que seus garçons foquem no cliente, não em correr para a cozinha.',
+      metric: '2x Mais',
+      metricLabel: 'Giros de mesa',
+      color: 'text-green-600',
+      bgColor: 'bg-green-100',
     },
     {
-      icon: DollarSign,
-      title: 'Reduza custos operacionais',
-      description: 'Automatize processos, elimine desperdícios e otimize sua operação com inteligência artificial.',
-      metric: '-30%',
-      metricLabel: 'Redução de custos',
-      color: 'text-boracume-blue',
-      bgColor: 'bg-boracume-blue/10',
-    },
-    {
-      icon: Heart,
-      title: 'Melhore experiência do cliente',
-      description: 'Interface intuitiva, pedidos rápidos e acompanhamento em tempo real que encantam seus clientes.',
-      metric: '4.9/5',
-      metricLabel: 'Satisfação do cliente',
-      color: 'text-boracume-orange',
-      bgColor: 'bg-boracume-orange/10',
+      icon: Zap,
+      title: 'Rapidez (Quickness)',
+      description: 'Do pedido à cozinha em 1 segundo. KDS instantâneo, pagamento via PIX na mesa e fila de espera andando rápido.',
+      metric: '-15 min',
+      metricLabel: 'Tempo de espera',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100',
     },
   ];
 
@@ -63,11 +63,10 @@ const BenefitsSection = () => {
           className="text-center mb-16"
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-            Por que escolher o{' '}
-            <span className="text-boracume-orange">BoraCumê</span>?
+            O <span className="text-boracume-orange">Salvador da Pátria</span> do seu Restaurante
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Resultados comprovados que transformam restaurantes em negócios de sucesso
+            Chega de caos. Implemente os 3 Qs (Qualidade, Quantidade e Rapidez) e veja seu lucro decolar.
           </p>
         </motion.div>
 
