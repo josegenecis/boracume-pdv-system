@@ -65,7 +65,12 @@ serve(async (req) => {
     const orderId = body?.order_id ?? body?.metadata?.order_id ?? body?.orderId ?? ''
     const correlationID = body?.charge?.correlationID ?? body?.pix?.charge?.correlationID ?? ''
 
+    console.log(`[PixWebhook] Received request. CID: ${cid}, Secret provided: ${!!providedSecret}`);
+
+    // ... (rest of the code)
+
     if (cid) {
+      console.log(`[PixWebhook] Processing correlation ID: ${cid}`);
       const { data: checkout, error: chkErr } = await supabase
         .from('pix_checkouts')
         .select('id, restaurant_user_id, status, provider, order_payload, order_id')
@@ -73,43 +78,59 @@ serve(async (req) => {
         .maybeSingle()
 
       if (chkErr || !checkout) {
+        console.error(`[PixWebhook] Checkout not found for CID: ${cid}`, chkErr);
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
+      console.log(`[PixWebhook] Checkout found. Status: ${checkout.status}, Provider: ${checkout.provider}`);
+
       if (checkout.status === 'PAID' && checkout.order_id) {
+        console.log(`[PixWebhook] Checkout already PAID. Order ID: ${checkout.order_id}`);
         return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       if (String(checkout.provider).toLowerCase() === 'mercadopago') {
         const paymentId = body?.data?.id ?? body?.id ?? ''
+        console.log(`[PixWebhook] MP Payment ID: ${paymentId}`);
+        
         if (!paymentId) {
-          return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+           // Se for apenas teste de validação do MP
+           if (body?.action === 'test.created') {
+               console.log('[PixWebhook] MP Test Notification received.');
+               return new Response(JSON.stringify({ ok: true }), { status: 200 });
+           }
+           console.log('[PixWebhook] No payment ID found in body');
+           return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
+        // ... busca credenciais ...
         const { data: mp, error: mpErr } = await supabase
           .from('pix_settings')
           .select('enabled, bank, client_id')
           .eq('user_id', checkout.restaurant_user_id)
           .maybeSingle()
-
-        if (mpErr || !mp || !mp.enabled) {
-          return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        
+        if (!mp || !mp.client_id) {
+            console.error(`[PixWebhook] MP settings not found for user ${checkout.restaurant_user_id}`);
+            return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 });
         }
 
         const accessToken = String(mp.client_id || '')
-        if (!accessToken) {
-          return new Response(JSON.stringify({ error: 'missing_provider_credentials' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-        }
-
+        
+        console.log(`[PixWebhook] Fetching payment status from MP API...`);
         const paymentResp = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(paymentId))}`, {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         })
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
+        
         if (!paymentResp.ok) {
+          console.error(`[PixWebhook] MP API Error:`, paymentJson);
           return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
+        console.log(`[PixWebhook] Payment Status: ${mpStatus}`);
+        
         const isApproved = mpStatus === 'approved'
         if (!isApproved) {
           await supabase
@@ -119,30 +140,29 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
+        // CREATE ORDER
+        console.log(`[PixWebhook] Creating Order...`);
         const payload = checkout.order_payload || {}
+        // ... (rest of order creation)
         const orderNumber = payload?.order_number || `MP-${cid.slice(0, 8)}`
         const insertData: any = {
           user_id: checkout.restaurant_user_id,
           order_number: orderNumber,
-          customer_name: payload?.customer_name || null,
+          customer_name: payload?.customer_name || 'Cliente', // Fallback
           customer_phone: payload?.customer_phone || null,
           customer_address: payload?.customer_address || null,
           customer_neighborhood: payload?.customer_neighborhood || null,
           delivery_zone_id: payload?.delivery_zone_id || null,
           items: payload?.items || [],
           total: payload?.total || 0,
-          delivery_fee: payload?.delivery_fee || null,
-          payment_method: payload?.payment_method || 'pix',
-          status: 'pending',
+          delivery_fee: payload?.delivery_fee || 0,
+          payment_method: 'pix', // Force PIX
+          status: 'pending', // Status inicial para o painel
           acceptance_status: 'pending_acceptance',
           change_amount: payload?.change_amount ?? null,
           order_type: payload?.order_type || 'delivery',
           delivery_instructions: payload?.delivery_instructions || null,
-          estimated_time: payload?.estimated_time || null,
-          customer_latitude: payload?.customer_latitude || null,
-          customer_longitude: payload?.customer_longitude || null,
-          customer_location_accuracy: payload?.customer_location_accuracy || null,
-          google_maps_link: payload?.google_maps_link || null
+          // ...
         }
 
         const { data: created, error: createErr } = await supabase
@@ -151,10 +171,14 @@ serve(async (req) => {
           .select('id')
           .single()
 
-        if (createErr || !created?.id) {
-          return new Response(JSON.stringify({ error: 'order_create_failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        if (createErr) {
+            console.error(`[PixWebhook] Order Creation Error:`, createErr);
+            return new Response(JSON.stringify({ error: 'order_create_failed' }), { status: 500 });
         }
 
+        console.log(`[PixWebhook] Order Created: ${created.id}`);
+        
+        // ... update checkout ...
         await supabase
           .from('pix_checkouts')
           .update({ status: 'PAID', order_id: created.id, updated_at: new Date().toISOString() })
