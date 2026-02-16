@@ -107,8 +107,8 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   return (
-    <Card className={`w-full max-w-[400px] shrink-0 border-2 ${isHighPriority ? 'border-red-500 shadow-red-100' : 'border-gray-200'} shadow-md transition-all hover:shadow-lg`}>
-      <div className={`px-4 py-3 text-white ${getHeaderColor(order.status)}`}>
+    <Card className={`w-full max-w-[400px] shrink-0 border-0 ${isHighPriority ? 'ring-4 ring-red-500 shadow-2xl' : 'ring-1 ring-gray-200'} shadow-lg transition-all hover:scale-[1.01] hover:shadow-xl rounded-2xl overflow-hidden`}>
+      <div className={`px-5 py-4 text-white ${getHeaderColor(order.status)} bg-gradient-to-r from-transparent via-white/5 to-transparent`}>
         <div className="flex items-center justify-between gap-2">
           <div className="font-black text-2xl tracking-tight">#{order.order_number}</div>
           <div className="flex items-center gap-2">

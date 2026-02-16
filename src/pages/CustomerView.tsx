@@ -16,9 +16,15 @@ const CustomerView = () => {
   const getDisplayName = (order: any) => {
       // Se tiver 'Mesa' no nome ou for tipo dine_in, priorizar Mesa
       if (order.order_type === 'dine_in' || order.customer_name.toLowerCase().includes('mesa')) {
-          // Tenta extrair número da mesa se estiver no nome
+          // Tenta extrair número da mesa se estiver no nome (ex: "Mesa 10")
           const mesaMatch = order.customer_name.match(/mesa\s*(\d+)/i);
           if (mesaMatch) return `MESA ${mesaMatch[1]}`;
+          
+          // Se for UUID longo (ex: Mesa e244...), mostra apenas "MESA"
+          if (order.customer_name.length > 15 && order.customer_name.toLowerCase().includes('mesa')) {
+              return "MESA";
+          }
+          
           return order.customer_name.length > 15 ? order.customer_name.substring(0, 15) : order.customer_name;
       }
       // Se for nome de pessoa, pega primeiro nome + inicial do segundo
@@ -45,7 +51,7 @@ const CustomerView = () => {
 
       <div className="flex-1 flex p-6 gap-6 overflow-hidden">
         {/* Preparing Column */}
-        <div className="flex-[0.4] bg-gray-900/80 rounded-3xl border-2 border-yellow-600/30 flex flex-col overflow-hidden shadow-2xl">
+        <div className="flex-1 bg-gray-900/80 rounded-3xl border-2 border-yellow-600/30 flex flex-col overflow-hidden shadow-2xl">
           <div className="bg-yellow-600 p-5 flex items-center justify-center gap-3 shadow-lg">
             <Clock className="h-8 w-8 text-black" />
             <h2 className="text-3xl font-black text-black uppercase tracking-wider">Preparando</h2>
@@ -75,7 +81,7 @@ const CustomerView = () => {
         </div>
 
         {/* Ready Column - MAIOR DESTAQUE */}
-        <div className="flex-[0.6] bg-green-900/20 rounded-3xl border-4 border-green-500 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.2)]">
+        <div className="flex-1 bg-green-900/20 rounded-3xl border-4 border-green-500 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.2)]">
           <div className="bg-green-600 p-6 flex items-center justify-center gap-4 shadow-lg animate-pulse-slow">
             <CheckCircle className="h-12 w-12 text-white" />
             <h2 className="text-5xl font-black text-white uppercase tracking-widest drop-shadow-md">PRONTO</h2>

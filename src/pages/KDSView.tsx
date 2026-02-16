@@ -26,19 +26,20 @@ const KDSView = () => {
   }
 
   const renderColumn = (title: string, icon: React.ReactNode, items: KitchenOrder[], colorClass: string, targetStatus: string) => (
-    <div className="flex-1 flex flex-col h-full min-w-[350px] bg-gray-50/50 rounded-xl border border-gray-200 overflow-hidden">
-      <div className={`p-4 ${colorClass} text-white flex justify-between items-center shadow-sm`}>
+    <div className="flex-1 flex flex-col h-full min-w-[350px] bg-gray-50/50 rounded-xl border border-gray-200 overflow-hidden shadow-inner">
+      <div className={`p-4 ${colorClass} text-white flex justify-between items-center shadow-md`}>
         <div className="flex items-center gap-2 font-bold text-lg">
           {icon}
           {title}
         </div>
-        <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold">
+        <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-bold shadow-sm backdrop-blur-sm">
           {items.length}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin">
+      {/* Centralização e Scroll Suave */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin flex flex-col items-center">
         {items.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
+          <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50 w-full">
             {icon}
             <p className="mt-2 text-sm font-medium">Nenhum pedido</p>
           </div>
