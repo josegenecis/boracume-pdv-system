@@ -2,12 +2,14 @@
 import React, { useMemo, useState } from 'react';
 import KitchenOrderCard from '@/components/kitchen/KitchenOrderCard';
 import { useKDS } from '@/hooks/useKDS';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Monitor, Tv } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 const Kitchen = () => {
   const { orders, updateOrderStatus, recallOrder, loading, refresh } = useKDS();
   const [selectedKitchen, setSelectedKitchen] = useState('main');
+  const navigate = useNavigate();
 
   const ordered = useMemo(() => {
     return [...orders].sort((a: any, b: any) => {
@@ -34,46 +36,57 @@ const Kitchen = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col p-3 sm:p-4 overflow-hidden">
-      <div className="flex-none mb-3">
-        <div className="flex flex-wrap items-center gap-2 bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-          <div className="flex items-center gap-2">
-            <select
-              className="h-9 px-3 border rounded-md bg-white text-sm"
-              value={selectedKitchen}
-              onChange={(e) => setSelectedKitchen(e.target.value)}
-            >
-              <option value="main">Cozinha principal</option>
-            </select>
-            <div className="text-xs text-muted-foreground">
-              {orders.length} pedidos • {preparingCount} em preparo • {readyCount} prontos
-            </div>
-          </div>
+    <div className="h-full flex flex-col p-4 space-y-4">
+      <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Cozinha (KDS)</h1>
+          <p className="text-muted-foreground">
+            {orders.length} pedidos na fila • {preparingCount} em preparo
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => window.open('/kds-view', '_blank')}
+            className="border-gray-300"
+          >
+            <Monitor className="mr-2 h-4 w-4" />
+            Modo Tela Cheia
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            onClick={() => window.open('/tv-view', '_blank')}
+            className="border-gray-300"
+          >
+            <Tv className="mr-2 h-4 w-4" />
+            Painel TV Cliente
+          </Button>
 
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => refresh()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Atualizar
-            </Button>
-            <Button size="sm" onClick={markAllAsReady} disabled={preparingCount === 0}>
-              Marcar todos como pronto
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => refresh()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Atualizar
+          </Button>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
-        <div className="h-full overflow-x-auto overflow-y-hidden">
-          <div className="flex gap-3 h-full items-start pb-3">
-            {ordered.map((order: any) => (
+      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
+        <div className="flex gap-4 h-full min-w-max px-1">
+          {ordered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center w-full h-64 text-gray-400">
+              <p>Nenhum pedido na cozinha no momento.</p>
+            </div>
+          ) : (
+            ordered.map((order: any) => (
               <KitchenOrderCard
                 key={order.id}
                 order={order}
                 onStatusChange={updateOrderStatus}
                 onRecall={recallOrder}
               />
-            ))}
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
