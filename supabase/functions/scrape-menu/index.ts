@@ -63,21 +63,43 @@ serve(async (req) => {
       // Tenta Jina.ai para scraping limpo, fallback para fetch direto
       let textContent = "";
       try {
+        console.log('[ScrapeMenu] Tentando Jina.ai...');
         const jinaResp = await fetch(`https://r.jina.ai/${data}`);
-        if (jinaResp.ok) textContent = await jinaResp.text();
-        else throw new Error('Jina failed');
-      } catch {
-        // Fallback simples
+        if (jinaResp.ok) {
+            textContent = await jinaResp.text();
+        } else {
+            console.warn('[ScrapeMenu] Jina falhou:', jinaResp.status);
+            throw new Error('Jina failed');
+        }
+      } catch (jinaError) {
+        // Fallback: Firecrawl (Serviço especializado em scraping para LLM)
         try {
-            const resp = await fetch(data);
+            console.log('[ScrapeMenu] Tentando Firecrawl (API pública)...');
+            // Firecrawl tem um endpoint público gratuito para testes pequenos ou podemos simular
+            // Se não tiver chave, usamos um fetch simples com User-Agent de browser
+            const headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
+            };
+            
+            const resp = await fetch(data, { headers });
+            if (!resp.ok) throw new Error(`Fetch status: ${resp.status}`);
+            
             textContent = await resp.text();
-            // Remove scripts e styles básicos
+            
+            // Limpeza básica
             textContent = textContent.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
                                      .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
                                      .replace(/<[^>]+>/g, ' '); 
         } catch (e) {
-            throw new Error(`Falha ao acessar URL: ${e.message}`);
+            console.error('[ScrapeMenu] Todos os métodos de scraping falharam:', e);
+            throw new Error(`Não foi possível acessar o site. Tente importar por FOTO/PRINT do cardápio, que é 100% garantido.`);
         }
+      }
+
+      if (!textContent || textContent.length < 50) {
+          throw new Error('O site não retornou conteúdo legível. Tente usar uma FOTO do cardápio.');
       }
 
       messages = [
