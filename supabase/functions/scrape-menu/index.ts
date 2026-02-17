@@ -60,13 +60,36 @@ serve(async (req) => {
     }`;
 
     // Detecção de Tipo (Imagem ou Texto)
-    const isImage = imageBase64 || isImageUpload || (url && /\.(jpg|jpeg|png|webp|gif)$/i.test(url));
+    // Tenta detectar se é imagem por extensão, upload ou flag.
+    const isImage = imageBase64 || isImageUpload || (url && /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(url));
 
-    if (isImage) {
-      const imageUrl = url || imageBase64;
+    // Fallback: Se for URL do Storage do Supabase (que pode não ter extensão), força como imagem
+    const isSupabaseStorage = url && url.includes('/storage/v1/object/');
+    
+    if (isImage || isSupabaseStorage) {
+      let imageUrl = url || imageBase64;
       if (!imageUrl) throw new Error('Imagem não fornecida para processamento.');
 
-      console.log('[ScrapeMenu] Modo: Visão (Imagem)');
+      console.log('[ScrapeMenu] Modo: Visão (Imagem)', { isImage, isSupabaseStorage });
+
+      // Se for URL e não Base64, tenta converter para Base64 no Backend para evitar erro de acesso da OpenAI
+      if (url && !imageBase64) {
+          try {
+              console.log('[ScrapeMenu] Baixando imagem para processamento local...');
+              const imgResp = await fetch(url);
+              if (imgResp.ok) {
+                  const arrayBuffer = await imgResp.arrayBuffer();
+                  const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                  const contentType = imgResp.headers.get('content-type') || 'image/jpeg';
+                  imageUrl = `data:${contentType};base64,${base64String}`;
+                  console.log('[ScrapeMenu] Imagem convertida para Base64 com sucesso.');
+              } else {
+                  console.warn(`[ScrapeMenu] Falha ao baixar imagem (${imgResp.status}). Tentando URL direta...`);
+              }
+          } catch (downloadErr) {
+              console.warn('[ScrapeMenu] Erro ao baixar imagem:', downloadErr);
+          }
+      }
       
       messages = [
         { role: 'system', content: systemPrompt },

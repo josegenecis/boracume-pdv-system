@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 interface CartProduct {
@@ -18,8 +18,21 @@ interface CartItem {
 }
 
 export const useSimpleCart = () => {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('boracume_menu_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  
   const { toast } = useToast();
+
+  // Persistir carrinho
+  useEffect(() => {
+    localStorage.setItem('boracume_menu_cart', JSON.stringify(cart));
+  }, [cart]);
 
   const addToCart = (
     product: CartProduct, 
@@ -28,15 +41,19 @@ export const useSimpleCart = () => {
     notes: string = '',
     variationPrice: number = 0
   ) => {
-
+    // Garantir tipos numéricos para evitar NaN
+    const basePrice = Number(product.price) || 0;
+    const extraPrice = Number(variationPrice) || 0;
+    
     // Garantir que variations seja um array de strings únicas e sem strings agrupadas
     const uniqueVariations = Array.from(new Set(
-      variations.filter(v => typeof v === 'string' && !v.includes(','))
+      (variations || []).filter(v => typeof v === 'string' && !v.includes(','))
     ));
     // Criar ID único baseado no produto + variações + notas
     const uniqueId = `${product.id}-${uniqueVariations.sort().join(',')}-${notes}`;
     // Calcular preço total
-    const totalPrice = (product.price + variationPrice) * quantity;
+    const totalPrice = (basePrice + extraPrice) * quantity;
+    
     setCart(prev => {
       // Verificar se item já existe
       const existingIndex = prev.findIndex(item => item.uniqueId === uniqueId);
@@ -46,14 +63,12 @@ export const useSimpleCart = () => {
         const updated = [...prev];
         updated[existingIndex].quantity += quantity;
         updated[existingIndex].totalPrice = 
-          (product.price + variationPrice) * updated[existingIndex].quantity;
-
+          (basePrice + extraPrice) * updated[existingIndex].quantity;
 
         toast({
           title: "Produto atualizado",
           description: `${product.name} - quantidade: ${updated[existingIndex].quantity}`,
         });
-
 
         return updated;
       } else {
@@ -61,20 +76,16 @@ export const useSimpleCart = () => {
         const newItem: CartItem = {
           product,
           quantity,
-
           variations: uniqueVariations,
-
           notes,
           totalPrice,
           uniqueId
         };
 
-
         toast({
           title: "Adicionado ao carrinho",
           description: `${product.name} - ${quantity}x`,
         });
-
 
         return [...prev, newItem];
       }
