@@ -74,7 +74,7 @@ serve(async (req) => {
           role: 'user', 
           content: [
             { type: "text", text: "Extraia o cardápio desta imagem seguindo estritamente o formato JSON solicitado." },
-            { type: "image_url", image_url: { url: imageUrl, detail: "low" } } 
+            { type: "image_url", image_url: { url: imageUrl, detail: "high" } } 
           ] 
         }
       ];

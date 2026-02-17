@@ -173,7 +173,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     setEnhanceLoading(true);
     setEnhancedPreview('');
     try {
-      const { data } = await invokeEdgeFunction<any>('enhance-product-image', { imageUrl: formData.image_url });
+      const { data } = await invokeEdgeFunction<any>('enhance-product-image', { 
+        imageUrl: formData.image_url,
+        productName: formData.name // Envia o nome também
+      });
       if (data?.ok && data?.imageBase64) {
         setEnhancedPreview(String(data.imageBase64));
         return;

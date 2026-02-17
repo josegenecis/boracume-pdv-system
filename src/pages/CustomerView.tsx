@@ -51,8 +51,8 @@ const CustomerView = () => {
 
       <div className="flex-1 flex p-6 gap-6 overflow-hidden">
         {/* Preparing Column */}
-        <div className="flex-1 bg-gray-900/80 rounded-3xl border-2 border-yellow-600/30 flex flex-col overflow-hidden shadow-2xl">
-          <div className="bg-yellow-600 p-5 flex items-center justify-center gap-3 shadow-lg">
+        <div className="flex-[0.8] bg-gray-900/80 rounded-3xl border-2 border-yellow-500/30 flex flex-col overflow-hidden shadow-2xl">
+          <div className="bg-yellow-500 p-5 flex items-center justify-center gap-3 shadow-lg">
             <Clock className="h-8 w-8 text-black" />
             <h2 className="text-3xl font-black text-black uppercase tracking-wider">Preparando</h2>
           </div>
@@ -71,7 +71,7 @@ const CustomerView = () => {
                       <span className="text-4xl font-black text-white tracking-widest font-mono">{getDisplayNumber(order)}</span>
                     </div>
                     <div className="text-right max-w-[50%]">
-                      <span className="text-2xl text-yellow-100 font-bold truncate block">{getDisplayName(order)}</span>
+                      <span className="text-2xl text-yellow-500 font-bold truncate block">{getDisplayName(order)}</span>
                     </div>
                   </div>
                 ))
@@ -81,7 +81,7 @@ const CustomerView = () => {
         </div>
 
         {/* Ready Column - MAIOR DESTAQUE */}
-        <div className="flex-1 bg-green-900/20 rounded-3xl border-4 border-green-500 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.2)]">
+        <div className="flex-[1.2] bg-green-900/20 rounded-3xl border-4 border-green-500 flex flex-col overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.2)]">
           <div className="bg-green-600 p-6 flex items-center justify-center gap-4 shadow-lg animate-pulse-slow">
             <CheckCircle className="h-12 w-12 text-white" />
             <h2 className="text-5xl font-black text-white uppercase tracking-widest drop-shadow-md">PRONTO</h2>

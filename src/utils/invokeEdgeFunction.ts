@@ -10,7 +10,7 @@ export const invokeEdgeFunction = async (
     const { data, error } = await supabase.functions.invoke(functionName, {
       body: JSON.stringify(body),
       // Increase timeout to 120 seconds for large menus
-      signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(60000) : undefined,
+      signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(90000) : undefined,
     })
 
     if (error) {
