@@ -42,7 +42,8 @@ const GlobalNotificationSystem: React.FC = () => {
   });
 
   // Verifica se está na página de pedidos para não mostrar notificação
-  const isOnOrdersPage = ['/orders', '/pedidos', '/kitchen', '/cozinha'].includes(location.pathname);
+  // Adicionado '/customer-view' e '/kds-view' para evitar notificações nessas telas dedicadas
+  const isOnOrdersPage = ['/orders', '/pedidos', '/kitchen', '/cozinha', '/kds-view', '/customer-view', '/menu-digital'].includes(location.pathname);
   const isDigitalMenu = location.pathname.includes('/menu');
 
   const isOnOrdersPageRef = useRef(isOnOrdersPage);

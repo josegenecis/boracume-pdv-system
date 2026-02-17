@@ -113,7 +113,11 @@ export const useKDS = () => {
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as KitchenOrder;
             if (['pending', 'accepted', 'preparing', 'ready'].includes(newOrder.status)) {
-              setOrders(prev => [...prev, newOrder]);
+              setOrders(prev => {
+                // Verificar se já existe para evitar duplicação
+                if (prev.some(o => o.id === newOrder.id)) return prev;
+                return [...prev, newOrder];
+              });
               
               // Som diferenciado por tipo
               if (newOrder.order_type === 'dine_in') {
@@ -135,6 +139,7 @@ export const useKDS = () => {
                 if (exists) {
                   return prev.map(o => o.id === updatedOrder.id ? updatedOrder : o);
                 } else {
+                  // Se não existe, adiciona, mas toca som e imprime se necessário
                   playNotificationSound();
                   if (updatedOrder.status === 'preparing') {
                     tryAutoPrint(updatedOrder);
