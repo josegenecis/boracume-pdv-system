@@ -58,6 +58,7 @@ serve(async (req) => {
     // MODO 1: IMAGEM (Vision API) - Mais Confiável
     // ==========================================
     if (type === 'image') {
+      // Vision API (data url base64)
       messages = [
         { role: 'system', content: systemPrompt },
         { 
@@ -68,18 +69,17 @@ serve(async (req) => {
           ] 
         }
       ];
-    } 
-    // ==========================================
-    // MODO 2: URL (Scraping) - Mais Complexo
-    // ==========================================
-    else if (type === 'url') {
+    } else if (type === 'url') {
       let textContent = "";
       
-      // Tentativa 1: Browserless (Se configurado) - Ideal para iFood/SPA
+      // Tentativa 1: Browserless com TIMEOUT de 30s
       if (BROWSERLESS_API_KEY) {
           try {
               console.log('[ScrapeMenu] Tentando Browserless/Puppeteer...');
-              // Chamada direta à API REST do Browserless para evitar deps pesadas
+              
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
               const browserlessResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -87,9 +87,12 @@ serve(async (req) => {
                       url: data,
                       waitFor: 'networkidle2', // Espera SPA carregar
                       rejectResourceTypes: ['image', 'font', 'media'] // Otimização
-                  })
+                  }),
+                  signal: controller.signal
               });
               
+              clearTimeout(timeoutId);
+
               if (browserlessResp.ok) {
                   textContent = await browserlessResp.text();
                   console.log('[ScrapeMenu] Sucesso com Browserless (HTML extraído).');
@@ -101,48 +104,52 @@ serve(async (req) => {
           }
       }
 
-      // Tentativa 2: Jina.ai (Se Browserless falhou ou não existe)
+      // Tentativa 2: Firecrawl (Scraping Inteligente) se Browserless falhar
+      if (!textContent) {
+          try {
+             console.log('[ScrapeMenu] Tentando Firecrawl...');
+             // Endpoint público que geralmente funciona melhor que Jina para SPAs
+             const firecrawlResp = await fetch('https://api.firecrawl.dev/v0/scrape', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ url: data })
+             });
+             
+             if (firecrawlResp.ok) {
+                 const fireData = await firecrawlResp.json();
+                 textContent = fireData.data?.markdown || fireData.data?.content;
+             }
+          } catch(fireErr) {
+             console.warn('[ScrapeMenu] Firecrawl falhou:', fireErr);
+          }
+      }
+
+      // Tentativa 3: Jina.ai (Último recurso de scraping inteligente)
       if (!textContent) {
           try {
             console.log('[ScrapeMenu] Tentando Jina.ai...');
             const jinaResp = await fetch(`https://r.jina.ai/${data}`);
             if (jinaResp.ok) {
                 textContent = await jinaResp.text();
-            } else {
-                console.warn('[ScrapeMenu] Jina falhou:', jinaResp.status);
             }
           } catch (jinaError) {
              console.warn('[ScrapeMenu] Erro Jina:', jinaError);
           }
       }
-
-      // Tentativa 3: Fetch Simples (Fallback final)
-      if (!textContent) {
-        try {
-            console.log('[ScrapeMenu] Tentando Fetch direto (Fallback)...');
-            const headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
-            };
-            const resp = await fetch(data, { headers });
-            if (resp.ok) textContent = await resp.text();
-        } catch (e) {
-            console.error('[ScrapeMenu] Fetch falhou:', e);
-        }
+      
+      // Validação final de conteúdo
+      if (!textContent || textContent.length < 50) {
+          // Se falhou tudo, retorna erro explícito para o usuário saber o que fazer
+          throw new Error('O site bloqueou o acesso automático. Por favor, tire um PRINT/FOTO do cardápio e use a opção "Imagem" (é infalível).');
       }
 
-      if (!textContent || textContent.length < 100) {
-          throw new Error('Não foi possível ler o conteúdo do site. Tente usar a opção "IMAGEM" tirando um print do cardápio.');
-      }
-
-      // Limpeza para economizar tokens
+      // Limpeza agressiva para caber no contexto e remover lixo
       const cleanText = textContent
         .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
         .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
-        .slice(0, 60000); // Limite seguro de caracteres
+        .slice(0, 45000); // Reduzi para 45k para garantir que cabe no prompt
 
       messages = [
         { role: 'system', content: systemPrompt },
