@@ -7,38 +7,21 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 1. Validação do Payload
-    let body;
-    try {
-      body = await req.json();
-    } catch (e) {
-      throw new Error('Corpo da requisição inválido ou vazio (JSON esperado).');
-    }
-
-    const { url, imageBase64, isImageUpload } = body;
+    const { type, data } = await req.json();
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
-    if (!openAiKey) {
-      throw new Error('Configuração de servidor incompleta: Chave OpenAI ausente.');
-    }
+    if (!openAiKey) throw new Error('Chave OpenAI não configurada.');
+    if (!data) throw new Error('Dados para processamento não fornecidos.');
 
-    console.log(`[ScrapeMenu] Iniciando processamento. URL: ${!!url}, Imagem: ${!!imageBase64}`);
+    console.log(`[ScrapeMenu] Iniciando processamento. Tipo: ${type}`);
 
-    // 2. Definição do Prompt e Mensagens
-    let messages = [];
     const systemPrompt = `Você é um especialista em ler cardápios.
-    Sua tarefa é extrair TODOS os produtos da imagem/texto e retornar APENAS um JSON válido.
-    
-    REGRAS CRÍTICAS:
-    1. Retorne APENAS o JSON puro. NÃO use markdown (sem \`\`\`json).
-    2. Se houver variações (P/M/G), agrupe-as no mesmo produto.
-    3. Ignore itens que não sejam comida/bebida.
+    Extraia TODOS os produtos e retorne APENAS um JSON válido.
     
     ESTRUTURA JSON OBRIGATÓRIA:
     {
@@ -50,97 +33,62 @@ serve(async (req) => {
               "name": "Nome do Produto", 
               "price": 0.00, 
               "description": "Descrição opcional", 
-              "variants": [
-                { "name": "Pequena", "price": 10.00 }
-              ] 
+              "variants": [ { "name": "Pequena", "price": 10.00 } ] 
             } 
           ]
         }
       ]
-    }`;
-
-    // Detecção de Tipo (Imagem ou Texto)
-    // Tenta detectar se é imagem por extensão, upload ou flag.
-    const isImage = imageBase64 || isImageUpload || (url && /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(url));
-
-    // Fallback: Se for URL do Storage do Supabase (que pode não ter extensão), força como imagem
-    const isSupabaseStorage = url && url.includes('/storage/v1/object/');
+    }
     
-    if (isImage || isSupabaseStorage) {
-      let imageUrl = url || imageBase64;
-      if (!imageUrl) throw new Error('Imagem não fornecida para processamento.');
+    REGRAS:
+    1. Retorne APENAS o JSON puro (sem markdown).
+    2. Ignore itens que não sejam comida/bebida.
+    3. Se houver variações (P/M/G), agrupe.`;
 
-      console.log('[ScrapeMenu] Modo: Visão (Imagem)', { isImage, isSupabaseStorage });
+    let messages = [];
 
-      // Se for URL e não Base64, tenta converter para Base64 no Backend para evitar erro de acesso da OpenAI
-      if (url && !imageBase64) {
-          try {
-              console.log('[ScrapeMenu] Baixando imagem para processamento local...');
-              const imgResp = await fetch(url);
-              if (imgResp.ok) {
-                  const arrayBuffer = await imgResp.arrayBuffer();
-                  const base64String = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                  const contentType = imgResp.headers.get('content-type') || 'image/jpeg';
-                  imageUrl = `data:${contentType};base64,${base64String}`;
-                  console.log('[ScrapeMenu] Imagem convertida para Base64 com sucesso.');
-              } else {
-                  console.warn(`[ScrapeMenu] Falha ao baixar imagem (${imgResp.status}). Tentando URL direta...`);
-              }
-          } catch (downloadErr) {
-              console.warn('[ScrapeMenu] Erro ao baixar imagem:', downloadErr);
-          }
-      }
-      
+    if (type === 'image') {
+      // Vision API (data url base64)
       messages = [
         { role: 'system', content: systemPrompt },
         { 
           role: 'user', 
           content: [
-            { type: "text", text: "Extraia o cardápio desta imagem seguindo estritamente o formato JSON solicitado." },
-            { type: "image_url", image_url: { url: imageUrl, detail: "high" } } 
+            { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
+            { type: "image_url", image_url: { url: data, detail: "high" } } 
           ] 
         }
       ];
-    } else if (url) {
-      console.log(`[ScrapeMenu] Modo: Texto (URL: ${url})`);
-      
+    } else if (type === 'url') {
+      // Tenta Jina.ai para scraping limpo, fallback para fetch direto
       let textContent = "";
       try {
-        // Tenta Jina.ai primeiro para scraping limpo
-        const jinaResponse = await fetch(`https://r.jina.ai/${url}`);
-        if (jinaResponse.ok) {
-           textContent = await jinaResponse.text();
-        } else {
-           throw new Error(`Jina falhou (${jinaResponse.status})`);
-        }
-      } catch (e) {
-        console.warn(`[ScrapeMenu] Fallback para fetch direto: ${e.message}`);
+        const jinaResp = await fetch(`https://r.jina.ai/${data}`);
+        if (jinaResp.ok) textContent = await jinaResp.text();
+        else throw new Error('Jina failed');
+      } catch {
+        // Fallback simples
         try {
-          const directResp = await fetch(url);
-          if (!directResp.ok) throw new Error(`Fetch direto falhou: ${directResp.status}`);
-          textContent = await directResp.text();
-        } catch (fetchError) {
-          throw new Error(`Não foi possível acessar a URL: ${fetchError.message}`);
+            const resp = await fetch(data);
+            textContent = await resp.text();
+            // Remove scripts e styles básicos
+            textContent = textContent.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+                                     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
+                                     .replace(/<[^>]+>/g, ' '); 
+        } catch (e) {
+            throw new Error(`Falha ao acessar URL: ${e.message}`);
         }
       }
-
-      if (!textContent || textContent.length < 50) {
-        throw new Error('O site retornou pouco ou nenhum conteúdo de texto.');
-      }
-
-      // Limita tamanho para evitar erro de tokens (80k chars ~= 20k tokens)
-      const cleanText = textContent.slice(0, 80000);
 
       messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extraia o cardápio deste conteúdo:\n\n${cleanText}` }
+        { role: 'user', content: `Extraia o cardápio deste conteúdo:\n\n${textContent.slice(0, 50000)}` }
       ];
     } else {
-      throw new Error('Nenhuma URL ou imagem fornecida.');
+        throw new Error('Tipo de importação inválido.');
     }
 
-    // 3. Chamada OpenAI
-    console.log('[ScrapeMenu] Enviando para OpenAI (gpt-4o-mini)...');
+    console.log('[ScrapeMenu] Enviando para OpenAI...');
     
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -149,7 +97,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', 
+        model: 'gpt-4o-mini', // Vision e Texto suportados e rápidos
         messages: messages,
         temperature: 0.1,
         max_tokens: 4000,
@@ -158,72 +106,31 @@ serve(async (req) => {
     });
 
     if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error(`[ScrapeMenu] Erro OpenAI (${aiResponse.status}):`, errText);
-      throw new Error(`Erro na IA: ${aiResponse.status} - Verifique os logs.`);
+      const err = await aiResponse.text();
+      console.error('OpenAI Error:', err);
+      throw new Error(`Erro na IA: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content;
-
-    if (!rawContent) {
-      throw new Error('A IA retornou uma resposta vazia.');
-    }
-
-    // 4. Parsing e Limpeza Robusta
-    console.log('[ScrapeMenu] Resposta recebida, processando JSON...');
-    let parsedData;
+    const content = aiData.choices[0].message.content;
     
-    try {
-      parsedData = JSON.parse(rawContent);
-    } catch (e) {
-      console.warn('[ScrapeMenu] JSON inválido direto, tentando limpar markdown...');
-      // Remove ```json e ``` e espaços extras
-      const clean = rawContent
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim();
-      
-      try {
-        parsedData = JSON.parse(clean);
-      } catch (parseError) {
-        console.error('[ScrapeMenu] Falha fatal no parsing. Conteúdo:', rawContent);
-        throw new Error('A IA não retornou um JSON válido. Tente novamente com uma imagem mais clara.');
-      }
-    }
+    // Limpeza agressiva de JSON
+    const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
 
-    // Normalização final
-    const categories = parsedData.categories || parsedData.products || [];
-
-    if (!Array.isArray(categories) || categories.length === 0) {
-       // Tenta verificar se retornou um objeto único ou estrutura diferente
-       if (parsedData.menu && Array.isArray(parsedData.menu)) {
-         return new Response(JSON.stringify({ success: true, categories: parsedData.menu }), { 
-           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 
-         });
-       }
-       throw new Error('Nenhum produto encontrado no formato esperado.');
-    }
-
+    // Validação final da estrutura
+    const categories = parsed.categories || parsed.menu || [];
+    
     return new Response(
-      JSON.stringify({ success: true, categories: categories }),
+      JSON.stringify({ success: true, categories }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error: any) {
-    console.error('[ScrapeMenu] Erro Geral:', error);
-    
-    // Retorna erro estruturado que o frontend consegue ler
+    console.error('[ScrapeMenu] Erro:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message || 'Erro interno desconhecido',
-        details: error.toString()
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 500 // Mantém 500 para indicar falha de servidor, mas com body JSON
-      }
+      JSON.stringify({ success: false, error: error.message }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 } // Retorna 200 com success: false para o frontend tratar
     );
   }
 })

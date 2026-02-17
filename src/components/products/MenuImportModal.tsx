@@ -155,6 +155,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         
         if (activeTab === 'link') {
             finalUrl = urlInput;
+            payload = { type: 'url', data: finalUrl };
         } else {
             if (!selectedImage) throw new Error('Selecione uma imagem.');
              
@@ -162,35 +163,19 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
              console.log('Iniciando processamento da imagem...');
              toast({ title: 'Processando Imagem', description: 'Otimizando para envio...' });
 
-             // 1. Converter para Base64 Otimizado (MUITO MAIS RÁPIDO E CONFIÁVEL QUE UPLOAD)
-             // Isso evita problemas de CORS, Permissões de Bucket e URLs Públicas
+             // 1. Converter para Base64 Otimizado
              const optimizedBase64 = await convertFileToBase64(selectedImage);
              
-             // Opcional: Upload em background para manter histórico (não bloqueia a IA)
-             const fileExt = selectedImage.name.split('.').pop();
-             const fileName = `${Date.now()}.${fileExt}`;
-             const filePath = `${user?.id}/${fileName}`;
-             
-             supabase.storage
-                 .from('menu-imports')
-                 .upload(filePath, selectedImage)
-                 .then(({ error }) => {
-                    if (error) console.warn('Falha no backup da imagem (não crítico):', error);
-                 });
-
-             // Define payload com base64 direto
+             // Define payload com base64 direto (sem upload para storage)
              payload = { 
-                imageBase64: optimizedBase64, 
-                isImageUpload: true 
+                type: 'image',
+                data: optimizedBase64 
              };
              
              toast({ title: 'Imagem Pronta', description: 'Enviando para Inteligência Artificial...' });
         }
 
-        if (activeTab === 'link') {
-            console.log('[Import] Processando URL:', finalUrl);
-            payload = { url: finalUrl, isImageUpload: false };
-        }
+        console.log('[Import] Enviando payload simplificado:', { type: (payload as any).type });
         
         // Use the utility function that handles authentication and environment variables correctly
         try {
