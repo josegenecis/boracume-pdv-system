@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
@@ -15,51 +14,74 @@ interface DashboardLayoutProps {
 
 const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { isOpen, isMobile, closeSidebar } = useSidebar();
-  const { user, profile, loading, refreshUser } = useAuth();
-  const [hasProducts, setHasProducts] = useState<boolean | null>(null);
+  const { user, loading, refreshUser } = useAuth();
+  const [showWizard, setShowWizard] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const checkProducts = async () => {
-      if (!user) return;
+    let mounted = true;
+
+    const checkOnboardingStatus = async () => {
+      if (!user) {
+        if (mounted) setChecking(false);
+        return;
+      }
       
-      const { count } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
+      try {
+        // Verifica produtos e status do perfil em paralelo
+        const [productsResult, profileResult] = await Promise.all([
+          supabase.from('products').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('profiles').select('onboarding_completed').eq('id', user.id).maybeSingle()
+        ]);
         
-      setHasProducts(count !== null && count > 0);
+        if (!mounted) return;
+
+        const hasProducts = (productsResult.count || 0) > 0;
+        const isCompleted = profileResult.data?.onboarding_completed === true;
+        
+        // Se tem produtos OU marcou como completado, não mostra wizard
+        if (hasProducts || isCompleted) {
+          setShowWizard(false);
+        } else {
+          setShowWizard(true);
+        }
+      } catch (error) {
+        console.error("Error checking onboarding status:", error);
+      } finally {
+        if (mounted) setChecking(false);
+      }
     };
 
-    checkProducts();
-  }, [user]);
+    if (!loading) {
+      checkOnboardingStatus();
+    }
 
-  // Se estiver carregando auth
-  if (loading) {
+    return () => {
+      mounted = false;
+    };
+  }, [user, loading]);
+
+  const handleOnboardingComplete = () => {
+    refreshUser();
+    setShowWizard(false);
+  };
+
+  // Se estiver carregando auth ou verificando status
+  if (loading || checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-orange-500 mx-auto mb-4" />
-          <p className="text-gray-500 text-sm">Carregando informações...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
+          <p className="text-gray-500 text-sm">Carregando...</p>
         </div>
       </div>
     );
   }
 
-  // Verifica se o usuário precisa passar pelo onboarding
-  // Mostra se:
-  // 1. Perfil não existe
-  // 2. OU não tem produtos cadastrados (mesmo que onboarding_completed seja true)
-  const showOnboarding = user && (!profile || hasProducts === false);
-
-  const handleOnboardingComplete = () => {
-    refreshUser();
-    setHasProducts(true); // Assume que o onboarding criou produtos
-  };
-
   return (
     <div className="min-h-screen bg-white w-full overflow-x-hidden relative">
       {/* Onboarding Overlay */}
-      {showOnboarding && (
+      {showWizard && (
         <OnboardingWizard onComplete={handleOnboardingComplete} />
       )}
 

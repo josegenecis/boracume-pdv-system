@@ -16,10 +16,12 @@ const Footer = () => {
             Falta apenas 1 minuto para o seu restaurante <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-boracume-orange to-red-500">mudar de patamar</span>.
           </h2>
-          <Button className="bg-white text-slate-950 hover:bg-gray-100 font-bold px-10 py-8 text-xl rounded-2xl shadow-[0_0_50px_-15px_rgba(255,255,255,0.3)] transition-all transform hover:scale-105">
-            Criar Minha Conta e Testar 30 Dias
-            <ArrowRight className="ml-2 w-6 h-6" />
-          </Button>
+          <Link to="/signup">
+            <Button className="bg-white text-slate-950 hover:bg-gray-100 font-bold px-10 py-8 text-xl rounded-2xl shadow-[0_0_50px_-15px_rgba(255,255,255,0.3)] transition-all transform hover:scale-105">
+              Criar Minha Conta e Testar 30 Dias
+              <ArrowRight className="ml-2 w-6 h-6" />
+            </Button>
+          </Link>
           <p className="mt-6 text-slate-500">
             Junte-se a mais de 1.000 donos de restaurantes felizes.
           </p>

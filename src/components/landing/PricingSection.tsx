@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, X, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 const PricingSection = () => {
   const [isAnnual, setIsAnnual] = useState(false);
@@ -153,15 +154,17 @@ const PricingSection = () => {
                 ))}
               </div>
 
-              <Button 
-                className={`w-full py-6 text-lg font-bold rounded-xl transition-all ${
-                  plan.popular 
-                    ? 'bg-boracume-orange hover:bg-orange-600 text-white shadow-lg shadow-orange-500/30' 
-                    : 'bg-slate-900 hover:bg-slate-800 text-white'
-                }`}
-              >
-                Testar 30 Dias Grátis
-              </Button>
+              <Link to="/signup" className="block">
+                <Button 
+                  className={`w-full py-6 text-lg font-bold rounded-xl transition-all ${
+                    plan.popular 
+                      ? 'bg-boracume-orange hover:bg-orange-600 text-white shadow-lg shadow-orange-500/30' 
+                      : 'bg-slate-900 hover:bg-slate-800 text-white'
+                  }`}
+                >
+                  Testar 30 Dias Grátis
+                </Button>
+              </Link>
               <p className="text-center text-xs text-slate-400 mt-4">
                 Sem fidelidade. Cancele quando quiser.
               </p>

@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowRight, Check, Play, Smartphone, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 
 const HeroSection = () => {
   return (
@@ -60,17 +61,19 @@ const HeroSection = () => {
 
             {/* CTA Area */}
             <div className="flex flex-col items-center lg:items-start space-y-4">
-              <Button 
-                size="lg" 
-                className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600 text-white text-lg font-bold px-8 py-8 rounded-2xl shadow-[0_0_40px_-10px_rgba(234,88,12,0.6)] animate-pulse hover:animate-none transition-all transform hover:scale-105 border-t border-white/20"
-              >
-                <div className="flex flex-col items-center sm:items-start">
-                  <span className="flex items-center gap-2">
-                    Importar meu Cardápio com IA <span className="bg-white/20 text-xs px-2 py-0.5 rounded uppercase">Grátis</span>
-                  </span>
-                </div>
-                <ArrowRight className="ml-3 w-6 h-6" />
-              </Button>
+              <Link to="/signup" className="w-full sm:w-auto">
+                <Button 
+                  size="lg" 
+                  className="w-full bg-boracume-orange hover:bg-orange-600 text-white text-lg font-bold px-8 py-8 rounded-2xl shadow-[0_0_40px_-10px_rgba(234,88,12,0.6)] animate-pulse hover:animate-none transition-all transform hover:scale-105 border-t border-white/20"
+                >
+                  <div className="flex flex-col items-center sm:items-start">
+                    <span className="flex items-center gap-2">
+                      Importar meu Cardápio com IA <span className="bg-white/20 text-xs px-2 py-0.5 rounded uppercase">Grátis</span>
+                    </span>
+                  </div>
+                  <ArrowRight className="ml-3 w-6 h-6" />
+                </Button>
+              </Link>
               
               <div className="flex flex-wrap justify-center lg:justify-start gap-4 text-sm text-slate-500 font-medium">
                 <div className="flex items-center gap-1.5">

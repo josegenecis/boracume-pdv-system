@@ -159,53 +159,38 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             if (!selectedImage) throw new Error('Selecione uma imagem.');
              
              // DEBUG: Avisar que começou o upload
-             console.log('Iniciando upload...');
-             toast({ title: 'Upload Iniciado', description: 'Enviando imagem para o servidor...' });
+             console.log('Iniciando processamento da imagem...');
+             toast({ title: 'Processando Imagem', description: 'Otimizando para envio...' });
 
-             // 1. Upload para Storage (Lógica Profissional: Upload Primeiro, Processa Depois)
+             // 1. Converter para Base64 Otimizado (MUITO MAIS RÁPIDO E CONFIÁVEL QUE UPLOAD)
+             // Isso evita problemas de CORS, Permissões de Bucket e URLs Públicas
+             const optimizedBase64 = await convertFileToBase64(selectedImage);
+             
+             // Opcional: Upload em background para manter histórico (não bloqueia a IA)
              const fileExt = selectedImage.name.split('.').pop();
              const fileName = `${Date.now()}.${fileExt}`;
              const filePath = `${user?.id}/${fileName}`;
- 
-             const { error: uploadError } = await supabase.storage
-                 .from('menu-imports')
-                 .upload(filePath, selectedImage);
- 
-             if (uploadError) {
-                  console.error('Erro Upload:', uploadError);
-                  // Tenta criar o bucket se não existir (fallback manual, idealmente via migration)
-                  if (uploadError.message.includes('bucket not found') || uploadError.message.includes('row-level security')) {
-                      // Tenta fallback para bucket 'products' que geralmente existe
-                      console.warn('Bucket menu-imports falhou, tentando bucket products...');
-                      const { error: fallbackError } = await supabase.storage
-                        .from('products') // Fallback bucket
-                        .upload(`menu-temp/${fileName}`, selectedImage);
-                      
-                      if (fallbackError) {
-                          throw new Error(`Erro fatal no upload (Bucket Principal e Fallback): ${uploadError.message}`);
-                      } else {
-                          // Sucesso no fallback
-                          const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(`menu-temp/${fileName}`);
-                          finalUrl = publicUrl;
-                      }
-                  } else {
-                      throw new Error(`Erro no upload da imagem: ${uploadError.message}`);
-                  }
-             } else {
-                 // 2. Pega URL Pública do bucket principal
-                 const { data: { publicUrl } } = supabase.storage
-                     .from('menu-imports')
-                     .getPublicUrl(filePath);
-     
-                 finalUrl = publicUrl;
-             }
              
-             console.log('Upload OK! URL:', finalUrl);
-             toast({ title: 'Upload Concluído', description: 'Processando com IA...' });
+             supabase.storage
+                 .from('menu-imports')
+                 .upload(filePath, selectedImage)
+                 .then(({ error }) => {
+                    if (error) console.warn('Falha no backup da imagem (não crítico):', error);
+                 });
+
+             // Define payload com base64 direto
+             payload = { 
+                imageBase64: optimizedBase64, 
+                isImageUpload: true 
+             };
+             
+             toast({ title: 'Imagem Pronta', description: 'Enviando para Inteligência Artificial...' });
         }
 
-        console.log('[Import] Processando URL:', finalUrl);
-        payload = { url: finalUrl, isImageUpload: activeTab === 'image' };
+        if (activeTab === 'link') {
+            console.log('[Import] Processando URL:', finalUrl);
+            payload = { url: finalUrl, isImageUpload: false };
+        }
         
         // Use the utility function that handles authentication and environment variables correctly
         try {
