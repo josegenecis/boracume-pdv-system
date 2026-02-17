@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 const corsHeaders = {
@@ -8,104 +7,118 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { url, imageBase64, isImageUpload } = await req.json()
+    // 1. Validação do Payload
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      throw new Error('Corpo da requisição inválido ou vazio (JSON esperado).');
+    }
+
+    const { url, imageBase64, isImageUpload } = body;
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openAiKey) {
-      throw new Error('Chave OpenAI não configurada.');
+      throw new Error('Configuração de servidor incompleta: Chave OpenAI ausente.');
     }
 
-    // 1. Definição Simplificada do Payload para a IA
-    let messages = [];
+    console.log(`[ScrapeMenu] Iniciando processamento. URL: ${!!url}, Imagem: ${!!imageBase64}`);
 
-    // Estrutura de saída desejada (SIMPLIFICADA AO EXTREMO)
+    // 2. Definição do Prompt e Mensagens
+    let messages = [];
     const systemPrompt = `Você é um especialista em ler cardápios.
-    Sua tarefa é extrair TODOS os produtos da imagem/texto e retornar um JSON.
+    Sua tarefa é extrair TODOS os produtos da imagem/texto e retornar APENAS um JSON válido.
     
-    ATENÇÃO MÁXIMA PARA PIZZARIAS E PREÇOS:
-    - Se encontrar algo como "Mussarela ... P 20 / M 30 / G 40", isso é UM produto com 3 variações.
-    - Estruture assim:
-      {
-        "name": "Mussarela",
-        "price": 20.00, // Menor preço
-        "variants": [
-           { "name": "Pequena (P)", "price": 20.00 },
-           { "name": "Média (M)", "price": 30.00 },
-           { "name": "Grande (G)", "price": 40.00 }
-        ]
-      }
-    - Leia todas as colunas. Não ignore nada.
+    REGRAS CRÍTICAS:
+    1. Retorne APENAS o JSON puro. NÃO use markdown (sem \`\`\`json).
+    2. Se houver variações (P/M/G), agrupe-as no mesmo produto.
+    3. Ignore itens que não sejam comida/bebida.
     
-    FORMATO JSON DE RESPOSTA:
+    ESTRUTURA JSON OBRIGATÓRIA:
     {
       "categories": [
         {
-          "name": "Categoria",
-          "items": [ { "name": "X", "price": 0, "description": "", "variants": [] } ]
+          "name": "Nome da Categoria",
+          "items": [ 
+            { 
+              "name": "Nome do Produto", 
+              "price": 0.00, 
+              "description": "Descrição opcional", 
+              "variants": [
+                { "name": "Pequena", "price": 10.00 }
+              ] 
+            } 
+          ]
         }
       ]
     }`;
 
-    // DETECÇÃO INTELIGENTE DE TIPO
-    // Se for upload de imagem OU url de imagem (termina em jpg/png/webp)
+    // Detecção de Tipo (Imagem ou Texto)
     const isImage = imageBase64 || isImageUpload || (url && /\.(jpg|jpeg|png|webp|gif)$/i.test(url));
 
     if (isImage) {
-      // Fluxo de Imagem (Vision)
-      const imageUrl = url || imageBase64; // Agora suporta URL direta para Vision!
-      
-      console.log(`Processando Imagem via Vision (URL: ${!!url}, Base64: ${!!imageBase64})`);
+      const imageUrl = url || imageBase64;
+      if (!imageUrl) throw new Error('Imagem não fornecida para processamento.');
 
+      console.log('[ScrapeMenu] Modo: Visão (Imagem)');
+      
       messages = [
         { role: 'system', content: systemPrompt },
         { 
           role: 'user', 
           content: [
-            { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
+            { type: "text", text: "Extraia o cardápio desta imagem seguindo estritamente o formato JSON solicitado." },
             { type: "image_url", image_url: { url: imageUrl, detail: "low" } } 
           ] 
         }
       ];
     } else if (url) {
-      // Fluxo de Site (Texto)
-      console.log(`Lendo URL: ${url}`);
+      console.log(`[ScrapeMenu] Modo: Texto (URL: ${url})`);
       
       let textContent = "";
-      
       try {
+        // Tenta Jina.ai primeiro para scraping limpo
         const jinaResponse = await fetch(`https://r.jina.ai/${url}`);
         if (jinaResponse.ok) {
            textContent = await jinaResponse.text();
         } else {
-           throw new Error("Jina falhou");
+           throw new Error(`Jina falhou (${jinaResponse.status})`);
         }
-      } catch {
-        console.log("Fallback para fetch direto...");
-        const directResp = await fetch(url);
-        textContent = await directResp.text();
+      } catch (e) {
+        console.warn(`[ScrapeMenu] Fallback para fetch direto: ${e.message}`);
+        try {
+          const directResp = await fetch(url);
+          if (!directResp.ok) throw new Error(`Fetch direto falhou: ${directResp.status}`);
+          textContent = await directResp.text();
+        } catch (fetchError) {
+          throw new Error(`Não foi possível acessar a URL: ${fetchError.message}`);
+        }
       }
 
-      // Limita o texto para não estourar tokens (50k chars é seguro para gpt-4o-mini)
-      const cleanText = textContent.slice(0, 50000);
+      if (!textContent || textContent.length < 50) {
+        throw new Error('O site retornou pouco ou nenhum conteúdo de texto.');
+      }
+
+      // Limita tamanho para evitar erro de tokens (80k chars ~= 20k tokens)
+      const cleanText = textContent.slice(0, 80000);
 
       messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extraia o cardápio deste texto/site:\n\n${cleanText}` }
+        { role: 'user', content: `Extraia o cardápio deste conteúdo:\n\n${cleanText}` }
       ];
     } else {
-      throw new Error('Nenhuma imagem ou URL fornecida.');
+      throw new Error('Nenhuma URL ou imagem fornecida.');
     }
 
-    console.log("Enviando para OpenAI...");
-
-    // 2. Chamada para OpenAI (GPT-4o-mini para TUDO, inclusive Visão)
-    // Motivo: O GPT-4o padrão é lento demais e causa timeout na Edge Function.
-    // O mini é rápido o suficiente e tem visão competente.
+    // 3. Chamada OpenAI
+    console.log('[ScrapeMenu] Enviando para OpenAI (gpt-4o-mini)...');
+    
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -122,39 +135,72 @@ serve(async (req) => {
     });
 
     if (!aiResponse.ok) {
-      const err = await aiResponse.text();
-      console.error("Erro OpenAI:", err);
-      throw new Error(`Erro OpenAI: ${aiResponse.status}`);
+      const errText = await aiResponse.text();
+      console.error(`[ScrapeMenu] Erro OpenAI (${aiResponse.status}):`, errText);
+      throw new Error(`Erro na IA: ${aiResponse.status} - Verifique os logs.`);
     }
 
     const aiData = await aiResponse.json();
-    const rawContent = aiData.choices[0].message.content;
-    console.log("Resposta IA recebida.");
+    const rawContent = aiData.choices?.[0]?.message?.content;
 
-    // 3. Parse e Limpeza
+    if (!rawContent) {
+      throw new Error('A IA retornou uma resposta vazia.');
+    }
+
+    // 4. Parsing e Limpeza Robusta
+    console.log('[ScrapeMenu] Resposta recebida, processando JSON...');
     let parsedData;
+    
     try {
       parsedData = JSON.parse(rawContent);
-    } catch {
-      // Tenta limpar markdown se houver
-      const clean = rawContent.replace(/```json/g, '').replace(/```/g, '');
-      parsedData = JSON.parse(clean);
+    } catch (e) {
+      console.warn('[ScrapeMenu] JSON inválido direto, tentando limpar markdown...');
+      // Remove ```json e ``` e espaços extras
+      const clean = rawContent
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+      
+      try {
+        parsedData = JSON.parse(clean);
+      } catch (parseError) {
+        console.error('[ScrapeMenu] Falha fatal no parsing. Conteúdo:', rawContent);
+        throw new Error('A IA não retornou um JSON válido. Tente novamente com uma imagem mais clara.');
+      }
     }
 
     // Normalização final
     const categories = parsedData.categories || parsedData.products || [];
 
-    // 4. Retorno Sucesso
+    if (!Array.isArray(categories) || categories.length === 0) {
+       // Tenta verificar se retornou um objeto único ou estrutura diferente
+       if (parsedData.menu && Array.isArray(parsedData.menu)) {
+         return new Response(JSON.stringify({ success: true, categories: parsedData.menu }), { 
+           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 
+         });
+       }
+       throw new Error('Nenhum produto encontrado no formato esperado.');
+    }
+
     return new Response(
       JSON.stringify({ success: true, categories: categories }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
-  } catch (error) {
-    console.error('Erro Geral:', error);
+  } catch (error: any) {
+    console.error('[ScrapeMenu] Erro Geral:', error);
+    
+    // Retorna erro estruturado que o frontend consegue ler
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Erro interno desconhecido',
+        details: error.toString()
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+        status: 500 // Mantém 500 para indicar falha de servidor, mas com body JSON
+      }
     );
   }
 })
