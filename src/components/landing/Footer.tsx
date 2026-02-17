@@ -1,130 +1,89 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, Mail, Phone, MapPin, Facebook, Instagram, Twitter, Linkedin } from 'lucide-react';
+import { ChefHat, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-gray-900 text-white">
+    <footer className="bg-slate-950 text-white border-t border-slate-900">
+      
+      {/* CTA Final */}
+      <div className="border-b border-slate-900">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+          <h2 className="text-3xl md:text-5xl font-extrabold mb-8 max-w-4xl mx-auto leading-tight">
+            Falta apenas 1 minuto para o seu restaurante <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-boracume-orange to-red-500">mudar de patamar</span>.
+          </h2>
+          <Button className="bg-white text-slate-950 hover:bg-gray-100 font-bold px-10 py-8 text-xl rounded-2xl shadow-[0_0_50px_-15px_rgba(255,255,255,0.3)] transition-all transform hover:scale-105">
+            Criar Minha Conta e Testar 30 Dias
+            <ArrowRight className="ml-2 w-6 h-6" />
+          </Button>
+          <p className="mt-6 text-slate-500">
+            Junte-se a mais de 1.000 donos de restaurantes felizes.
+          </p>
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Logo e Descrição */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-boracume-orange rounded-lg flex items-center justify-center">
                 <ChefHat className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold">BoraCumê</span>
             </div>
-            <p className="text-gray-400 text-sm leading-relaxed">
-              A plataforma completa de gestão para restaurantes e delivery. 
-              Otimize suas operações, aumente vendas e melhore a experiência do cliente.
+            <p className="text-slate-400 text-sm leading-relaxed">
+              O sistema operacional completo para restaurantes que querem vender mais e ter menos dor de cabeça.
             </p>
-            <div className="flex space-x-4">
-              <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
-                <Facebook className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
-                <Instagram className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
-                <Twitter className="w-5 h-5" />
-              </a>
-              <a href="#" className="text-gray-400 hover:text-blue-400 transition-colors">
-                <Linkedin className="w-5 h-5" />
-              </a>
-            </div>
           </div>
 
-          {/* Produto */}
+          {/* Links */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Produto</h3>
+            <h3 className="text-lg font-bold text-white">Plataforma</h3>
             <ul className="space-y-2 text-sm">
-              <li>
-                <a href="#funcionalidades" className="text-gray-400 hover:text-white transition-colors">
-                  Funcionalidades
-                </a>
-              </li>
-              <li>
-                <a href="#precos" className="text-gray-400 hover:text-white transition-colors">
-                  Preços
-                </a>
-              </li>
-              <li>
-                <Link to="/demo" className="text-gray-400 hover:text-white transition-colors">
-                  Demonstração
-                </Link>
-              </li>
-              <li>
-                <Link to="/teste-gratuito" className="text-gray-400 hover:text-white transition-colors">
-                  Teste Grátis
-                </Link>
-              </li>
+              <li><a href="#funcionalidades" className="text-slate-400 hover:text-boracume-orange transition-colors">Funcionalidades</a></li>
+              <li><a href="#como-funciona" className="text-slate-400 hover:text-boracume-orange transition-colors">Como Funciona</a></li>
+              <li><a href="#precos" className="text-slate-400 hover:text-boracume-orange transition-colors">Preços</a></li>
+              <li><Link to="/login" className="text-slate-400 hover:text-boracume-orange transition-colors">Login</Link></li>
             </ul>
           </div>
 
-          {/* Empresa */}
+          {/* Legal */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Empresa</h3>
+            <h3 className="text-lg font-bold text-white">Legal</h3>
             <ul className="space-y-2 text-sm">
-              <li>
-                <a href="#depoimentos" className="text-gray-400 hover:text-white transition-colors">
-                  Cases de Sucesso
-                </a>
-              </li>
-              <li>
-                <Link to="/contato" className="text-gray-400 hover:text-white transition-colors">
-                  Contato
-                </Link>
-              </li>
-              <li>
-                <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                  Blog
-                </a>
-              </li>
-              <li>
-                <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                  Carreiras
-                </a>
-              </li>
+              <li><Link to="/termos" className="text-slate-400 hover:text-boracume-orange transition-colors">Termos de Uso</Link></li>
+              <li><Link to="/privacidade" className="text-slate-400 hover:text-boracume-orange transition-colors">Política de Privacidade</Link></li>
+              <li><Link to="/lgpd" className="text-slate-400 hover:text-boracume-orange transition-colors">LGPD</Link></li>
             </ul>
           </div>
 
           {/* Contato */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Contato</h3>
+            <h3 className="text-lg font-bold text-white">Fale Conosco</h3>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center space-x-2 text-gray-400">
-                <Mail className="w-4 h-4" />
-                <span>contato@boracume.com</span>
+              <div className="flex items-center space-x-2 text-slate-400">
+                <Mail className="w-4 h-4 text-boracume-orange" />
+                <span>oi@boracume.com.br</span>
               </div>
-              <div className="flex items-center space-x-2 text-gray-400">
-                <Phone className="w-4 h-4" />
-                <span>(11) 9999-9999</span>
-              </div>
-              <div className="flex items-center space-x-2 text-gray-400">
-                <MapPin className="w-4 h-4" />
+              <div className="flex items-center space-x-2 text-slate-400">
+                <MapPin className="w-4 h-4 text-boracume-orange" />
                 <span>São Paulo, SP</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Linha divisória */}
-        <div className="border-t border-gray-800 mt-8 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <p className="text-gray-400 text-sm">
-              © {currentYear} BoraCumê. Todos os direitos reservados.
-            </p>
-            <div className="flex space-x-6 text-sm">
-              <Link to="/politica-privacidade" className="text-gray-400 hover:text-white transition-colors">
-                Política de Privacidade
-              </Link>
-              <Link to="/termos-uso" className="text-gray-400 hover:text-white transition-colors">
-                Termos de Uso
-              </Link>
-            </div>
+        <div className="border-t border-slate-900 mt-12 pt-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center">
+          <p className="text-slate-500 text-sm">
+            © {currentYear} BoraCumê Tecnologia Ltda.
+          </p>
+          <div className="flex space-x-4 mt-4 md:mt-0">
+             {/* Social icons if needed */}
           </div>
         </div>
       </div>

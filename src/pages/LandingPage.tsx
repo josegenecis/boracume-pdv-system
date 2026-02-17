@@ -3,31 +3,23 @@ import { Helmet } from 'react-helmet-async';
 import LandingLayout from '@/components/landing/LandingLayout';
 import HeroSection from '@/components/landing/HeroSection';
 import BenefitsSection from '@/components/landing/BenefitsSection';
-import FeaturesSection from '@/components/landing/FeaturesSection';
-import TestimonialsSection from '@/components/landing/TestimonialsSection';
+import AiFeatureSection from '@/components/landing/AiFeatureSection';
 import PricingSection from '@/components/landing/PricingSection';
-import ContactForm from '@/components/landing/ContactForm';
 import { ScrollToTop } from '@/components/landing/ScrollToTop';
 
 const LandingPage = () => {
-  console.log("LANDING PAGE V3 LOADED");
-
   return (
     <>
       <Helmet>
-        <title>BoraCumê - O Salvador da Pátria do seu Restaurante</title>
-        <meta name="description" content="Chega de caos. Organize pedidos, cozinha e financeiro em um só lugar. Teste grátis por 30 dias." />
+        <title>BoraCumê - O Fim das Taxas Abusivas de Delivery</title>
+        <meta name="description" content="Liberte seu restaurante do caos no WhatsApp. O único sistema de Delivery e PDV com IA que cria sua loja digital em 1 minuto." />
       </Helmet>
 
       <LandingLayout>
         <HeroSection />
         <BenefitsSection />
-        <FeaturesSection />
-        {/* Testimonials temporariamente oculto pois nao temos clientes reais ainda */}
-        {/* <TestimonialsSection /> */}
+        <AiFeatureSection />
         <PricingSection />
-        <ContactForm />
-        
         <ScrollToTop />
       </LandingLayout>
     </>
