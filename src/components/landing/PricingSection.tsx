@@ -77,7 +77,7 @@ const PricingSection = () => {
         {/* Header */}
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 mb-6">
-            Uma oferta <span className="text-boracume-orange">Irrecusável</span>.
+            Escolha o plano ideal para <span className="text-boracume-orange">Você</span>.
           </h2>
           <p className="text-xl text-slate-600 mb-8">
             Comece com 30 dias grátis em qualquer plano. Sem pegadinhas.

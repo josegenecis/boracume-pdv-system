@@ -99,7 +99,7 @@ const AiFeatureSection = () => {
             >
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-boracume-orange/10 border border-boracume-orange/20 text-boracume-orange font-semibold text-sm mb-6">
                 <Scan className="w-4 h-4" />
-                <span>O Cavalo de Troia da Produtividade</span>
+                <span>Produtividade Máxima</span>
               </div>
               
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 leading-tight">

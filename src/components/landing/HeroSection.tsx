@@ -6,8 +6,18 @@ import { motion } from 'framer-motion';
 const HeroSection = () => {
   return (
     <section className="relative bg-slate-950 overflow-hidden min-h-[90vh] flex items-center pt-20">
-      {/* Background Effects */}
+      {/* Background Image */}
       <div className="absolute inset-0 z-0">
+        <img 
+          src="https://images.unsplash.com/photo-1556740758-90de374c12ad?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80" 
+          alt="Atendente usando sistema PDV em restaurante" 
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-slate-950/80"></div>
+      </div>
+
+      {/* Background Effects */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
         {/* Noise Texture */}
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-soft-light"></div>
         
