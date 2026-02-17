@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
+// ⚠️ Configuração de Browserless (Opcional, mas recomendado para iFood/Rappi)
+// Se não tiver chave, o sistema usa fallback Jina/Fetch.
+// Para configurar: `npx supabase secrets set BROWSERLESS_API_KEY=seu_token`
+const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -7,6 +12,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -20,8 +26,9 @@ serve(async (req) => {
 
     console.log(`[ScrapeMenu] Iniciando processamento. Tipo: ${type}`);
 
+    // Prompt Sistema (Otimizado)
     const systemPrompt = `Você é um especialista em ler cardápios.
-    Extraia TODOS os produtos e retorne APENAS um JSON válido.
+    Sua tarefa é extrair TODOS os produtos da imagem ou texto fornecido e retornar APENAS um JSON válido.
     
     ESTRUTURA JSON OBRIGATÓRIA:
     {
@@ -40,15 +47,17 @@ serve(async (req) => {
       ]
     }
     
-    REGRAS:
-    1. Retorne APENAS o JSON puro (sem markdown).
-    2. Ignore itens que não sejam comida/bebida.
-    3. Se houver variações (P/M/G), agrupe.`;
+    REGRAS CRÍTICAS:
+    1. Retorne APENAS o JSON puro. NÃO use markdown (sem \`\`\`json).
+    2. Ignore itens que não sejam comida/bebida (ex: horário, endereço).
+    3. Se houver variações (P/M/G), agrupe-as no mesmo produto.`;
 
     let messages = [];
 
+    // ==========================================
+    // MODO 1: IMAGEM (Vision API) - Mais Confiável
+    // ==========================================
     if (type === 'image') {
-      // Vision API (data url base64)
       messages = [
         { role: 'system', content: systemPrompt },
         { 
@@ -59,57 +68,93 @@ serve(async (req) => {
           ] 
         }
       ];
-    } else if (type === 'url') {
-      // Tenta Jina.ai para scraping limpo, fallback para fetch direto
+    } 
+    // ==========================================
+    // MODO 2: URL (Scraping) - Mais Complexo
+    // ==========================================
+    else if (type === 'url') {
       let textContent = "";
-      try {
-        console.log('[ScrapeMenu] Tentando Jina.ai...');
-        const jinaResp = await fetch(`https://r.jina.ai/${data}`);
-        if (jinaResp.ok) {
-            textContent = await jinaResp.text();
-        } else {
-            console.warn('[ScrapeMenu] Jina falhou:', jinaResp.status);
-            throw new Error('Jina failed');
-        }
-      } catch (jinaError) {
-        // Fallback: Firecrawl (Serviço especializado em scraping para LLM)
+      
+      // Tentativa 1: Browserless (Se configurado) - Ideal para iFood/SPA
+      if (BROWSERLESS_API_KEY) {
+          try {
+              console.log('[ScrapeMenu] Tentando Browserless/Puppeteer...');
+              // Chamada direta à API REST do Browserless para evitar deps pesadas
+              const browserlessResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      url: data,
+                      waitFor: 'networkidle2', // Espera SPA carregar
+                      rejectResourceTypes: ['image', 'font', 'media'] // Otimização
+                  })
+              });
+              
+              if (browserlessResp.ok) {
+                  textContent = await browserlessResp.text();
+                  console.log('[ScrapeMenu] Sucesso com Browserless (HTML extraído).');
+              } else {
+                  console.warn('[ScrapeMenu] Browserless falhou:', browserlessResp.status);
+              }
+          } catch (bErr) {
+              console.warn('[ScrapeMenu] Erro Browserless:', bErr);
+          }
+      }
+
+      // Tentativa 2: Jina.ai (Se Browserless falhou ou não existe)
+      if (!textContent) {
+          try {
+            console.log('[ScrapeMenu] Tentando Jina.ai...');
+            const jinaResp = await fetch(`https://r.jina.ai/${data}`);
+            if (jinaResp.ok) {
+                textContent = await jinaResp.text();
+            } else {
+                console.warn('[ScrapeMenu] Jina falhou:', jinaResp.status);
+            }
+          } catch (jinaError) {
+             console.warn('[ScrapeMenu] Erro Jina:', jinaError);
+          }
+      }
+
+      // Tentativa 3: Fetch Simples (Fallback final)
+      if (!textContent) {
         try {
-            console.log('[ScrapeMenu] Tentando Firecrawl (API pública)...');
-            // Firecrawl tem um endpoint público gratuito para testes pequenos ou podemos simular
-            // Se não tiver chave, usamos um fetch simples com User-Agent de browser
+            console.log('[ScrapeMenu] Tentando Fetch direto (Fallback)...');
             const headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7'
             };
-            
             const resp = await fetch(data, { headers });
-            if (!resp.ok) throw new Error(`Fetch status: ${resp.status}`);
-            
-            textContent = await resp.text();
-            
-            // Limpeza básica
-            textContent = textContent.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-                                     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
-                                     .replace(/<[^>]+>/g, ' '); 
+            if (resp.ok) textContent = await resp.text();
         } catch (e) {
-            console.error('[ScrapeMenu] Todos os métodos de scraping falharam:', e);
-            throw new Error(`Não foi possível acessar o site. Tente importar por FOTO/PRINT do cardápio, que é 100% garantido.`);
+            console.error('[ScrapeMenu] Fetch falhou:', e);
         }
       }
 
-      if (!textContent || textContent.length < 50) {
-          throw new Error('O site não retornou conteúdo legível. Tente usar uma FOTO do cardápio.');
+      if (!textContent || textContent.length < 100) {
+          throw new Error('Não foi possível ler o conteúdo do site. Tente usar a opção "IMAGEM" tirando um print do cardápio.');
       }
+
+      // Limpeza para economizar tokens
+      const cleanText = textContent
+        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
+        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .slice(0, 60000); // Limite seguro de caracteres
 
       messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extraia o cardápio deste conteúdo:\n\n${textContent.slice(0, 50000)}` }
+        { role: 'user', content: `Extraia o cardápio deste conteúdo HTML/Texto:\n\n${cleanText}` }
       ];
     } else {
         throw new Error('Tipo de importação inválido.');
     }
 
+    // ==========================================
+    // CHAMADA OPENAI
+    // ==========================================
     console.log('[ScrapeMenu] Enviando para OpenAI...');
     
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -119,7 +164,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Vision e Texto suportados e rápidos
+        model: 'gpt-4o-mini', 
         messages: messages,
         temperature: 0.1,
         max_tokens: 4000,
@@ -130,29 +175,43 @@ serve(async (req) => {
     if (!aiResponse.ok) {
       const err = await aiResponse.text();
       console.error('OpenAI Error:', err);
-      throw new Error(`Erro na IA: ${aiResponse.status}`);
+      throw new Error(`Erro na IA (${aiResponse.status}): Verifique sua chave de API.`);
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices[0].message.content;
-    
-    // Limpeza agressiva de JSON
-    const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
+    const rawContent = aiData.choices?.[0]?.message?.content;
 
-    // Validação final da estrutura
+    if (!rawContent) throw new Error('A IA retornou uma resposta vazia.');
+
+    // Parsing Robusto
+    const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+    let parsed;
+    try {
+        parsed = JSON.parse(cleanJson);
+    } catch (parseErr) {
+        console.error('JSON Parse Error:', cleanJson);
+        throw new Error('A IA não retornou um JSON válido.');
+    }
+
     const categories = parsed.categories || parsed.menu || [];
     
+    if (!categories.length) {
+        throw new Error('Nenhum produto identificado. Tente uma imagem mais clara.');
+    }
+
     return new Response(
       JSON.stringify({ success: true, categories }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error: any) {
-    console.error('[ScrapeMenu] Erro:', error);
+    console.error('[ScrapeMenu] Erro Fatal:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 } // Retorna 200 com success: false para o frontend tratar
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Erro desconhecido no servidor.' 
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 })
