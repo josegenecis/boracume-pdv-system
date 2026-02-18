@@ -101,6 +101,8 @@ serve(async (req) => {
              if (items && items.length > 0) {
                  // Apify retorna texto limpo ou markdown
                  textContent = items[0].text || items[0].markdown;
+                 // Se o Apify retornou JSON (para ifood-scraper), use-o direto
+                 apifyJson = items[0]; 
                  console.log('[ScrapeMenu] Sucesso com Apify!');
              }
           } catch (apifyErr) {
@@ -108,6 +110,14 @@ serve(async (req) => {
           }
       }
       
+      // Se Apify retornou JSON estruturado (caso use scraper específico do iFood), retorna direto
+      if (apifyJson && apifyJson.menu) {
+           return new Response(
+              JSON.stringify({ success: true, categories: apifyJson.menu }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
+      }
+
       // Tentativa 2: Browserless com TIMEOUT de 30s
       if (!textContent && BROWSERLESS_API_KEY) {
           try {
