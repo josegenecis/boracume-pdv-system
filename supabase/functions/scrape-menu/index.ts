@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// Import Apify Client
+import { ApifyClient } from 'https://esm.sh/apify-client@2.9.1';
 
 // ⚠️ Configuração de Browserless (Opcional, mas recomendado para iFood/Rappi)
 // Se não tiver chave, o sistema usa fallback Jina/Fetch.
 // Para configurar: `npx supabase secrets set BROWSERLESS_API_KEY=seu_token`
 const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
+
+// ⚠️ Configuração do APIFY (Melhor solução para iFood)
+const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,9 +76,40 @@ serve(async (req) => {
       ];
     } else if (type === 'url') {
       let textContent = "";
+      let apifyJson = null;
+
+      // ==========================================
+      // NOVO: Integração APIFY (Prioridade para iFood/Rappi)
+      // ==========================================
+      if (APIFY_TOKEN && (data.includes('ifood.com.br') || data.includes('rappi'))) {
+          try {
+             console.log('[ScrapeMenu] URL de Delivery detectada. Tentando APIFY...');
+             const client = new ApifyClient({ token: APIFY_TOKEN });
+             
+             // Usa o Actor oficial de scraping genérico ou específico do iFood se disponível
+             // Vamos usar o 'apify/website-content-crawler' que é robusto, ou 'heinz-j/ifood-scraper'
+             // Por segurança, vamos usar o website-content-crawler que é mantido pela Apify e tem JS rendering
+             const run = await client.actor('apify/website-content-crawler').call({
+                 startUrls: [{ url: data }],
+                 maxCrawlPages: 1,
+                 proxyConfiguration: { useApifyProxy: true }
+             });
+
+             console.log('[ScrapeMenu] Apify Run ID:', run.id);
+             const { items } = await client.dataset(run.defaultDatasetId).listItems();
+             
+             if (items && items.length > 0) {
+                 // Apify retorna texto limpo ou markdown
+                 textContent = items[0].text || items[0].markdown;
+                 console.log('[ScrapeMenu] Sucesso com Apify!');
+             }
+          } catch (apifyErr) {
+             console.warn('[ScrapeMenu] Erro Apify:', apifyErr);
+          }
+      }
       
-      // Tentativa 1: Browserless com TIMEOUT de 30s
-      if (BROWSERLESS_API_KEY) {
+      // Tentativa 2: Browserless com TIMEOUT de 30s
+      if (!textContent && BROWSERLESS_API_KEY) {
           try {
               console.log('[ScrapeMenu] Tentando Browserless/Puppeteer...');
               
@@ -104,7 +140,7 @@ serve(async (req) => {
           }
       }
 
-      // Tentativa 2: Firecrawl (Scraping Inteligente) se Browserless falhar
+      // Tentativa 3: Firecrawl (Scraping Inteligente) se Browserless falhar
       if (!textContent) {
           try {
              console.log('[ScrapeMenu] Tentando Firecrawl...');
@@ -124,7 +160,7 @@ serve(async (req) => {
           }
       }
 
-      // Tentativa 3: Jina.ai (Último recurso de scraping inteligente)
+      // Tentativa 4: Jina.ai (Último recurso de scraping inteligente)
       if (!textContent) {
           try {
             console.log('[ScrapeMenu] Tentando Jina.ai...');
