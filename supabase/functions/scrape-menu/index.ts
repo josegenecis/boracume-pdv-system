@@ -1,14 +1,10 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-// Removido import do Apify Client para evitar conflitos de dependência
-// import { ApifyClient } from 'https://esm.sh/apify-client@2.9.1';
 
-// ⚠️ Configuração de Browserless (Opcional, mas recomendado para iFood/Rappi)
-// Se não tiver chave, o sistema usa fallback Jina/Fetch.
-// Para configurar: `npx supabase secrets set BROWSERLESS_API_KEY=seu_token`
+// ⚠️ Configurações (Lidas do Ambiente)
 const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
-
-// ⚠️ Configuração do APIFY (Melhor solução para iFood)
 const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,32 +12,158 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-serve(async (req) => {
-  // Handle CORS preflight requests
+console.log("Edge Function scrape-menu iniciada!");
+
+serve(async (req: Request) => {
+  // 1. Tratamento de CORS (Preflight)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { type, data } = await req.json();
-    const openAiKey = Deno.env.get('OPENAI_API_KEY');
-
-    if (!openAiKey) {
-        console.error('OPENAI_API_KEY is missing');
-        // Não quebrar a execução se for scraping (só precisa de IA para parse final ou imagem)
-        // Mas se for imagem, é obrigatório.
-        if (type === 'image') {
-             throw new Error('Configuração de IA ausente no servidor (OPENAI_API_KEY).');
-        }
-    }
-    if (!data) throw new Error('Dados para processamento não fornecidos.');
-
-    console.log(`[ScrapeMenu] Iniciando processamento. Tipo: ${type}`);
-
-    // Prompt Sistema (Otimizado)
-    const systemPrompt = `Você é um especialista em ler cardápios.
-    Sua tarefa é extrair TODOS os produtos da imagem ou texto fornecido e retornar APENAS um JSON válido.
+    // 2. Parse do Body
+    const bodyText = await req.text();
+    if (!bodyText) throw new Error('Body vazio');
     
+    let body;
+    try {
+        body = JSON.parse(bodyText);
+    } catch (e) {
+        throw new Error('JSON inválido no body');
+    }
+
+    const { type, data } = body;
+    console.log(`[ScrapeMenu] Requisição recebida. Tipo: ${type}`);
+
+    // 3. Validação de Chaves Críticas
+    // Se for imagem, PRECISA da OpenAI. Se for link iFood, PRECISA do Apify.
+    if (type === 'image' && !OPENAI_API_KEY) {
+         throw new Error('Configuração de IA (OPENAI_API_KEY) ausente no servidor.');
+    }
+
+    // ==========================================
+    // FLUXO DE IMPORTAÇÃO
+    // ==========================================
+    
+    // --- CASO 1: URL (IFOOD/RAPPI/OUTROS) ---
+    if (type === 'url') {
+        // A. Tentar APIFY (Prioridade para iFood/Rappi)
+        if (APIFY_TOKEN && (data.includes('ifood') || data.includes('rappi'))) {
+            try {
+                console.log('[ScrapeMenu] Usando Apify...');
+                const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}`;
+                
+                // Iniciar Crawler
+                const startResp = await fetch(runUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startUrls: [{ url: data }],
+                        maxCrawlPages: 1,
+                        proxyConfiguration: { useApifyProxy: true },
+                        browser: 'chromium',
+                        renderingTypeDetectionRatio: 0.1
+                    })
+                });
+
+                if (!startResp.ok) {
+                    const err = await startResp.text();
+                    console.error('[ScrapeMenu] Erro ao iniciar Apify:', err);
+                    throw new Error(`Apify Start Failed: ${startResp.status}`);
+                }
+
+                const startData = await startResp.json();
+                const runId = startData.data.id;
+                const datasetId = startData.data.defaultDatasetId;
+                console.log('[ScrapeMenu] Run ID:', runId);
+
+                // Polling (Esperar terminar)
+                let status = 'RUNNING';
+                const startTime = Date.now();
+                
+                while (status === 'RUNNING' || status === 'READY') {
+                    if (Date.now() - startTime > 45000) break; // Timeout 45s
+                    await new Promise(r => setTimeout(r, 2000));
+                    
+                    const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+                    const checkData = await checkResp.json();
+                    status = checkData.data.status;
+                }
+
+                if (status === 'SUCCEEDED') {
+                    const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+                    const items = await itemsResp.json();
+                    if (items && items.length > 0) {
+                        // Sucesso! Retornar direto para IA processar ou retornar JSON se já tiver
+                        const textContent = items[0].text || items[0].markdown;
+                        return await processWithAI(textContent, OPENAI_API_KEY);
+                    }
+                }
+            } catch (e) {
+                console.warn('[ScrapeMenu] Apify falhou, tentando fallback...', e);
+            }
+        }
+
+        // B. Tentar Browserless/Puppeteer (Fallback)
+        if (BROWSERLESS_API_KEY) {
+             try {
+                console.log('[ScrapeMenu] Usando Browserless...');
+                const blResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: data,
+                        waitFor: 'networkidle2',
+                        rejectResourceTypes: ['image', 'font', 'media']
+                    })
+                });
+                if (blResp.ok) {
+                    const text = await blResp.text();
+                    return await processWithAI(text, OPENAI_API_KEY);
+                }
+             } catch (e) {
+                 console.warn('[ScrapeMenu] Browserless falhou:', e);
+             }
+        }
+
+        // C. Tentar Jina.ai (Fallback final)
+        try {
+            console.log('[ScrapeMenu] Usando Jina...');
+            const jinaResp = await fetch(`https://r.jina.ai/${data}`);
+            if (jinaResp.ok) {
+                const text = await jinaResp.text();
+                return await processWithAI(text, OPENAI_API_KEY);
+            }
+        } catch (e) {
+            console.warn('[ScrapeMenu] Jina falhou:', e);
+        }
+
+        throw new Error('Não foi possível ler o site. Tente tirar um PRINT do cardápio e usar a opção "Imagem".');
+    }
+
+    // --- CASO 2: IMAGEM ---
+    if (type === 'image') {
+        return await processWithAI(data, OPENAI_API_KEY, true);
+    }
+
+    throw new Error('Tipo de importação inválido');
+
+  } catch (error: any) {
+    console.error('[ScrapeMenu] Erro Fatal:', error);
+    // Retorna 200 OK com erro JSON para o frontend exibir
+    return new Response(
+      JSON.stringify({ success: false, error: error.message, details: error.toString() }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    );
+  }
+})
+
+// Função Auxiliar para chamar OpenAI
+async function processWithAI(content: string, apiKey: string | undefined, isImage = false) {
+    if (!apiKey) throw new Error('Chave OpenAI não configurada (necessária para processar o texto/imagem).');
+
+    const systemPrompt = `Você é um especialista em ler cardápios.
+    Extraia TODOS os produtos e retorne APENAS um JSON válido.
     ESTRUTURA JSON OBRIGATÓRIA:
     {
       "categories": [
@@ -58,255 +180,49 @@ serve(async (req) => {
         }
       ]
     }
-    
-    REGRAS CRÍTICAS:
-    1. Retorne APENAS o JSON puro. NÃO use markdown (sem \`\`\`json).
-    2. Ignore itens que não sejam comida/bebida (ex: horário, endereço).
-    3. Se houver variações (P/M/G), agrupe-as no mesmo produto.`;
+    REGRAS: Retorne APENAS o JSON puro (sem markdown). Ignore itens que não sejam comida/bebida.`;
 
-    let messages = [];
-
-    // ==========================================
-    // MODO 1: IMAGEM (Vision API) - Mais Confiável
-    // ==========================================
-    if (type === 'image') {
-      // Vision API (data url base64)
-      messages = [
+    const messages = [
         { role: 'system', content: systemPrompt },
         { 
-          role: 'user', 
-          content: [
-            { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
-            { type: "image_url", image_url: { url: data, detail: "high" } } 
-          ] 
+            role: 'user', 
+            content: isImage 
+                ? [
+                    { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
+                    { type: "image_url", image_url: { url: content, detail: "high" } }
+                  ]
+                : `Extraia o cardápio deste conteúdo:\n\n${content.slice(0, 45000)}`
         }
-      ];
-    } else if (type === 'url') {
-      let textContent = "";
-      let apifyJson = null;
+    ];
 
-      // ==========================================
-      // NOVO: Integração APIFY (Prioridade para iFood/Rappi)
-      // ==========================================
-      if (APIFY_TOKEN && (data.includes('ifood.com.br') || data.includes('rappi'))) {
-          try {
-             console.log('[ScrapeMenu] URL de Delivery detectada. Tentando APIFY...');
-             
-             // Usa FETCH direto para API do Apify para evitar erro de importação do SDK
-             const actorId = 'apify/website-content-crawler';
-             const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${APIFY_TOKEN}`;
-             
-             const runResp = await fetch(runUrl, {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                     startUrls: [{ url: data }],
-                     maxCrawlPages: 1,
-                     proxyConfiguration: { useApifyProxy: true },
-                     browser: 'chromium',
-                     renderingTypeDetectionRatio: 0.1
-                 })
-             });
-
-             if (!runResp.ok) {
-                 const errText = await runResp.text();
-                 throw new Error(`Apify Start Error: ${runResp.status} - ${errText}`);
-             }
-
-             const runData = await runResp.json();
-             const runId = runData.data.id;
-             const defaultDatasetId = runData.data.defaultDatasetId;
-             console.log('[ScrapeMenu] Apify Run ID:', runId);
-
-             // Polling para esperar terminar (limite 45s)
-             let status = 'RUNNING';
-             const startTime = Date.now();
-             
-             while (status === 'RUNNING' || status === 'READY') {
-                 if (Date.now() - startTime > 45000) break; // Timeout segurança
-                 await new Promise(r => setTimeout(r, 2000));
-                 
-                 const statusResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
-                 const statusData = await statusResp.json();
-                 status = statusData.data.status;
-             }
-
-             if (status === 'SUCCEEDED') {
-                 const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${defaultDatasetId}/items?token=${APIFY_TOKEN}`);
-                 const items = await itemsResp.json();
-                 
-                 if (items && items.length > 0) {
-                     textContent = items[0].text || items[0].markdown;
-                     apifyJson = items[0]; 
-                     console.log('[ScrapeMenu] Sucesso com Apify!');
-                 }
-             } else {
-                 console.warn('[ScrapeMenu] Apify não terminou a tempo ou falhou:', status);
-             }
-             
-          } catch (apifyErr) {
-             console.warn('[ScrapeMenu] Erro Apify:', apifyErr);
-          }
-      }
-      
-      // Se Apify retornou JSON estruturado (caso use scraper específico do iFood), retorna direto
-      if (apifyJson && apifyJson.menu) {
-           return new Response(
-              JSON.stringify({ success: true, categories: apifyJson.menu }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            );
-      }
-
-      // Tentativa 2: Browserless com TIMEOUT de 30s
-      if (!textContent && BROWSERLESS_API_KEY) {
-          try {
-              console.log('[ScrapeMenu] Tentando Browserless/Puppeteer...');
-              
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-
-              const browserlessResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                      url: data,
-                      waitFor: 'networkidle2', // Espera SPA carregar
-                      rejectResourceTypes: ['image', 'font', 'media'] // Otimização
-                  }),
-                  signal: controller.signal
-              });
-              
-              clearTimeout(timeoutId);
-
-              if (browserlessResp.ok) {
-                  textContent = await browserlessResp.text();
-                  console.log('[ScrapeMenu] Sucesso com Browserless (HTML extraído).');
-              } else {
-                  console.warn('[ScrapeMenu] Browserless falhou:', browserlessResp.status);
-              }
-          } catch (bErr) {
-              console.warn('[ScrapeMenu] Erro Browserless:', bErr);
-          }
-      }
-
-      // Tentativa 3: Firecrawl (Scraping Inteligente) se Browserless falhar
-      if (!textContent) {
-          try {
-             console.log('[ScrapeMenu] Tentando Firecrawl...');
-             // Endpoint público que geralmente funciona melhor que Jina para SPAs
-             const firecrawlResp = await fetch('https://api.firecrawl.dev/v0/scrape', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ url: data })
-             });
-             
-             if (firecrawlResp.ok) {
-                 const fireData = await firecrawlResp.json();
-                 textContent = fireData.data?.markdown || fireData.data?.content;
-             }
-          } catch(fireErr) {
-             console.warn('[ScrapeMenu] Firecrawl falhou:', fireErr);
-          }
-      }
-
-      // Tentativa 4: Jina.ai (Último recurso de scraping inteligente)
-      if (!textContent) {
-          try {
-            console.log('[ScrapeMenu] Tentando Jina.ai...');
-            const jinaResp = await fetch(`https://r.jina.ai/${data}`);
-            if (jinaResp.ok) {
-                textContent = await jinaResp.text();
-            }
-          } catch (jinaError) {
-             console.warn('[ScrapeMenu] Erro Jina:', jinaError);
-          }
-      }
-      
-      // Validação final de conteúdo
-      if (!textContent || textContent.length < 50) {
-          // Se falhou tudo, retorna erro explícito para o usuário saber o que fazer
-          throw new Error('O site bloqueou o acesso automático. Por favor, tire um PRINT/FOTO do cardápio e use a opção "Imagem" (é infalível).');
-      }
-
-      // Limpeza agressiva para caber no contexto e remover lixo
-      const cleanText = textContent
-        .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
-        .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .slice(0, 45000); // Reduzi para 45k para garantir que cabe no prompt
-
-      messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Extraia o cardápio deste conteúdo HTML/Texto:\n\n${cleanText}` }
-      ];
-    } else {
-        throw new Error('Tipo de importação inválido.');
-    }
-
-    // ==========================================
-    // CHAMADA OPENAI
-    // ==========================================
     console.log('[ScrapeMenu] Enviando para OpenAI...');
-    
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', 
-        messages: messages,
-        temperature: 0.1,
-        max_tokens: 4000,
-        response_format: { type: "json_object" }
-      }),
+    const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: messages,
+            temperature: 0.1,
+            max_tokens: 4000,
+            response_format: { type: "json_object" }
+        })
     });
 
-    if (!aiResponse.ok) {
-      const err = await aiResponse.text();
-      console.error('OpenAI Error:', err);
-      throw new Error(`Erro na IA (${aiResponse.status}): Verifique sua chave de API.`);
+    if (!aiResp.ok) {
+        const err = await aiResp.text();
+        throw new Error(`Erro na IA (${aiResp.status}): ${err}`);
     }
 
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content;
-
-    if (!rawContent) throw new Error('A IA retornou uma resposta vazia.');
-
-    // Parsing Robusto
+    const aiData = await aiResp.json();
+    const rawContent = aiData.choices[0].message.content;
     const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-    let parsed;
-    try {
-        parsed = JSON.parse(cleanJson);
-    } catch (parseErr) {
-        console.error('JSON Parse Error:', cleanJson);
-        throw new Error('A IA não retornou um JSON válido.');
-    }
-
-    const categories = parsed.categories || parsed.menu || [];
-    
-    if (!categories.length) {
-        throw new Error('Nenhum produto identificado. Tente uma imagem mais clara.');
-    }
+    const parsed = JSON.parse(cleanJson);
 
     return new Response(
-      JSON.stringify({ success: true, categories }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        JSON.stringify({ success: true, categories: parsed.categories || parsed.menu || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
-
-  } catch (error: any) {
-    console.error('[ScrapeMenu] Erro Fatal:', error);
-    
-    // Retorna 200 com flag de erro para o frontend conseguir ler o JSON
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message || 'Erro desconhecido no servidor (500)',
-        details: error.toString()
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
-  }
-})
+}
