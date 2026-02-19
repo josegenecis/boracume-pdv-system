@@ -313,12 +313,21 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       setUrlInput('');
       
     } catch (error: any) {
-      console.error(error);
+      console.error('[Import] Erro Fatal:', error);
+      
+      const errorMessage = error?.message || 'Erro desconhecido ao processar.';
+      
       toast({
         title: 'Erro na importação',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive'
       });
+      
+      // Fallback visual
+      if (!error?.message) {
+         alert('Erro desconhecido: Verifique o console do navegador (F12) para detalhes.');
+      }
+
     } finally {
       setLoading(false);
     }
