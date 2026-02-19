@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-// Import Apify Client
-import { ApifyClient } from 'https://esm.sh/apify-client@2.9.1';
+// Removido import do Apify Client para evitar conflitos de dependência
+// import { ApifyClient } from 'https://esm.sh/apify-client@2.9.1';
 
 // ⚠️ Configuração de Browserless (Opcional, mas recomendado para iFood/Rappi)
 // Se não tiver chave, o sistema usa fallback Jina/Fetch.
@@ -26,7 +26,10 @@ serve(async (req) => {
     const { type, data } = await req.json();
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
 
-    if (!openAiKey) throw new Error('Chave OpenAI não configurada.');
+    if (!openAiKey) {
+        console.error('OPENAI_API_KEY is missing');
+        throw new Error('Configuração de IA ausente no servidor.');
+    }
     if (!data) throw new Error('Dados para processamento não fornecidos.');
 
     console.log(`[ScrapeMenu] Iniciando processamento. Tipo: ${type}`);
@@ -84,29 +87,59 @@ serve(async (req) => {
       if (APIFY_TOKEN && (data.includes('ifood.com.br') || data.includes('rappi'))) {
           try {
              console.log('[ScrapeMenu] URL de Delivery detectada. Tentando APIFY...');
-             const client = new ApifyClient({ token: APIFY_TOKEN });
              
-             // Usa o Actor oficial de scraping genérico ou específico do iFood se disponível
-             // Vamos usar o 'apify/website-content-crawler' que é o scraper OFICIAL e mantido pela Apify
-             const run = await client.actor('apify/website-content-crawler').call({
-                 startUrls: [{ url: data }],
-                 maxCrawlPages: 1, // Só precisamos da página do cardápio
-                 proxyConfiguration: { useApifyProxy: true },
-                 // Configurações para renderizar JS (necessário para iFood/Rappi)
-                 browser: 'chromium',
-                 renderingTypeDetectionRatio: 0.1 // Força renderização de browser
+             // Usa FETCH direto para API do Apify para evitar erro de importação do SDK
+             const actorId = 'apify/website-content-crawler';
+             const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${APIFY_TOKEN}`;
+             
+             const runResp = await fetch(runUrl, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                     startUrls: [{ url: data }],
+                     maxCrawlPages: 1,
+                     proxyConfiguration: { useApifyProxy: true },
+                     browser: 'chromium',
+                     renderingTypeDetectionRatio: 0.1
+                 })
              });
 
-             console.log('[ScrapeMenu] Apify Run ID:', run.id);
-             const { items } = await client.dataset(run.defaultDatasetId).listItems();
-             
-             if (items && items.length > 0) {
-                 // Apify retorna texto limpo ou markdown
-                 textContent = items[0].text || items[0].markdown;
-                 // Se o Apify retornou JSON (para ifood-scraper), use-o direto
-                 apifyJson = items[0]; 
-                 console.log('[ScrapeMenu] Sucesso com Apify!');
+             if (!runResp.ok) {
+                 const errText = await runResp.text();
+                 throw new Error(`Apify Start Error: ${runResp.status} - ${errText}`);
              }
+
+             const runData = await runResp.json();
+             const runId = runData.data.id;
+             const defaultDatasetId = runData.data.defaultDatasetId;
+             console.log('[ScrapeMenu] Apify Run ID:', runId);
+
+             // Polling para esperar terminar (limite 45s)
+             let status = 'RUNNING';
+             const startTime = Date.now();
+             
+             while (status === 'RUNNING' || status === 'READY') {
+                 if (Date.now() - startTime > 45000) break; // Timeout segurança
+                 await new Promise(r => setTimeout(r, 2000));
+                 
+                 const statusResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+                 const statusData = await statusResp.json();
+                 status = statusData.data.status;
+             }
+
+             if (status === 'SUCCEEDED') {
+                 const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${defaultDatasetId}/items?token=${APIFY_TOKEN}`);
+                 const items = await itemsResp.json();
+                 
+                 if (items && items.length > 0) {
+                     textContent = items[0].text || items[0].markdown;
+                     apifyJson = items[0]; 
+                     console.log('[ScrapeMenu] Sucesso com Apify!');
+                 }
+             } else {
+                 console.warn('[ScrapeMenu] Apify não terminou a tempo ou falhou:', status);
+             }
+             
           } catch (apifyErr) {
              console.warn('[ScrapeMenu] Erro Apify:', apifyErr);
           }
