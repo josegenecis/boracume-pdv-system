@@ -6,16 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V3 (Native Deno.serve) iniciada!");
+console.log("Edge Function scrape-menu V4 (Direct Mapping) iniciada!");
 
 Deno.serve(async (req) => {
-  // 1. Tratamento de CORS (Preflight)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 2. Parse do Body
     const bodyText = await req.text();
     if (!bodyText) throw new Error('Body vazio');
     
@@ -29,28 +27,21 @@ Deno.serve(async (req) => {
     const { type, data } = body;
     console.log(`[ScrapeMenu] Requisição recebida. Tipo: ${type}`);
 
-    // Configurações (Lidas do Ambiente)
     const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
     const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-    // 3. Validação de Chaves Críticas
     if (type === 'image' && !OPENAI_API_KEY) {
          throw new Error('Configuração de IA (OPENAI_API_KEY) ausente no servidor.');
     }
 
-    // ==========================================
-    // FLUXO DE IMPORTAÇÃO
-    // ==========================================
-    
-    // --- CASO 1: URL (IFOOD/RAPPI/OUTROS) ---
+    // --- CASO 1: URL ---
     if (type === 'url') {
         
-        // A. Tentar APIFY (Prioridade para iFood)
+        // A. Tentar APIFY (iFood)
         if (APIFY_TOKEN && data.includes('ifood.com.br')) {
             try {
                 console.log('[ScrapeMenu] Detectado iFood. Usando Actor priscilas/ifood-menu-scraper...');
-                // Actor específico para iFood (mais confiável que o genérico)
                 const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
                 
                 const startResp = await fetch(runUrl, {
@@ -64,23 +55,20 @@ Deno.serve(async (req) => {
 
                 if (!startResp.ok) {
                     const err = await startResp.text();
-                    console.error('[ScrapeMenu] Erro ao iniciar Apify iFood:', err);
-                    throw new Error(`Apify iFood Start Failed: ${startResp.status}`);
+                    throw new Error(`Apify Start Failed: ${startResp.status} - ${err}`);
                 }
 
                 const startData = await startResp.json();
                 const runId = startData.data.id;
                 const datasetId = startData.data.defaultDatasetId;
-                console.log('[ScrapeMenu] iFood Run ID:', runId);
+                console.log('[ScrapeMenu] Run ID:', runId);
 
-                // Polling (Esperar terminar - iFood pode demorar)
+                // Polling
                 let status = 'RUNNING';
                 const startTime = Date.now();
-                
                 while (status === 'RUNNING' || status === 'READY') {
-                    if (Date.now() - startTime > 110000) break; // Timeout 110s (limite da function é 120s)
-                    await new Promise(r => setTimeout(r, 5000)); // Checar a cada 5s
-                    
+                    if (Date.now() - startTime > 110000) break; 
+                    await new Promise(r => setTimeout(r, 5000));
                     const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
                     const checkData = await checkResp.json();
                     status = checkData.data.status;
@@ -91,24 +79,45 @@ Deno.serve(async (req) => {
                     const items = await itemsResp.json();
                     
                     if (items && items.length > 0) {
-                        console.log(`[ScrapeMenu] iFood retornou ${items.length} itens brutos.`);
-                        // O scraper do iFood retorna JSON estruturado.
-                        // Podemos passar esse JSON para a IA normalizar para o nosso formato.
-                        const jsonContent = JSON.stringify(items.slice(0, 50)); // Limitar para não estourar token
+                        console.log(`[ScrapeMenu] iFood retornou ${items.length} itens. Tentando mapeamento direto...`);
+                        
+                        // TENTATIVA 1: Mapeamento Direto (Sem gastar IA)
+                        const mappedCategories = mapApifyItemsToCategories(items);
+                        
+                        if (mappedCategories.length > 0) {
+                            console.log('[ScrapeMenu] Mapeamento direto funcionou!', mappedCategories.length, 'categorias.');
+                            return new Response(
+                                JSON.stringify({ success: true, categories: mappedCategories }),
+                                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                            );
+                        }
+                        
+                        // TENTATIVA 2: IA (Fallback se mapeamento falhar)
+                        console.log('[ScrapeMenu] Mapeamento direto falhou. Usando IA...');
+                        // Pega uma amostra maior e mais limpa
+                        const jsonContent = JSON.stringify(items.slice(0, 80)); 
                         return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                    } else {
+                        throw new Error('Apify retornou lista vazia de itens.');
                     }
+                } else {
+                    throw new Error(`Apify não terminou com sucesso. Status: ${status}`);
                 }
-            } catch (e) {
-                console.warn('[ScrapeMenu] Apify iFood falhou, tentando fallback genérico...', e);
+            } catch (e: any) {
+                console.error('[ScrapeMenu] Erro no fluxo iFood:', e);
+                // Retornar erro legível para o front
+                return new Response(
+                    JSON.stringify({ success: false, error: `Erro na leitura do iFood: ${e.message}` }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
             }
         }
 
-        // B. Tentar APIFY Genérico (Outros sites ou fallback)
+        // B. Tentar APIFY Genérico
         if (APIFY_TOKEN) {
              try {
                 console.log('[ScrapeMenu] Usando Apify Crawler Genérico...');
                 const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}`;
-                
                 const startResp = await fetch(runUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -153,7 +162,6 @@ Deno.serve(async (req) => {
         // C. Tentar Browserless/Puppeteer (Fallback)
         if (BROWSERLESS_API_KEY) {
              try {
-                console.log('[ScrapeMenu] Usando Browserless...');
                 const blResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -174,7 +182,6 @@ Deno.serve(async (req) => {
 
         // D. Tentar Jina.ai (Fallback final)
         try {
-            console.log('[ScrapeMenu] Usando Jina...');
             const jinaResp = await fetch(`https://r.jina.ai/${data}`);
             if (jinaResp.ok) {
                 const text = await jinaResp.text();
@@ -196,7 +203,6 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error('[ScrapeMenu] Erro Fatal:', error);
-    // Retorna 200 OK com erro JSON para o frontend exibir
     return new Response(
       JSON.stringify({ success: false, error: error.message, details: error.toString() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -204,42 +210,94 @@ Deno.serve(async (req) => {
   }
 })
 
-// Função Auxiliar para chamar OpenAI
-async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
-    if (!apiKey) throw new Error('Chave OpenAI não configurada (necessária para processar o texto/imagem).');
+// === HELPERS ===
 
-    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
-    Sua missão é extrair produtos, preços e VARIAÇÕES/COMPLEMENTOS do conteúdo fornecido.
+function mapApifyItemsToCategories(items: any[]): any[] {
+    const categoriesMap: Record<string, any[]> = {};
     
-    IMPORTANTE SOBRE VARIAÇÕES:
-    - Procure por tamanhos (P, M, G), sabores, adicionais, bordas, ou opções de escolha.
-    - Se um produto tiver opções com preços diferentes, crie "variants".
-    - Se houver adicionais pagos, crie "variants" com o nome do adicional e seu preço.
+    // Tenta encontrar o padrão de dados.
+    // O scraper priscilas/ifood-menu-scraper geralmente retorna uma lista plana de itens.
+    // Ex: { title: "X-Bacon", price: 20, menuSection: "Lanches", options: [...] }
     
-    ESTRUTURA JSON OBRIGATÓRIA:
+    for (const item of items) {
+        // Normalização de campos
+        const name = item.title || item.name || item.productName;
+        const price = parseFloat(item.price || item.unitPrice || item.value || '0');
+        const categoryName = item.menuSection || item.category || item.group || 'Geral';
+        const description = item.description || item.details || '';
+        const imageUrl = item.imageUrl || item.image || '';
+        
+        if (!name) continue;
+
+        // Processar Variações/Opções
+        const variants: any[] = [];
+        
+        // Se options vier como array de objetos
+        if (Array.isArray(item.options)) {
+            for (const opt of item.options) {
+                if (opt.name && opt.price) {
+                     variants.push({ name: opt.name, price: parseFloat(opt.price) });
+                } else if (opt.name) {
+                     variants.push({ name: opt.name, price: 0 });
+                }
+            }
+        }
+        // Se vier como choices ou complements
+        if (Array.isArray(item.choices)) {
+             for (const choice of item.choices) {
+                 if (choice.name) variants.push({ name: choice.name, price: parseFloat(choice.price || '0') });
+                 // Se choices tiver options dentro (estrutura aninhada do iFood)
+                 if (Array.isArray(choice.options)) {
+                     for (const nested of choice.options) {
+                         if (nested.name) variants.push({ name: nested.name, price: parseFloat(nested.price || '0') });
+                     }
+                 }
+             }
+        }
+
+        if (!categoriesMap[categoryName]) {
+            categoriesMap[categoryName] = [];
+        }
+
+        categoriesMap[categoryName].push({
+            name,
+            price,
+            description,
+            image_url: imageUrl,
+            variants
+        });
+    }
+
+    // Converter mapa para array
+    return Object.entries(categoriesMap).map(([name, items]) => ({
+        name,
+        items
+    }));
+}
+
+async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
+    if (!apiKey) throw new Error('Chave OpenAI não configurada.');
+
+    const systemPrompt = `Você é um especialista em estruturar cardápios.
+    Extraia produtos, preços e VARIAÇÕES (tamanhos, sabores, adicionais) do JSON ou texto.
+    
+    SAÍDA JSON:
     {
       "categories": [
         {
-          "name": "Nome da Categoria (Ex: Lanches, Bebidas)",
+          "name": "Nome Categoria",
           "items": [ 
             { 
-              "name": "Nome do Produto", 
+              "name": "Produto", 
               "price": 0.00, 
-              "description": "Descrição detalhada", 
-              "variants": [ 
-                  { "name": "Bacon Extra", "price": 5.00 },
-                  { "name": "Tamanho Grande", "price": 10.00 }
-              ] 
+              "description": "...", 
+              "variants": [ { "name": "Grande", "price": 10.00 } ] 
             } 
           ]
         }
       ]
     }
-    REGRAS:
-    1. Retorne APENAS o JSON puro.
-    2. Ignore itens que não sejam do cardápio (rodapés, links, etc).
-    3. Se o preço for "A partir de", use o menor preço como base e coloque as opções mais caras como variantes.
-    4. Normalize os preços para float (ex: 10.50).`;
+    Se receber um JSON estruturado, preserve ao máximo a estrutura original.`;
 
     const messages = [
         { role: 'system', content: systemPrompt },
@@ -247,14 +305,13 @@ async function processWithAI(content: string, apiKey: string | undefined, isImag
             role: 'user', 
             content: isImage 
                 ? [
-                    { type: "text", text: "Extraia o cardápio desta imagem em JSON, incluindo todas as variações e opcionais visíveis." },
+                    { type: "text", text: "Extraia o cardápio desta imagem." },
                     { type: "image_url", image_url: { url: content, detail: "high" } }
                   ]
-                : `Analise este conteúdo (${isJson ? 'JSON Estruturado' : 'Texto Bruto'}) e extraia o cardápio:\n\n${content.slice(0, 50000)}`
+                : `Extraia o cardápio:\n\n${content.slice(0, 50000)}`
         }
     ];
 
-    console.log('[ScrapeMenu] Enviando para OpenAI...');
     const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -272,7 +329,7 @@ async function processWithAI(content: string, apiKey: string | undefined, isImag
 
     if (!aiResp.ok) {
         const err = await aiResp.text();
-        throw new Error(`Erro na IA (${aiResp.status}): ${err}`);
+        throw new Error(`Erro IA: ${err}`);
     }
 
     const aiData = await aiResp.json();
