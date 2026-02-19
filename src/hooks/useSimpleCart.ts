@@ -41,16 +41,22 @@ export const useSimpleCart = () => {
     notes: string = '',
     variationPrice: number = 0
   ) => {
+    console.log('🛒 Adicionando ao carrinho:', { product, quantity, variations, notes, variationPrice });
+
     // Garantir tipos numéricos para evitar NaN
     const basePrice = Number(product.price) || 0;
     const extraPrice = Number(variationPrice) || 0;
     
-    // Garantir que variations seja um array de strings únicas e sem strings agrupadas
+    // Garantir que variations seja um array de strings
+    // Removida a restrição de vírgulas que causava bugs em nomes compostos
     const uniqueVariations = Array.from(new Set(
-      (variations || []).filter(v => typeof v === 'string' && !v.includes(','))
+      (variations || []).filter(v => typeof v === 'string' && v.trim() !== '')
     ));
+
     // Criar ID único baseado no produto + variações + notas
-    const uniqueId = `${product.id}-${uniqueVariations.sort().join(',')}-${notes}`;
+    // Usamos pipe | como separador para evitar conflito com vírgulas nos nomes
+    const uniqueId = `${product.id}|${uniqueVariations.sort().join('|')}|${notes.trim()}`;
+    
     // Calcular preço total
     const totalPrice = (basePrice + extraPrice) * quantity;
     
@@ -65,6 +71,8 @@ export const useSimpleCart = () => {
         updated[existingIndex].totalPrice = 
           (basePrice + extraPrice) * updated[existingIndex].quantity;
 
+        console.log('🔄 Item atualizado:', updated[existingIndex]);
+        
         toast({
           title: "Produto atualizado",
           description: `${product.name} - quantidade: ${updated[existingIndex].quantity}`,
@@ -77,10 +85,12 @@ export const useSimpleCart = () => {
           product,
           quantity,
           variations: uniqueVariations,
-          notes,
+          notes: notes.trim(),
           totalPrice,
           uniqueId
         };
+
+        console.log('➕ Novo item:', newItem);
 
         toast({
           title: "Adicionado ao carrinho",
@@ -100,11 +110,12 @@ export const useSimpleCart = () => {
 
     setCart(prev => prev.map(item => {
       if (item.uniqueId === uniqueId) {
-        const basePrice = item.totalPrice / item.quantity; // Preço unitário atual
+        // Recalcular com base no preço unitário original implícito
+        const unitPrice = item.totalPrice / item.quantity;
         return {
           ...item,
           quantity: newQuantity,
-          totalPrice: basePrice * newQuantity
+          totalPrice: unitPrice * newQuantity
         };
       }
       return item;
@@ -124,11 +135,11 @@ export const useSimpleCart = () => {
   };
 
   const getCartTotal = () => {
-    return cart.reduce((total, item) => total + item.totalPrice, 0);
+    return cart.reduce((total, item) => total + (Number(item.totalPrice) || 0), 0);
   };
 
   const getCartItemCount = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
+    return cart.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
   };
 
   return {

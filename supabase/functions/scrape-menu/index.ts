@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V2 (Native Deno.serve) iniciada!");
+console.log("Edge Function scrape-menu V3 (Native Deno.serve) iniciada!");
 
 Deno.serve(async (req) => {
   // 1. Tratamento de CORS (Preflight)
@@ -45,13 +45,70 @@ Deno.serve(async (req) => {
     
     // --- CASO 1: URL (IFOOD/RAPPI/OUTROS) ---
     if (type === 'url') {
-        // A. Tentar APIFY (Prioridade para iFood/Rappi)
-        if (APIFY_TOKEN && (data.includes('ifood') || data.includes('rappi'))) {
+        
+        // A. Tentar APIFY (Prioridade para iFood)
+        if (APIFY_TOKEN && data.includes('ifood.com.br')) {
             try {
-                console.log('[ScrapeMenu] Usando Apify...');
+                console.log('[ScrapeMenu] Detectado iFood. Usando Actor priscilas/ifood-menu-scraper...');
+                // Actor específico para iFood (mais confiável que o genérico)
+                const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
+                
+                const startResp = await fetch(runUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startUrls: [{ url: data }],
+                        proxyConfiguration: { useApifyProxy: true }
+                    })
+                });
+
+                if (!startResp.ok) {
+                    const err = await startResp.text();
+                    console.error('[ScrapeMenu] Erro ao iniciar Apify iFood:', err);
+                    throw new Error(`Apify iFood Start Failed: ${startResp.status}`);
+                }
+
+                const startData = await startResp.json();
+                const runId = startData.data.id;
+                const datasetId = startData.data.defaultDatasetId;
+                console.log('[ScrapeMenu] iFood Run ID:', runId);
+
+                // Polling (Esperar terminar - iFood pode demorar)
+                let status = 'RUNNING';
+                const startTime = Date.now();
+                
+                while (status === 'RUNNING' || status === 'READY') {
+                    if (Date.now() - startTime > 110000) break; // Timeout 110s (limite da function é 120s)
+                    await new Promise(r => setTimeout(r, 5000)); // Checar a cada 5s
+                    
+                    const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+                    const checkData = await checkResp.json();
+                    status = checkData.data.status;
+                }
+
+                if (status === 'SUCCEEDED') {
+                    const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+                    const items = await itemsResp.json();
+                    
+                    if (items && items.length > 0) {
+                        console.log(`[ScrapeMenu] iFood retornou ${items.length} itens brutos.`);
+                        // O scraper do iFood retorna JSON estruturado.
+                        // Podemos passar esse JSON para a IA normalizar para o nosso formato.
+                        const jsonContent = JSON.stringify(items.slice(0, 50)); // Limitar para não estourar token
+                        return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                    }
+                }
+            } catch (e) {
+                console.warn('[ScrapeMenu] Apify iFood falhou, tentando fallback genérico...', e);
+            }
+        }
+
+        // B. Tentar APIFY Genérico (Outros sites ou fallback)
+        if (APIFY_TOKEN) {
+             try {
+                console.log('[ScrapeMenu] Usando Apify Crawler Genérico...');
                 const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}`;
                 
-                // Iniciar Crawler
                 const startResp = await fetch(runUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -64,45 +121,36 @@ Deno.serve(async (req) => {
                     })
                 });
 
-                if (!startResp.ok) {
-                    const err = await startResp.text();
-                    console.error('[ScrapeMenu] Erro ao iniciar Apify:', err);
-                    throw new Error(`Apify Start Failed: ${startResp.status}`);
-                }
-
-                const startData = await startResp.json();
-                const runId = startData.data.id;
-                const datasetId = startData.data.defaultDatasetId;
-                console.log('[ScrapeMenu] Run ID:', runId);
-
-                // Polling (Esperar terminar)
-                let status = 'RUNNING';
-                const startTime = Date.now();
-                
-                while (status === 'RUNNING' || status === 'READY') {
-                    if (Date.now() - startTime > 45000) break; // Timeout 45s
-                    await new Promise(r => setTimeout(r, 2000));
+                if (startResp.ok) {
+                    const startData = await startResp.json();
+                    const runId = startData.data.id;
+                    const datasetId = startData.data.defaultDatasetId;
                     
-                    const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
-                    const checkData = await checkResp.json();
-                    status = checkData.data.status;
-                }
+                    let status = 'RUNNING';
+                    const startTime = Date.now();
+                    while (status === 'RUNNING' || status === 'READY') {
+                        if (Date.now() - startTime > 60000) break;
+                        await new Promise(r => setTimeout(r, 3000));
+                        const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+                        const checkData = await checkResp.json();
+                        status = checkData.data.status;
+                    }
 
-                if (status === 'SUCCEEDED') {
-                    const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
-                    const items = await itemsResp.json();
-                    if (items && items.length > 0) {
-                        // Sucesso! Retornar direto para IA processar
-                        const textContent = items[0].text || items[0].markdown;
-                        return await processWithAI(textContent, OPENAI_API_KEY);
+                    if (status === 'SUCCEEDED') {
+                        const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+                        const items = await itemsResp.json();
+                        if (items && items.length > 0) {
+                            const textContent = items[0].text || items[0].markdown || JSON.stringify(items);
+                            return await processWithAI(textContent, OPENAI_API_KEY);
+                        }
                     }
                 }
-            } catch (e) {
-                console.warn('[ScrapeMenu] Apify falhou, tentando fallback...', e);
-            }
+             } catch (e) {
+                 console.warn('[ScrapeMenu] Apify Genérico falhou:', e);
+             }
         }
 
-        // B. Tentar Browserless/Puppeteer (Fallback)
+        // C. Tentar Browserless/Puppeteer (Fallback)
         if (BROWSERLESS_API_KEY) {
              try {
                 console.log('[ScrapeMenu] Usando Browserless...');
@@ -124,7 +172,7 @@ Deno.serve(async (req) => {
              }
         }
 
-        // C. Tentar Jina.ai (Fallback final)
+        // D. Tentar Jina.ai (Fallback final)
         try {
             console.log('[ScrapeMenu] Usando Jina...');
             const jinaResp = await fetch(`https://r.jina.ai/${data}`);
@@ -157,28 +205,41 @@ Deno.serve(async (req) => {
 })
 
 // Função Auxiliar para chamar OpenAI
-async function processWithAI(content: string, apiKey: string | undefined, isImage = false) {
+async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada (necessária para processar o texto/imagem).');
 
-    const systemPrompt = `Você é um especialista em ler cardápios.
-    Extraia TODOS os produtos e retorne APENAS um JSON válido.
+    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
+    Sua missão é extrair produtos, preços e VARIAÇÕES/COMPLEMENTOS do conteúdo fornecido.
+    
+    IMPORTANTE SOBRE VARIAÇÕES:
+    - Procure por tamanhos (P, M, G), sabores, adicionais, bordas, ou opções de escolha.
+    - Se um produto tiver opções com preços diferentes, crie "variants".
+    - Se houver adicionais pagos, crie "variants" com o nome do adicional e seu preço.
+    
     ESTRUTURA JSON OBRIGATÓRIA:
     {
       "categories": [
         {
-          "name": "Nome da Categoria",
+          "name": "Nome da Categoria (Ex: Lanches, Bebidas)",
           "items": [ 
             { 
               "name": "Nome do Produto", 
               "price": 0.00, 
-              "description": "Descrição opcional", 
-              "variants": [ { "name": "Pequena", "price": 10.00 } ] 
+              "description": "Descrição detalhada", 
+              "variants": [ 
+                  { "name": "Bacon Extra", "price": 5.00 },
+                  { "name": "Tamanho Grande", "price": 10.00 }
+              ] 
             } 
           ]
         }
       ]
     }
-    REGRAS: Retorne APENAS o JSON puro (sem markdown). Ignore itens que não sejam comida/bebida.`;
+    REGRAS:
+    1. Retorne APENAS o JSON puro.
+    2. Ignore itens que não sejam do cardápio (rodapés, links, etc).
+    3. Se o preço for "A partir de", use o menor preço como base e coloque as opções mais caras como variantes.
+    4. Normalize os preços para float (ex: 10.50).`;
 
     const messages = [
         { role: 'system', content: systemPrompt },
@@ -186,10 +247,10 @@ async function processWithAI(content: string, apiKey: string | undefined, isImag
             role: 'user', 
             content: isImage 
                 ? [
-                    { type: "text", text: "Extraia o cardápio desta imagem em JSON." },
+                    { type: "text", text: "Extraia o cardápio desta imagem em JSON, incluindo todas as variações e opcionais visíveis." },
                     { type: "image_url", image_url: { url: content, detail: "high" } }
                   ]
-                : `Extraia o cardápio deste conteúdo:\n\n${content.slice(0, 45000)}`
+                : `Analise este conteúdo (${isJson ? 'JSON Estruturado' : 'Texto Bruto'}) e extraia o cardápio:\n\n${content.slice(0, 50000)}`
         }
     ];
 
