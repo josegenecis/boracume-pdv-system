@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V8 (Async Fix & Logging) iniciada!");
+console.log("Edge Function scrape-menu V9 (Async Fix & LatLong) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -43,12 +43,14 @@ Deno.serve(async (req) => {
                 if (storeId) {
                     console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
                     
-                    // CORREÇÃO: waitForFinish deve ser Query Param, não Body
                     const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
                     
+                    // CORREÇÃO: Adicionadas coordenadas genéricas (SP) para passar na validação do Actor
                     const inputPayload = {
                         "store_ids": [storeId],
-                        "proxyConfiguration": { "useApifyProxy": true }
+                        "proxyConfiguration": { "useApifyProxy": true },
+                        "latitude": -23.550520,
+                        "longitude": -46.633308
                     };
                     
                     console.log("[Start] Payload enviado para Apify:", JSON.stringify(inputPayload));
@@ -119,7 +121,6 @@ Deno.serve(async (req) => {
     if (action === 'check') {
         if (!runId) throw new Error('RunId obrigatório para check.');
 
-        // console.log(`[Check] Verificando status do Run: ${runId}`);
         const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
         const checkData = await checkResp.json();
         const status = checkData.data.status;
