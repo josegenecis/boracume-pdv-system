@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V4 (Direct Mapping) iniciada!");
+console.log("Edge Function scrape-menu V5 (iFood Fix) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -41,79 +41,85 @@ Deno.serve(async (req) => {
         // A. Tentar APIFY (iFood)
         if (APIFY_TOKEN && data.includes('ifood.com.br')) {
             try {
-                console.log('[ScrapeMenu] Detectado iFood. Usando Actor priscilas/ifood-menu-scraper...');
-                const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
+                console.log('[ScrapeMenu] Detectado iFood. Tentando extrair ID da loja...');
                 
-                const startResp = await fetch(runUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        startUrls: [{ url: data }],
-                        proxyConfiguration: { useApifyProxy: true }
-                    })
-                });
+                // Tenta extrair o UUID da URL do iFood
+                // Padrão: .../delivery/cidade-uf/nome-loja/UUID
+                const ifoodIdMatch = data.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
+                const storeId = ifoodIdMatch ? ifoodIdMatch[1] : null;
 
-                if (!startResp.ok) {
-                    const err = await startResp.text();
-                    throw new Error(`Apify Start Failed: ${startResp.status} - ${err}`);
-                }
-
-                const startData = await startResp.json();
-                const runId = startData.data.id;
-                const datasetId = startData.data.defaultDatasetId;
-                console.log('[ScrapeMenu] Run ID:', runId);
-
-                // Polling
-                let status = 'RUNNING';
-                const startTime = Date.now();
-                while (status === 'RUNNING' || status === 'READY') {
-                    if (Date.now() - startTime > 110000) break; 
-                    await new Promise(r => setTimeout(r, 5000));
-                    const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
-                    const checkData = await checkResp.json();
-                    status = checkData.data.status;
-                }
-
-                if (status === 'SUCCEEDED') {
-                    const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
-                    const items = await itemsResp.json();
+                if (storeId) {
+                    console.log(`[ScrapeMenu] ID da loja encontrado: ${storeId}. Usando Actor priscilas/ifood-menu-scraper...`);
                     
-                    if (items && items.length > 0) {
-                        console.log(`[ScrapeMenu] iFood retornou ${items.length} itens. Tentando mapeamento direto...`);
+                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
+                    
+                    const startResp = await fetch(runUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            "store_ids": [storeId],
+                            "proxyConfiguration": { "useApifyProxy": true }
+                        })
+                    });
+
+                    if (!startResp.ok) {
+                        const err = await startResp.text();
+                        // Se der erro 400 ou outro, lançamos erro para cair no catch e tentar o genérico
+                        throw new Error(`Apify iFood Actor Failed: ${startResp.status} - ${err}`);
+                    }
+
+                    const startData = await startResp.json();
+                    const runId = startData.data.id;
+                    const datasetId = startData.data.defaultDatasetId;
+                    console.log('[ScrapeMenu] Run ID:', runId);
+
+                    // Polling
+                    let status = 'RUNNING';
+                    const startTime = Date.now();
+                    while (status === 'RUNNING' || status === 'READY') {
+                        if (Date.now() - startTime > 110000) break; 
+                        await new Promise(r => setTimeout(r, 5000));
+                        const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+                        const checkData = await checkResp.json();
+                        status = checkData.data.status;
+                    }
+
+                    if (status === 'SUCCEEDED') {
+                        const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+                        const items = await itemsResp.json();
                         
-                        // TENTATIVA 1: Mapeamento Direto (Sem gastar IA)
-                        const mappedCategories = mapApifyItemsToCategories(items);
-                        
-                        if (mappedCategories.length > 0) {
-                            console.log('[ScrapeMenu] Mapeamento direto funcionou!', mappedCategories.length, 'categorias.');
-                            return new Response(
-                                JSON.stringify({ success: true, categories: mappedCategories }),
-                                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                            );
+                        if (items && items.length > 0) {
+                            console.log(`[ScrapeMenu] iFood retornou ${items.length} itens.`);
+                            
+                            // TENTATIVA 1: Mapeamento Direto
+                            const mappedCategories = mapApifyItemsToCategories(items);
+                            if (mappedCategories.length > 0) {
+                                return new Response(
+                                    JSON.stringify({ success: true, categories: mappedCategories }),
+                                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                                );
+                            }
+                            
+                            // TENTATIVA 2: IA
+                            const jsonContent = JSON.stringify(items.slice(0, 80)); 
+                            return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                        } else {
+                            console.warn('[ScrapeMenu] Lista vazia do iFood. Tentando método genérico...');
+                            // Não lança erro, deixa cair no fluxo genérico abaixo
                         }
-                        
-                        // TENTATIVA 2: IA (Fallback se mapeamento falhar)
-                        console.log('[ScrapeMenu] Mapeamento direto falhou. Usando IA...');
-                        // Pega uma amostra maior e mais limpa
-                        const jsonContent = JSON.stringify(items.slice(0, 80)); 
-                        return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
                     } else {
-                        throw new Error('Apify retornou lista vazia de itens.');
+                        console.warn(`[ScrapeMenu] iFood Actor não terminou com sucesso (${status}). Tentando método genérico...`);
                     }
                 } else {
-                    throw new Error(`Apify não terminou com sucesso. Status: ${status}`);
+                    console.warn('[ScrapeMenu] Não foi possível extrair o ID da loja da URL. Tentando método genérico...');
                 }
             } catch (e: any) {
-                console.error('[ScrapeMenu] Erro no fluxo iFood:', e);
-                // Retornar erro legível para o front
-                return new Response(
-                    JSON.stringify({ success: false, error: `Erro na leitura do iFood: ${e.message}` }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                );
+                console.warn('[ScrapeMenu] Erro no fluxo iFood (específico):', e.message);
+                console.log('Tentando fallback para crawler genérico...');
             }
         }
 
-        // B. Tentar APIFY Genérico
+        // B. Tentar APIFY Genérico (Fallback)
         if (APIFY_TOKEN) {
              try {
                 console.log('[ScrapeMenu] Usando Apify Crawler Genérico...');
@@ -215,10 +221,6 @@ Deno.serve(async (req) => {
 function mapApifyItemsToCategories(items: any[]): any[] {
     const categoriesMap: Record<string, any[]> = {};
     
-    // Tenta encontrar o padrão de dados.
-    // O scraper priscilas/ifood-menu-scraper geralmente retorna uma lista plana de itens.
-    // Ex: { title: "X-Bacon", price: 20, menuSection: "Lanches", options: [...] }
-    
     for (const item of items) {
         // Normalização de campos
         const name = item.title || item.name || item.productName;
@@ -232,7 +234,6 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         // Processar Variações/Opções
         const variants: any[] = [];
         
-        // Se options vier como array de objetos
         if (Array.isArray(item.options)) {
             for (const opt of item.options) {
                 if (opt.name && opt.price) {
@@ -242,11 +243,9 @@ function mapApifyItemsToCategories(items: any[]): any[] {
                 }
             }
         }
-        // Se vier como choices ou complements
         if (Array.isArray(item.choices)) {
              for (const choice of item.choices) {
                  if (choice.name) variants.push({ name: choice.name, price: parseFloat(choice.price || '0') });
-                 // Se choices tiver options dentro (estrutura aninhada do iFood)
                  if (Array.isArray(choice.options)) {
                      for (const nested of choice.options) {
                          if (nested.name) variants.push({ name: nested.name, price: parseFloat(nested.price || '0') });
@@ -268,7 +267,6 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         });
     }
 
-    // Converter mapa para array
     return Object.entries(categoriesMap).map(([name, items]) => ({
         name,
         items
