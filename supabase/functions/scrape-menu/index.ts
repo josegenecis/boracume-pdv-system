@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V7 (Async/Polling) iniciada!");
+console.log("Edge Function scrape-menu V8 (Async Fix & Logging) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -24,17 +24,14 @@ Deno.serve(async (req) => {
         throw new Error('JSON inválido no body');
     }
 
-    // Novos parâmetros: action ('start' | 'check') e runId (para check)
-    // Compatibilidade reversa: se não tiver action, assume fluxo síncrono antigo (ou 'start' implícito se tiver type)
     const { type, data, action = 'start', runId } = body;
-    
     console.log(`[ScrapeMenu] Action: ${action}, Type: ${type}, RunID: ${runId}`);
 
     const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
     // =================================================================================
-    // ROTA 1: START (Inicia o trabalho e retorna Run ID imediatamente)
+    // ROTA 1: START
     // =================================================================================
     if (action === 'start') {
         if (type === 'url') {
@@ -46,19 +43,27 @@ Deno.serve(async (req) => {
                 if (storeId) {
                     console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
                     
-                    // Inicia SEM esperar terminar (waitForFinish: 0)
-                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
+                    // CORREÇÃO: waitForFinish deve ser Query Param, não Body
+                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+                    
+                    const inputPayload = {
+                        "store_ids": [storeId],
+                        "proxyConfiguration": { "useApifyProxy": true }
+                    };
+                    
+                    console.log("[Start] Payload enviado para Apify:", JSON.stringify(inputPayload));
+
                     const startResp = await fetch(runUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            "store_ids": [storeId],
-                            "proxyConfiguration": { "useApifyProxy": true },
-                            "waitForFinish": 0 // RETORNA IMEDIATAMENTE
-                        })
+                        body: JSON.stringify(inputPayload)
                     });
 
-                    if (!startResp.ok) throw new Error(`Erro ao iniciar Apify: ${startResp.status}`);
+                    if (!startResp.ok) {
+                        const errText = await startResp.text();
+                        console.error(`[Start] Erro Apify: ${startResp.status} - ${errText}`);
+                        throw new Error(`Erro ao iniciar Apify: ${startResp.status} - ${errText}`);
+                    }
                     
                     const startData = await startResp.json();
                     return new Response(
@@ -71,19 +76,28 @@ Deno.serve(async (req) => {
              // 2. Generic Crawler Logic
              if (APIFY_TOKEN) {
                 console.log(`[Start] Iniciando Apify Generic Async...`);
-                const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}`;
+                
+                const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+                
+                const inputPayload = {
+                    startUrls: [{ url: data }],
+                    maxCrawlPages: 1,
+                    proxyConfiguration: { useApifyProxy: true }
+                };
+
+                console.log("[Start] Payload enviado para Apify Generic:", JSON.stringify(inputPayload));
+
                 const startResp = await fetch(runUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        startUrls: [{ url: data }],
-                        maxCrawlPages: 1,
-                        proxyConfiguration: { useApifyProxy: true },
-                        waitForFinish: 0 // RETORNA IMEDIATAMENTE
-                    })
+                    body: JSON.stringify(inputPayload)
                 });
 
-                if (!startResp.ok) throw new Error(`Erro ao iniciar Apify Generic: ${startResp.status}`);
+                if (!startResp.ok) {
+                    const errText = await startResp.text();
+                    console.error(`[Start] Erro Apify Generic: ${startResp.status} - ${errText}`);
+                    throw new Error(`Erro ao iniciar Apify Generic: ${startResp.status}`);
+                }
                 
                 const startData = await startResp.json();
                 return new Response(
@@ -93,21 +107,19 @@ Deno.serve(async (req) => {
              }
         }
         
-        // Se for imagem, processa síncrono mesmo (geralmente é rápido, < 30s)
         if (type === 'image') {
              const result = await processWithAI(data, OPENAI_API_KEY, true);
-             // Normaliza resposta para parecer com o fluxo async se necessário, ou retorna direto
              return result;
         }
     }
 
     // =================================================================================
-    // ROTA 2: CHECK (Verifica status e processa se terminou)
+    // ROTA 2: CHECK
     // =================================================================================
     if (action === 'check') {
         if (!runId) throw new Error('RunId obrigatório para check.');
 
-        console.log(`[Check] Verificando status do Run: ${runId}`);
+        // console.log(`[Check] Verificando status do Run: ${runId}`);
         const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
         const checkData = await checkResp.json();
         const status = checkData.data.status;
@@ -135,10 +147,9 @@ Deno.serve(async (req) => {
                 );
             }
 
-            // Processamento (Mapeamento ou IA)
+            // Lógica de extração (igual à V6)
             let menuItems: any[] = [];
             
-            // Lógica de extração (igual à V6)
             if (items[0].menu && Array.isArray(items[0].menu)) {
                 menuItems = items[0].menu;
             } else if (items[0].categories && Array.isArray(items[0].categories)) {
@@ -151,22 +162,26 @@ Deno.serve(async (req) => {
                 menuItems = items;
             }
 
-            // Tentativa 1: Mapeamento Direto
-            const mappedCategories = mapApifyItemsToCategories(menuItems);
-            if (mappedCategories.length > 0) {
-                 return new Response(
-                    JSON.stringify({ success: true, status: 'completed', categories: mappedCategories }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                );
+            if (menuItems.length > 0) {
+                 const mappedCategories = mapApifyItemsToCategories(menuItems);
+                 if (mappedCategories.length > 0) {
+                      return new Response(
+                        JSON.stringify({ success: true, status: 'completed', categories: mappedCategories }),
+                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                    );
+                 }
+                 // IA Fallback
+                 console.log('[Check] Mapeamento falhou, usando IA...');
+                 const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
+                 return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
             }
-
-            // Tentativa 2: IA
-            console.log('[Check] Usando IA para formatar...');
-            const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
-            return await processWithAI(jsonContent, OPENAI_API_KEY, false, true); // Retorna response direta
+             
+            return new Response(
+                JSON.stringify({ success: false, error: 'Não foi possível extrair produtos do dataset.' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
         }
 
-        // Se falhou ou abortou
         return new Response(
             JSON.stringify({ success: false, status: 'failed', error: `Apify terminou com status: ${status}` }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -184,127 +199,49 @@ Deno.serve(async (req) => {
   }
 })
 
-// === HELPERS (Mantidos da V6) ===
-
+// === HELPERS (Mantidos) ===
 function mapApifyItemsToCategories(items: any[]): any[] {
     const categoriesMap: Record<string, any[]> = {};
-    
     for (const item of items) {
         const name = item.name || item.title || item.productName || item.item_name;
         const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
         const description = item.description || item.details || item.shortDescription || '';
         const imageUrl = item.imageUrl || item.image || item.image_url || '';
-        
         if (!name) continue;
-
         const variants: any[] = [];
         const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || [];
-        
         if (Array.isArray(optionsSource)) {
             for (const opt of optionsSource) {
                 if (opt.options && Array.isArray(opt.options)) {
                     for (const subOpt of opt.options) {
-                        if (subOpt.name) {
-                            variants.push({ 
-                                name: subOpt.name, 
-                                price: parseFloat(subOpt.price || subOpt.value || '0') 
-                            });
-                        }
+                        if (subOpt.name) variants.push({ name: subOpt.name, price: parseFloat(subOpt.price || subOpt.value || '0') });
                     }
-                } 
-                else if (opt.name) {
-                    variants.push({ 
-                        name: opt.name, 
-                        price: parseFloat(opt.price || opt.value || '0') 
-                    });
+                } else if (opt.name) {
+                    variants.push({ name: opt.name, price: parseFloat(opt.price || opt.value || '0') });
                 }
             }
         }
-
-        if (!categoriesMap[categoryName]) {
-            categoriesMap[categoryName] = [];
-        }
-
-        categoriesMap[categoryName].push({
-            name,
-            price,
-            description,
-            image_url: imageUrl,
-            variants
-        });
+        if (!categoriesMap[categoryName]) categoriesMap[categoryName] = [];
+        categoriesMap[categoryName].push({ name, price, description, image_url: imageUrl, variants });
     }
-
-    return Object.entries(categoriesMap).map(([name, items]) => ({
-        name,
-        items
-    }));
+    return Object.entries(categoriesMap).map(([name, items]) => ({ name, items }));
 }
 
 async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-
-    const systemPrompt = `Você é um especialista em estruturar cardápios.
-    Extraia produtos, preços e VARIAÇÕES (tamanhos, sabores, adicionais) do JSON ou texto.
-    
-    SAÍDA JSON:
-    {
-      "categories": [
-        {
-          "name": "Nome Categoria",
-          "items": [ 
-            { 
-              "name": "Produto", 
-              "price": 0.00, 
-              "description": "...", 
-              "variants": [ { "name": "Grande", "price": 10.00 } ] 
-            } 
-          ]
-        }
-      ]
-    }
-    Se receber um JSON estruturado, preserve ao máximo a estrutura original.`;
-
+    const systemPrompt = `Você é um especialista em estruturar cardápios. Extraia produtos, preços e VARIAÇÕES. SAÍDA JSON: { "categories": [ { "name": "Nome", "items": [ { "name": "Produto", "price": 0.00, "variants": [] } ] } ] }`;
     const messages = [
         { role: 'system', content: systemPrompt },
-        { 
-            role: 'user', 
-            content: isImage 
-                ? [
-                    { type: "text", text: "Extraia o cardápio desta imagem." },
-                    { type: "image_url", image_url: { url: content, detail: "high" } }
-                  ]
-                : `Extraia o cardápio:\n\n${content.slice(0, 50000)}`
-        }
+        { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio:\n\n${content.slice(0, 50000)}` }
     ];
-
     const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: messages,
-            temperature: 0.1,
-            max_tokens: 4000,
-            response_format: { type: "json_object" }
-        })
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o-mini', messages: messages, temperature: 0.1, max_tokens: 4000, response_format: { type: "json_object" } })
     });
-
-    if (!aiResp.ok) {
-        const err = await aiResp.text();
-        throw new Error(`Erro IA: ${err}`);
-    }
-
+    if (!aiResp.ok) { const err = await aiResp.text(); throw new Error(`Erro IA: ${err}`); }
     const aiData = await aiResp.json();
-    const rawContent = aiData.choices[0].message.content;
-    const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
-
-    return new Response(
-        JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    const parsed = JSON.parse(aiData.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
+    return new Response(JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 }
