@@ -87,10 +87,14 @@ serve(async (req) => {
              const client = new ApifyClient({ token: APIFY_TOKEN });
              
              // Usa o Actor oficial de scraping genérico ou específico do iFood se disponível
-             // Vamos usar o 'priscilas/ifood-menu-scraper' que é específico e gratuito/barato
-             const run = await client.actor('priscilas/ifood-menu-scraper').call({
+             // Vamos usar o 'apify/website-content-crawler' que é o scraper OFICIAL e mantido pela Apify
+             const run = await client.actor('apify/website-content-crawler').call({
                  startUrls: [{ url: data }],
-                 proxyConfiguration: { useApifyProxy: true }
+                 maxCrawlPages: 1, // Só precisamos da página do cardápio
+                 proxyConfiguration: { useApifyProxy: true },
+                 // Configurações para renderizar JS (necessário para iFood/Rappi)
+                 browser: 'chromium',
+                 renderingTypeDetectionRatio: 0.1 // Força renderização de browser
              });
 
              console.log('[ScrapeMenu] Apify Run ID:', run.id);
