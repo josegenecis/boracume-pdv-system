@@ -28,7 +28,11 @@ serve(async (req) => {
 
     if (!openAiKey) {
         console.error('OPENAI_API_KEY is missing');
-        throw new Error('Configuração de IA ausente no servidor.');
+        // Não quebrar a execução se for scraping (só precisa de IA para parse final ou imagem)
+        // Mas se for imagem, é obrigatório.
+        if (type === 'image') {
+             throw new Error('Configuração de IA ausente no servidor (OPENAI_API_KEY).');
+        }
     }
     if (!data) throw new Error('Dados para processamento não fornecidos.');
 
@@ -294,12 +298,15 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[ScrapeMenu] Erro Fatal:', error);
+    
+    // Retorna 200 com flag de erro para o frontend conseguir ler o JSON
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'Erro desconhecido no servidor.' 
+        error: error.message || 'Erro desconhecido no servidor (500)',
+        details: error.toString()
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   }
 })
