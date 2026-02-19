@@ -1,20 +1,14 @@
+
 // @ts-ignore
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-
-// ⚠️ Configurações (Lidas do Ambiente)
-const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
-const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu iniciada!");
+console.log("Edge Function scrape-menu V2 (Native Deno.serve) iniciada!");
 
-serve(async (req: Request) => {
+Deno.serve(async (req) => {
   // 1. Tratamento de CORS (Preflight)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -35,8 +29,12 @@ serve(async (req: Request) => {
     const { type, data } = body;
     console.log(`[ScrapeMenu] Requisição recebida. Tipo: ${type}`);
 
+    // Configurações (Lidas do Ambiente)
+    const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
+    const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
     // 3. Validação de Chaves Críticas
-    // Se for imagem, PRECISA da OpenAI. Se for link iFood, PRECISA do Apify.
     if (type === 'image' && !OPENAI_API_KEY) {
          throw new Error('Configuração de IA (OPENAI_API_KEY) ausente no servidor.');
     }
@@ -94,7 +92,7 @@ serve(async (req: Request) => {
                     const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
                     const items = await itemsResp.json();
                     if (items && items.length > 0) {
-                        // Sucesso! Retornar direto para IA processar ou retornar JSON se já tiver
+                        // Sucesso! Retornar direto para IA processar
                         const textContent = items[0].text || items[0].markdown;
                         return await processWithAI(textContent, OPENAI_API_KEY);
                     }

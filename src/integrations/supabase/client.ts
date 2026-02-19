@@ -28,10 +28,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     headers: {
       'X-Client-Info': 'boracume-app'
     },
-    fetch: (url, options = {}) => {
+    fetch: (url, options: any = {}) => {
       return fetch(url, {
         ...options,
-        signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined, // 30 second timeout
+        signal: options.signal || ((AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined),
       });
     }
   },
