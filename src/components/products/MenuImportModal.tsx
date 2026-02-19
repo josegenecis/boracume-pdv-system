@@ -134,6 +134,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         toast({ title: 'Atenção', description: 'Insira um link válido.', variant: 'destructive' });
         return;
     }
+    
+    // Adicione um log de verificação para saber se o código chegou aqui
+    console.log('[Import] Iniciando importação, activeTab:', activeTab);
+
     if (activeTab === 'image' && !selectedImage) {
         toast({ title: 'Atenção', description: 'Selecione uma imagem.', variant: 'destructive' });
         return;
