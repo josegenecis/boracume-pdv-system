@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V6 (Senior Node Fix) iniciada!");
+console.log("Edge Function scrape-menu V7 (Async/Polling) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -24,135 +24,53 @@ Deno.serve(async (req) => {
         throw new Error('JSON inválido no body');
     }
 
-    const { type, data } = body;
-    console.log(`[ScrapeMenu] Requisição recebida. Tipo: ${type}`);
+    // Novos parâmetros: action ('start' | 'check') e runId (para check)
+    // Compatibilidade reversa: se não tiver action, assume fluxo síncrono antigo (ou 'start' implícito se tiver type)
+    const { type, data, action = 'start', runId } = body;
+    
+    console.log(`[ScrapeMenu] Action: ${action}, Type: ${type}, RunID: ${runId}`);
 
-    const BROWSERLESS_API_KEY = Deno.env.get('BROWSERLESS_API_KEY');
     const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-    if (type === 'image' && !OPENAI_API_KEY) {
-         throw new Error('Configuração de IA (OPENAI_API_KEY) ausente no servidor.');
-    }
-
-    // --- CASO 1: URL ---
-    if (type === 'url') {
-        
-        // A. Tentar APIFY (iFood)
-        if (APIFY_TOKEN && data.includes('ifood.com.br')) {
-            try {
-                console.log('[ScrapeMenu] Detectado iFood. Tentando extrair ID da loja...');
-                
-                // Tenta extrair o UUID da URL do iFood
+    // =================================================================================
+    // ROTA 1: START (Inicia o trabalho e retorna Run ID imediatamente)
+    // =================================================================================
+    if (action === 'start') {
+        if (type === 'url') {
+             // 1. iFood Logic
+             if (APIFY_TOKEN && data.includes('ifood.com.br')) {
                 const ifoodIdMatch = data.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
                 const storeId = ifoodIdMatch ? ifoodIdMatch[1] : null;
 
                 if (storeId) {
-                    console.log(`[ScrapeMenu] ID da loja encontrado: ${storeId}. Usando Actor priscilas/ifood-menu-scraper...`);
+                    console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
                     
+                    // Inicia SEM esperar terminar (waitForFinish: 0)
                     const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}`;
-                    
                     const startResp = await fetch(runUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             "store_ids": [storeId],
-                            "proxyConfiguration": { "useApifyProxy": true }
+                            "proxyConfiguration": { "useApifyProxy": true },
+                            "waitForFinish": 0 // RETORNA IMEDIATAMENTE
                         })
                     });
 
-                    if (!startResp.ok) {
-                        const err = await startResp.text();
-                        throw new Error(`Apify iFood Actor Failed: ${startResp.status} - ${err}`);
-                    }
-
+                    if (!startResp.ok) throw new Error(`Erro ao iniciar Apify: ${startResp.status}`);
+                    
                     const startData = await startResp.json();
-                    const runId = startData.data.id;
-                    const datasetId = startData.data.defaultDatasetId;
-                    console.log('[ScrapeMenu] Run ID:', runId);
-
-                    // Polling
-                    let status = 'RUNNING';
-                    const startTime = Date.now();
-                    while (status === 'RUNNING' || status === 'READY') {
-                        if (Date.now() - startTime > 110000) break; 
-                        await new Promise(r => setTimeout(r, 5000));
-                        const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
-                        const checkData = await checkResp.json();
-                        status = checkData.data.status;
-                    }
-
-                    if (status === 'SUCCEEDED') {
-                        const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
-                        const items = await itemsResp.json();
-                        
-                        if (items && items.length > 0) {
-                            console.log(`[ScrapeMenu] iFood retornou ${items.length} itens no dataset.`);
-                            
-                            // LOG CRÍTICO PARA DEBUG: Inspecionar o PRIMEIRO item
-                            console.log('[DEBUG] Primeiro item do dataset:', JSON.stringify(items[0], null, 2));
-
-                            // Lógica de Extração Robusta
-                            // O Actor pode retornar uma lista de produtos plana OU um objeto de loja contendo o menu
-                            let menuItems: any[] = [];
-
-                            if (items[0].menu && Array.isArray(items[0].menu)) {
-                                // Caso 1: Estrutura aninhada { restaurant: "...", menu: [...] }
-                                console.log('[ScrapeMenu] Detectada estrutura aninhada (menu). Extraindo...');
-                                menuItems = items[0].menu;
-                            } else if (items[0].categories && Array.isArray(items[0].categories)) {
-                                // Caso 2: Estrutura por categorias { restaurant: "...", categories: [...] }
-                                console.log('[ScrapeMenu] Detectada estrutura de categorias. Extraindo...');
-                                // Flatten categories
-                                for (const cat of items[0].categories) {
-                                    if (cat.items && Array.isArray(cat.items)) {
-                                        menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
-                                    }
-                                }
-                            } else {
-                                // Caso 3: Lista plana de produtos (o dataset É os itens)
-                                console.log('[ScrapeMenu] Assumindo lista plana de produtos.');
-                                menuItems = items;
-                            }
-
-                            if (menuItems.length > 0) {
-                                console.log(`[ScrapeMenu] Total de produtos extraídos: ${menuItems.length}. Tentando mapeamento...`);
-                                
-                                // TENTATIVA 1: Mapeamento Direto
-                                const mappedCategories = mapApifyItemsToCategories(menuItems);
-                                if (mappedCategories.length > 0) {
-                                    console.log('[ScrapeMenu] Mapeamento direto bem sucedido!');
-                                    return new Response(
-                                        JSON.stringify({ success: true, categories: mappedCategories }),
-                                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                                    );
-                                }
-                                
-                                // TENTATIVA 2: IA (com os dados extraídos corretamente)
-                                console.log('[ScrapeMenu] Mapeamento falhou. Enviando amostra para IA...');
-                                const jsonContent = JSON.stringify(menuItems.slice(0, 50)); 
-                                return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
-                            } else {
-                                throw new Error('Não foi possível encontrar array de produtos no retorno do Apify.');
-                            }
-                        } else {
-                            console.warn('[ScrapeMenu] Dataset vazio.');
-                        }
-                    } else {
-                        console.warn(`[ScrapeMenu] iFood Actor não terminou com sucesso (${status}).`);
-                    }
-                } else {
-                    console.warn('[ScrapeMenu] ID da loja não encontrado na URL.');
+                    return new Response(
+                        JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
+                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                    );
                 }
-            } catch (e: any) {
-                console.warn('[ScrapeMenu] Erro no fluxo iFood:', e.message);
-            }
-        }
+             }
 
-        // B. Tentar APIFY Genérico (Fallback)
-        if (APIFY_TOKEN) {
-             try {
-                console.log('[ScrapeMenu] Usando Apify Crawler Genérico...');
+             // 2. Generic Crawler Logic
+             if (APIFY_TOKEN) {
+                console.log(`[Start] Iniciando Apify Generic Async...`);
                 const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}`;
                 const startResp = await fetch(runUrl, {
                     method: 'POST',
@@ -161,81 +79,101 @@ Deno.serve(async (req) => {
                         startUrls: [{ url: data }],
                         maxCrawlPages: 1,
                         proxyConfiguration: { useApifyProxy: true },
-                        browser: 'chromium',
-                        renderingTypeDetectionRatio: 0.1
+                        waitForFinish: 0 // RETORNA IMEDIATAMENTE
                     })
                 });
 
-                if (startResp.ok) {
-                    const startData = await startResp.json();
-                    const runId = startData.data.id;
-                    const datasetId = startData.data.defaultDatasetId;
-                    
-                    let status = 'RUNNING';
-                    const startTime = Date.now();
-                    while (status === 'RUNNING' || status === 'READY') {
-                        if (Date.now() - startTime > 60000) break;
-                        await new Promise(r => setTimeout(r, 3000));
-                        const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
-                        const checkData = await checkResp.json();
-                        status = checkData.data.status;
-                    }
-
-                    if (status === 'SUCCEEDED') {
-                        const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
-                        const items = await itemsResp.json();
-                        if (items && items.length > 0) {
-                            const textContent = items[0].text || items[0].markdown || JSON.stringify(items);
-                            return await processWithAI(textContent, OPENAI_API_KEY);
-                        }
-                    }
-                }
-             } catch (e) {
-                 console.warn('[ScrapeMenu] Apify Genérico falhou:', e);
+                if (!startResp.ok) throw new Error(`Erro ao iniciar Apify Generic: ${startResp.status}`);
+                
+                const startData = await startResp.json();
+                return new Response(
+                    JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
              }
         }
+        
+        // Se for imagem, processa síncrono mesmo (geralmente é rápido, < 30s)
+        if (type === 'image') {
+             const result = await processWithAI(data, OPENAI_API_KEY, true);
+             // Normaliza resposta para parecer com o fluxo async se necessário, ou retorna direto
+             return result;
+        }
+    }
 
-        // C. Tentar Browserless/Puppeteer (Fallback)
-        if (BROWSERLESS_API_KEY) {
-             try {
-                const blResp = await fetch(`https://chrome.browserless.io/content?token=${BROWSERLESS_API_KEY}&stealth=true`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: data,
-                        waitFor: 'networkidle2',
-                        rejectResourceTypes: ['image', 'font', 'media']
-                    })
-                });
-                if (blResp.ok) {
-                    const text = await blResp.text();
-                    return await processWithAI(text, OPENAI_API_KEY);
-                }
-             } catch (e) {
-                 console.warn('[ScrapeMenu] Browserless falhou:', e);
-             }
+    // =================================================================================
+    // ROTA 2: CHECK (Verifica status e processa se terminou)
+    // =================================================================================
+    if (action === 'check') {
+        if (!runId) throw new Error('RunId obrigatório para check.');
+
+        console.log(`[Check] Verificando status do Run: ${runId}`);
+        const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
+        const checkData = await checkResp.json();
+        const status = checkData.data.status;
+
+        console.log(`[Check] Status atual: ${status}`);
+
+        if (status === 'RUNNING' || status === 'READY') {
+            return new Response(
+                JSON.stringify({ success: true, status: 'processing' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
         }
 
-        // D. Tentar Jina.ai (Fallback final)
-        try {
-            const jinaResp = await fetch(`https://r.jina.ai/${data}`);
-            if (jinaResp.ok) {
-                const text = await jinaResp.text();
-                return await processWithAI(text, OPENAI_API_KEY);
+        if (status === 'SUCCEEDED') {
+            const datasetId = checkData.data.defaultDatasetId;
+            console.log(`[Check] Sucesso! Baixando dataset: ${datasetId}`);
+            
+            const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+            const items = await itemsResp.json();
+
+            if (!items || items.length === 0) {
+                return new Response(
+                    JSON.stringify({ success: false, error: 'Dataset vazio.' }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
             }
-        } catch (e) {
-            console.warn('[ScrapeMenu] Jina falhou:', e);
+
+            // Processamento (Mapeamento ou IA)
+            let menuItems: any[] = [];
+            
+            // Lógica de extração (igual à V6)
+            if (items[0].menu && Array.isArray(items[0].menu)) {
+                menuItems = items[0].menu;
+            } else if (items[0].categories && Array.isArray(items[0].categories)) {
+                for (const cat of items[0].categories) {
+                    if (cat.items && Array.isArray(cat.items)) {
+                        menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
+                    }
+                }
+            } else {
+                menuItems = items;
+            }
+
+            // Tentativa 1: Mapeamento Direto
+            const mappedCategories = mapApifyItemsToCategories(menuItems);
+            if (mappedCategories.length > 0) {
+                 return new Response(
+                    JSON.stringify({ success: true, status: 'completed', categories: mappedCategories }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
+            }
+
+            // Tentativa 2: IA
+            console.log('[Check] Usando IA para formatar...');
+            const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
+            return await processWithAI(jsonContent, OPENAI_API_KEY, false, true); // Retorna response direta
         }
 
-        throw new Error('Não foi possível ler o site. Tente tirar um PRINT do cardápio e usar a opção "Imagem".');
+        // Se falhou ou abortou
+        return new Response(
+            JSON.stringify({ success: false, status: 'failed', error: `Apify terminou com status: ${status}` }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
     }
 
-    // --- CASO 2: IMAGEM ---
-    if (type === 'image') {
-        return await processWithAI(data, OPENAI_API_KEY, true);
-    }
-
-    throw new Error('Tipo de importação inválido');
+    throw new Error('Ação inválida ou tipo não suportado.');
 
   } catch (error: any) {
     console.error('[ScrapeMenu] Erro Fatal:', error);
@@ -246,14 +184,12 @@ Deno.serve(async (req) => {
   }
 })
 
-// === HELPERS ===
+// === HELPERS (Mantidos da V6) ===
 
 function mapApifyItemsToCategories(items: any[]): any[] {
     const categoriesMap: Record<string, any[]> = {};
     
     for (const item of items) {
-        // Normalização de campos
-        // Tenta encontrar campos em vários níveis
         const name = item.name || item.title || item.productName || item.item_name;
         const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
@@ -262,15 +198,11 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         
         if (!name) continue;
 
-        // Processar Variações/Opções
         const variants: any[] = [];
-        
-        // Estrutura comum: options, choices, modifiers, garnishes
         const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || [];
         
         if (Array.isArray(optionsSource)) {
             for (const opt of optionsSource) {
-                // Se for um grupo de opções (ex: "Escolha o tamanho")
                 if (opt.options && Array.isArray(opt.options)) {
                     for (const subOpt of opt.options) {
                         if (subOpt.name) {
@@ -281,7 +213,6 @@ function mapApifyItemsToCategories(items: any[]): any[] {
                         }
                     }
                 } 
-                // Se for uma opção direta
                 else if (opt.name) {
                     variants.push({ 
                         name: opt.name, 
@@ -373,7 +304,7 @@ async function processWithAI(content: string, apiKey: string | undefined, isImag
     const parsed = JSON.parse(cleanJson);
 
     return new Response(
-        JSON.stringify({ success: true, categories: parsed.categories || parsed.menu || [] }),
+        JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 }

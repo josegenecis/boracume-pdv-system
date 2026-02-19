@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -41,6 +40,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const [textInput, setTextInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Processando...');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
@@ -92,7 +92,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          // Tamanho padrão de alta qualidade que o GPT-4o Vision processa bem
           const MAX_SIZE = 1200; 
           let width = img.width;
           let height = img.height;
@@ -109,12 +108,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             }
           }
           
-          // SEM CROP - Enviar imagem inteira redimensionada
           canvas.width = width;
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Qualidade balanceada
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
           resolve(compressedBase64);
         };
@@ -124,8 +121,62 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     });
   };
 
+  const pollForResults = async (runId: string): Promise<ImportedCategory[]> => {
+      const POLL_INTERVAL = 5000; // 5 segundos
+      const MAX_ATTEMPTS = 60; // 5 minutos máximo
+      let attempts = 0;
+
+      return new Promise((resolve, reject) => {
+          const checkStatus = async () => {
+              attempts++;
+              setLoadingMessage(`Extraindo cardápio... (${attempts}s)`);
+              
+              try {
+                  const { data, status } = await invokeEdgeFunction('scrape-menu', { 
+                      action: 'check', 
+                      runId: runId 
+                  });
+
+                  if (status !== 200 || !data.success) {
+                      // Se falhar o check, paramos
+                      if (data?.status === 'failed') {
+                          reject(new Error(data.error || 'Falha na extração dos dados.'));
+                          return;
+                      }
+                      // Se for erro de rede, tentamos de novo
+                      console.warn('Erro ao checar status, tentando novamente...', data);
+                  } else {
+                      if (data.status === 'completed') {
+                          resolve(data.categories || []);
+                          return;
+                      }
+                      // Se ainda estiver processando (status: processing)
+                  }
+
+                  if (attempts >= MAX_ATTEMPTS) {
+                      reject(new Error('Tempo limite excedido (5 minutos).'));
+                      return;
+                  }
+
+                  // Tentar novamente
+                  setTimeout(checkStatus, POLL_INTERVAL);
+
+              } catch (e) {
+                  console.error('Erro no polling:', e);
+                  // Continuar tentando mesmo com erro de rede
+                  if (attempts >= MAX_ATTEMPTS) {
+                      reject(e);
+                  } else {
+                      setTimeout(checkStatus, POLL_INTERVAL);
+                  }
+              }
+          };
+
+          checkStatus();
+      });
+  };
+
   const handleImport = async () => {
-    // Validação básica ANTES de iniciar o loading
     if (activeTab === 'text' && !textInput.trim()) {
         toast({ title: 'Atenção', description: 'Cole o texto do cardápio.', variant: 'destructive' });
         return;
@@ -134,18 +185,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         toast({ title: 'Atenção', description: 'Insira um link válido.', variant: 'destructive' });
         return;
     }
-    
-    // Adicione um log de verificação para saber se o código chegou aqui
-    console.log('[Import] Iniciando importação, activeTab:', activeTab);
-
     if (activeTab === 'image' && !selectedImage) {
         toast({ title: 'Atenção', description: 'Selecione uma imagem.', variant: 'destructive' });
         return;
     }
 
     setLoading(true);
-      const timestamp = new Date().toISOString();
-      console.log(`[Import] Iniciando importação (v${timestamp})...`, activeTab);
+    setLoadingMessage('Iniciando...');
+    console.log(`[Import] Iniciando importação...`, activeTab);
 
     try {
       let categoriesToImport: ImportedCategory[] = [];
@@ -153,85 +200,59 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       if (activeTab === 'text') {
         categoriesToImport = parseMenuText(textInput);
       } 
-      else if (activeTab === 'link' || activeTab === 'image') {
-        let payload = {};
-        let finalUrl = '';
+      else if (activeTab === 'link') {
+        // 1. Iniciar Job (Async)
+        setLoadingMessage('Conectando ao iFood...');
+        const { data: startData, status: startStatus } = await invokeEdgeFunction('scrape-menu', { 
+            type: 'url', 
+            data: urlInput,
+            action: 'start'
+        });
+
+        if (startStatus !== 200 || !startData.success) {
+            throw new Error(startData?.error || 'Não foi possível iniciar a leitura.');
+        }
+
+        const runId = startData.runId;
         
-        if (activeTab === 'link') {
-            finalUrl = urlInput;
-            payload = { type: 'url', data: finalUrl };
+        // 2. Se retornou runId, fazer Polling
+        if (runId) {
+            console.log('[Import] Job iniciado. RunID:', runId);
+            categoriesToImport = await pollForResults(runId);
         } else {
-            if (!selectedImage) throw new Error('Selecione uma imagem.');
-             
-             // DEBUG: Avisar que começou o upload
-             console.log('Iniciando processamento da imagem...');
-             toast({ title: 'Processando Imagem', description: 'Otimizando para envio...' });
-
-             // 1. Converter para Base64 Otimizado
-             const optimizedBase64 = await convertFileToBase64(selectedImage);
-             
-             // Define payload com base64 direto (sem upload para storage)
-             payload = { 
-                type: 'image',
-                data: optimizedBase64 
-             };
-             
-             toast({ title: 'Imagem Pronta', description: 'Enviando para Inteligência Artificial...' });
+            // Fallback para caso não tenha retornado runId (ex: imagem ou erro)
+            categoriesToImport = startData.categories || [];
         }
+      }
+      else if (activeTab === 'image') {
+         setLoadingMessage('Processando imagem...');
+         const optimizedBase64 = await convertFileToBase64(selectedImage!);
+         
+         const { data, status } = await invokeEdgeFunction('scrape-menu', { 
+            type: 'image',
+            data: optimizedBase64,
+            action: 'start' // Imagem ainda é síncrona
+         });
 
-        console.log('[Import] Enviando payload simplificado:', { type: (payload as any).type });
-        
-        // Use the utility function that handles authentication and environment variables correctly
-        try {
-          const { data, status } = await invokeEdgeFunction('scrape-menu', payload);
-          console.log('[Import] Resposta da função:', status, data);
-
-          if (status !== 200) {
-              console.error('[Import] Erro Function:', data);
-              throw new Error(data?.error || `Erro ${status}: Falha ao conectar com a IA.`);
-          } else {
-             if (!data.success) {
-                 throw new Error(data.error || 'A IA não conseguiu ler os dados.');
-             }
-             categoriesToImport = data.categories || [];
-          }
-        } catch (err: any) {
-           console.error("[Import] Erro fatal na chamada:", err);
-           
-           // Se for erro de rede/timeout, mostra mensagem clara
-           if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-               toast({
-                 title: 'Erro de Conexão',
-                 description: 'Não foi possível conectar ao servidor de IA. Verifique sua internet ou tente novamente.',
-                 variant: 'destructive',
-               });
-           } else {
-               // Mostra o erro real retornado pela Edge Function
-               toast({
-                 title: 'Falha na Importação',
-                 description: `Detalhes: ${err.message || JSON.stringify(err)}`,
-                 variant: 'destructive',
-               });
-           }
-           
-           setLoading(false);
-           return; 
-        }
+         if (status !== 200 || !data.success) {
+             throw new Error(data?.error || 'Erro ao processar imagem.');
+         }
+         categoriesToImport = data.categories || [];
       }
 
       if (categoriesToImport.length === 0) {
-        throw new Error('Nenhum produto encontrado pela IA.');
+        throw new Error('Nenhum produto encontrado.');
       }
       
-      console.log('[Import] Produtos encontrados:', categoriesToImport.length, 'categorias');
+      console.log('[Import] Sucesso! Importando para o banco...');
+      setLoadingMessage('Salvando produtos...');
 
       let totalProducts = 0;
 
-      // Process Categories and Products
+      // Salvamento no Banco (igual ao anterior)
       for (const category of categoriesToImport) {
         let categoryId: string | null = null;
 
-        // 1. Create/Get Category
         if (category.name && category.name !== 'Geral') {
             const { data: existingCat } = await supabase
                 .from('product_categories')
@@ -253,9 +274,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             }
         }
 
-          // 3. Insert Products
         for (const product of category.items) {
-            // First check if product already exists to avoid duplicates
             const { data: existingProduct } = await supabase
                 .from('products')
                 .select('id')
@@ -284,17 +303,13 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
             if (!prodError && newProduct) {
                 totalProducts++;
-
-                // 3. Insert Variants if any
                 if (product.variants && product.variants.length > 0) {
                     const variantsData = product.variants.map(v => ({
                         product_id: newProduct.id,
                         name: v.name,
                         price: v.price
                     }));
-                    
                     try {
-                        // Cast to any to bypass strict type checking for now if table missing in types
                         await (supabase as any).from('product_variants').insert(variantsData);
                     } catch (varError) {
                         console.error('Error inserting variants:', varError);
@@ -317,23 +332,15 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       setUrlInput('');
       
     } catch (error: any) {
-      console.error('[Import] Erro Fatal:', error);
-      
-      const errorMessage = error?.message || 'Erro desconhecido ao processar.';
-      
+      console.error('[Import] Erro:', error);
       toast({
         title: 'Erro na importação',
-        description: errorMessage,
+        description: error?.message || 'Erro desconhecido.',
         variant: 'destructive'
       });
-      
-      // Fallback visual
-      if (!error?.message) {
-         alert('Erro desconhecido: Verifique o console do navegador (F12) para detalhes.');
-      }
-
     } finally {
       setLoading(false);
+      setLoadingMessage('Processando...');
     }
   };
 
@@ -366,9 +373,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Importação manual simples (sem IA).
-              </p>
             </div>
           </TabsContent>
 
@@ -414,10 +418,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
-                <Wand2 className="w-4 h-4" />
-                <span>O GPT-4o Vision analisará a foto e identificará os itens.</span>
-              </div>
           </TabsContent>
         </Tabs>
 
@@ -425,7 +425,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
           <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            {activeTab === 'text' ? 'Importar' : 'Processar com IA'}
+            {loading ? loadingMessage : (activeTab === 'text' ? 'Importar' : 'Processar com IA')}
           </Button>
         </DialogFooter>
       </DialogContent>
