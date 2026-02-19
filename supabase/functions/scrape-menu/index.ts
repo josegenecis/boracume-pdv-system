@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V5 (iFood Fix) iniciada!");
+console.log("Edge Function scrape-menu V6 (Senior Node Fix) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -44,7 +44,6 @@ Deno.serve(async (req) => {
                 console.log('[ScrapeMenu] Detectado iFood. Tentando extrair ID da loja...');
                 
                 // Tenta extrair o UUID da URL do iFood
-                // Padrão: .../delivery/cidade-uf/nome-loja/UUID
                 const ifoodIdMatch = data.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
                 const storeId = ifoodIdMatch ? ifoodIdMatch[1] : null;
 
@@ -64,7 +63,6 @@ Deno.serve(async (req) => {
 
                     if (!startResp.ok) {
                         const err = await startResp.text();
-                        // Se der erro 400 ou outro, lançamos erro para cair no catch e tentar o genérico
                         throw new Error(`Apify iFood Actor Failed: ${startResp.status} - ${err}`);
                     }
 
@@ -89,33 +87,65 @@ Deno.serve(async (req) => {
                         const items = await itemsResp.json();
                         
                         if (items && items.length > 0) {
-                            console.log(`[ScrapeMenu] iFood retornou ${items.length} itens.`);
+                            console.log(`[ScrapeMenu] iFood retornou ${items.length} itens no dataset.`);
                             
-                            // TENTATIVA 1: Mapeamento Direto
-                            const mappedCategories = mapApifyItemsToCategories(items);
-                            if (mappedCategories.length > 0) {
-                                return new Response(
-                                    JSON.stringify({ success: true, categories: mappedCategories }),
-                                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                                );
+                            // LOG CRÍTICO PARA DEBUG: Inspecionar o PRIMEIRO item
+                            console.log('[DEBUG] Primeiro item do dataset:', JSON.stringify(items[0], null, 2));
+
+                            // Lógica de Extração Robusta
+                            // O Actor pode retornar uma lista de produtos plana OU um objeto de loja contendo o menu
+                            let menuItems: any[] = [];
+
+                            if (items[0].menu && Array.isArray(items[0].menu)) {
+                                // Caso 1: Estrutura aninhada { restaurant: "...", menu: [...] }
+                                console.log('[ScrapeMenu] Detectada estrutura aninhada (menu). Extraindo...');
+                                menuItems = items[0].menu;
+                            } else if (items[0].categories && Array.isArray(items[0].categories)) {
+                                // Caso 2: Estrutura por categorias { restaurant: "...", categories: [...] }
+                                console.log('[ScrapeMenu] Detectada estrutura de categorias. Extraindo...');
+                                // Flatten categories
+                                for (const cat of items[0].categories) {
+                                    if (cat.items && Array.isArray(cat.items)) {
+                                        menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
+                                    }
+                                }
+                            } else {
+                                // Caso 3: Lista plana de produtos (o dataset É os itens)
+                                console.log('[ScrapeMenu] Assumindo lista plana de produtos.');
+                                menuItems = items;
                             }
-                            
-                            // TENTATIVA 2: IA
-                            const jsonContent = JSON.stringify(items.slice(0, 80)); 
-                            return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+
+                            if (menuItems.length > 0) {
+                                console.log(`[ScrapeMenu] Total de produtos extraídos: ${menuItems.length}. Tentando mapeamento...`);
+                                
+                                // TENTATIVA 1: Mapeamento Direto
+                                const mappedCategories = mapApifyItemsToCategories(menuItems);
+                                if (mappedCategories.length > 0) {
+                                    console.log('[ScrapeMenu] Mapeamento direto bem sucedido!');
+                                    return new Response(
+                                        JSON.stringify({ success: true, categories: mappedCategories }),
+                                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                                    );
+                                }
+                                
+                                // TENTATIVA 2: IA (com os dados extraídos corretamente)
+                                console.log('[ScrapeMenu] Mapeamento falhou. Enviando amostra para IA...');
+                                const jsonContent = JSON.stringify(menuItems.slice(0, 50)); 
+                                return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                            } else {
+                                throw new Error('Não foi possível encontrar array de produtos no retorno do Apify.');
+                            }
                         } else {
-                            console.warn('[ScrapeMenu] Lista vazia do iFood. Tentando método genérico...');
-                            // Não lança erro, deixa cair no fluxo genérico abaixo
+                            console.warn('[ScrapeMenu] Dataset vazio.');
                         }
                     } else {
-                        console.warn(`[ScrapeMenu] iFood Actor não terminou com sucesso (${status}). Tentando método genérico...`);
+                        console.warn(`[ScrapeMenu] iFood Actor não terminou com sucesso (${status}).`);
                     }
                 } else {
-                    console.warn('[ScrapeMenu] Não foi possível extrair o ID da loja da URL. Tentando método genérico...');
+                    console.warn('[ScrapeMenu] ID da loja não encontrado na URL.');
                 }
             } catch (e: any) {
-                console.warn('[ScrapeMenu] Erro no fluxo iFood (específico):', e.message);
-                console.log('Tentando fallback para crawler genérico...');
+                console.warn('[ScrapeMenu] Erro no fluxo iFood:', e.message);
             }
         }
 
@@ -223,35 +253,42 @@ function mapApifyItemsToCategories(items: any[]): any[] {
     
     for (const item of items) {
         // Normalização de campos
-        const name = item.title || item.name || item.productName;
-        const price = parseFloat(item.price || item.unitPrice || item.value || '0');
-        const categoryName = item.menuSection || item.category || item.group || 'Geral';
-        const description = item.description || item.details || '';
-        const imageUrl = item.imageUrl || item.image || '';
+        // Tenta encontrar campos em vários níveis
+        const name = item.name || item.title || item.productName || item.item_name;
+        const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
+        const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
+        const description = item.description || item.details || item.shortDescription || '';
+        const imageUrl = item.imageUrl || item.image || item.image_url || '';
         
         if (!name) continue;
 
         // Processar Variações/Opções
         const variants: any[] = [];
         
-        if (Array.isArray(item.options)) {
-            for (const opt of item.options) {
-                if (opt.name && opt.price) {
-                     variants.push({ name: opt.name, price: parseFloat(opt.price) });
-                } else if (opt.name) {
-                     variants.push({ name: opt.name, price: 0 });
+        // Estrutura comum: options, choices, modifiers, garnishes
+        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || [];
+        
+        if (Array.isArray(optionsSource)) {
+            for (const opt of optionsSource) {
+                // Se for um grupo de opções (ex: "Escolha o tamanho")
+                if (opt.options && Array.isArray(opt.options)) {
+                    for (const subOpt of opt.options) {
+                        if (subOpt.name) {
+                            variants.push({ 
+                                name: subOpt.name, 
+                                price: parseFloat(subOpt.price || subOpt.value || '0') 
+                            });
+                        }
+                    }
+                } 
+                // Se for uma opção direta
+                else if (opt.name) {
+                    variants.push({ 
+                        name: opt.name, 
+                        price: parseFloat(opt.price || opt.value || '0') 
+                    });
                 }
             }
-        }
-        if (Array.isArray(item.choices)) {
-             for (const choice of item.choices) {
-                 if (choice.name) variants.push({ name: choice.name, price: parseFloat(choice.price || '0') });
-                 if (Array.isArray(choice.options)) {
-                     for (const nested of choice.options) {
-                         if (nested.name) variants.push({ name: nested.name, price: parseFloat(nested.price || '0') });
-                     }
-                 }
-             }
         }
 
         if (!categoriesMap[categoryName]) {
