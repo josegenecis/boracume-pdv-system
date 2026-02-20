@@ -35,9 +35,25 @@ Deno.serve(async (req) => {
     // =================================================================================
     if (action === 'start') {
         if (type === 'url') {
+             const rawUrl = String(data || '').trim();
+             let parsedUrl: URL | null = null;
+             try {
+                 parsedUrl = new URL(rawUrl);
+                 if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') parsedUrl = null;
+             } catch {
+                 parsedUrl = null;
+             }
+
+             if (!parsedUrl) {
+                 return new Response(
+                   JSON.stringify({ success: false, status: 'failed', error: 'URL inválida.' }),
+                   { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                 );
+             }
+
              // 1. iFood Logic
-             if (APIFY_TOKEN && data.includes('ifood.com.br')) {
-                const ifoodIdMatch = data.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
+             if (APIFY_TOKEN && rawUrl.includes('ifood.com.br')) {
+                const ifoodIdMatch = rawUrl.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
                 const storeId = ifoodIdMatch ? ifoodIdMatch[1] : null;
 
                 if (storeId) {
@@ -81,7 +97,7 @@ Deno.serve(async (req) => {
                 const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
                 
                 const inputPayload = {
-                    startUrls: [{ url: data }],
+                    startUrls: [{ url: rawUrl }],
                     maxCrawlPages: 1,
                     proxyConfiguration: { useApifyProxy: true }
                 };

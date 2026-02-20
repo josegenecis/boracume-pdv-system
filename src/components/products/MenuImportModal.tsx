@@ -47,6 +47,15 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const isValidUrl = (value: string) => {
+    try {
+      const u = new URL(value.trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const parseMenuText = (text: string) => {
     const lines = text.split('\n');
     const products: ImportedProduct[] = [];
@@ -193,6 +202,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     }
     if (activeTab === 'link' && !urlInput.trim()) {
         toast({ title: 'Atenção', description: 'Insira um link válido.', variant: 'destructive' });
+        return;
+    }
+    if (activeTab === 'link' && urlInput.trim() && !isValidUrl(urlInput)) {
+        toast({ title: 'Atenção', description: 'O valor informado não é uma URL válida. Use a aba Texto para colar descrições.', variant: 'destructive' });
         return;
     }
     if (activeTab === 'image' && !selectedImage) {
