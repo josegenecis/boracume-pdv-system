@@ -43,6 +43,17 @@ interface Category {
 }
 
 const Products = () => {
+  const normalizeImageUrl = (value?: string | null) => {
+    const v = (value || '').trim();
+    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return '';
+    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
+    if (v.startsWith('https://') || v.startsWith('data:') || v.startsWith('blob:')) return v;
+    return '';
+  };
+
+  const FALLBACK_PIXEL =
+    'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -506,9 +517,18 @@ const Products = () => {
                                                 >
                                                   <GripVertical className="h-4 w-4" />
                                                 </button>
-                                                {product.image_url ? (
+                                                {normalizeImageUrl(product.image_url) ? (
                                                   <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-gray-100 border">
-                                                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                                                    <img
+                                                      src={normalizeImageUrl(product.image_url)}
+                                                      alt={product.name}
+                                                      className="w-full h-full object-cover"
+                                                      loading="lazy"
+                                                      onError={(e) => {
+                                                        e.currentTarget.onerror = null;
+                                                        e.currentTarget.src = FALLBACK_PIXEL;
+                                                      }}
+                                                    />
                                                   </div>
                                                 ) : (
                                                   <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center flex-shrink-0 border">
@@ -600,9 +620,18 @@ const Products = () => {
                                                 >
                                                   <GripVertical className="h-4 w-4" />
                                                 </button>
-                                                {product.image_url ? (
+                                                {normalizeImageUrl(product.image_url) ? (
                                                   <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-gray-100 border">
-                                                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                                                    <img
+                                                      src={normalizeImageUrl(product.image_url)}
+                                                      alt={product.name}
+                                                      className="w-full h-full object-cover"
+                                                      loading="lazy"
+                                                      onError={(e) => {
+                                                        e.currentTarget.onerror = null;
+                                                        e.currentTarget.src = FALLBACK_PIXEL;
+                                                      }}
+                                                    />
                                                   </div>
                                                 ) : (
                                                   <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center flex-shrink-0 border">
