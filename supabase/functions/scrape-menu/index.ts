@@ -1,12 +1,15 @@
 
 // @ts-ignore
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+
+// @ts-ignore
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V10 (Status Failed Fix) iniciada!");
+console.log("Edge Function scrape-menu V11 (Skip Step & Image Rehosting) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -29,6 +32,8 @@ Deno.serve(async (req) => {
 
     const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     // =================================================================================
     // ROTA 1: START
@@ -157,14 +162,13 @@ Deno.serve(async (req) => {
             const items = await itemsResp.json();
 
             if (!items || items.length === 0) {
-                // CORREÇÃO: status: 'failed' para parar o polling
                 return new Response(
                     JSON.stringify({ success: false, status: 'failed', error: 'Dataset vazio. O scraper não encontrou itens.' }),
                     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                 );
             }
 
-            // Lógica de extração (igual à V6)
+            // Lógica de extração
             let menuItems: any[] = [];
             
             if (items[0].menu && Array.isArray(items[0].menu)) {
@@ -181,26 +185,80 @@ Deno.serve(async (req) => {
 
             if (menuItems.length > 0) {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
+                 
+                 // RE-HOSTING LOGIC
+                 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+                     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+                     console.log('[Check] Re-hospedando imagens no Supabase Storage...');
+                     
+                     // Helper para upload
+                     const uploadImage = async (url: string) => {
+                         try {
+                             if (!url || !url.startsWith('http')) return null;
+                             const resp = await fetch(url);
+                             if (!resp.ok) return null;
+                             const blob = await resp.blob();
+                             const ext = blob.type.split('/')[1] || 'jpg';
+                             const filename = `${crypto.randomUUID()}.${ext}`;
+                             
+                             const { error: uploadError } = await supabase.storage
+                                .from('product-images')
+                                .upload(filename, blob, { contentType: blob.type, upsert: false });
+                             
+                             if (uploadError) {
+                                 console.warn(`[Check] Erro upload: ${uploadError.message}`);
+                                 return null;
+                             }
+                             
+                             const { data: { publicUrl } } = supabase.storage
+                                .from('product-images')
+                                .getPublicUrl(filename);
+                                
+                             return publicUrl;
+                         } catch (e) {
+                             console.warn(`[Check] Erro fetch imagem: ${e}`);
+                             return null;
+                         }
+                     };
+
+                     // Processar categorias em paralelo
+                     await Promise.all(mappedCategories.map(async (cat: any) => {
+                         if (cat.items) {
+                             // Processar itens em paralelo (limitado a 5 por vez por categoria para não estourar)
+                             const itemsWithImages = cat.items.filter((i: any) => i.image_url);
+                             for (const item of itemsWithImages) {
+                                 // Tentar re-hospedar
+                                 const newUrl = await uploadImage(item.image_url);
+                                 if (newUrl) {
+                                     item.image_url = newUrl;
+                                 } else {
+                                     // Se falhar, manter original (o frontend tem fallback)
+                                     // Ou setar null se quisermos ser estritos? Melhor manter.
+                                     console.log(`[Check] Falha ao re-hospedar ${item.image_url}, mantendo original.`);
+                                 }
+                             }
+                         }
+                     }));
+                 }
+
                  if (mappedCategories.length > 0) {
                       return new Response(
                         JSON.stringify({ success: true, status: 'completed', categories: mappedCategories }),
                         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                     );
                  }
-                 // IA Fallback
+                 
                  console.log('[Check] Mapeamento falhou, usando IA...');
                  const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
                  return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
             }
              
-            // CORREÇÃO: status: 'failed'
             return new Response(
                 JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível extrair produtos do dataset.' }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
 
-        // Se falhou ou abortou
         return new Response(
             JSON.stringify({ success: false, status: 'failed', error: `Apify terminou com status: ${status}` }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -211,7 +269,6 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error('[ScrapeMenu] Erro Fatal:', error);
-    // CORREÇÃO: status: 'failed' no catch global
     return new Response(
       JSON.stringify({ success: false, status: 'failed', error: error.message, details: error.toString() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -281,46 +338,7 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
 async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
-
-Extraia do conteúdo fornecido:
-1) Produtos com nome, descrição, imagem (se houver) e preço base.
-2) VARIANTES DE PREÇO (tamanho P/M/G, 300ml/500ml, etc) como preços finais diferentes.
-3) VARIAÇÕES/ADICIONAIS em grupos (ex: "Escolha o tamanho", "Adicionais", "Borda") com opções e preços (acréscimos).
-
-REGRAS IMPORTANTES:
-- Se existir lista de tamanhos com preços finais (ex: P 10,00 / G 20,00), coloque em "price_variants".
-- "price" deve ser o menor preço (ou o preço base do item). Se não houver preço base, use o menor preço de "price_variants" como "price".
-- Variações/adicionais por escolha devem ir em "variations" (grupos), com "options" contendo {name, price} (price é acréscimo, pode ser 0).
-- Se não houver imagem confiável, retorne "image_url": null.
-
-SAÍDA JSON (OBRIGATÓRIA):
-{
-  "categories": [
-    {
-      "name": "Nome da Categoria",
-      "items": [
-        {
-          "name": "Produto",
-          "description": "Descrição",
-          "image_url": "https://..." | null,
-          "price": 0.00,
-          "price_variants": [ { "name": "P", "price": 10.00 }, { "name": "G", "price": 20.00 } ],
-          "variations": [
-            {
-              "name": "Adicionais",
-              "required": false,
-              "max_selections": 1,
-              "options": [ { "name": "Bacon", "price": 5.00 } ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-
-Retorne APENAS o JSON puro.`;
+    const systemPrompt = `Você é um especialista em estruturar cardápios. Extraia produtos, preços e VARIAÇÕES. SAÍDA JSON: { "categories": [ { "name": "Nome", "items": [ { "name": "Produto", "price": 0.00, "variants": [] } ] } ] }`;
     const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio:\n\n${content.slice(0, 50000)}` }

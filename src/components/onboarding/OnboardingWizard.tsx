@@ -440,7 +440,15 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                       )}
                     />
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        onClick={() => setStep(2)}
+                        disabled={isLoading}
+                      >
+                        Pular Configuração
+                      </Button>
                       <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
                         {isLoading ? 'Salvando...' : 'Continuar para Cardápio >'}
                       </Button>
