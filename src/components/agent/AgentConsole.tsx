@@ -80,13 +80,27 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     // Add processing message
     const processingMessage = addMessage({
       type: 'agent',
-      content: 'Processando comando...',
+      content: 'Conectando ao cérebro...',
       status: 'processing'
     });
+    
+    // Animação de "pensando"
+    const thinkingMessages = ['Conectando ao cérebro...', 'Analisando comando...', 'Consultando banco de dados...', 'Executando ação...'];
+    let msgIndex = 0;
+    const thinkingInterval = setInterval(() => {
+        msgIndex = (msgIndex + 1) % thinkingMessages.length;
+        setMessages(prev => prev.map(msg => 
+            msg.id === processingMessage.id && msg.status === 'processing'
+              ? { ...msg, content: thinkingMessages[msgIndex] }
+              : msg
+        ));
+    }, 2000);
 
     try {
       // Process the command through the agent service
       const result = await processAgentCommand(userInput, user?.id || '');
+      
+      clearInterval(thinkingInterval);
       
       // Update processing message with result
       setMessages(prev => prev.map(msg => 
@@ -108,6 +122,8 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         });
       }
     } catch (error) {
+      clearInterval(thinkingInterval);
+      
       // Update processing message with error
       setMessages(prev => prev.map(msg => 
         msg.id === processingMessage.id 

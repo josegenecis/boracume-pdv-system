@@ -89,9 +89,10 @@ export async function processAgentCommand(command: string, userId: string): Prom
     } else if (isHelpCommand(normalizedCommand)) {
       return await handleHelpCommand();
     } else {
+      // Se a Edge Function falhou E o regex não pegou, retornamos erro amigável
       return {
         success: false,
-        message: 'A IA não conseguiu processar e o comando local não foi reconhecido. Tente ser mais específico.'
+        message: 'A IA está temporariamente indisponível e não reconheci este comando localmente. Tente comandos simples como "Desativar [ingrediente]" ou "Lançar despesa".'
       };
     }
   } catch (error: any) {
