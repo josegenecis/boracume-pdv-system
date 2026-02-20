@@ -8,16 +8,25 @@ const SoundPermissionHelper: React.FC = () => {
   const [needsPermission, setNeedsPermission] = useState(false);
 
   useEffect(() => {
-    // Verificar se o usuário já habilitou o som anteriormente
-    const soundAlreadyUnlocked = localStorage.getItem('sound_unlocked') === 'true';
+    // Verificar se o áudio está suspenso ou bloqueado
+    const checkAudioContext = () => {
+      // @ts-ignore
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) {
+        const ctx = new AudioContext();
+        if (ctx.state === 'suspended') {
+          setNeedsPermission(true);
+        }
+        ctx.close(); // Clean up temp context
+      }
+    };
+
+    checkAudioContext();
     
-    if (!soundNotifications.isAudioSupported()) {
-      setNeedsPermission(false);
-    } else if (!soundAlreadyUnlocked) {
-      // Só mostrar o helper se o usuário nunca habilitou o som
+    // Fallback: Verificar localStorage também
+    const soundAlreadyUnlocked = localStorage.getItem('sound_unlocked') === 'true';
+    if (!soundAlreadyUnlocked && soundNotifications.isAudioSupported()) {
       setNeedsPermission(true);
-    } else {
-      setNeedsPermission(false);
     }
   }, []);
 
