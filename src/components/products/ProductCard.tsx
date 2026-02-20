@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,16 @@ const ProductCard: React.FC<ProductCardProps> = ({
   onDelete, 
   onToggleAvailability 
 }) => {
+  const [imageError, setImageError] = useState(false);
+
+  const imageUrl = useMemo(() => {
+    const v = (product.image_url || '').trim();
+    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return '';
+    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
+    if (v.startsWith('https://') || v.startsWith('data:') || v.startsWith('blob:')) return v;
+    return '';
+  }, [product.image_url]);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -41,12 +51,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <Card className="h-full flex flex-col">
-      {product.image_url && (
+      {imageUrl && !imageError && (
         <div className="aspect-video w-full overflow-hidden rounded-t-lg">
           <img
-            src={product.image_url}
+            src={imageUrl}
             alt={product.name}
             className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImageError(true)}
           />
         </div>
       )}

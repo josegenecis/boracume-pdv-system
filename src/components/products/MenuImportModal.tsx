@@ -56,6 +56,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     }
   };
 
+  const normalizeImageUrl = (value?: string | null) => {
+    const v = (value || '').trim();
+    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return null;
+    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
+    if (v.startsWith('https://')) return v;
+    return null;
+  };
+
   const parseMenuText = (text: string) => {
     const lines = text.split('\n');
     const products: ImportedProduct[] = [];
@@ -314,7 +322,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     name: product.name,
                     price: product.price,
                     description: product.description || '',
-                    image_url: product.image_url,
+                    image_url: normalizeImageUrl(product.image_url),
                     category: category.name || 'Geral',
                     category_id: categoryId,
                     available: true,

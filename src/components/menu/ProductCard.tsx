@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { MessageCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DiscountBadge from './DiscountBadge';
@@ -20,6 +20,16 @@ interface ProductCardProps {
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
+  const [imageError, setImageError] = useState(false);
+
+  const imageUrl = useMemo(() => {
+    const v = (product.image_url || '').trim();
+    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return '';
+    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
+    if (v.startsWith('https://') || v.startsWith('data:') || v.startsWith('blob:')) return v;
+    return '';
+  }, [product.image_url]);
+
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onProductClick(product);
@@ -82,12 +92,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
         {/* Imagem do lado direito */}
         <div className="flex-shrink-0">
           <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100">
-            {product.image_url ? (
+            {imageUrl && !imageError ? (
               <img
-                src={product.image_url}
+                src={imageUrl}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 loading="lazy"
+                onError={() => setImageError(true)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400">

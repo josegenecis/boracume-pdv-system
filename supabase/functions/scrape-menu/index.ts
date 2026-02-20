@@ -222,12 +222,41 @@ Deno.serve(async (req) => {
 // === HELPERS (Mantidos) ===
 function mapApifyItemsToCategories(items: any[]): any[] {
     const categoriesMap: Record<string, any[]> = {};
+
+    const coerceImageUrl = (value: any): string | null => {
+        const pickFromObject = (obj: any) => {
+            if (!obj || typeof obj !== 'object') return null;
+            const candidates = [obj.url, obj.href, obj.src, obj.imageUrl, obj.image_url];
+            for (const c of candidates) {
+                if (typeof c === 'string' && c.trim()) return c.trim();
+            }
+            return null;
+        };
+
+        let url: string | null = null;
+        if (typeof value === 'string') url = value.trim();
+        else if (Array.isArray(value)) {
+            for (const v of value) {
+                const u = coerceImageUrl(v);
+                if (u) { url = u; break; }
+            }
+        } else if (value && typeof value === 'object') {
+            url = pickFromObject(value);
+        }
+
+        if (!url) return null;
+        if (url === 'null' || url === 'undefined' || url === '[object Object]') return null;
+        if (url.startsWith('http://')) url = `https://${url.slice('http://'.length)}`;
+        if (url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+        return null;
+    };
+
     for (const item of items) {
         const name = item.name || item.title || item.productName || item.item_name;
         const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
         const description = item.description || item.details || item.shortDescription || '';
-        const imageUrl = item.imageUrl || item.image || item.image_url || '';
+        const imageUrl = coerceImageUrl(item.imageUrl) || coerceImageUrl(item.image) || coerceImageUrl(item.image_url) || null;
         if (!name) continue;
         const variants: any[] = [];
         const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || [];
