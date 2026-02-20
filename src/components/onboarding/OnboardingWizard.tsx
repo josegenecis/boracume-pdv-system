@@ -149,13 +149,21 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
     try {
        // Mark onboarding as completed in DB
        if (user) {
-         await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
+         // Tenta atualizar, mas não bloqueia se falhar
+         try {
+            await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
+         } catch (e) {
+            console.warn("Erro ao marcar onboarding_completed:", e);
+         }
        }
        
        await onComplete();
-       window.location.reload();
+       // Removido window.location.reload() que pode estar causando problemas
+       // window.location.reload();
     } catch (error) {
        console.error(error);
+       // Mesmo com erro, tenta fechar
+       onComplete();
     }
   };
 
@@ -440,17 +448,26 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
                       )}
                     />
 
-                    <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={finishWizard}
+                        disabled={isLoading}
+                        className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                      >
+                        Sair / Fechar
+                      </Button>
                       <Button 
                         type="button" 
                         variant="ghost" 
                         onClick={() => setStep(2)}
                         disabled={isLoading}
                       >
-                        Pular Configuração
+                        Pular para Opções de Cardápio
                       </Button>
                       <Button type="submit" disabled={isLoading} className="w-full sm:w-auto bg-boracume-orange hover:bg-orange-600">
-                        {isLoading ? 'Salvando...' : 'Continuar para Cardápio >'}
+                        {isLoading ? 'Salvando...' : 'Continuar >'}
                       </Button>
                     </div>
                   </div>
