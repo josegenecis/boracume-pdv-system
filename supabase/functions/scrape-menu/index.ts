@@ -246,8 +246,10 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
         if (!url) return null;
         if (url === 'null' || url === 'undefined' || url === '[object Object]') return null;
+        if (url.startsWith('//')) url = `https:${url}`;
         if (url.startsWith('http://')) url = `https://${url.slice('http://'.length)}`;
         if (url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+        if (url.includes('ifood-static.com.br') || url.includes('ifood-static.com')) return `https://${url}`;
         return null;
     };
 
@@ -279,7 +281,46 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
 async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-    const systemPrompt = `Você é um especialista em estruturar cardápios. Extraia produtos, preços e VARIAÇÕES. SAÍDA JSON: { "categories": [ { "name": "Nome", "items": [ { "name": "Produto", "price": 0.00, "variants": [] } ] } ] }`;
+    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
+
+Extraia do conteúdo fornecido:
+1) Produtos com nome, descrição, imagem (se houver) e preço base.
+2) VARIANTES DE PREÇO (tamanho P/M/G, 300ml/500ml, etc) como preços finais diferentes.
+3) VARIAÇÕES/ADICIONAIS em grupos (ex: "Escolha o tamanho", "Adicionais", "Borda") com opções e preços (acréscimos).
+
+REGRAS IMPORTANTES:
+- Se existir lista de tamanhos com preços finais (ex: P 10,00 / G 20,00), coloque em "price_variants".
+- "price" deve ser o menor preço (ou o preço base do item). Se não houver preço base, use o menor preço de "price_variants" como "price".
+- Variações/adicionais por escolha devem ir em "variations" (grupos), com "options" contendo {name, price} (price é acréscimo, pode ser 0).
+- Se não houver imagem confiável, retorne "image_url": null.
+
+SAÍDA JSON (OBRIGATÓRIA):
+{
+  "categories": [
+    {
+      "name": "Nome da Categoria",
+      "items": [
+        {
+          "name": "Produto",
+          "description": "Descrição",
+          "image_url": "https://..." | null,
+          "price": 0.00,
+          "price_variants": [ { "name": "P", "price": 10.00 }, { "name": "G", "price": 20.00 } ],
+          "variations": [
+            {
+              "name": "Adicionais",
+              "required": false,
+              "max_selections": 1,
+              "options": [ { "name": "Bacon", "price": 5.00 } ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Retorne APENAS o JSON puro.`;
     const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio:\n\n${content.slice(0, 50000)}` }

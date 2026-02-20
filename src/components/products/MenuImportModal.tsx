@@ -22,12 +22,21 @@ interface ImportedVariant {
   price: number;
 }
 
+interface ImportedVariationGroup {
+  name: string;
+  required?: boolean;
+  max_selections?: number;
+  options: ImportedVariant[];
+}
+
 interface ImportedProduct {
   name: string;
   price: number;
   description?: string;
   image_url?: string;
   variants?: ImportedVariant[];
+  price_variants?: ImportedVariant[];
+  variations?: ImportedVariationGroup[];
 }
 
 interface ImportedCategory {
@@ -59,8 +68,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const normalizeImageUrl = (value?: string | null) => {
     const v = (value || '').trim();
     if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return null;
+    if (v.startsWith('//')) return `https:${v}`;
     if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
     if (v.startsWith('https://')) return v;
+    if (v.includes('ifood-static.com.br') || v.includes('ifood-static.com')) return `https://${v}`;
     return null;
   };
 
@@ -315,12 +326,31 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             
             if (existingProduct) continue;
 
+            const priceVariants = (product.price_variants && product.price_variants.length > 0)
+              ? product.price_variants
+              : (product.variants || []);
+
+            const normalizedPriceVariants = (priceVariants || [])
+              .filter(v => v && String(v.name || '').trim())
+              .map(v => ({
+                name: String(v.name).trim(),
+                price: Number(v.price) || 0
+              }))
+              .filter(v => v.price > 0);
+
+            const effectiveBasePrice =
+              Number(product.price) > 0
+                ? Number(product.price)
+                : (normalizedPriceVariants.length > 0
+                    ? Math.min(...normalizedPriceVariants.map(v => v.price))
+                    : 0);
+
             const { data: newProduct, error: prodError } = await supabase
                 .from('products')
                 .insert({
                     user_id: user?.id,
                     name: product.name,
-                    price: product.price,
+                    price: effectiveBasePrice,
                     description: product.description || '',
                     image_url: normalizeImageUrl(product.image_url),
                     category: category.name || 'Geral',
@@ -334,8 +364,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
             if (!prodError && newProduct) {
                 totalProducts++;
-                if (product.variants && product.variants.length > 0) {
-                    const variantsData = product.variants.map(v => ({
+                if (normalizedPriceVariants.length > 0) {
+                    const variantsData = normalizedPriceVariants.map(v => ({
                         product_id: newProduct.id,
                         name: v.name,
                         price: v.price
@@ -344,6 +374,32 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                         await (supabase as any).from('product_variants').insert(variantsData);
                     } catch (varError) {
                         console.error('Error inserting variants:', varError);
+                    }
+                }
+
+                if (product.variations && product.variations.length > 0) {
+                    const variationGroups = product.variations
+                      .filter(v => v && String(v.name || '').trim() && Array.isArray(v.options) && v.options.length > 0)
+                      .map(v => ({
+                        user_id: user?.id,
+                        product_id: newProduct.id,
+                        name: String(v.name).trim(),
+                        required: Boolean(v.required),
+                        max_selections: Math.max(1, Number(v.max_selections) || 1),
+                        options: (v.options || [])
+                          .filter(o => o && String(o.name || '').trim())
+                          .map(o => ({
+                            name: String(o.name).trim(),
+                            price: Number(o.price) >= 0 ? Number(o.price) : 0
+                          }))
+                      }));
+
+                    if (variationGroups.length > 0) {
+                        try {
+                            await (supabase as any).from('product_variations').insert(variationGroups);
+                        } catch (varError) {
+                            console.error('Error inserting product variations:', varError);
+                        }
                     }
                 }
             }
