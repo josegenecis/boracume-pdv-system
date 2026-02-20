@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-console.log("Edge Function scrape-menu V9 (Async Fix & LatLong) iniciada!");
+console.log("Edge Function scrape-menu V10 (Status Failed Fix) iniciada!");
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -45,7 +45,6 @@ Deno.serve(async (req) => {
                     
                     const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
                     
-                    // CORREÇÃO: Adicionadas coordenadas genéricas (SP) para passar na validação do Actor
                     const inputPayload = {
                         "store_ids": [storeId],
                         "proxyConfiguration": { "useApifyProxy": true },
@@ -142,8 +141,9 @@ Deno.serve(async (req) => {
             const items = await itemsResp.json();
 
             if (!items || items.length === 0) {
+                // CORREÇÃO: status: 'failed' para parar o polling
                 return new Response(
-                    JSON.stringify({ success: false, error: 'Dataset vazio.' }),
+                    JSON.stringify({ success: false, status: 'failed', error: 'Dataset vazio. O scraper não encontrou itens.' }),
                     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                 );
             }
@@ -177,12 +177,14 @@ Deno.serve(async (req) => {
                  return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
             }
              
+            // CORREÇÃO: status: 'failed'
             return new Response(
-                JSON.stringify({ success: false, error: 'Não foi possível extrair produtos do dataset.' }),
+                JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível extrair produtos do dataset.' }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
 
+        // Se falhou ou abortou
         return new Response(
             JSON.stringify({ success: false, status: 'failed', error: `Apify terminou com status: ${status}` }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -193,8 +195,9 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error('[ScrapeMenu] Erro Fatal:', error);
+    // CORREÇÃO: status: 'failed' no catch global
     return new Response(
-      JSON.stringify({ success: false, error: error.message, details: error.toString() }),
+      JSON.stringify({ success: false, status: 'failed', error: error.message, details: error.toString() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   }

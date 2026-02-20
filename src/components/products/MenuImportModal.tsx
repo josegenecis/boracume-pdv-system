@@ -137,28 +137,38 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                       runId: runId 
                   });
 
-                  if (status !== 200 || !data.success) {
-                      // Se falhar o check, paramos
-                      if (data?.status === 'failed') {
-                          reject(new Error(data.error || 'Falha na extração dos dados.'));
-                          return;
-                      }
-                      // Se for erro de rede, tentamos de novo
-                      console.warn('Erro ao checar status, tentando novamente...', data);
-                  } else {
-                      if (data.status === 'completed') {
-                          resolve(data.categories || []);
-                          return;
-                      }
-                      // Se ainda estiver processando (status: processing)
+                  // 1. Erro de Rede ou Status HTTP (não 200)
+                  if (status !== 200) {
+                      // Se for erro 500 (interno), geralmente é falha fatal se não tiver success: true
+                      console.warn('Erro HTTP ao checar status:', status, data);
+                      // Tentar novamente (pode ser instabilidade)
+                  } 
+                  
+                  // 2. Erro Lógico retornado pelo Backend
+                  else if (!data.success) {
+                      // Se o backend diz que falhou, PARAR IMEDIATAMENTE.
+                      // Isso evita o loop infinito quando o backend retorna "Dataset vazio" ou "Erro Apify".
+                      reject(new Error(data.error || 'Falha desconhecida na extração.'));
+                      return;
                   }
-
+                  
+                  // 3. Status Específico do Job
+                  else if (data.status === 'failed') {
+                      reject(new Error(data.error || 'O processo de extração falhou.'));
+                      return;
+                  }
+                  else if (data.status === 'completed') {
+                      resolve(data.categories || []);
+                      return;
+                  }
+                  
+                  // 4. Timeout Frontend
                   if (attempts >= MAX_ATTEMPTS) {
                       reject(new Error('Tempo limite excedido (5 minutos).'));
                       return;
                   }
 
-                  // Tentar novamente
+                  // 5. Tentar novamente (status: processing ou erro de rede)
                   setTimeout(checkStatus, POLL_INTERVAL);
 
               } catch (e) {
