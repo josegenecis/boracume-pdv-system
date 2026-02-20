@@ -48,8 +48,8 @@ Deno.serve(async (req) => {
                     const inputPayload = {
                         "store_ids": [storeId],
                         "proxyConfiguration": { "useApifyProxy": true },
-                        "latitude": -23.550520,
-                        "longitude": -46.633308
+                        "latitude": "-23.550520",
+                        "longitude": "-46.633308"
                     };
                     
                     console.log("[Start] Payload enviado para Apify:", JSON.stringify(inputPayload));
