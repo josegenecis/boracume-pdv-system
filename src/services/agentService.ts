@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 export interface AgentCommandResult {
   success: boolean;
@@ -49,13 +50,36 @@ const EXPENSE_CATEGORIES = [
  */
 export async function processAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
   try {
-    // Normalize command
-    const normalizedCommand = command.toLowerCase().trim();
-    
     // Log the command for tracking
     await logAgentActivity(userId, 'command_received', command);
 
-    // Parse and execute command
+    // 1. Tentar processar via Edge Function (AI Agent)
+    try {
+        console.log('[AgentService] Enviando para Edge Function ai-agent...');
+        const { data, status } = await invokeEdgeFunction('ai-agent', {
+            command: command,
+            userId: userId
+        });
+
+        if (status === 200 && data && data.success) {
+            await logAgentActivity(userId, 'ai_command_success', `IA: ${data.message.substring(0, 50)}...`);
+            return {
+                success: true,
+                message: data.message,
+                metadata: { tool_results: data.tool_results }
+            };
+        } else {
+            console.warn('[AgentService] AI Agent falhou ou retornou erro:', data);
+        }
+    } catch (edgeError) {
+        console.error('[AgentService] Erro na Edge Function:', edgeError);
+        // Fallback para processamento local se a Edge Function falhar (timeout, etc)
+    }
+
+    // 2. Fallback: Processamento Local (Regex Legacy)
+    console.log('[AgentService] Usando fallback local...');
+    const normalizedCommand = command.toLowerCase().trim();
+
     if (isIngredientDisableCommand(normalizedCommand)) {
       return await handleIngredientDisable(normalizedCommand, userId);
     } else if (isExpenseRegistrationCommand(normalizedCommand)) {
@@ -67,7 +91,7 @@ export async function processAgentCommand(command: string, userId: string): Prom
     } else {
       return {
         success: false,
-        message: 'Não entendi seu comando. Tente: "Desativar [ingrediente] de todos os produtos" ou "Lançar despesa de R$ [valor] para [categoria]"'
+        message: 'A IA não conseguiu processar e o comando local não foi reconhecido. Tente ser mais específico.'
       };
     }
   } catch (error: any) {
