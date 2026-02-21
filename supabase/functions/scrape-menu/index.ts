@@ -101,9 +101,12 @@ Deno.serve(async (req: Request) => {
               throw new Error(`Falha ao abrir o link (${pageResp.status}).`);
             }
             const html = await pageResp.text();
-            const aiResponse = await processWithAI(html, OPENAI_API_KEY, false, false);
-            const aiJson = await aiResponse.json();
-            let categories = (aiJson.categories || []);
+            let categories = parseThirdPartyMenu(html);
+            if (!(Array.isArray(categories) && categories.reduce((a: number, c: any) => a + (Array.isArray(c.items) ? c.items.length : 0), 0) > 0)) {
+              const aiResponse = await processWithAI(html, OPENAI_API_KEY, false, false);
+              const aiJson = await aiResponse.json();
+              categories = validateAndSanitizeThirdParty(html, aiJson.categories || []);
+            }
             if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
               const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
               try {
@@ -433,4 +436,51 @@ Saída:
     const aiData = await aiResp.json();
     const parsed = JSON.parse(aiData.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
     return new Response(JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+}
+
+function parseThirdPartyMenu(html: string): any[] {
+  return [];
+}
+
+function validateAndSanitizeThirdParty(html: string, categories: any[]): any[] {
+  try {
+    const text = html.replace(/\s+/g, ' ').toLowerCase();
+    const pricePattern = /(r\$\s?\d{1,3}(?:\.\d{3})*(?:,\d{2}))/i;
+    const urlPattern = /(https?:\/\/[^\s"'<>]+)/i;
+    const out: any[] = [];
+    for (const cat of categories || []) {
+      const name = String(cat?.name || '').trim();
+      const items = Array.isArray(cat?.items) ? cat.items : [];
+      const validItems: any[] = [];
+      for (const it of items) {
+        const nm = String(it?.name || '').trim();
+        const desc = String(it?.description || '').trim();
+        const price = Number(it?.price || 0);
+        const pv = Array.isArray(it?.price_variants) ? it.price_variants : [];
+        const img = it?.image_url || null;
+        const hasName = nm && text.includes(nm.toLowerCase());
+        const hasPrice = price > 0 || pv.some((v: any) => Number(v?.price || 0) > 0) || pricePattern.test(text);
+        const imgOk = img && typeof img === 'string' && urlPattern.test(img);
+        if (hasName && hasPrice) {
+          const item: any = { name: nm, price: price };
+          if (desc) item.description = desc;
+          if (imgOk) item.image_url = img;
+          if (pv.length > 0) item.price_variants = pv.map((v: any) => ({ name: String(v?.name || '').trim(), price: Number(v?.price || 0) })).filter((v: any) => v.name && v.price > 0);
+          if (Array.isArray(it?.variations) && it.variations.length > 0) {
+            item.variations = it.variations.map((g: any) => ({
+              name: String(g?.name || '').trim(),
+              required: !!g?.required,
+              max_selections: Math.max(1, Number(g?.max_selections || 1)),
+              options: Array.isArray(g?.options) ? g.options.map((o: any) => ({ name: String(o?.name || '').trim(), price: Math.max(0, Number(o?.price || 0)) })).filter((o: any) => o.name) : []
+            })).filter((g: any) => g.name && g.options && g.options.length > 0);
+          }
+          validItems.push(item);
+        }
+      }
+      if (name && validItems.length > 0) out.push({ name, items: validItems });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
