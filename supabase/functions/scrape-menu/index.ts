@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
                 if (storeId) {
                     console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
                     
-                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=1`;
                     
                     const inputPayload = {
                         "store_ids": [storeId],
@@ -89,9 +89,39 @@ Deno.serve(async (req: Request) => {
                     }
                     
                     const startData = await startResp.json();
-                    return new Response(
-                        JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
+                    const dsId = startData?.data?.defaultDatasetId;
+                    const status = startData?.data?.status;
+                    if (status === 'SUCCEEDED' && dsId) {
+                      const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${dsId}/items?token=${APIFY_TOKEN}`);
+                      const items = await itemsResp.json();
+                      let menuItems: any[] = [];
+                      if (items[0]?.menu && Array.isArray(items[0].menu)) {
+                        menuItems = items[0].menu;
+                      } else if (items[0]?.categories && Array.isArray(items[0].categories)) {
+                        for (const cat of items[0].categories) {
+                          if (cat.items && Array.isArray(cat.items)) {
+                            menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
+                          }
+                        }
+                      } else {
+                        menuItems = items;
+                      }
+                      const mappedCategories = mapApifyItemsToCategories(menuItems);
+                      const consolidated = consolidateVariantsAndCategories(mappedCategories);
+                      let aiStructured: any[] = [];
+                      try {
+                        const rawText = JSON.stringify(menuItems).slice(0, 200000);
+                        aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                      } catch {}
+                      const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
+                      return new Response(
+                        JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
                         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                      );
+                    }
+                    return new Response(
+                      JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
+                      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                     );
                 }
              }
@@ -100,7 +130,7 @@ Deno.serve(async (req: Request) => {
               throw new Error('APIFY_TOKEN não configurado.');
             }
             console.log(`[Start] Iniciando Apify Web Scraper (terceiros)...`);
-            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=1`;
             const pageFunction = `
               async function pageFunction(context) {
                 const { jQuery, request } = context;
@@ -193,8 +223,38 @@ Deno.serve(async (req: Request) => {
               throw new Error(`Erro ao iniciar Web Scraper: ${startResp.status}`);
             }
             const startData = await startResp.json();
+            const dsId = startData?.data?.defaultDatasetId;
+            const status = startData?.data?.status;
+            if (status === 'SUCCEEDED' && dsId) {
+              const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${dsId}/items?token=${APIFY_TOKEN}`);
+              const items = await itemsResp.json();
+              let menuItems: any[] = [];
+              if (items[0]?.menu && Array.isArray(items[0].menu)) {
+                menuItems = items[0].menu;
+              } else if (items[0]?.categories && Array.isArray(items[0].categories)) {
+                for (const cat of items[0].categories) {
+                  if (cat.items && Array.isArray(cat.items)) {
+                    menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
+                  }
+                }
+              } else {
+                menuItems = items;
+              }
+              const mappedCategories = mapApifyItemsToCategories(menuItems);
+              const consolidated = consolidateVariantsAndCategories(mappedCategories);
+              let aiStructured: any[] = [];
+              try {
+                const rawText = JSON.stringify(menuItems).slice(0, 200000);
+                aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+              } catch {}
+              const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
+              return new Response(
+                JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
             return new Response(
-              JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
+              JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
@@ -658,7 +718,7 @@ async function aiStructurize(raw: string, apiKey: string | undefined): Promise<a
           .filter((o: any) => o.name);
         if (opts.length > 0) variationsGroups.push({ name: 'Complementos', required: false, max_selections: 1, options: opts });
       }
-      const effectivePrice = price > 0 ? price : (price_variants.length > 0 ? Math.min(...price_variants.map(v => v.price)) : 0);
+      const effectivePrice = price > 0 ? price : (price_variants.length > 0 ? Math.min(...price_variants.map((vv: any) => vv.price)) : 0);
       return { name: nm, description: desc, price: effectivePrice, image_url, price_variants, variations: variationsGroups };
     }).filter((p: any) => p.name && p.price > 0);
     return { name, items: mappedItems };
