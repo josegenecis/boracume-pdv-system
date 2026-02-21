@@ -715,6 +715,61 @@ const Products = () => {
                         <Folder className="h-4 w-4 mr-2 text-gray-400" />
                         <span className="font-medium flex-1 text-gray-700">Sem Categoria</span>
                         <Badge variant="secondary" className="ml-2">{filteredProducts.filter(p => !p.category_id).length}</Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            const uncategorizedIds = filteredProducts.filter(p => !p.category_id).map(p => p.id);
+                            const allSelected = uncategorizedIds.every(id => selectedIds.has(id));
+                            setSelectedIds(prev => {
+                              const next = new Set(prev);
+                              if (allSelected) uncategorizedIds.forEach(id => next.delete(id));
+                              else uncategorizedIds.forEach(id => next.add(id));
+                              return next;
+                            });
+                          }}
+                        >
+                          {filteredProducts.filter(p => !p.category_id).every(p => selectedIds.has(p.id)) ? 'Desmarcar categoria' : 'Selecionar categoria'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            const ids = filteredProducts.filter(p => !p.category_id).map(p => p.id).filter(id => selectedIds.has(id));
+                            if (ids.length === 0) return;
+                            if (!confirm(`Excluir ${ids.length} produto(s) desta categoria?`)) return;
+                            (async () => {
+                              try {
+                                setIsLoading(true);
+                                const { error } = await supabase
+                                  .from('products')
+                                  .delete()
+                                  .in('id', ids)
+                                  .eq('user_id', user?.id);
+                                if (error) throw error;
+                                setSelectedIds(prev => {
+                                  const next = new Set(prev);
+                                  ids.forEach(id => next.delete(id));
+                                  return next;
+                                });
+                                toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
+                                fetchProducts();
+                              } catch (e: any) {
+                                toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+                              } finally {
+                                setIsLoading(false);
+                              }
+                            })();
+                          }}
+                          disabled={filteredProducts.filter(p => !p.category_id).every(p => !selectedIds.has(p.id))}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Excluir selecionados
+                        </Button>
                       </div>
                       
                       {expandedCategories.has('uncategorized') && (
@@ -729,6 +784,13 @@ const Products = () => {
                                          <Card className={`overflow-hidden hover:shadow-md transition-all ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'border-l-4 border-l-red-500' : ''}`}>
                                             <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                                               <div className="flex items-center gap-3">
+                                                <input
+                                                  type="checkbox"
+                                                  className="w-4 h-4"
+                                                  checked={selectedIds.has(product.id)}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  onChange={(e) => { e.stopPropagation(); toggleSelect(product.id, e.target.checked); }}
+                                                />
                                                 <button
                                                   type="button"
                                                   {...(canReorderProducts ? draggableProvided.dragHandleProps : {})}
