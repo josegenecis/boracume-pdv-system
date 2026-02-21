@@ -96,59 +96,78 @@ Deno.serve(async (req: Request) => {
                 }
              }
 
-            const pageResp = await fetch(rawUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!pageResp.ok) {
-              throw new Error(`Falha ao abrir o link (${pageResp.status}).`);
+            if (!APIFY_TOKEN) {
+              throw new Error('APIFY_TOKEN não configurado.');
             }
-            const html = await pageResp.text();
-            let categories = parseThirdPartyMenu(html);
-            if (!(Array.isArray(categories) && categories.reduce((a: number, c: any) => a + (Array.isArray(c.items) ? c.items.length : 0), 0) > 0)) {
-              const aiResponse = await processWithAI(html, OPENAI_API_KEY, false, false);
-              const aiJson = await aiResponse.json();
-              categories = validateAndSanitizeThirdParty(html, aiJson.categories || []);
-            }
-            if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-              const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-              try {
-                const { data: buckets } = await supabase.storage.listBuckets();
-                const exists = Array.isArray(buckets) && buckets.some((b: any) => b.name === 'product-images');
-                if (!exists) {
-                  await supabase.storage.createBucket('product-images', { public: true, fileSizeLimit: 10485760 });
+            console.log(`[Start] Iniciando Apify Web Scraper (terceiros)...`);
+            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+            const pageFunction = `
+              async function pageFunction(context) {
+                const { request, log, jQuery } = context;
+                const $ = jQuery;
+                const categories = [];
+                function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
+                function priceOf(el){
+                  const txt = norm($(el).text());
+                  const m = txt.match(/R\\$\\s?\\d{1,3}(?:\\.\\d{3})*(?:,\\d{2})/);
+                  if(!m) return 0;
+                  try{ return Number(m[0].replace('R$','').replace(/\\./g,'').replace(',','.').trim()); }catch{ return 0; }
                 }
-              } catch {}
-              const uploadImage = async (url: string) => {
-                try {
-                  if (!url || !url.startsWith('http')) return null;
-                  const resp = await fetch(url);
-                  if (!resp.ok) return null;
-                  const blob = await resp.blob();
-                  const ext = blob.type.split('/')[1] || 'jpg';
-                  const filename = `${crypto.randomUUID()}.${ext}`;
-                  const { error: uploadError } = await supabase.storage
-                    .from('product-images')
-                    .upload(filename, blob, { contentType: blob.type, upsert: false });
-                  if (uploadError) return null;
-                  const { data: { publicUrl } } = supabase.storage
-                    .from('product-images')
-                    .getPublicUrl(filename);
-                  return publicUrl;
-                } catch {
+                function imgOf(el){
+                  let src = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
+                  src = norm(src);
+                  if(src && src.startsWith('//')) src = 'https:' + src;
+                  if(src && src.startsWith('http')) return src;
                   return null;
                 }
-              };
-              await Promise.all((categories || []).map(async (cat: any) => {
-                if (Array.isArray(cat.items)) {
-                  for (const item of cat.items) {
-                    if (item.image_url) {
-                      const newUrl = await uploadImage(item.image_url);
-                      if (newUrl) item.image_url = newUrl;
+                function collectProducts(container){
+                  const items = [];
+                  $(container).find('.product, .item, .menu-item, .card, .card-product, [class*=\"produto\"], [class*=\"item\"]').each((i, el) => {
+                    const name = norm($(el).find('h1, h2, h3, .title, .name, [class*=\"nome\"]').first().text());
+                    const desc = norm($(el).find('.description, .desc, [class*=\"descri\"]').first().text());
+                    const price = priceOf(el);
+                    const img = imgOf(el);
+                    if(name && price>0){
+                      items.push({ name, description: desc || '', price, image_url: img });
                     }
-                  }
+                  });
+                  return items;
                 }
-              }));
+                // Group by visible headings
+                $('h1, h2, h3, .category-title, [class*=\"categoria\"]').each((i, h) => {
+                  const catName = norm($(h).text());
+                  if(!catName) return;
+                  const container = $(h).nextUntil('h1, h2, h3, .category-title, [class*=\"categoria\"]').parent().length ? $(h).parent() : $(h).next();
+                  const items = collectProducts(container.length ? container : $(h).next());
+                  if(items.length>0) categories.push({ name: catName, items });
+                });
+                // Fallback: whole document
+                if(categories.length===0){
+                  const items = collectProducts('body');
+                  if(items.length>0) categories.push({ name: 'Geral', items });
+                }
+                return { categories };
+              }
+            `;
+            const inputPayload = {
+              startUrls: [{ url: rawUrl }],
+              maxRequestsPerCrawl: 10,
+              proxyConfiguration: { useApifyProxy: true },
+              pageFunction
+            };
+            const startResp = await fetch(runUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(inputPayload)
+            });
+            if (!startResp.ok) {
+              const errText = await startResp.text();
+              console.error(`[Start] Erro Web Scraper: ${startResp.status} - ${errText}`);
+              throw new Error(`Erro ao iniciar Web Scraper: ${startResp.status}`);
             }
+            const startData = await startResp.json();
             return new Response(
-              JSON.stringify({ success: true, status: 'completed', categories }),
+              JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
