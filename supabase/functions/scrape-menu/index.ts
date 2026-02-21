@@ -103,9 +103,8 @@ Deno.serve(async (req: Request) => {
             const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const pageFunction = `
               async function pageFunction(context) {
-                const { request, log, jQuery } = context;
+                const { jQuery } = context;
                 const $ = jQuery;
-                const categories = [];
                 function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
                 function priceOf(el){
                   const txt = norm($(el).text());
@@ -122,9 +121,10 @@ Deno.serve(async (req: Request) => {
                 }
                 function collectProducts(container){
                   const items = [];
-                  $(container).find('.product, .item, .menu-item, .card, .card-product, [class*=\"produto\"], [class*=\"item\"]').each((i, el) => {
-                    const name = norm($(el).find('h1, h2, h3, .title, .name, [class*=\"nome\"]').first().text());
-                    const desc = norm($(el).find('.description, .desc, [class*=\"descri\"]').first().text());
+                  const itemSel = '.product, .item, .menu-item, .card, .card-product, [class*=produto], [class*=item]';
+                  $(container).find(itemSel).each((i, el) => {
+                    const name = norm($(el).find('h1, h2, h3, .title, .name, [class*=nome]').first().text());
+                    const desc = norm($(el).find('.description, .desc, [class*=descri]').first().text());
                     const price = priceOf(el);
                     const img = imgOf(el);
                     if(name && price>0){
@@ -133,20 +133,30 @@ Deno.serve(async (req: Request) => {
                   });
                   return items;
                 }
-                // Group by visible headings
-                $('h1, h2, h3, .category-title, [class*=\"categoria\"]').each((i, h) => {
-                  const catName = norm($(h).text());
-                  if(!catName) return;
-                  const container = $(h).nextUntil('h1, h2, h3, .category-title, [class*=\"categoria\"]').parent().length ? $(h).parent() : $(h).next();
-                  const items = collectProducts(container.length ? container : $(h).next());
-                  if(items.length>0) categories.push({ name: catName, items });
-                });
-                // Fallback: whole document
+                const anchorSel = 'h1, h2, h3, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [class*=category], [class*=secao]';
+                const anchors = $(anchorSel).filter(function(){ return norm($(this).text()).length>0; }).toArray();
+                const categories = [];
+                for(let i=0;i<anchors.length;i++){
+                  const h = anchors[i];
+                  const name = norm($(h).text());
+                  if(!name) continue;
+                  const section = $(h).nextUntil(anchorSel);
+                  let items = collectProducts(section.length ? section : $(h).parent());
+                  if(items.length===0) items = collectProducts($(h).parent());
+                  if(items.length>0) categories.push({ name, items });
+                }
                 if(categories.length===0){
                   const items = collectProducts('body');
                   if(items.length>0) categories.push({ name: 'Geral', items });
                 }
-                return { categories };
+                const merged = {};
+                for(const c of categories){
+                  const key = c.name;
+                  if(!merged[key]) merged[key] = [];
+                  merged[key] = merged[key].concat(c.items);
+                }
+                const out = Object.entries(merged).map(([name, items]) => ({ name, items }));
+                return { categories: out };
               }
             `;
             const inputPayload = {
