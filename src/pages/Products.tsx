@@ -74,6 +74,7 @@ const Products = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -328,6 +329,43 @@ const Products = () => {
     }
   };
 
+  const toggleSelect = (productId: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(productId); else next.delete(productId);
+      return next;
+    });
+  };
+
+  const bulkDeleteByCategory = async (categoryId: string) => {
+    const ids = filteredProducts
+      .filter(p => p.category_id === categoryId)
+      .map(p => p.id)
+      .filter(id => selectedIds.has(id));
+    if (ids.length === 0) return;
+    if (!confirm(`Excluir ${ids.length} produto(s) desta categoria?`)) return;
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+      toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
+      fetchProducts();
+    } catch (e: any) {
+      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
     setIsSheetOpen(true);
@@ -494,6 +532,16 @@ const Products = () => {
                         <Folder className="h-4 w-4 mr-2 text-orange-500" />
                         <span className="font-medium flex-1 text-gray-700">{category.name}</span>
                         <Badge variant="secondary" className="ml-2">{categoryProducts.length}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2"
+                          onClick={(e) => { e.stopPropagation(); bulkDeleteByCategory(category.id); }}
+                          disabled={categoryProducts.every(p => !selectedIds.has(p.id))}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Excluir selecionados
+                        </Button>
                       </div>
                       
                       {isExpanded && (
@@ -511,6 +559,12 @@ const Products = () => {
                                           <Card className={`overflow-hidden hover:shadow-md transition-all ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'border-l-4 border-l-red-500' : ''}`}>
                                             <CardContent className="p-3 cursor-pointer" onClick={() => handleEditProduct(product)}>
                                               <div className="flex items-center gap-3">
+                                                <input
+                                                  type="checkbox"
+                                                  className="w-4 h-4"
+                                                  checked={selectedIds.has(product.id)}
+                                                  onChange={(e) => { e.stopPropagation(); toggleSelect(product.id, e.target.checked); }}
+                                                />
                                                 <button
                                                   type="button"
                                                   {...(canReorderProducts ? draggableProvided.dragHandleProps : {})}
