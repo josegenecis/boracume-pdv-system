@@ -96,38 +96,58 @@ Deno.serve(async (req: Request) => {
                 }
              }
 
-             // 2. Generic Crawler Logic
-             if (APIFY_TOKEN) {
-                console.log(`[Start] Iniciando Apify Generic Async...`);
-                
-                const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
-                
-                const inputPayload = {
-                    startUrls: [{ url: rawUrl }],
-                    maxCrawlPages: 1,
-                    proxyConfiguration: { useApifyProxy: true }
-                };
-
-                console.log("[Start] Payload enviado para Apify Generic:", JSON.stringify(inputPayload));
-
-                const startResp = await fetch(runUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(inputPayload)
-                });
-
-                if (!startResp.ok) {
-                    const errText = await startResp.text();
-                    console.error(`[Start] Erro Apify Generic: ${startResp.status} - ${errText}`);
-                    throw new Error(`Erro ao iniciar Apify Generic: ${startResp.status}`);
+            const pageResp = await fetch(rawUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!pageResp.ok) {
+              throw new Error(`Falha ao abrir o link (${pageResp.status}).`);
+            }
+            const html = await pageResp.text();
+            const aiResponse = await processWithAI(html, OPENAI_API_KEY, false, false);
+            const aiJson = await aiResponse.json();
+            let categories = (aiJson.categories || []);
+            if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+              const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+              try {
+                const { data: buckets } = await supabase.storage.listBuckets();
+                const exists = Array.isArray(buckets) && buckets.some((b: any) => b.name === 'product-images');
+                if (!exists) {
+                  await supabase.storage.createBucket('product-images', { public: true, fileSizeLimit: 10485760 });
                 }
-                
-                const startData = await startResp.json();
-                return new Response(
-                    JSON.stringify({ success: true, runId: startData.data.id, status: 'started' }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                );
-             }
+              } catch {}
+              const uploadImage = async (url: string) => {
+                try {
+                  if (!url || !url.startsWith('http')) return null;
+                  const resp = await fetch(url);
+                  if (!resp.ok) return null;
+                  const blob = await resp.blob();
+                  const ext = blob.type.split('/')[1] || 'jpg';
+                  const filename = `${crypto.randomUUID()}.${ext}`;
+                  const { error: uploadError } = await supabase.storage
+                    .from('product-images')
+                    .upload(filename, blob, { contentType: blob.type, upsert: false });
+                  if (uploadError) return null;
+                  const { data: { publicUrl } } = supabase.storage
+                    .from('product-images')
+                    .getPublicUrl(filename);
+                  return publicUrl;
+                } catch {
+                  return null;
+                }
+              };
+              await Promise.all((categories || []).map(async (cat: any) => {
+                if (Array.isArray(cat.items)) {
+                  for (const item of cat.items) {
+                    if (item.image_url) {
+                      const newUrl = await uploadImage(item.image_url);
+                      if (newUrl) item.image_url = newUrl;
+                    }
+                  }
+                }
+              }));
+            }
+            return new Response(
+              JSON.stringify({ success: true, status: 'completed', categories }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+            );
         }
         
         if (type === 'image') {
