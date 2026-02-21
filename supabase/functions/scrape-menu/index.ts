@@ -1,6 +1,7 @@
 
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+declare const Deno: any;
 
 // @ts-ignore
 const corsHeaders = {
@@ -11,7 +12,7 @@ const corsHeaders = {
 
 console.log("Edge Function scrape-menu V11 (Skip Step & Image Rehosting) iniciada!");
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -186,7 +187,18 @@ Deno.serve(async (req) => {
             if (menuItems.length > 0) {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
                  
-                 // RE-HOSTING LOGIC
+                 const totalItems = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
+                 const withDesc = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.filter((i: any) => String(i.description || '').trim()).length : 0), 0);
+                 const withImg = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.filter((i: any) => String(i.image_url || '').trim()).length : 0), 0);
+                 const descOk = totalItems > 0 ? withDesc / totalItems >= 0.5 : false;
+                 const imgOk = totalItems > 0 ? withImg / totalItems >= 0.5 : false;
+                 
+                 if (!(descOk && imgOk)) {
+                   const jsonContent = JSON.stringify(menuItems.slice(0, 120));
+                   const aiResult = await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                   return aiResult;
+                 }
+                 
                  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
                      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
                      try {
@@ -288,9 +300,21 @@ function mapApifyItemsToCategories(items: any[]): any[] {
     const coerceImageUrl = (value: any): string | null => {
         const pickFromObject = (obj: any) => {
             if (!obj || typeof obj !== 'object') return null;
-            const candidates = [obj.url, obj.href, obj.src, obj.imageUrl, obj.image_url];
+            const candidates = [obj.url, obj.href, obj.src, obj.imageUrl, obj.image_url, obj.thumbnail, obj.picture, obj.photo];
             for (const c of candidates) {
                 if (typeof c === 'string' && c.trim()) return c.trim();
+            }
+            if (Array.isArray(obj.images)) {
+              for (const im of obj.images) {
+                const u = coerceImageUrl(im);
+                if (u) return u;
+              }
+            }
+            if (Array.isArray(obj.photos)) {
+              for (const im of obj.photos) {
+                const u = coerceImageUrl(im);
+                if (u) return u;
+              }
             }
             return null;
         };
@@ -319,11 +343,11 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         const name = item.name || item.title || item.productName || item.item_name;
         const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
-        const description = item.description || item.details || item.shortDescription || '';
-        const imageUrl = coerceImageUrl(item.imageUrl) || coerceImageUrl(item.image) || coerceImageUrl(item.image_url) || null;
+        const description = item.description || item.details || item.shortDescription || item.desc || item.subtitle || item.content || item.ingredients || '';
+        const imageUrl = coerceImageUrl(item.imageUrl) || coerceImageUrl(item.image) || coerceImageUrl(item.image_url) || coerceImageUrl(item.media) || coerceImageUrl(item.thumbnail) || null;
         if (!name) continue;
         const variants: any[] = [];
-        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || [];
+        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || item.addons || item.extras || [];
         if (Array.isArray(optionsSource)) {
             for (const opt of optionsSource) {
                 if (opt.options && Array.isArray(opt.options)) {
