@@ -366,6 +366,49 @@ const Products = () => {
     }
   };
 
+  const toggleSelectCategory = (categoryId: string) => {
+    const ids = filteredProducts.filter(p => p.category_id === categoryId).map(p => p.id);
+    const allSelected = ids.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        ids.forEach(id => next.delete(id));
+      } else {
+        ids.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filteredProducts.map(p => p.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const bulkDeleteSelected = async () => {
+    const ids = filteredProducts.map(p => p.id).filter(id => selectedIds.has(id));
+    if (ids.length === 0) return;
+    if (!confirm(`Excluir ${ids.length} produto(s) selecionados?`)) return;
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      clearSelection();
+      toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
+      fetchProducts();
+    } catch (e: any) {
+      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const handleEditProduct = (product: ProductItem) => {
     setEditingProduct(product);
     setIsSheetOpen(true);
@@ -483,6 +526,15 @@ const Products = () => {
                   </Select>
                 </div>
                 <div className="hidden sm:flex gap-2 flex-nowrap overflow-x-auto scrollbar-hide py-1">
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={selectAllFiltered}>
+                    Selecionar todos
+                  </Button>
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={clearSelection}>
+                    Limpar seleção
+                  </Button>
+                  <Button variant="destructive" size="sm" className="shrink-0" onClick={bulkDeleteSelected} disabled={filteredProducts.every(p => !selectedIds.has(p.id))}>
+                    Excluir selecionados
+                  </Button>
                   <Button
                     variant={selectedCategory === 'all' ? "default" : "outline"}
                     size="sm"
@@ -533,6 +585,14 @@ const Products = () => {
                         <span className="font-medium flex-1 text-gray-700">{category.name}</span>
                         <Badge variant="secondary" className="ml-2">{categoryProducts.length}</Badge>
                         <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2"
+                          onClick={(e) => { e.stopPropagation(); toggleSelectCategory(category.id); }}
+                        >
+                          {categoryProducts.every(p => selectedIds.has(p.id)) ? 'Desmarcar categoria' : 'Selecionar categoria'}
+                        </Button>
+                        <Button
                           variant="ghost"
                           size="sm"
                           className="ml-2"
@@ -563,6 +623,7 @@ const Products = () => {
                                                   type="checkbox"
                                                   className="w-4 h-4"
                                                   checked={selectedIds.has(product.id)}
+                                                  onClick={(e) => e.stopPropagation()}
                                                   onChange={(e) => { e.stopPropagation(); toggleSelect(product.id, e.target.checked); }}
                                                 />
                                                 <button
