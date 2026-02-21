@@ -103,7 +103,7 @@ Deno.serve(async (req: Request) => {
             const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const pageFunction = `
               async function pageFunction(context) {
-                const { jQuery } = context;
+                const { jQuery, request } = context;
                 const $ = jQuery;
                 function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
                 function priceOf(el){
@@ -119,6 +119,21 @@ Deno.serve(async (req: Request) => {
                   if(src && src.startsWith('http')) return src;
                   return null;
                 }
+                function parseVariations(container){
+                  const groups = [];
+                  const groupSel = '.add-ons, .addons, .options-group, .variations, .complements, [class*=adicionais], [class*=acompanha], [class*=opcoes]';
+                  $(container).find(groupSel).each((i, g) => {
+                    const name = norm($(g).find('h4, h3, .group-title, .title').first().text()) || 'Adicionais';
+                    const options = [];
+                    $(g).find('label, .option, .item, .checkbox, .radio').each((j, o) => {
+                      const nm = norm($(o).text());
+                      const pr = priceOf(o);
+                      if(nm) options.push({ name: nm, price: Math.max(0, pr) });
+                    });
+                    if(options.length>0) groups.push({ name, required: false, max_selections: 1, options });
+                  });
+                  return groups;
+                }
                 function collectProducts(container){
                   const items = [];
                   const itemSel = '.product, .item, .menu-item, .card, .card-product, [class*=produto], [class*=item]';
@@ -127,8 +142,9 @@ Deno.serve(async (req: Request) => {
                     const desc = norm($(el).find('.description, .desc, [class*=descri]').first().text());
                     const price = priceOf(el);
                     const img = imgOf(el);
+                    const variations = parseVariations(el);
                     if(name && price>0){
-                      items.push({ name, description: desc || '', price, image_url: img });
+                      items.push({ name, description: desc || '', price, image_url: img, variations });
                     }
                   });
                   return items;
@@ -163,7 +179,8 @@ Deno.serve(async (req: Request) => {
               startUrls: [{ url: rawUrl }],
               maxRequestsPerCrawl: 10,
               proxyConfiguration: { useApifyProxy: true },
-              pageFunction
+              pageFunction,
+              linkSelector: 'a[href*=\"produto\"], a[href*=\"product\"], .product a, .item a'
             };
             const startResp = await fetch(runUrl, {
               method: 'POST',
