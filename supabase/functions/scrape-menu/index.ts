@@ -257,6 +257,15 @@ Deno.serve(async (req: Request) => {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
                  const consolidated = consolidateVariantsAndCategories(mappedCategories);
                  
+                 // IA pós-processamento para estruturar categorias/complementos/variações
+                 let aiStructured: any[] = [];
+                 try {
+                   const rawText = JSON.stringify(menuItems).slice(0, 200000);
+                   aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                 } catch (e) {
+                   console.warn('[Check] IA estruturadora falhou, usando consolidação heurística.', e);
+                 }
+                 
                  const totalItems = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
                  const withDesc = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.filter((i: any) => String(i.description || '').trim()).length : 0), 0);
                  const withImg = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.filter((i: any) => String(i.image_url || '').trim()).length : 0), 0);
@@ -309,12 +318,11 @@ Deno.serve(async (req: Request) => {
                      };
 
                      // Processar categorias em paralelo
-                     await Promise.all(mappedCategories.map(async (cat: any) => {
-                        // usar categorias consolidadas se existirem
-                        const useCat = consolidated.find((cc: any) => cc.name === cat.name) || cat;
+                     const catsForImages = (aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories));
+                     await Promise.all(catsForImages.map(async (cat: any) => {
                          if (cat.items) {
                              // Processar itens em paralelo (limitado a 5 por vez por categoria para não estourar)
-                             const itemsWithImages = (useCat.items || cat.items).filter((i: any) => i.image_url);
+                             const itemsWithImages = (cat.items || []).filter((i: any) => i.image_url);
                              for (const item of itemsWithImages) {
                                  // Tentar re-hospedar
                                  const newUrl = await uploadImage(item.image_url);
@@ -330,7 +338,7 @@ Deno.serve(async (req: Request) => {
                      }));
                  }
 
-                 const finalCats = consolidated.length > 0 ? consolidated : mappedCategories;
+                 const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
                  if (finalCats.length > 0) {
                       return new Response(
                         JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
@@ -603,4 +611,57 @@ function consolidateVariantsAndCategories(categories: any[]): any[] {
     if (rebuilt.length > 1) return rebuilt;
   }
   return out;
+}
+
+async function aiStructurize(raw: string, apiKey: string | undefined): Promise<any[]> {
+  if (!apiKey) throw new Error('Chave OpenAI não configurada.');
+  const systemPrompt = `Você é um parser de cardápios. Recebe texto bruto (ou JSON) e deve devolver JSON estruturado com categorias, itens, variações, complementos e imagens. Responda APENAS JSON.`;
+  const userPrompt = `Aqui está o texto bruto extraído de um cardápio:\n\n${raw.slice(0, 120000)}\n\nGere um JSON no formato:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [{"nome":"P","preco":10.00}],\n          "complementos":[{"nome":"Bacon","preco":5.00}],\n          "imagens":["https://..."]\n        }\n      ]\n    }\n  ]\n}\nRegras: mantenha nomes exatos dos itens, extraia preços reais, não invente categorias nem itens que não existam no texto.`;
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      temperature: 0.1,
+      max_tokens: 4000,
+      response_format: { type: 'json_object' }
+    })
+  });
+  if (!resp.ok) { const err = await resp.text(); throw new Error(`Erro IA: ${err}`); }
+  const data = await resp.json();
+  const parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || '{}').trim());
+  const categorias = Array.isArray(parsed?.categorias) ? parsed.categorias : [];
+  const sizeRegex = /^(P|M|G|GG|Pequeno|Médio|Grande|Gigante|\d{2,3}\s?(?:cm|ml))$/i;
+  const toInternal = categorias.map((c: any) => {
+    const name = String(c?.nome || '').trim() || 'Geral';
+    const items = Array.isArray(c?.itens) ? c.itens : [];
+    const mappedItems = items.map((it: any) => {
+      const nm = String(it?.nome || '').trim();
+      const desc = String(it?.descricao || '').trim();
+      const price = Number(it?.preco || 0);
+      const imgs = Array.isArray(it?.imagens) ? it.imagens : [];
+      const image_url = (imgs.find((u: any) => typeof u === 'string' && u.startsWith('http')) || null);
+      const variacoes = Array.isArray(it?.variacoes) ? it.variacoes : [];
+      const complementos = Array.isArray(it?.complementos) ? it.complementos : [];
+      const price_variants = variacoes
+        .map((vv: any) => ({ name: String(vv?.nome || '').trim(), price: Number(vv?.preco || 0) }))
+        .filter((vv: any) => vv.name && vv.price > 0 && sizeRegex.test(vv.name));
+      const other_variations = variacoes
+        .map((vv: any) => ({ name: String(vv?.nome || '').trim(), price: Math.max(0, Number(vv?.preco || 0)) }))
+        .filter((vv: any) => vv.name && !sizeRegex.test(vv.name));
+      const variationsGroups: any[] = [];
+      if (other_variations.length > 0) variationsGroups.push({ name: 'Variações', required: false, max_selections: 1, options: other_variations });
+      if (complementos.length > 0) {
+        const opts = complementos
+          .map((v: any) => ({ name: String(v?.nome || '').trim(), price: Math.max(0, Number(v?.preco || 0)) }))
+          .filter((o: any) => o.name);
+        if (opts.length > 0) variationsGroups.push({ name: 'Complementos', required: false, max_selections: 1, options: opts });
+      }
+      const effectivePrice = price > 0 ? price : (price_variants.length > 0 ? Math.min(...price_variants.map(v => v.price)) : 0);
+      return { name: nm, description: desc, price: effectivePrice, image_url, price_variants, variations: variationsGroups };
+    }).filter((p: any) => p.name && p.price > 0);
+    return { name, items: mappedItems };
+  }).filter((cat: any) => cat.items && cat.items.length > 0);
+  return toInternal;
 }
