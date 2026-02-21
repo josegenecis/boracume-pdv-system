@@ -311,21 +311,108 @@ Deno.serve(async (req: Request) => {
                 );
             }
 
-            // Lógica de extração
+            // Lógica de extração (suporta Web Scraper com pageFunctionResult)
+            let extractedCategories: any[] = [];
             let menuItems: any[] = [];
-            
-            if (items[0].menu && Array.isArray(items[0].menu)) {
-                menuItems = items[0].menu;
-            } else if (items[0].categories && Array.isArray(items[0].categories)) {
-                for (const cat of items[0].categories) {
-                    if (cat.items && Array.isArray(cat.items)) {
-                        menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
-                    }
+            if (Array.isArray(items) && items[0]?.pageFunctionResult?.categories) {
+                for (const it of items) {
+                    const cats = it?.pageFunctionResult?.categories;
+                    if (Array.isArray(cats)) extractedCategories.push(...cats);
                 }
-            } else {
-                menuItems = items;
+            }
+            if (extractedCategories.length === 0) {
+                if (items[0]?.menu && Array.isArray(items[0].menu)) {
+                    menuItems = items[0].menu;
+                } else if (items[0]?.categories && Array.isArray(items[0].categories)) {
+                    for (const cat of items[0].categories) {
+                        if (cat.items && Array.isArray(cat.items)) {
+                            menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
+                        }
+                    }
+                } else {
+                    menuItems = items;
+                }
             }
 
+            // Caminho 1: categorias já estruturadas pelo pageFunction
+            if (extractedCategories.length > 0) {
+                 const consolidated = consolidateVariantsAndCategories(extractedCategories);
+                 
+                 // IA pós-processamento apenas quando necessário
+                 let aiStructured: any[] = [];
+                 try {
+                   const totalItemsHeuristic = consolidated.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
+                   if (consolidated.length === 1 || totalItemsHeuristic >= 30) {
+                     const rawText = JSON.stringify(extractedCategories).slice(0, 150000);
+                     aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                   }
+                 } catch (e) {
+                   console.warn('[Check] IA estruturadora (categorias) falhou, usando consolidação heurística.', e);
+                 }
+                 
+                 if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+                     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+                     try {
+                       const { data: buckets } = await supabase.storage.listBuckets();
+                       const exists = Array.isArray(buckets) && buckets.some((b: any) => b.name === 'product-images');
+                       if (!exists) {
+                         await supabase.storage.createBucket('product-images', { public: true, fileSizeLimit: 10485760 });
+                       }
+                     } catch {}
+ 
+                     const uploadImage = async (url: string) => {
+                         try {
+                             if (!url || !url.startsWith('http')) return null;
+                             const resp = await fetch(url);
+                             if (!resp.ok) return null;
+                             const blob = await resp.blob();
+                             const ext = blob.type.split('/')[1] || 'jpg';
+                             const filename = `${crypto.randomUUID()}.${ext}`;
+                             
+                             const { error: uploadError } = await supabase.storage
+                                .from('product-images')
+                                .upload(filename, blob, { contentType: blob.type, upsert: false });
+                             
+                             if (uploadError) {
+                                 console.warn(`[Check] Erro upload: ${uploadError.message}`);
+                                 return null;
+                             }
+                             
+                             const { data: { publicUrl } } = supabase.storage
+                                .from('product-images')
+                                .getPublicUrl(filename);
+                                
+                             return publicUrl;
+                         } catch (e) {
+                             console.warn(`[Check] Erro fetch imagem: ${e}`);
+                             return null;
+                         }
+                     };
+                     
+                     let rehostBudget = 40;
+                     const catsForImages = (aiStructured.length > 0 ? aiStructured : consolidated);
+                     for (const cat of catsForImages) {
+                       if (!cat.items || rehostBudget <= 0) continue;
+                       const itemsWithImages = (cat.items || []).filter((i: any) => i.image_url && i.image_url.startsWith('http'));
+                       for (const item of itemsWithImages) {
+                         if (rehostBudget <= 0) break;
+                         const newUrl = await uploadImage(item.image_url);
+                         if (newUrl) item.image_url = newUrl;
+                         rehostBudget--;
+                       }
+                     }
+                 }
+                 
+                 const finalCats = aiStructured.length > 0 ? aiStructured : consolidated;
+                 if (finalCats.length > 0) {
+                      return new Response(
+                        JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
+                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                    );
+                 }
+            }
+            
+            // Caminho 2: itens avulsos (fallback)
             if (menuItems.length > 0) {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
                  const consolidated = consolidateVariantsAndCategories(mappedCategories);
