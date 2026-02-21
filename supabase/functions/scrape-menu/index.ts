@@ -228,6 +228,7 @@ Deno.serve(async (req: Request) => {
 
             if (menuItems.length > 0) {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
+                 const consolidated = consolidateVariantsAndCategories(mappedCategories);
                  
                  const totalItems = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
                  const withDesc = mappedCategories.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.filter((i: any) => String(i.description || '').trim()).length : 0), 0);
@@ -282,9 +283,11 @@ Deno.serve(async (req: Request) => {
 
                      // Processar categorias em paralelo
                      await Promise.all(mappedCategories.map(async (cat: any) => {
+                        // usar categorias consolidadas se existirem
+                        const useCat = consolidated.find((cc: any) => cc.name === cat.name) || cat;
                          if (cat.items) {
                              // Processar itens em paralelo (limitado a 5 por vez por categoria para não estourar)
-                             const itemsWithImages = cat.items.filter((i: any) => i.image_url);
+                             const itemsWithImages = (useCat.items || cat.items).filter((i: any) => i.image_url);
                              for (const item of itemsWithImages) {
                                  // Tentar re-hospedar
                                  const newUrl = await uploadImage(item.image_url);
@@ -300,9 +303,10 @@ Deno.serve(async (req: Request) => {
                      }));
                  }
 
-                 if (mappedCategories.length > 0) {
+                 const finalCats = consolidated.length > 0 ? consolidated : mappedCategories;
+                 if (finalCats.length > 0) {
                       return new Response(
-                        JSON.stringify({ success: true, status: 'completed', categories: mappedCategories }),
+                        JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
                         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                     );
                  }
@@ -506,4 +510,70 @@ function validateAndSanitizeThirdParty(html: string, categories: any[]): any[] {
   } catch {
     return [];
   }
+}
+
+function consolidateVariantsAndCategories(categories: any[]): any[] {
+  const sizeRegex = /\((\d{2,3}\s?(?:cm|ml))\)$/i;
+  const tailSizeRegex = /\b(P|M|G|GG|Pequeno|Médio|Grande|Gigante)\b$/i;
+  const keywords = [
+    { name: 'Linha Premium', test: (n: string) => /premium/i.test(n) },
+    { name: 'Linha Basic', test: (n: string) => /basic/i.test(n) },
+    { name: 'Doces', test: (n: string) => /doce|chocolate|brigadeiro|sobremesa/i.test(n) },
+    { name: 'Bebidas', test: (n: string) => /bebida|refrigerante|suco|água|coca|guaraná/i.test(n) }
+  ];
+  const normalizeName = (n: string) => n.replace(sizeRegex, '').replace(tailSizeRegex, '').trim();
+  const extractSize = (n: string) => {
+    const m1 = n.match(sizeRegex);
+    if (m1) return m1[1].toUpperCase();
+    const m2 = n.match(tailSizeRegex);
+    if (m2) return m2[1].toUpperCase();
+    return null;
+  };
+  let out: any[] = [];
+  for (const cat of categories || []) {
+    const groups: Record<string, any[]> = {};
+    for (const it of (cat.items || [])) {
+      const base = normalizeName(String(it?.name || ''));
+      if (!base) continue;
+      if (!groups[base]) groups[base] = [];
+      groups[base].push(it);
+    }
+    const consolidatedItems: any[] = [];
+    for (const [base, arr] of Object.entries(groups)) {
+      if ((arr as any[]).length <= 1) {
+        consolidatedItems.push(arr[0]);
+      } else {
+        const priceVariants = (arr as any[]).map((p: any) => ({
+          name: extractSize(String(p?.name || '')) || String(p?.name || '').trim(),
+          price: Number(p?.price || 0)
+        })).filter(v => v.name && v.price > 0);
+        const best = (arr as any[]).sort((a, b) => (String(b?.description || '').length) - (String(a?.description || '').length))[0];
+        consolidatedItems.push({
+          name: base,
+          description: best?.description || '',
+          image_url: best?.image_url || null,
+          price: Math.min(...priceVariants.map(v => v.price)),
+          price_variants: priceVariants
+        });
+      }
+    }
+    out.push({ name: cat.name || 'Geral', items: consolidatedItems });
+  }
+  // Se só há uma categoria e muitos itens, tentar dividir por keywords
+  if (out.length === 1 && Array.isArray(out[0].items) && out[0].items.length > 10) {
+    const buckets: Record<string, any[]> = {};
+    for (const k of keywords) buckets[k.name] = [];
+    buckets['Outros'] = [];
+    for (const it of out[0].items) {
+      const n = String(it?.name || '');
+      const hit = keywords.find(k => k.test(n));
+      if (hit) buckets[hit.name].push(it); else buckets['Outros'].push(it);
+    }
+    const rebuilt: any[] = [];
+    for (const [name, items] of Object.entries(buckets)) {
+      if (items.length > 0) rebuilt.push({ name, items });
+    }
+    if (rebuilt.length > 1) return rebuilt;
+  }
+  return out;
 }
