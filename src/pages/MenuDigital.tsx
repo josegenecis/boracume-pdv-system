@@ -78,7 +78,7 @@ const MenuDigital = () => {
     deliveryZones, 
     isLoading: menuLoading,
     error: menuError 
-  } = useMenuData({ userId: finalUserId });
+  } = useMenuData({ userId: finalUserId, enableCache: false });
 
   // Pré-carregar imagens dos destaques para exibição instantânea
   useEffect(() => {

@@ -110,36 +110,41 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
     let mounted = true;
 
     async function fetchData() {
-      // 1. Verificar cache primeiro (Instantâneo)
+      // 1. Verificar cache primeiro (Instantâneo) — apenas se habilitado
       const cacheKey = `menu_data_${userId}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        try {
-          const { timestamp, data } = JSON.parse(cachedData);
-          // Cache válido por 15 minutos (aumentado para melhor UX)
-          if (Date.now() - timestamp < 15 * 60 * 1000) {
-            console.log('📦 Usando dados do cache local');
-            if (mounted) {
-              const highlightsData = (data.products || [])
-              .filter((p: any) => p.is_highlight)
-              .sort((a: any, b: any) => (b.order_count || 0) - (a.order_count || 0))
-              .slice(0, 6);
+      if (enableCache) {
+        const cachedData = localStorage.getItem(cacheKey);
+        
+        if (cachedData) {
+          try {
+            const { timestamp, data } = JSON.parse(cachedData);
+            // Cache válido por 15 minutos (aumentado para melhor UX)
+            if (Date.now() - timestamp < 15 * 60 * 1000) {
+              console.log('📦 Usando dados do cache local');
+              if (mounted) {
+                const highlightsData = (data.products || [])
+                .filter((p: any) => p.is_highlight)
+                .sort((a: any, b: any) => (b.order_count || 0) - (a.order_count || 0))
+                .slice(0, 6);
 
-              setData({
-                products: data.products || [],
-                categories: data.categories || [],
-                profile: data.profile,
-                deliveryZones: data.deliveryZones || [],
-                highlights: highlightsData || [],
-                isLoading: false,
-                error: null
-              });
+                setData({
+                  products: data.products || [],
+                  categories: data.categories || [],
+                  profile: data.profile,
+                  deliveryZones: data.deliveryZones || [],
+                  highlights: highlightsData || [],
+                  isLoading: false,
+                  error: null
+                });
+              }
             }
+          } catch (e) {
+            console.warn('Erro ao ler cache', e);
           }
-        } catch (e) {
-          console.warn('Erro ao ler cache', e);
         }
+      } else {
+        // Bust cache quando explicitamente desabilitado (Safari pode manter estado)
+        localStorage.removeItem(cacheKey);
       }
 
       // 2. Buscar dados atualizados diretamente do Supabase (Mais rápido que Edge Function fria)
@@ -172,6 +177,7 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
             `)
             .eq('user_id', userId)
             .eq('is_available', true)
+            .eq('show_in_delivery', true)
             .order('name', { ascending: true }),
           // Buscar zonas de entrega
           supabase
@@ -189,8 +195,17 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
         if (productsError) throw productsError;
         if (deliveryZonesError) throw deliveryZonesError;
 
-        // Processar dados
-        const processedProducts = (productsData || []) as any[];
+        // Se não trouxe nada (Safari/ITP pode afetar cache), tentar consulta simplificada sem JOIN
+        let processedProducts = (productsData || []) as any[];
+        if ((!processedProducts || processedProducts.length === 0)) {
+          const { data: fallbackProducts } = await (supabase.from('products') as any)
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_available', true)
+            .eq('show_in_delivery', true)
+            .order('name', { ascending: true });
+          processedProducts = (fallbackProducts || []) as any[];
+        }
         const highlights = processedProducts
           .filter(p => p.is_highlight)
           .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))
@@ -219,16 +234,18 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
 
         if(mounted) {
           setData(menuData);
-          // Atualizar cache com dados frescos
-          localStorage.setItem(cacheKey, JSON.stringify({
-            timestamp: Date.now(),
-            data: { 
-              products: processedProducts,
-              categories: categoriesData,
-              profile: fallbackProfile,
-              deliveryZones: deliveryZonesData
-             }
-          }));
+          // Atualizar cache com dados frescos — apenas se habilitado
+          if (enableCache) {
+            localStorage.setItem(cacheKey, JSON.stringify({
+              timestamp: Date.now(),
+              data: { 
+                products: processedProducts,
+                categories: categoriesData,
+                profile: fallbackProfile,
+                deliveryZones: deliveryZonesData
+               }
+            }));
+          }
         }
 
       } catch (err) {

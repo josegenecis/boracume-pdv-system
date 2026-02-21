@@ -189,9 +189,14 @@ Deno.serve(async (req) => {
                  // RE-HOSTING LOGIC
                  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
                      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-                     console.log('[Check] Re-hospedando imagens no Supabase Storage...');
-                     
-                     // Helper para upload
+                     try {
+                       const { data: buckets } = await supabase.storage.listBuckets();
+                       const exists = Array.isArray(buckets) && buckets.some((b: any) => b.name === 'product-images');
+                       if (!exists) {
+                         await supabase.storage.createBucket('product-images', { public: true, fileSizeLimit: 10485760 });
+                       }
+                     } catch {}
+ 
                      const uploadImage = async (url: string) => {
                          try {
                              if (!url || !url.startsWith('http')) return null;
@@ -338,7 +343,39 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
 async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-    const systemPrompt = `Você é um especialista em estruturar cardápios. Extraia produtos, preços e VARIAÇÕES. SAÍDA JSON: { "categories": [ { "name": "Nome", "items": [ { "name": "Produto", "price": 0.00, "variants": [] } ] } ] }`;
+    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
+Extraia produtos com nome, descrição, imagem (se houver) e preço base.
+Extraia VARIANTES DE PREÇO (tamanhos com preços finais) e VARIAÇÕES/ADICIONAIS em grupos.
+Regras:
+- "price" deve ser o menor preço do item ou o preço base.
+- "price_variants" lista tamanhos com preço final.
+- "variations" são grupos com opções e acréscimos.
+- Se não houver imagem confiável, use null.
+Saída:
+{
+  "categories": [
+    {
+      "name": "Categoria",
+      "items": [
+        {
+          "name": "Produto",
+          "description": "Descrição",
+          "image_url": "https://..." | null,
+          "price": 0.00,
+          "price_variants": [ { "name": "P", "price": 10.00 } ],
+          "variations": [
+            {
+              "name": "Adicionais",
+              "required": false,
+              "max_selections": 1,
+              "options": [ { "name": "Bacon", "price": 5.00 } ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`;
     const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio:\n\n${content.slice(0, 50000)}` }
