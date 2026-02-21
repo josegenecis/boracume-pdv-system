@@ -135,6 +135,7 @@ Deno.serve(async (req: Request) => {
               async function pageFunction(context) {
                 const { jQuery, request } = context;
                 const $ = jQuery;
+                const isCw = /cardapioweb\\.com/i.test(request.url || '');
                 function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
                 function priceOf(el){
                   const txt = norm($(el).text());
@@ -151,11 +152,13 @@ Deno.serve(async (req: Request) => {
                 }
                 function parseVariations(container){
                   const groups = [];
-                  const groupSel = '.add-ons, .addons, .options-group, .variations, .complements, [class*=adicionais], [class*=acompanha], [class*=opcoes]';
+                  const groupSel = isCw 
+                    ? '.complementos, .complements, .adicionais, .options-group, [class*=adicionais], [class*=complement], [class*=opcao]'
+                    : '.add-ons, .addons, .options-group, .variations, .complements, [class*=adicionais], [class*=acompanha], [class*=opcoes]';
                   $(container).find(groupSel).each((i, g) => {
-                    const name = norm($(g).find('h4, h3, .group-title, .title').first().text()) || 'Adicionais';
+                    const name = norm($(g).find('h4, h3, .group-title, .title, .nome, .name').first().text()) || 'Adicionais';
                     const options = [];
-                    $(g).find('label, .option, .item, .checkbox, .radio').each((j, o) => {
+                    $(g).find('label, .option, .item, .checkbox, .radio, [class*=opcao]').each((j, o) => {
                       const nm = norm($(o).text());
                       const pr = priceOf(o);
                       if(nm) options.push({ name: nm, price: Math.max(0, pr) });
@@ -166,10 +169,18 @@ Deno.serve(async (req: Request) => {
                 }
                 function collectProducts(container){
                   const items = [];
-                  const itemSel = '.product, .item, .menu-item, .card, .card-product, [class*=produto], [class*=item]';
+                  const itemSel = isCw 
+                    ? '.menu-item, .product-card, .produto, [class*=produto], [data-item]'
+                    : '.product, .item, .menu-item, .card, .card-product, [class*=produto], [class*=item]';
+                  const nameSel = isCw 
+                    ? '.item-name, .product-name, .name, .titulo, h3, h2'
+                    : 'h1, h2, h3, .title, .name, [class*=nome]';
+                  const descSel = isCw 
+                    ? '.item-desc, .product-desc, .description, .descricao, [class*=descri]'
+                    : '.description, .desc, [class*=descri]';
                   $(container).find(itemSel).each((i, el) => {
-                    const name = norm($(el).find('h1, h2, h3, .title, .name, [class*=nome]').first().text());
-                    const desc = norm($(el).find('.description, .desc, [class*=descri]').first().text());
+                    const name = norm($(el).find(nameSel).first().text());
+                    const desc = norm($(el).find(descSel).first().text());
                     const price = priceOf(el);
                     const img = imgOf(el);
                     const variations = parseVariations(el);
@@ -179,7 +190,9 @@ Deno.serve(async (req: Request) => {
                   });
                   return items;
                 }
-                const anchorSel = 'h1, h2, h3, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [class*=category], [class*=secao]';
+                const anchorSel = isCw 
+                  ? '.menu-section h2, .menu-section .title, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [data-section=category]'
+                  : 'h1, h2, h3, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [class*=category], [class*=secao]';
                 const anchors = $(anchorSel).filter(function(){ return norm($(this).text()).length>0; }).toArray();
                 const categories = [];
                 for(let i=0;i<anchors.length;i++){
