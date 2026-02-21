@@ -27,26 +27,14 @@ export const invokeEdgeFunction = async (
     if (error) {
        console.error('[EdgeFunction] Supabase Client Error:', error);
        
-       // Handle AbortError (Timeout)
        if (error.name === 'AbortError' || (error instanceof Error && error.message.includes('aborted'))) {
            throw new Error('A requisição demorou muito e foi cancelada (Timeout 120s).');
        }
-
-       // Se o erro for de conexão/network, throw para cair no catch do componente e mostrar "Erro de Rede"
        if (error instanceof TypeError && error.message === 'Failed to fetch') {
           throw error;
        }
        
-       // Se for erro da função (500), retornamos o erro estruturado
-       // Tenta extrair JSON do erro se possível
-       let errorData = { error: error.message || error };
-       try {
-           if (typeof error === 'string') {
-               const parsed = JSON.parse(error);
-               errorData = parsed;
-           }
-       } catch {}
-
+       const errorData = { error: typeof error === 'string' ? error : (error.message || 'Erro desconhecido') };
        return { data: errorData, status: 500 };
     }
 
