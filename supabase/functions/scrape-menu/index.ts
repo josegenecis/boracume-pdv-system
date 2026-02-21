@@ -409,7 +409,7 @@ function mapApifyItemsToCategories(items: any[]): any[] {
 
 async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
     if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes.
+    const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes. Sempre responda em json.
 Extraia produtos com nome, descrição, imagem (se houver) e preço base.
 Extraia VARIANTES DE PREÇO (tamanhos com preços finais) e VARIAÇÕES/ADICIONAIS em grupos.
 Regras:
@@ -417,7 +417,7 @@ Regras:
 - "price_variants" lista tamanhos com preço final.
 - "variations" são grupos com opções e acréscimos.
 - Se não houver imagem confiável, use null.
-Saída:
+Saída json:
 {
   "categories": [
     {
@@ -444,17 +444,21 @@ Saída:
 }`;
     const messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio:\n\n${content.slice(0, 50000)}` }
+        { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio e retorne um json." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio a partir do HTML e retorne um json válido:\n\n${content.slice(0, 50000)}` }
     ];
-    const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o-mini', messages: messages, temperature: 0.1, max_tokens: 4000, response_format: { type: "json_object" } })
-    });
-    if (!aiResp.ok) { const err = await aiResp.text(); throw new Error(`Erro IA: ${err}`); }
-    const aiData = await aiResp.json();
-    const parsed = JSON.parse(aiData.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
-    return new Response(JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    try {
+      const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-4o-mini', messages: messages, temperature: 0.1, max_tokens: 4000, response_format: { type: "json_object" } })
+      });
+      if (!aiResp.ok) { const err = await aiResp.text(); throw new Error(`Erro IA: ${err}`); }
+      const aiData = await aiResp.json();
+      const parsed = JSON.parse(aiData.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
+      return new Response(JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ success: false, status: 'failed', error: e?.message || String(e) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
 }
 
 function parseThirdPartyMenu(html: string): any[] {
