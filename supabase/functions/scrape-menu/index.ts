@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
                 if (storeId) {
                     console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
                     
-                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=1`;
+                    const runUrl = `https://api.apify.com/v2/acts/priscilas~ifood-menu-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
                     
                     const inputPayload = {
                         "store_ids": [storeId],
@@ -130,7 +130,7 @@ Deno.serve(async (req: Request) => {
               throw new Error('APIFY_TOKEN não configurado.');
             }
             console.log(`[Start] Iniciando Apify Web Scraper (terceiros)...`);
-            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=1`;
+            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const pageFunction = `
               async function pageFunction(context) {
                 const { jQuery, request } = context;
@@ -317,11 +317,14 @@ Deno.serve(async (req: Request) => {
                  const mappedCategories = mapApifyItemsToCategories(menuItems);
                  const consolidated = consolidateVariantsAndCategories(mappedCategories);
                  
-                 // IA pós-processamento para estruturar categorias/complementos/variações
+                 // IA pós-processamento apenas quando necessário (evita custo e demora)
                  let aiStructured: any[] = [];
                  try {
-                   const rawText = JSON.stringify(menuItems).slice(0, 200000);
-                   aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                   const totalItemsHeuristic = consolidated.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
+                   if (consolidated.length === 1 || totalItemsHeuristic >= 30) {
+                     const rawText = JSON.stringify(menuItems).slice(0, 150000);
+                     aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                   }
                  } catch (e) {
                    console.warn('[Check] IA estruturadora falhou, usando consolidação heurística.', e);
                  }
@@ -377,25 +380,25 @@ Deno.serve(async (req: Request) => {
                          }
                      };
 
-                     // Processar categorias em paralelo
+                     // Re-hosting: apenas quando necessário e com orçamento para evitar lentidão
+                     const shouldRehost = (u: string) => {
+                       try {
+                         const host = new URL(u).host;
+                         return !/(cardapioweb|cdn|cloudfront|googleusercontent|static|img\.|images\.)/i.test(host);
+                       } catch { return false; }
+                     };
+                     let rehostBudget = 40;
                      const catsForImages = (aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories));
-                     await Promise.all(catsForImages.map(async (cat: any) => {
-                         if (cat.items) {
-                             // Processar itens em paralelo (limitado a 5 por vez por categoria para não estourar)
-                             const itemsWithImages = (cat.items || []).filter((i: any) => i.image_url);
-                             for (const item of itemsWithImages) {
-                                 // Tentar re-hospedar
-                                 const newUrl = await uploadImage(item.image_url);
-                                 if (newUrl) {
-                                     item.image_url = newUrl;
-                                 } else {
-                                     // Se falhar, manter original (o frontend tem fallback)
-                                     // Ou setar null se quisermos ser estritos? Melhor manter.
-                                     console.log(`[Check] Falha ao re-hospedar ${item.image_url}, mantendo original.`);
-                                 }
-                             }
-                         }
-                     }));
+                     for (const cat of catsForImages) {
+                       if (!cat.items || rehostBudget <= 0) continue;
+                       const itemsWithImages = (cat.items || []).filter((i: any) => i.image_url && shouldRehost(i.image_url));
+                       for (const item of itemsWithImages) {
+                         if (rehostBudget <= 0) break;
+                         const newUrl = await uploadImage(item.image_url);
+                         if (newUrl) item.image_url = newUrl;
+                         rehostBudget--;
+                       }
+                     }
                  }
 
                  const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
