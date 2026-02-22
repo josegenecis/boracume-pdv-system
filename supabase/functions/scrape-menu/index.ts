@@ -129,101 +129,12 @@ Deno.serve(async (req: Request) => {
             if (!APIFY_TOKEN) {
               throw new Error('APIFY_TOKEN não configurado.');
             }
-            console.log(`[Start] Iniciando Apify Web Scraper (terceiros)...`);
-            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
-            const pageFunction = `
-              async function pageFunction(context) {
-                const { jQuery, request } = context;
-                const $ = jQuery;
-                const isCw = /cardapioweb\\.com/i.test(request.url || '');
-                function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
-                function priceOf(el){
-                  const txt = norm($(el).text());
-                  const m = txt.match(/R\\$\\s?\\d{1,3}(?:\\.\\d{3})*(?:,\\d{2})/);
-                  if(!m) return 0;
-                  try{ return Number(m[0].replace('R$','').replace(/\\./g,'').replace(',','.').trim()); }catch{ return 0; }
-                }
-                function imgOf(el){
-                  let src = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
-                  src = norm(src);
-                  if(src && src.startsWith('//')) src = 'https:' + src;
-                  if(src && src.startsWith('http')) return src;
-                  return null;
-                }
-                function parseVariations(container){
-                  const groups = [];
-                  const groupSel = isCw 
-                    ? '.complementos, .complements, .adicionais, .options-group, [class*=adicionais], [class*=complement], [class*=opcao]'
-                    : '.add-ons, .addons, .options-group, .variations, .complements, [class*=adicionais], [class*=acompanha], [class*=opcoes]';
-                  $(container).find(groupSel).each((i, g) => {
-                    const name = norm($(g).find('h4, h3, .group-title, .title, .nome, .name').first().text()) || 'Adicionais';
-                    const options = [];
-                    $(g).find('label, .option, .item, .checkbox, .radio, [class*=opcao]').each((j, o) => {
-                      const nm = norm($(o).text());
-                      const pr = priceOf(o);
-                      if(nm) options.push({ name: nm, price: Math.max(0, pr) });
-                    });
-                    if(options.length>0) groups.push({ name, required: false, max_selections: 1, options });
-                  });
-                  return groups;
-                }
-                function collectProducts(container){
-                  const items = [];
-                  const itemSel = isCw 
-                    ? '.menu-item, .product-card, .produto, [class*=produto], [data-item]'
-                    : '.product, .item, .menu-item, .card, .card-product, [class*=produto], [class*=item]';
-                  const nameSel = isCw 
-                    ? '.item-name, .product-name, .name, .titulo, h3, h2'
-                    : 'h1, h2, h3, .title, .name, [class*=nome]';
-                  const descSel = isCw 
-                    ? '.item-desc, .product-desc, .description, .descricao, [class*=descri]'
-                    : '.description, .desc, [class*=descri]';
-                  $(container).find(itemSel).each((i, el) => {
-                    const name = norm($(el).find(nameSel).first().text());
-                    const desc = norm($(el).find(descSel).first().text());
-                    const price = priceOf(el);
-                    const img = imgOf(el);
-                    const variations = parseVariations(el);
-                    if(name && price>0){
-                      items.push({ name, description: desc || '', price, image_url: img, variations });
-                    }
-                  });
-                  return items;
-                }
-                const anchorSel = isCw 
-                  ? '.menu-section h2, .menu-section .title, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [data-section=category]'
-                  : 'h1, h2, h3, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [class*=category], [class*=secao]';
-                const anchors = $(anchorSel).filter(function(){ return norm($(this).text()).length>0; }).toArray();
-                const categories = [];
-                for(let i=0;i<anchors.length;i++){
-                  const h = anchors[i];
-                  const name = norm($(h).text());
-                  if(!name) continue;
-                  const section = $(h).nextUntil(anchorSel);
-                  let items = collectProducts(section.length ? section : $(h).parent());
-                  if(items.length===0) items = collectProducts($(h).parent());
-                  if(items.length>0) categories.push({ name, items });
-                }
-                if(categories.length===0){
-                  const items = collectProducts('body');
-                  if(items.length>0) categories.push({ name: 'Geral', items });
-                }
-                const merged = {};
-                for(const c of categories){
-                  const key = c.name;
-                  if(!merged[key]) merged[key] = [];
-                  merged[key] = merged[key].concat(c.items);
-                }
-                const out = Object.entries(merged).map(([name, items]) => ({ name, items }));
-                return { categories: out };
-              }
-            `;
+            console.log(`[Start] Iniciando Apify Website Content Crawler (universal)...`);
+            const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const inputPayload = {
               startUrls: [{ url: rawUrl }],
-              maxRequestsPerCrawl: 10,
-              proxyConfiguration: { useApifyProxy: true },
-              pageFunction,
-              linkSelector: 'a[href*=\"produto\"], a[href*=\"product\"], .product a, .item a'
+              maxCrawlPages: 30,
+              proxyConfiguration: { useApifyProxy: true }
             };
             const startResp = await fetch(runUrl, {
               method: 'POST',
@@ -232,40 +143,10 @@ Deno.serve(async (req: Request) => {
             });
             if (!startResp.ok) {
               const errText = await startResp.text();
-              console.error(`[Start] Erro Web Scraper: ${startResp.status} - ${errText}`);
-              throw new Error(`Erro ao iniciar Web Scraper: ${startResp.status}`);
+              console.error(`[Start] Erro Website Content Crawler: ${startResp.status} - ${errText}`);
+              throw new Error(`Erro ao iniciar Website Content Crawler: ${startResp.status}`);
             }
             const startData = await startResp.json();
-            const dsId = startData?.data?.defaultDatasetId;
-            const status = startData?.data?.status;
-            if (status === 'SUCCEEDED' && dsId) {
-              const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${dsId}/items?token=${APIFY_TOKEN}`);
-              const items = await itemsResp.json();
-              let menuItems: any[] = [];
-              if (items[0]?.menu && Array.isArray(items[0].menu)) {
-                menuItems = items[0].menu;
-              } else if (items[0]?.categories && Array.isArray(items[0].categories)) {
-                for (const cat of items[0].categories) {
-                  if (cat.items && Array.isArray(cat.items)) {
-                    menuItems.push(...cat.items.map((i: any) => ({ ...i, category: cat.name })));
-                  }
-                }
-              } else {
-                menuItems = items;
-              }
-              const mappedCategories = mapApifyItemsToCategories(menuItems);
-              const consolidated = consolidateVariantsAndCategories(mappedCategories);
-              let aiStructured: any[] = [];
-              try {
-                const rawText = JSON.stringify(menuItems).slice(0, 200000);
-                aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
-              } catch {}
-              const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
-              return new Response(
-                JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-              );
-            }
             return new Response(
               JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -311,7 +192,16 @@ Deno.serve(async (req: Request) => {
                 );
             }
 
-            // Lógica de extração (suporta Web Scraper com pageFunctionResult)
+            // Lógica de extração (suporta Web Scraper com pageFunctionResult + crawlers de conteúdo)
+            const looksLikeContentCrawl = !!(
+              items?.[0]?.text ||
+              items?.[0]?.markdown ||
+              items?.[0]?.pageContent ||
+              items?.[0]?.content ||
+              items?.[0]?.html ||
+              items?.[0]?.bodyText
+            );
+
             let extractedCategories: any[] = [];
             let menuItems: any[] = [];
             if (Array.isArray(items) && items[0]?.pageFunctionResult?.categories) {
@@ -320,7 +210,7 @@ Deno.serve(async (req: Request) => {
                     if (Array.isArray(cats)) extractedCategories.push(...cats);
                 }
             }
-            if (extractedCategories.length === 0) {
+            if (extractedCategories.length === 0 && !looksLikeContentCrawl) {
                 if (items[0]?.menu && Array.isArray(items[0].menu)) {
                     menuItems = items[0].menu;
                 } else if (items[0]?.categories && Array.isArray(items[0].categories)) {
@@ -409,6 +299,29 @@ Deno.serve(async (req: Request) => {
                         JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
                         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                     );
+                 }
+            }
+
+            // Caminho 1.5: crawler de conteúdo (texto/markdown/html) + IA estruturadora universal
+            if (looksLikeContentCrawl) {
+                 const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
+                 if (text) {
+                   let aiStructured: any[] = [];
+                   try {
+                     const rawForAi =
+                       `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
+                       `${imageUrls.slice(0, 200).join('\n')}\n\n` +
+                       `TEXTO EXTRAÍDO:\n${text}`;
+                     aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                   } catch (e) {
+                     console.warn('[Check] IA estruturadora (crawler conteúdo) falhou.', e);
+                   }
+                   if (aiStructured.length > 0) {
+                      return new Response(
+                        JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
+                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                      );
+                   }
                  }
             }
             
@@ -827,4 +740,52 @@ async function aiStructurize(raw: string, apiKey: string | undefined): Promise<a
     return { name, items: mappedItems };
   }).filter((cat: any) => cat.items && cat.items.length > 0);
   return toInternal;
+}
+
+function extractTextAndImagesFromApifyItems(items: any[]): { text: string; imageUrls: string[] } {
+  const parts: string[] = [];
+  const images = new Set<string>();
+  const pushImages = (value: any) => {
+    if (!value) return;
+    if (typeof value === 'string') {
+      if (/^https?:\/\//i.test(value) && /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(value)) images.add(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const v of value) pushImages(v);
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const k of ['url', 'src', 'href', 'image', 'imageUrl', 'image_url', 'thumbnail', 'photo', 'picture']) {
+        const v = (value as any)[k];
+        if (typeof v === 'string') pushImages(v);
+      }
+      for (const k of ['images', 'imageUrls', 'image_urls', 'photos', 'thumbnails']) {
+        const v = (value as any)[k];
+        if (Array.isArray(v)) pushImages(v);
+      }
+    }
+  };
+
+  for (const it of items || []) {
+    const url = String((it as any)?.url || (it as any)?.pageUrl || (it as any)?.page_url || '').trim();
+    const title = String((it as any)?.title || (it as any)?.pageTitle || '').trim();
+    const textCandidate =
+      (it as any)?.text ||
+      (it as any)?.markdown ||
+      (it as any)?.content ||
+      (it as any)?.pageContent ||
+      (it as any)?.bodyText ||
+      '';
+    const chunk = typeof textCandidate === 'string' ? textCandidate : JSON.stringify(textCandidate || it).slice(0, 6000);
+    pushImages(it);
+    if (chunk && chunk.trim()) {
+      parts.push(`${url ? `URL: ${url}\n` : ''}${title ? `TÍTULO: ${title}\n` : ''}${chunk}`);
+      const matches = chunk.match(/https?:\/\/[^\s"'<>]+/g) || [];
+      for (const m of matches) pushImages(m);
+    }
+  }
+
+  const text = parts.join('\n\n---\n\n').slice(0, 160000);
+  return { text, imageUrls: Array.from(images).slice(0, 400) };
 }
