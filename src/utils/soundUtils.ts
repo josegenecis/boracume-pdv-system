@@ -37,7 +37,7 @@ export class SoundNotifications {
     this.audioFiles.clear();
     
     const sounds = [
-      { name: 'bell', path: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3' }, // Som estilo "Ding Dong" similar a apps de delivery
+      { name: 'bell', path: '/sounds/bell.mp3' },
       { name: 'chime', path: '/sounds/chime.mp3' },
       { name: 'notification', path: '/sounds/notification.mp3' },
       { name: 'ding', path: '/sounds/ding.mp3' }
