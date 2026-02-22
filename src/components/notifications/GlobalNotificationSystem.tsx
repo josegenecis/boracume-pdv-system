@@ -52,6 +52,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const volumeRef = useRef(volume);
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
+  const warnedUnlockRef = useRef(false);
 
   useEffect(() => {
     isOnOrdersPageRef.current = isOnOrdersPage;
@@ -68,6 +69,28 @@ const GlobalNotificationSystem: React.FC = () => {
     soundNotifications.setEnabled(soundEnabled);
     soundNotifications.setVolume(volume);
   }, [soundEnabled, soundType, volume]);
+
+  const playOrderSound = async () => {
+    if (!soundEnabledRef.current) return;
+    try {
+      await soundNotifications.playSound(soundTypeRef.current);
+      return;
+    } catch {}
+    try {
+      await soundNotifications.playSound('bell');
+    } catch {}
+    try {
+      if (warnedUnlockRef.current) return;
+      const unlocked = localStorage.getItem('sound_unlocked') === 'true';
+      if (unlocked) return;
+      warnedUnlockRef.current = true;
+      toast({
+        title: 'Som bloqueado',
+        description: 'Clique/toque na tela uma vez para liberar a notificação sonora.',
+        duration: 8000,
+      });
+    } catch {}
+  };
 
   useEffect(() => {
     try {
@@ -167,21 +190,18 @@ const GlobalNotificationSystem: React.FC = () => {
             (newOrder as any).status === 'pending';
           if (!showForInsert) return;
           setPendingOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-          if (!isOnOrdersPageRef.current) {
-            setIsAnimatingOut(false);
-            setIsVisible(true);
-            if (soundEnabledRef.current) {
-              await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-            }
-            if (navigator.vibrate) {
-              navigator.vibrate([200, 100, 200]);
-            }
-            toast({
-              title: "🔔 Novo Pedido Recebido!",
-              description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
-              duration: 5000,
-            });
+          await playOrderSound();
+          if (isOnOrdersPageRef.current) return;
+          setIsAnimatingOut(false);
+          setIsVisible(true);
+          if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200]);
           }
+          toast({
+            title: "🔔 Novo Pedido Recebido!",
+            description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
+            duration: 5000,
+          });
         }
       )
       .on(
@@ -199,21 +219,18 @@ const GlobalNotificationSystem: React.FC = () => {
             || (updatedOrder as any).status === 'pending';
           if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
-            if (!isOnOrdersPageRef.current) {
-              setIsAnimatingOut(false);
-              setIsVisible(true);
-              if (soundEnabledRef.current) {
-                await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-              }
-              if (navigator.vibrate) {
-                navigator.vibrate([200, 100, 200]);
-              }
-              toast({
-                title: "🔔 Novo Pedido Recebido!",
-                description: `Pedido ${updatedOrder.order_number} - ${updatedOrder.customer_name || 'Cliente'}`,
-                duration: 5000,
-              });
+            await playOrderSound();
+            if (isOnOrdersPageRef.current) return;
+            setIsAnimatingOut(false);
+            setIsVisible(true);
+            if (navigator.vibrate) {
+              navigator.vibrate([200, 100, 200]);
             }
+            toast({
+              title: "🔔 Novo Pedido Recebido!",
+              description: `Pedido ${updatedOrder.order_number} - ${updatedOrder.customer_name || 'Cliente'}`,
+              duration: 5000,
+            });
           } else {
             soundNotifications.stopAllSounds();
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
@@ -261,18 +278,16 @@ const GlobalNotificationSystem: React.FC = () => {
       const prev = pendingOrdersRef.current || [];
       const prevIds = new Set(prev.map(o => o.id));
       const newOnes = next.filter(o => !prevIds.has(o.id));
-      if (newOnes.length > 0 && !isOnOrdersPageRef.current) {
-        setIsAnimatingOut(false);
-        setIsVisible(true);
-        if (soundEnabledRef.current) {
-          await soundNotifications.playSound(soundTypeRef.current).catch(() => soundNotifications.playSound('bell'));
-        }
-        toast({
-          title: "🔔 Novo Pedido Recebido!",
-          description: `Você tem ${newOnes.length} novo${newOnes.length > 1 ? 's' : ''} pedido${newOnes.length > 1 ? 's' : ''}.`,
-          duration: 5000,
-        });
-      }
+      if (newOnes.length === 0) return;
+      await playOrderSound();
+      if (isOnOrdersPageRef.current) return;
+      setIsAnimatingOut(false);
+      setIsVisible(true);
+      toast({
+        title: "🔔 Novo Pedido Recebido!",
+        description: `Você tem ${newOnes.length} novo${newOnes.length > 1 ? 's' : ''} pedido${newOnes.length > 1 ? 's' : ''}.`,
+        duration: 5000,
+      });
     }, 8000);
 
     return () => {
@@ -336,7 +351,7 @@ const GlobalNotificationSystem: React.FC = () => {
     if (!order) return;
     try {
       soundNotifications.stopAllSounds();
-      const { data } = await invokeEdgeFunction<any>('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
+      const { data } = await invokeEdgeFunction('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
       if (!data?.ok) throw new Error(data?.error || 'Falha ao aceitar');
       setIsAnimatingOut(true);
       window.setTimeout(() => {
