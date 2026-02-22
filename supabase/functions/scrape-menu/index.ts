@@ -426,10 +426,26 @@ Deno.serve(async (req: Request) => {
                  const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
                  return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
             }
-             
+            
+            // Fallback final (universal): tenta estruturar a partir do JSON bruto do dataset
+            try {
+              const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
+              const rawForAi =
+                `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
+                `${imageUrls.slice(0, 200).join('\n')}\n\n` +
+                `DADOS EXTRAÍDOS (texto/markdown/html/JSON):\n${text || JSON.stringify(items).slice(0, 120000)}`;
+              const aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+              if (Array.isArray(aiStructured) && aiStructured.length > 0) {
+                return new Response(
+                  JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
+              }
+            } catch {}
+
             return new Response(
-                JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível extrair produtos do dataset.' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível extrair produtos do dataset.' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
 
