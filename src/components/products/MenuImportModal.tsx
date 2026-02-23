@@ -153,7 +153,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
-          const MAX_SIZE = 1200; 
+          const MAX_SIZE = 900; 
           let width = img.width;
           let height = img.height;
           
@@ -173,13 +173,23 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
           
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.75);
           resolve(compressedBase64);
         };
         img.onerror = (error) => reject(error);
       };
       reader.onerror = error => reject(error);
     });
+  };
+
+  const invokeScrapeMenuWithRetry = async (body: any, retries = 2) => {
+    let last: { data: any | null; status: number } = { data: null, status: 500 };
+    for (let i = 0; i <= retries; i++) {
+      last = await invokeEdgeFunction('scrape-menu', body);
+      if (last.status === 200) return last;
+      await new Promise<void>(resolve => window.setTimeout(resolve, 600 + i * 600));
+    }
+    return last;
   };
 
   const pollForResults = async (runId: string): Promise<ImportedCategory[]> => {
@@ -357,7 +367,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
            categoriesToImport = data.categories || [];
          } else if (!hasAnyVariantsOrAddons) {
            setLoadingMessage('Procurando variações e adicionais...');
-           const { data, status } = await invokeEdgeFunction('scrape-menu', { 
+           const { data, status } = await invokeScrapeMenuWithRetry({ 
               type: 'image',
               data: optimizedBase64,
               action: 'start'
