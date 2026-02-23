@@ -133,7 +133,17 @@ Deno.serve(async (req: Request) => {
             const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const inputPayload = {
               startUrls: [{ url: rawUrl }],
-              maxCrawlPages: 30,
+              crawlerType: 'playwright:adaptive',
+              maxCrawlDepth: 2,
+              maxCrawlPages: 25,
+              dynamicContentWaitSecs: 6,
+              maxScrollHeightPixels: 5000,
+              removeCookieWarnings: true,
+              blockMedia: true,
+              saveMarkdown: true,
+              saveHtml: false,
+              saveFiles: false,
+              clickElementsCssSelector: '[aria-expanded="false"]',
               proxyConfiguration: { useApifyProxy: true }
             };
             const startResp = await fetch(runUrl, {
@@ -203,7 +213,7 @@ Deno.serve(async (req: Request) => {
             const datasetId = checkData.data.defaultDatasetId;
             console.log(`[Check] Sucesso! Baixando dataset: ${datasetId}`);
             
-            const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+            const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&clean=true&format=json`);
             const items = await itemsResp.json();
 
             if (!items || items.length === 0) {
