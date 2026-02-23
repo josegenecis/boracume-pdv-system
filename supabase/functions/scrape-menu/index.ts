@@ -729,18 +729,22 @@ function consolidateVariantsAndCategories(categories: any[]): any[] {
 async function aiStructurize(raw: string, apiKey: string | undefined): Promise<any[]> {
   if (!apiKey) throw new Error('Chave OpenAI não configurada.');
   const systemPrompt = `Você é um parser de cardápios. Você recebe texto bruto (ou JSON) extraído de sites/cardápios e deve devolver um JSON estruturado. Responda APENAS JSON, sem explicações.`;
-  const userPrompt = `ENTRADA (texto bruto / json / html / markdown):\n\n${raw.slice(0, 120000)}\n\nOBJETIVO: gerar JSON com categorias, itens e seus detalhes.\n\nFORMATO OBRIGATÓRIO:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [\n            {\"nome\":\"P\",\"preco\":10.00},\n            {\"nome\":\"25cm\",\"preco\":15.99}\n          ],\n          \"complementos\": [\n            {\"nome\":\"Bacon\",\"preco\":5.00}\n          ],\n          \"imagens\": [\"https://...\"]\n        }\n      ]\n    }\n  ]\n}\n\nREGRAS IMPORTANTES:\n- NÃO INVENTE produtos/categorias: só use o que existir na entrada.\n- PREÇOS: sempre número (0.00). Converta vírgula para ponto.\n- Se um item tiver tamanhos com preços diferentes (P/M/G, 25cm/35cm, 300ml/500ml etc), coloque em \"variacoes\" com nome do tamanho e preço final.\n- Se houver adicionais/complementos com preço (ex.: \"+R$ 2,00\", \"Adicionar bacon 5\"), coloque em \"complementos\".\n- Se houver grupos como \"Escolha até 3\" / \"obrigatório\" / \"1 opção\", use isso para decidir quais itens são complementos (mesmo que a entrada não tenha estrutura perfeita).\n- IMAGENS: só use URLs presentes na entrada. Se não der para associar uma imagem a um produto específico, deixe \"imagens\": [] para esse produto.\n- DESCRIÇÃO: se não existir, use string vazia.\n\nResponda somente com o JSON.`;
+  const userPrompt = `ENTRADA (texto bruto / json / html / markdown):\n\n${raw.slice(0, 60000)}\n\nOBJETIVO: gerar JSON com categorias, itens e seus detalhes.\n\nFORMATO OBRIGATÓRIO:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [\n            {\"nome\":\"P\",\"preco\":10.00},\n            {\"nome\":\"25cm\",\"preco\":15.99}\n          ],\n          \"complementos\": [\n            {\"nome\":\"Bacon\",\"preco\":5.00}\n          ],\n          \"imagens\": [\"https://...\"]\n        }\n      ]\n    }\n  ]\n}\n\nREGRAS IMPORTANTES:\n- NÃO INVENTE produtos/categorias: só use o que existir na entrada.\n- PREÇOS: sempre número (0.00). Converta vírgula para ponto.\n- Se um item tiver tamanhos com preços diferentes (P/M/G, 25cm/35cm, 300ml/500ml etc), coloque em \"variacoes\" com nome do tamanho e preço final.\n- Se houver adicionais/complementos com preço (ex.: \"+R$ 2,00\", \"Adicionar bacon 5\"), coloque em \"complementos\".\n- IMAGENS: só use URLs presentes na entrada. Se não der para associar uma imagem a um produto específico, deixe \"imagens\": [] para esse produto.\n- DESCRIÇÃO: se não existir, use string vazia.\n\nResponda somente com o JSON.`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
       temperature: 0.1,
-      max_tokens: 4000,
+      max_tokens: 2500,
       response_format: { type: 'json_object' }
     })
   });
+  clearTimeout(timeoutId);
   if (!resp.ok) { const err = await resp.text(); throw new Error(`Erro IA: ${err}`); }
   const data = await resp.json();
   const parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || '{}').trim());

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,9 +53,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   const [loadingMessage, setLoadingMessage] = useState('Processando...');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const cancelRef = useRef(false);
   
   const { toast } = useToast();
   const { user } = useAuth();
+
+  useEffect(() => {
+    cancelRef.current = !isOpen;
+  }, [isOpen]);
 
   const isValidUrl = (value: string) => {
     try {
@@ -196,9 +201,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       const POLL_INTERVAL = 5000; // 5 segundos
       const MAX_ATTEMPTS = 60; // 5 minutos máximo
       let attempts = 0;
+      let consecutiveFailures = 0;
 
       return new Promise((resolve, reject) => {
           const checkStatus = async () => {
+              if (cancelRef.current) {
+                reject(new Error('Cancelado.'));
+                return;
+              }
               attempts++;
               setLoadingMessage(`Extraindo cardápio... (${attempts}s)`);
               
@@ -210,8 +220,13 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
                   // 1. Erro de Rede ou Status HTTP (não 200)
                   if (status !== 200) {
+                      consecutiveFailures++;
                       // Se for erro 500 (interno), geralmente é falha fatal se não tiver success: true
                       console.warn('Erro HTTP ao checar status:', status, data);
+                      if (consecutiveFailures >= 3) {
+                        reject(new Error(data?.error || 'Falha de rede ao consultar o servidor. Tente novamente.'));
+                        return;
+                      }
                       // Tentar novamente (pode ser instabilidade)
                   } 
                   
@@ -232,6 +247,9 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                       resolve(data.categories || []);
                       return;
                   }
+                  else {
+                      consecutiveFailures = 0;
+                  }
                   
                   // 4. Timeout Frontend
                   if (attempts >= MAX_ATTEMPTS) {
@@ -240,16 +258,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                   }
 
                   // 5. Tentar novamente (status: processing ou erro de rede)
-                  setTimeout(checkStatus, POLL_INTERVAL);
+                  if (!cancelRef.current) setTimeout(checkStatus, POLL_INTERVAL);
 
               } catch (e) {
                   console.error('Erro no polling:', e);
                   // Continuar tentando mesmo com erro de rede
-                  if (attempts >= MAX_ATTEMPTS) {
+                  consecutiveFailures++;
+                  if (attempts >= MAX_ATTEMPTS || consecutiveFailures >= 3) {
                       reject(e);
-                  } else {
-                      setTimeout(checkStatus, POLL_INTERVAL);
+                      return;
                   }
+                  if (!cancelRef.current) setTimeout(checkStatus, POLL_INTERVAL);
               }
           };
 
@@ -605,7 +624,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              cancelRef.current = true;
+              setLoading(false);
+              setLoadingMessage('Processando...');
+              onClose();
+            }}
+          >
+            Cancelar
+          </Button>
           <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
             {loading ? loadingMessage : (activeTab === 'text' ? 'Importar' : 'Processar com IA')}
