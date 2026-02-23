@@ -76,6 +76,38 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     return null;
   };
 
+  const normalizeKey = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const mergeImportedMenus = (base: ImportedCategory[], enrich: ImportedCategory[]) => {
+    const enrichProducts = new Map<string, ImportedProduct>();
+    for (const c of enrich || []) {
+      for (const p of c.items || []) {
+        if (!p?.name) continue;
+        enrichProducts.set(normalizeKey(p.name), p);
+      }
+    }
+    return (base || []).map(cat => ({
+      ...cat,
+      items: (cat.items || []).map(p => {
+        const e = enrichProducts.get(normalizeKey(p.name || ''));
+        if (!e) return p;
+        const merged: ImportedProduct = { ...p };
+        if ((!merged.description || !merged.description.trim()) && e.description) merged.description = e.description;
+        if ((!merged.image_url || !normalizeImageUrl(merged.image_url)) && e.image_url) merged.image_url = e.image_url;
+        if ((!merged.price_variants || merged.price_variants.length === 0) && e.price_variants?.length) merged.price_variants = e.price_variants;
+        if ((!merged.variants || merged.variants.length === 0) && e.variants?.length) merged.variants = e.variants;
+        if ((!merged.variations || merged.variations.length === 0) && e.variations?.length) merged.variations = e.variations;
+        return merged;
+      })
+    }));
+  };
+
   const parseMenuText = (text: string) => {
     const lines = text.split('\n');
     const products: ImportedProduct[] = [];
@@ -304,6 +336,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
            }
          }
 
+         const hasAnyVariantsOrAddons = (categoriesToImport || []).some((c: ImportedCategory) =>
+           (c.items || []).some((p: ImportedProduct) =>
+             (p.price_variants && p.price_variants.length > 0) ||
+             (p.variants && p.variants.length > 0) ||
+             (p.variations && p.variations.length > 0)
+           )
+         );
+
          if (categoriesToImport.length === 0) {
            setLoadingMessage('Processando imagem...');
            const { data, status } = await invokeEdgeFunction('scrape-menu', { 
@@ -315,6 +355,16 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                throw new Error(data?.error || 'Erro ao processar imagem.');
            }
            categoriesToImport = data.categories || [];
+         } else if (!hasAnyVariantsOrAddons) {
+           setLoadingMessage('Procurando variações e adicionais...');
+           const { data, status } = await invokeEdgeFunction('scrape-menu', { 
+              type: 'image',
+              data: optimizedBase64,
+              action: 'start'
+           });
+           if (status === 200 && data?.success && Array.isArray(data.categories) && data.categories.length > 0) {
+             categoriesToImport = mergeImportedMenus(categoriesToImport, data.categories);
+           }
          }
       }
 

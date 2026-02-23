@@ -161,7 +161,7 @@ Deno.serve(async (req: Request) => {
                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                );
              }
-             const categories = await aiStructurize(text, OPENAI_API_KEY);
+             const categories = consolidateVariantsAndCategories(await aiStructurize(text, OPENAI_API_KEY));
              if (!categories || categories.length === 0) {
                return new Response(
                  JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível estruturar o cardápio a partir do texto.' }),
@@ -728,8 +728,8 @@ function consolidateVariantsAndCategories(categories: any[]): any[] {
 
 async function aiStructurize(raw: string, apiKey: string | undefined): Promise<any[]> {
   if (!apiKey) throw new Error('Chave OpenAI não configurada.');
-  const systemPrompt = `Você é um parser de cardápios. Recebe texto bruto (ou JSON) e deve devolver JSON estruturado com categorias, itens, variações, complementos e imagens. Responda APENAS JSON.`;
-  const userPrompt = `Aqui está o texto bruto extraído de um cardápio:\n\n${raw.slice(0, 120000)}\n\nGere um JSON no formato:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [{"nome":"P","preco":10.00}],\n          "complementos":[{"nome":"Bacon","preco":5.00}],\n          "imagens":["https://..."]\n        }\n      ]\n    }\n  ]\n}\nRegras: mantenha nomes exatos dos itens, extraia preços reais, não invente categorias nem itens que não existam no texto.`;
+  const systemPrompt = `Você é um parser de cardápios. Você recebe texto bruto (ou JSON) extraído de sites/cardápios e deve devolver um JSON estruturado. Responda APENAS JSON, sem explicações.`;
+  const userPrompt = `ENTRADA (texto bruto / json / html / markdown):\n\n${raw.slice(0, 120000)}\n\nOBJETIVO: gerar JSON com categorias, itens e seus detalhes.\n\nFORMATO OBRIGATÓRIO:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [\n            {\"nome\":\"P\",\"preco\":10.00},\n            {\"nome\":\"25cm\",\"preco\":15.99}\n          ],\n          \"complementos\": [\n            {\"nome\":\"Bacon\",\"preco\":5.00}\n          ],\n          \"imagens\": [\"https://...\"]\n        }\n      ]\n    }\n  ]\n}\n\nREGRAS IMPORTANTES:\n- NÃO INVENTE produtos/categorias: só use o que existir na entrada.\n- PREÇOS: sempre número (0.00). Converta vírgula para ponto.\n- Se um item tiver tamanhos com preços diferentes (P/M/G, 25cm/35cm, 300ml/500ml etc), coloque em \"variacoes\" com nome do tamanho e preço final.\n- Se houver adicionais/complementos com preço (ex.: \"+R$ 2,00\", \"Adicionar bacon 5\"), coloque em \"complementos\".\n- Se houver grupos como \"Escolha até 3\" / \"obrigatório\" / \"1 opção\", use isso para decidir quais itens são complementos (mesmo que a entrada não tenha estrutura perfeita).\n- IMAGENS: só use URLs presentes na entrada. Se não der para associar uma imagem a um produto específico, deixe \"imagens\": [] para esse produto.\n- DESCRIÇÃO: se não existir, use string vazia.\n\nResponda somente com o JSON.`;
   const resp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
