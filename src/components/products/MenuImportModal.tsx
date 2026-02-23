@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import Tesseract from 'tesseract.js';
 
 interface MenuImportModalProps {
   isOpen: boolean;
@@ -240,7 +241,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       let categoriesToImport: ImportedCategory[] = [];
 
       if (activeTab === 'text') {
-        categoriesToImport = parseMenuText(textInput);
+        setLoadingMessage('Processando texto...');
+        const { data, status } = await invokeEdgeFunction('scrape-menu', {
+          type: 'text',
+          data: textInput,
+          action: 'start'
+        });
+        if (status !== 200 || !data.success) {
+          categoriesToImport = parseMenuText(textInput);
+        } else {
+          categoriesToImport = data.categories || [];
+        }
       } 
       else if (activeTab === 'link') {
         // 1. Iniciar Job (Async)
@@ -267,19 +278,44 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
       }
       else if (activeTab === 'image') {
-         setLoadingMessage('Processando imagem...');
+         setLoadingMessage('Lendo texto da imagem...');
          const optimizedBase64 = await convertFileToBase64(selectedImage!);
-         
-         const { data, status } = await invokeEdgeFunction('scrape-menu', { 
-            type: 'image',
-            data: optimizedBase64,
-            action: 'start' // Imagem ainda é síncrona
-         });
+         let extractedText = '';
+         try {
+           const res = await Tesseract.recognize(optimizedBase64, 'por', {
+             logger: (m: any) => {
+               if (m?.status === 'recognizing text' && typeof m?.progress === 'number') {
+                 setLoadingMessage(`Lendo texto da imagem... ${Math.round(m.progress * 100)}%`);
+               }
+             }
+           });
+           extractedText = String(res?.data?.text || '').trim();
+         } catch {}
 
-         if (status !== 200 || !data.success) {
-             throw new Error(data?.error || 'Erro ao processar imagem.');
+         if (extractedText) {
+           setLoadingMessage('Estruturando cardápio...');
+           const { data, status } = await invokeEdgeFunction('scrape-menu', {
+             type: 'text',
+             data: extractedText,
+             action: 'start'
+           });
+           if (status === 200 && data.success) {
+             categoriesToImport = data.categories || [];
+           }
          }
-         categoriesToImport = data.categories || [];
+
+         if (categoriesToImport.length === 0) {
+           setLoadingMessage('Processando imagem...');
+           const { data, status } = await invokeEdgeFunction('scrape-menu', { 
+              type: 'image',
+              data: optimizedBase64,
+              action: 'start'
+           });
+           if (status !== 200 || !data.success) {
+               throw new Error(data?.error || 'Erro ao processar imagem.');
+           }
+           categoriesToImport = data.categories || [];
+         }
       }
 
       if (categoriesToImport.length === 0) {

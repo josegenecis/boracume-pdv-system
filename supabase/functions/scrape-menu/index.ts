@@ -153,6 +153,27 @@ Deno.serve(async (req: Request) => {
             );
         }
         
+        if (type === 'text') {
+             const text = String(data || '').trim();
+             if (!text) {
+               return new Response(
+                 JSON.stringify({ success: false, status: 'failed', error: 'Texto vazio.' }),
+                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+               );
+             }
+             const categories = await aiStructurize(text, OPENAI_API_KEY);
+             if (!categories || categories.length === 0) {
+               return new Response(
+                 JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível estruturar o cardápio a partir do texto.' }),
+                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+               );
+             }
+             return new Response(
+               JSON.stringify({ success: true, status: 'completed', categories }),
+               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+             );
+        }
+        
         if (type === 'image') {
              const result = await processWithAI(data, OPENAI_API_KEY, true);
              return result;
