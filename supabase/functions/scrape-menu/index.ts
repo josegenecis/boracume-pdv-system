@@ -687,16 +687,28 @@ function mapApifyItemsToCategories(items: any[]): any[] {
     };
 
     const sizeRegex = /^(P|M|G|GG|Pequeno|Médio|Medio|Grande|Gigante|\d{2,3}\s?(?:cm|ml))$/i;
+    const normalizeToken = (s: string) => String(s || '').replace(/\s+/g, ' ').trim();
+    const isSizeToken = (s: string) => {
+      const t = normalizeToken(s)
+        .replace(/[()]/g, '')
+        .replace(/\s*-\s*/g, ' ')
+        .trim();
+      if (!t) return false;
+      if (sizeRegex.test(t)) return true;
+      if (/^\d{2,3}(?:\s?(?:ml|cm))$/i.test(t)) return true;
+      return false;
+    };
     const groupLooksLikeSize = (groupName: string, optionNames: string[]) => {
       const g = String(groupName || '').toLowerCase();
-      if (/(tamanho|size|por[cç][aã]o|volume|ml|cm|litro|lata)/i.test(g)) return true;
-      const names = (optionNames || []).map(n => String(n || '').trim()).filter(Boolean);
+      const names = (optionNames || []).map(n => normalizeToken(n)).filter(Boolean);
       if (names.length === 0) return false;
-      const hits = names.filter(n => sizeRegex.test(n)).length;
-      if (hits / names.length >= 0.6) return true;
-      const shortHits = names.filter(n => n.length <= 3 && /^[a-z]{1,3}$/i.test(n)).length;
-      if (shortHits / names.length >= 0.6) return true;
-      return false;
+
+      const sizeHits = names.filter(isSizeToken).length;
+      const ratio = sizeHits / names.length;
+      const nameHints = /(tamanho|size|volume|por[cç][aã]o|ml|cm|litro)/i.test(g);
+
+      if (nameHints) return ratio >= 0.4;
+      return ratio >= 0.6;
     };
 
     const normalizeMoney = (v: any) => {
@@ -769,9 +781,9 @@ function mapApifyItemsToCategories(items: any[]): any[] {
           }
         }
 
-        const flatVariants: any[] = mappedGroups
-          .flatMap((g: any) => (g.options || []).map((o: any) => ({ name: o.name, price: Number(o.price || 0) })))
-          .filter((o: any) => o?.name && Number(o?.price || 0) > 0);
+        const flatVariants: any[] = price_variants
+          .map((v: any) => ({ name: v.name, price: Number(v.price || 0) }))
+          .filter((v: any) => v?.name && Number(v?.price || 0) > 0);
 
         const effectiveBasePrice = price > 0 ? price : (price_variants.length > 0 ? Math.min(...price_variants.map(v => Number(v.price || 0))) : 0);
         if (!categoriesMap[categoryName]) categoriesMap[categoryName] = [];
@@ -780,7 +792,7 @@ function mapApifyItemsToCategories(items: any[]): any[] {
           price: effectiveBasePrice,
           description,
           image_url: imageUrl,
-          variants: flatVariants,
+          variants: flatVariants.length > 0 ? flatVariants : undefined,
           price_variants: price_variants.length > 0 ? price_variants : undefined,
           variations: variations.length > 0 ? variations : undefined
         });
