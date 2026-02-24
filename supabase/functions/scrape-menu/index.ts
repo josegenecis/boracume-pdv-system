@@ -157,9 +157,9 @@ Deno.serve(async (req: Request) => {
                 removeCookieWarnings: true,
                 blockMedia: true,
                 saveMarkdown: true,
-                saveHtml: false,
+                saveHtml: true,
                 saveFiles: false,
-                proxyConfiguration: { useApifyProxy: true }
+                proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' }
               };
               const startResp = await fetch(runUrl, {
                 method: 'POST',
@@ -265,7 +265,7 @@ Deno.serve(async (req: Request) => {
             const inputPayload = {
               startUrls: [{ url: rawUrl }],
               maxRequestsPerCrawl: 25,
-              proxyConfiguration: { useApifyProxy: true },
+              proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' },
               pageFunction,
               linkSelector: 'a[href*="produto"], a[href*="product"], a[href*="item"], a[href*="menu"], a[href*="cardapio"], .product a, .item a'
             };
@@ -322,6 +322,7 @@ Deno.serve(async (req: Request) => {
         const checkResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`);
         const checkData = await checkResp.json();
         const status = checkData.data.status;
+        const actId = String(checkData?.data?.actId || '');
 
         console.log(`[Check] Status atual: ${status}`);
 
@@ -336,7 +337,7 @@ Deno.serve(async (req: Request) => {
             const datasetId = checkData.data.defaultDatasetId;
             console.log(`[Check] Sucesso! Baixando dataset: ${datasetId}`);
             
-            const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&clean=true&format=json`);
+            const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&format=json`);
             const items = await itemsResp.json();
 
             if (!items || items.length === 0) {
@@ -613,6 +614,7 @@ Deno.serve(async (req: Request) => {
                 error: 'Não foi possível extrair produtos do dataset.',
                 debug: {
                   runId: String(runId || ''),
+                  actId,
                   datasetId: String(datasetId || ''),
                   itemsCount: Array.isArray(items) ? items.length : 0
                 }
