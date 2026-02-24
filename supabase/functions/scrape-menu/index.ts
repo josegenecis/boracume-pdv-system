@@ -491,22 +491,32 @@ Deno.serve(async (req: Request) => {
             // Caminho 1.5: crawler de conteúdo (texto/markdown/html/pageFunctionResult.pageText) + IA estruturadora universal
             if (looksLikeContentCrawl) {
                  const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
-                 if (text && OPENAI_API_KEY) {
-                   let aiStructured: any[] = [];
-                   try {
-                     const rawForAi =
-                       `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
-                       `${imageUrls.slice(0, 200).join('\n')}\n\n` +
-                       `TEXTO EXTRAÍDO:\n${text}`;
-                     aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
-                   } catch (e) {
-                     console.warn('[Check] IA estruturadora (crawler conteúdo) falhou.', e);
+                 if (text) {
+                   if (OPENAI_API_KEY) {
+                     let aiStructured: any[] = [];
+                     try {
+                       const rawForAi =
+                         `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
+                         `${imageUrls.slice(0, 200).join('\n')}\n\n` +
+                         `TEXTO EXTRAÍDO:\n${text}`;
+                       aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                     } catch (e) {
+                       console.warn('[Check] IA estruturadora (crawler conteúdo) falhou.', e);
+                     }
+                     if (aiStructured.length > 0) {
+                        return new Response(
+                          JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
+                          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                        );
+                     }
                    }
-                   if (aiStructured.length > 0) {
-                      return new Response(
-                        JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
-                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                      );
+
+                   const heuristic = heuristicStructurizeFromText(text, imageUrls);
+                   if (heuristic.length > 0) {
+                     return new Response(
+                       JSON.stringify({ success: true, status: 'completed', categories: heuristic }),
+                       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                     );
                    }
                  }
             }
@@ -616,16 +626,28 @@ Deno.serve(async (req: Request) => {
             // Fallback final (universal): tenta estruturar a partir do JSON bruto do dataset
             try {
               const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
-              const rawForAi =
-                `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
-                `${imageUrls.slice(0, 200).join('\n')}\n\n` +
-                `DADOS EXTRAÍDOS (texto/markdown/html/JSON):\n${text || JSON.stringify(items).slice(0, 120000)}`;
-              const aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
-              if (Array.isArray(aiStructured) && aiStructured.length > 0) {
-                return new Response(
-                  JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
-                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                );
+              if (OPENAI_API_KEY) {
+                const rawForAi =
+                  `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
+                  `${imageUrls.slice(0, 200).join('\n')}\n\n` +
+                  `DADOS EXTRAÍDOS (texto/markdown/html/JSON):\n${text || JSON.stringify(items).slice(0, 120000)}`;
+                const aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                if (Array.isArray(aiStructured) && aiStructured.length > 0) {
+                  return new Response(
+                    JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                  );
+                }
+              }
+
+              if (text) {
+                const heuristic = heuristicStructurizeFromText(text, imageUrls);
+                if (heuristic.length > 0) {
+                  return new Response(
+                    JSON.stringify({ success: true, status: 'completed', categories: heuristic }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                  );
+                }
               }
             } catch {}
 
@@ -1047,6 +1069,93 @@ function mergeImportedCategories(base: any[], enrich: any[]): any[] {
   }
 
   return out;
+}
+
+function heuristicStructurizeFromText(rawText: string, imageUrls: string[]): any[] {
+  const text = String(rawText || '');
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const categories: { name: string; items: any[] }[] = [];
+  let current = { name: 'Geral', items: [] as any[] };
+  categories.push(current);
+  let lastProduct: any | null = null;
+
+  const priceRegex = /(?:R\\$\\s*)?(\\d{1,3}(?:\\.\\d{3})*(?:,\\d{2})|\\d+(?:,\\d{2}))/;
+  const isHeading = (l: string) => /^#{1,6}\\s+/.test(l) || (/^[A-Z0-9ÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ][A-Z0-9ÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ\\s-]{3,}$/.test(l) && l.length <= 48);
+  const headingText = (l: string) => l.replace(/^#{1,6}\\s+/, '').replace(/:+$/, '').trim();
+
+  const ensureCategory = (name: string) => {
+    const n = headingText(name) || 'Geral';
+    const found = categories.find(c => c.name.toLowerCase() === n.toLowerCase());
+    if (found) {
+      current = found;
+    } else {
+      current = { name: n, items: [] };
+      categories.push(current);
+    }
+  };
+
+  const parsePrice = (s: string) => {
+    const m = s.match(priceRegex);
+    if (!m) return null;
+    const num = Number(String(m[1]).replace(/\\./g, '').replace(',', '.'));
+    return Number.isFinite(num) ? num : null;
+  };
+
+  for (const l of lines) {
+    if (isHeading(l) && !priceRegex.test(l)) {
+      ensureCategory(l);
+      lastProduct = null;
+      continue;
+    }
+
+    const imgInline = l.match(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/i);
+    if (imgInline?.[1] && lastProduct && !lastProduct.image_url) {
+      lastProduct.image_url = imgInline[1];
+      continue;
+    }
+
+    const urlOnly = l.match(/https?:\/\/[^\s"'<>]+/);
+    if (urlOnly?.[0] && lastProduct && !lastProduct.image_url && /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(urlOnly[0])) {
+      lastProduct.image_url = urlOnly[0];
+      continue;
+    }
+
+    const bullet = /^[-*]\s+/.test(l);
+    if (bullet && lastProduct) {
+      const pr = parsePrice(l);
+      const name = l.replace(/^[-*]\s+/, '').replace(priceRegex, '').replace(/\+\s*$/, '').trim();
+      if (name && pr !== null) {
+        if (!Array.isArray(lastProduct.variations)) lastProduct.variations = [];
+        let group = lastProduct.variations.find((g: any) => g?.name === 'Complementos');
+        if (!group) {
+          group = { name: 'Complementos', required: false, max_selections: 1, options: [] as any[] };
+          lastProduct.variations.push(group);
+        }
+        group.options.push({ name, price: Math.max(0, pr) });
+      }
+      continue;
+    }
+
+    const pr = parsePrice(l);
+    if (pr !== null && pr > 0) {
+      const name = l.replace(priceRegex, '').replace(/[._-]{2,}/g, ' ').trim();
+      if (!name) continue;
+      const product = { name, price: pr, description: '', image_url: null };
+      current.items.push(product);
+      lastProduct = product;
+      continue;
+    }
+  }
+
+  if (imageUrls?.length) {
+    for (const c of categories) {
+      for (const p of c.items || []) {
+        if (!p.image_url) continue;
+      }
+    }
+  }
+
+  return categories.filter(c => Array.isArray(c.items) && c.items.length > 0);
 }
 
 async function aiStructurize(raw: string, apiKey: string | undefined): Promise<any[]> {
