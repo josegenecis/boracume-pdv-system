@@ -28,6 +28,7 @@ import Relatorios from '@/pages/Relatorios';
 import Configuracoes from '@/pages/Configuracoes';
 import Subscription from '@/pages/Subscription';
 import MenuDigital from '@/pages/MenuDigital';
+import Totem from '@/pages/Totem';
 import NotFound from '@/pages/NotFound';
 import Loyalty from '@/pages/Loyalty';
 import BairrosEntrega from '@/pages/BairrosEntrega';
@@ -65,6 +66,8 @@ function AppContent() {
       {/* Rotas públicas para o menu digital - aceita ambos os formatos */}
       <Route path="/menu/:userId" element={<MenuDigital />} />
       <Route path="/menu-digital" element={<MenuDigital />} />
+      <Route path="/totem/:userId" element={<Totem />} />
+      <Route path="/totem" element={<Totem />} />
       <Route path="/track/:orderId" element={<OrderTracking />} />
       <Route path="/mp/return" element={<MercadoPagoReturn />} />
       <Route path="/mp/callback" element={<MpCallback />} />
