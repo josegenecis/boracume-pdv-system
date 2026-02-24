@@ -129,22 +129,96 @@ Deno.serve(async (req: Request) => {
             if (!APIFY_TOKEN) {
               throw new Error('APIFY_TOKEN não configurado.');
             }
-            console.log(`[Start] Iniciando Apify Website Content Crawler (universal)...`);
-            const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+            console.log(`[Start] Iniciando Apify Web Scraper (universal)...`);
+            const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+            const pageFunction = `
+              async function pageFunction(context) {
+                const { jQuery, request } = context;
+                const $ = jQuery;
+                function norm(t){ try{ return (t||'').replace(/\\s+/g,' ').trim(); }catch{ return ''; } }
+                function priceOfText(txt){
+                  const m = String(txt||'').match(/R\\$\\s?\\d{1,3}(?:\\.\\d{3})*(?:,\\d{2})/);
+                  if(!m) return 0;
+                  try{ return Number(m[0].replace('R$','').replace(/\\./g,'').replace(',','.').trim()); }catch{ return 0; }
+                }
+                function priceOf(el){ return priceOfText($(el).text()); }
+                function imgUrlsFrom(el){
+                  const urls = [];
+                  $(el).find('img').each((_, im) => {
+                    const src = $(im).attr('src') || $(im).attr('data-src') || '';
+                    const srcset = $(im).attr('srcset') || '';
+                    const pick = (u) => {
+                      const s = norm(u);
+                      if(!s) return;
+                      let out = s;
+                      if(out.startsWith('//')) out = 'https:' + out;
+                      if(out.startsWith('http')) urls.push(out);
+                    };
+                    pick(src);
+                    if(srcset) srcset.split(',').map(p => p.trim().split(' ')[0]).forEach(pick);
+                  });
+                  return Array.from(new Set(urls));
+                }
+                function parseVariationText(blockText){
+                  const lines = String(blockText||'').split('\\n').map(l => norm(l)).filter(Boolean);
+                  const options = [];
+                  for(const l of lines){
+                    const pr = priceOfText(l);
+                    const nm = norm(l.replace(/R\\$\\s?\\d{1,3}(?:\\.\\d{3})*(?:,\\d{2})/, ''));
+                    if(nm && (pr>0 || /\\+\\s*R\\$/.test(l))) options.push({ name: nm, price: Math.max(0, pr) });
+                  }
+                  if(options.length>0) return [{ name: 'Adicionais', required: false, max_selections: 1, options }];
+                  return [];
+                }
+                function collectProducts(container){
+                  const items = [];
+                  const itemSel = 'article, .product, .item, .menu-item, .card, [class*=produto], [class*=product], [class*=item]';
+                  $(container).find(itemSel).each((i, el) => {
+                    const name = norm($(el).find('h1, h2, h3, .title, .name, [class*=nome], [class*=title]').first().text()) || norm($(el).attr('aria-label'));
+                    const desc = norm($(el).find('.description, .desc, [class*=descri], [class*=subtitle]').first().text());
+                    const price = priceOf(el);
+                    const images = imgUrlsFrom(el);
+                    const variations = parseVariationText($(el).text());
+                    if(name && price>0){
+                      items.push({ name, description: desc || '', price, image_url: images[0] || null, variations });
+                    }
+                  });
+                  return items;
+                }
+                const anchorSel = 'h1, h2, h3, .category-title, .menu-category, .group-title, .section-title, [class*=categoria], [class*=category], [class*=secao]';
+                const anchors = $(anchorSel).filter(function(){ return norm($(this).text()).length>0; }).toArray();
+                const categories = [];
+                for(let i=0;i<anchors.length;i++){
+                  const h = anchors[i];
+                  const name = norm($(h).text());
+                  if(!name) continue;
+                  const section = $(h).nextUntil(anchorSel);
+                  let items = collectProducts(section.length ? section : $(h).parent());
+                  if(items.length===0) items = collectProducts($(h).parent());
+                  if(items.length>0) categories.push({ name, items });
+                }
+                if(categories.length===0){
+                  const items = collectProducts('body');
+                  if(items.length>0) categories.push({ name: 'Geral', items });
+                }
+                const merged = {};
+                for(const c of categories){
+                  const key = c.name;
+                  if(!merged[key]) merged[key] = [];
+                  merged[key] = merged[key].concat(c.items);
+                }
+                const out = Object.entries(merged).map(([name, items]) => ({ name, items }));
+                const pageText = norm($('body').text()).slice(0, 20000);
+                const pageImages = imgUrlsFrom('body').slice(0, 200);
+                return { categories: out, pageText, pageImages, pageUrl: request.url };
+              }
+            `;
             const inputPayload = {
               startUrls: [{ url: rawUrl }],
-              crawlerType: 'playwright:adaptive',
-              maxCrawlDepth: 2,
-              maxCrawlPages: 25,
-              dynamicContentWaitSecs: 6,
-              maxScrollHeightPixels: 5000,
-              removeCookieWarnings: true,
-              blockMedia: true,
-              saveMarkdown: true,
-              saveHtml: false,
-              saveFiles: false,
-              clickElementsCssSelector: '[aria-expanded="false"]',
-              proxyConfiguration: { useApifyProxy: true }
+              maxRequestsPerCrawl: 25,
+              proxyConfiguration: { useApifyProxy: true },
+              pageFunction,
+              linkSelector: 'a[href*="produto"], a[href*="product"], a[href*="item"], a[href*="menu"], a[href*="cardapio"], .product a, .item a'
             };
             const startResp = await fetch(runUrl, {
               method: 'POST',
@@ -153,8 +227,8 @@ Deno.serve(async (req: Request) => {
             });
             if (!startResp.ok) {
               const errText = await startResp.text();
-              console.error(`[Start] Erro Website Content Crawler: ${startResp.status} - ${errText}`);
-              throw new Error(`Erro ao iniciar Website Content Crawler: ${startResp.status}`);
+              console.error(`[Start] Erro Web Scraper: ${startResp.status} - ${errText}`);
+              throw new Error(`Erro ao iniciar Web Scraper: ${startResp.status}`);
             }
             const startData = await startResp.json();
             return new Response(
@@ -230,7 +304,10 @@ Deno.serve(async (req: Request) => {
               items?.[0]?.pageContent ||
               items?.[0]?.content ||
               items?.[0]?.html ||
-              items?.[0]?.bodyText
+              items?.[0]?.bodyText ||
+              items?.[0]?.pageFunctionResult?.pageText ||
+              items?.[0]?.pageFunctionResult?.pageText ||
+              items?.[0]?.pageText
             );
 
             let extractedCategories: any[] = [];
@@ -333,10 +410,10 @@ Deno.serve(async (req: Request) => {
                  }
             }
 
-            // Caminho 1.5: crawler de conteúdo (texto/markdown/html) + IA estruturadora universal
+            // Caminho 1.5: crawler de conteúdo (texto/markdown/html/pageFunctionResult.pageText) + IA estruturadora universal
             if (looksLikeContentCrawl) {
                  const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
-                 if (text) {
+                 if (text && OPENAI_API_KEY) {
                    let aiStructured: any[] = [];
                    try {
                      const rawForAi =
@@ -827,9 +904,12 @@ function extractTextAndImagesFromApifyItems(items: any[]): { text: string; image
       (it as any)?.content ||
       (it as any)?.pageContent ||
       (it as any)?.bodyText ||
+      (it as any)?.pageText ||
+      (it as any)?.pageFunctionResult?.pageText ||
       '';
     const chunk = typeof textCandidate === 'string' ? textCandidate : JSON.stringify(textCandidate || it).slice(0, 6000);
     pushImages(it);
+    pushImages((it as any)?.pageFunctionResult?.pageImages);
     if (chunk && chunk.trim()) {
       parts.push(`${url ? `URL: ${url}\n` : ''}${title ? `TÍTULO: ${title}\n` : ''}${chunk}`);
       const matches = chunk.match(/https?:\/\/[^\s"'<>]+/g) || [];
