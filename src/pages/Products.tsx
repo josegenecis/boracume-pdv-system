@@ -494,7 +494,7 @@ const Products = () => {
         <TabsList className="mb-2 flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide">
           <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
-          <TabsTrigger value="global-variations">Variações Globais</TabsTrigger>
+          <TabsTrigger value="global-variations">Complementos</TabsTrigger>
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">

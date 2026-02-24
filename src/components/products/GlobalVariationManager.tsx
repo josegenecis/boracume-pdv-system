@@ -48,7 +48,7 @@ const GlobalVariationManager: React.FC = () => {
         options: typeof variation.options === 'string' ? JSON.parse(variation.options) : variation.options
       })));
     } catch (error) {
-      toast({ title: 'Erro', description: 'Erro ao carregar variações globais.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Erro ao carregar complementos.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -80,33 +80,33 @@ const GlobalVariationManager: React.FC = () => {
           .insert(insertData);
         if (error) throw error;
       }
-      toast({ title: 'Sucesso', description: `Variação global ${editingVariation ? 'atualizada' : 'criada'} com sucesso!` });
+      toast({ title: 'Sucesso', description: `Complemento ${editingVariation ? 'atualizado' : 'criado'} com sucesso!` });
       setShowForm(false);
       setEditingVariation(undefined);
       fetchVariations();
     } catch (error) {
-      toast({ title: 'Erro', description: 'Erro ao salvar variação global.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Erro ao salvar complemento.', variant: 'destructive' });
     }
   };
 
   const handleDeleteVariation = async (variationId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta variação global?')) return;
+    if (!confirm('Tem certeza que deseja excluir este complemento?')) return;
     try {
       const { error } = await supabase
         .from('global_variations')
         .delete()
         .eq('id', variationId);
       if (error) throw error;
-      toast({ title: 'Sucesso', description: 'Variação global excluída com sucesso.' });
+      toast({ title: 'Sucesso', description: 'Complemento excluído com sucesso.' });
       fetchVariations();
     } catch (error) {
-      toast({ title: 'Erro', description: 'Erro ao excluir variação global.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Erro ao excluir complemento.', variant: 'destructive' });
     }
   };
 
   if (!user) {
     return (
-      <div className="text-center py-8 text-gray-500">É necessário estar autenticado para gerenciar variações globais.</div>
+      <div className="text-center py-8 text-gray-500">É necessário estar autenticado para gerenciar complementos.</div>
     );
   }
 
