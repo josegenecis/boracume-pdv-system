@@ -160,6 +160,7 @@ Deno.serve(async (req: Request) => {
                 saveMarkdown: true,
                 saveHtml: true,
                 saveFiles: false,
+                clickElementsCssSelector: '.MuiButtonBase-root, [role="button"], button, a[href]',
                 proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' }
               };
               const startResp = await fetch(runUrl, {
