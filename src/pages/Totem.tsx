@@ -9,10 +9,12 @@ import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import CartBottomBar from '@/components/menu/CartBottomBar';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
 import TotemCheckoutModal from '@/components/totem/TotemCheckoutModal';
 import TotemProductCard from '@/components/totem/TotemProductCard';
 import { useAuth } from '@/contexts/AuthContext';
+import { PrinterService } from '@/utils/printerService';
 
 interface Product {
   id: string;
@@ -150,6 +152,20 @@ export default function Totem() {
                   className="pl-9 bg-white/15 border-white/20 placeholder:text-white/70 text-white focus-visible:ring-white/30"
                 />
               </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="bg-white/15 hover:bg-white/25 text-white border border-white/20"
+                onClick={async () => {
+                  const ok = await PrinterService.connectUsb();
+                  if (ok) toast({ title: 'Impressora conectada', description: 'Pronto para imprimir cupom.' });
+                  else toast({ title: 'Falha ao conectar', description: 'Tente novamente.', variant: 'destructive' });
+                }}
+              >
+                Conectar impressora
+              </Button>
             </div>
           </div>
         </div>
