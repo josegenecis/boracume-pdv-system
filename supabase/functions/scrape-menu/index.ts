@@ -57,6 +57,18 @@ Deno.serve(async (req: Request) => {
                  );
              }
 
+            // Guardrails: links inválidos conhecidos (ex.: home do Anota AI)
+            try {
+              const host = parsedUrl.host.toLowerCase();
+              const path = parsedUrl.pathname || '/';
+              if (host === 'pedido.anota.ai' && (path === '/' || path === '')) {
+                return new Response(
+                  JSON.stringify({ success: false, status: 'failed', error: 'Link do Anota AI inválido. Use o link da loja/checkout (não a página inicial).' }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                );
+              }
+            } catch {}
+
              // 1. iFood Logic
              if (APIFY_TOKEN && rawUrl.includes('ifood.com.br')) {
                 const ifoodIdMatch = rawUrl.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
@@ -69,9 +81,10 @@ Deno.serve(async (req: Request) => {
                     
                     const inputPayload = {
                         "store_ids": [storeId],
-                        "proxyConfiguration": { "useApifyProxy": true },
                         "latitude": "-23.550520",
-                        "longitude": "-46.633308"
+                        "longitude": "-46.633308",
+                        "useApifyProxy": true,
+                        "proxyCountry": "BR"
                     };
                     
                     console.log("[Start] Payload enviado para Apify:", JSON.stringify(inputPayload));
@@ -129,6 +142,42 @@ Deno.serve(async (req: Request) => {
             if (!APIFY_TOKEN) {
               throw new Error('APIFY_TOKEN não configurado.');
             }
+
+            // 2. CardapioWeb / sites dinâmicos: Website Content Crawler tende a ser mais robusto
+            if (parsedUrl.host.toLowerCase().includes('cardapioweb.com')) {
+              console.log(`[Start] Iniciando Apify Website Content Crawler (cardapioweb)...`);
+              const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+              const inputPayload = {
+                startUrls: [{ url: rawUrl }],
+                crawlerType: 'playwright:adaptive',
+                maxCrawlDepth: 2,
+                maxCrawlPages: 40,
+                dynamicContentWaitSecs: 8,
+                maxScrollHeightPixels: 8000,
+                removeCookieWarnings: true,
+                blockMedia: true,
+                saveMarkdown: true,
+                saveHtml: false,
+                saveFiles: false,
+                proxyConfiguration: { useApifyProxy: true }
+              };
+              const startResp = await fetch(runUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(inputPayload)
+              });
+              if (!startResp.ok) {
+                const errText = await startResp.text();
+                console.error(`[Start] Erro Website Content Crawler (cardapioweb): ${startResp.status} - ${errText}`);
+                throw new Error(`Erro ao iniciar Website Content Crawler: ${startResp.status}`);
+              }
+              const startData = await startResp.json();
+              return new Response(
+                JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
+
             console.log(`[Start] Iniciando Apify Web Scraper (universal)...`);
             const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const pageFunction = `
@@ -558,7 +607,16 @@ Deno.serve(async (req: Request) => {
             } catch {}
 
             return new Response(
-              JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível extrair produtos do dataset.' }),
+              JSON.stringify({
+                success: false,
+                status: 'failed',
+                error: 'Não foi possível extrair produtos do dataset.',
+                debug: {
+                  runId: String(runId || ''),
+                  datasetId: String(datasetId || ''),
+                  itemsCount: Array.isArray(items) ? items.length : 0
+                }
+              }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
             );
         }
