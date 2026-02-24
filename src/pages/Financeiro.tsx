@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
   CardDescription, 
   CardHeader, 
-  CardTitle,
-  CardFooter
+  CardTitle
 } from '@/components/ui/card';
 import { 
   Table, 
@@ -29,14 +28,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   CreditCard, 
   DollarSign, 
-  Calendar, 
   ArrowUp, 
   ArrowDown, 
   Download, 
   Filter,
   Percent,
-  Plus,
-  Trash2,
   Lock,
   Unlock
 } from 'lucide-react';
@@ -45,6 +41,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import {
   Dialog,
   DialogContent,
@@ -84,6 +81,8 @@ const Financeiro = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [ordersRaw, setOrdersRaw] = useState<any[]>([]);
+  const [expensesRaw, setExpensesRaw] = useState<any[]>([]);
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
@@ -133,8 +132,13 @@ const Financeiro = () => {
         .from('orders')
         .select('*')
         .eq('user_id', user.id);
+
+      const ordersList = (orders as any[]) || [];
+      setOrdersRaw(ordersList);
       
-      const incomeTx = (orders || []).map(order => ({
+      const incomeTx = ordersList
+        .filter((order) => String((order as any)?.status || '') !== 'cancelled')
+        .map(order => ({
         id: order.id,
         date: new Date(order.created_at),
         description: `Pedido #${order.id.substring(0, 8)}`,
@@ -150,9 +154,12 @@ const Financeiro = () => {
         .select('*')
         .eq('user_id', user.id);
 
-      const expenseTx = (expenses || []).map(exp => ({
+      const expensesList = (expenses as any[]) || [];
+      setExpensesRaw(expensesList);
+
+      const expenseTx = expensesList.map(exp => ({
         id: exp.id,
-        date: new Date(exp.date),
+        date: new Date(exp.expense_date || exp.date || exp.created_at),
         description: exp.description,
         amount: exp.amount,
         type: 'saida' as 'saida',
@@ -478,6 +485,98 @@ const Financeiro = () => {
       return 'R$ 0,00';
     }
   };
+
+  const reportStart = filters.startDate ? new Date(filters.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+  reportStart.setHours(0, 0, 0, 0);
+  const reportEnd = filters.endDate ? new Date(filters.endDate) : new Date();
+  reportEnd.setHours(23, 59, 59, 999);
+
+  const enumerateDays = (from: Date, to: Date) => {
+    const out: Date[] = [];
+    const cur = new Date(from);
+    cur.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setHours(0, 0, 0, 0);
+    while (cur <= end) {
+      out.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return out;
+  };
+
+  const dateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const dailySeries = (() => {
+    const days = enumerateDays(reportStart, reportEnd);
+    const map: Record<string, { income: number; expenses: number }> = {};
+    for (const t of filteredTransactions) {
+      if (!t?.date) continue;
+      if (t.date < reportStart || t.date > reportEnd) continue;
+      const k = dateKey(t.date);
+      if (!map[k]) map[k] = { income: 0, expenses: 0 };
+      if (t.type === 'entrada') map[k].income += Number(t.amount || 0);
+      if (t.type === 'saida') map[k].expenses += Number(t.amount || 0);
+    }
+    return days.map((d) => {
+      const k = dateKey(d);
+      const v = map[k] || { income: 0, expenses: 0 };
+      const profit = v.income - v.expenses;
+      const label = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(d);
+      return { date: k, label, income: Number(v.income.toFixed(2)), expenses: Number(v.expenses.toFixed(2)), profit: Number(profit.toFixed(2)) };
+    });
+  })();
+
+  const expenseByCategory = (() => {
+    const map: Record<string, number> = {};
+    for (const t of filteredTransactions) {
+      if (t.type !== 'saida') continue;
+      if (t.date < reportStart || t.date > reportEnd) continue;
+      const key = String(t.category || 'Geral');
+      map[key] = (map[key] || 0) + Number(t.amount || 0);
+    }
+    const rows = Object.entries(map).map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }));
+    rows.sort((a, b) => b.value - a.value);
+    const top = rows.slice(0, 6);
+    const rest = rows.slice(6);
+    const restSum = rest.reduce((acc, r) => acc + r.value, 0);
+    return restSum > 0 ? [...top, { name: 'Outros', value: Number(restSum.toFixed(2)) }] : top;
+  })();
+
+  const COLORS = ['#7c3aed', '#22c55e', '#ef4444', '#0ea5e9', '#f59e0b', '#64748b', '#a855f7'];
+
+  const dre = (() => {
+    const ordersInRange = (ordersRaw || []).filter((o: any) => {
+      const created = new Date(o?.created_at);
+      if (created < reportStart || created > reportEnd) return false;
+      if (String(o?.status || '') === 'cancelled') return false;
+      return true;
+    });
+    const receitaLiquida = ordersInRange.reduce((acc: number, o: any) => acc + Number(o?.total || 0), 0);
+    const descontos = ordersInRange.reduce((acc: number, o: any) => acc + Number(o?.discount || 0), 0);
+    const receitaBruta = receitaLiquida + descontos;
+    const taxaEntrega = ordersInRange.reduce((acc: number, o: any) => acc + Number(o?.delivery_fee || 0), 0);
+    const receitaProdutos = Math.max(0, receitaLiquida - taxaEntrega);
+
+    const despesas = (expensesRaw || []).filter((e: any) => {
+      const d = new Date(e?.expense_date || e?.date || e?.created_at);
+      return d >= reportStart && d <= reportEnd;
+    }).reduce((acc: number, e: any) => acc + Number(e?.amount || 0), 0);
+    const lucroOperacional = receitaLiquida - despesas;
+    return {
+      receitaBruta: Number(receitaBruta.toFixed(2)),
+      descontos: Number(descontos.toFixed(2)),
+      receitaLiquida: Number(receitaLiquida.toFixed(2)),
+      receitaProdutos: Number(receitaProdutos.toFixed(2)),
+      taxaEntrega: Number(taxaEntrega.toFixed(2)),
+      despesas: Number(despesas.toFixed(2)),
+      lucroOperacional: Number(lucroOperacional.toFixed(2)),
+    };
+  })();
   
   const getPaymentMethodLabel = (method?: PaymentMethod) => {
     switch (method) {
@@ -980,6 +1079,104 @@ const Financeiro = () => {
         </TabsContent>
         
         <TabsContent value="relatorios" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Receitas vs Despesas</CardTitle>
+                <CardDescription>
+                  {new Intl.DateTimeFormat('pt-BR').format(reportStart)} até {new Intl.DateTimeFormat('pt-BR').format(reportEnd)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailySeries}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                    <Legend />
+                    <Line type="monotone" dataKey="income" name="Receitas" stroke="#22c55e" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="expenses" name="Despesas" stroke="#ef4444" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="profit" name="Lucro" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Despesas por Categoria</CardTitle>
+                <CardDescription>
+                  Distribuição das saídas no período selecionado
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                {expenseByCategory.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    Sem despesas no período
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                      <Legend />
+                      <Pie data={expenseByCategory} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={2}>
+                        {expenseByCategory.map((_, idx) => (
+                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>DRE (simplificada)</CardTitle>
+              <CardDescription>
+                {new Intl.DateTimeFormat('pt-BR').format(reportStart)} até {new Intl.DateTimeFormat('pt-BR').format(reportEnd)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium">Receita Bruta</TableCell>
+                    <TableCell className="text-right">{formatCurrency(dre.receitaBruta)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">(-) Descontos</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(dre.descontos)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Receita Líquida</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(dre.receitaLiquida)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Receita de Produtos</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(dre.receitaProdutos)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">Taxa de Entrega</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(dre.taxaEntrega)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="text-muted-foreground">(-) Despesas</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(dre.despesas)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Lucro Operacional</TableCell>
+                    <TableCell className={`text-right font-bold ${dre.lucroOperacional >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(dre.lucroOperacional)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Exportar Relatórios</CardTitle>
