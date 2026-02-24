@@ -577,6 +577,8 @@ const Financeiro = () => {
       lucroOperacional: Number(lucroOperacional.toFixed(2)),
     };
   })();
+
+  const margemOperacional = dre.receitaLiquida > 0 ? (dre.lucroOperacional / dre.receitaLiquida) * 100 : 0;
   
   const getPaymentMethodLabel = (method?: PaymentMethod) => {
     switch (method) {
@@ -598,12 +600,20 @@ const Financeiro = () => {
   
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">Gestão Financeira</h1>
-        <div className="flex gap-2">
+      <Card className="border-0 bg-gradient-to-r from-violet-600 via-indigo-600 to-sky-600 text-white">
+        <CardContent className="p-5">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="text-2xl font-bold tracking-tight">Financeiro</div>
+              <div className="text-white/90 text-sm">
+                Acompanhe receitas, despesas, lucro e DRE no período selecionado
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
            <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant={currentSession ? "secondary" : "default"} onClick={() => {
+              <Button className="bg-white/15 hover:bg-white/25 text-white border border-white/20" variant="outline" onClick={() => {
                 setCashOperation(currentSession ? 'close' : 'open');
                 setCashAmount('');
               }}>
@@ -658,7 +668,7 @@ const Financeiro = () => {
 
           <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="destructive">
+              <Button className="bg-rose-600 hover:bg-rose-700 text-white">
                 <ArrowDown className="mr-2 h-4 w-4" />
                 Nova Despesa
               </Button>
@@ -695,11 +705,13 @@ const Financeiro = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="border-l-4 border-l-emerald-500 bg-emerald-50/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <ArrowUp className="h-5 w-5 text-green-500" />
@@ -714,7 +726,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-l-4 border-l-rose-500 bg-rose-50/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <ArrowDown className="h-5 w-5 text-red-500" />
@@ -729,7 +741,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-l-4 border-l-violet-600 bg-violet-50/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-boracume-green" />
@@ -746,7 +758,7 @@ const Financeiro = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="bg-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
@@ -761,7 +773,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="bg-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
@@ -776,7 +788,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="bg-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <Percent className="h-4 w-4" />
@@ -793,13 +805,13 @@ const Financeiro = () => {
       </div>
       
       <Tabs defaultValue="fluxo-caixa" className="w-full">
-        <TabsList>
+        <TabsList className="bg-muted/60">
           <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
         
         <TabsContent value="fluxo-caixa" className="space-y-4">
-          <Card>
+          <Card className="bg-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 {currentSession ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -963,7 +975,7 @@ const Financeiro = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-white">
             <CardHeader>
               <CardTitle className="text-xl">Transações</CardTitle>
               <CardDescription>
@@ -1025,8 +1037,9 @@ const Financeiro = () => {
               </div>
             </CardHeader>
             <CardContent>
+              <div className="rounded-lg border overflow-hidden">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead>Data</TableHead>
                     <TableHead>Descrição</TableHead>
@@ -1074,13 +1087,53 @@ const Financeiro = () => {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
         
         <TabsContent value="relatorios" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="bg-emerald-50/60 border-l-4 border-l-emerald-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Receita Líquida</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-lg font-bold text-emerald-700">{formatCurrency(dre.receitaLiquida)}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-rose-50/60 border-l-4 border-l-rose-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Despesas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-lg font-bold text-rose-700">{formatCurrency(dre.despesas)}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-violet-50/60 border-l-4 border-l-violet-600">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Lucro Operacional</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-lg font-bold ${dre.lucroOperacional >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {formatCurrency(dre.lucroOperacional)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-sky-50/60 border-l-4 border-l-sky-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Margem</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-lg font-bold ${margemOperacional >= 0 ? 'text-sky-700' : 'text-rose-700'}`}>
+                  {Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="bg-white">
               <CardHeader>
                 <CardTitle>Receitas vs Despesas</CardTitle>
                 <CardDescription>
@@ -1103,7 +1156,7 @@ const Financeiro = () => {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-white">
               <CardHeader>
                 <CardTitle>Despesas por Categoria</CardTitle>
                 <CardDescription>
@@ -1132,7 +1185,7 @@ const Financeiro = () => {
             </Card>
           </div>
 
-          <Card>
+          <Card className="bg-white border-l-4 border-l-violet-600">
             <CardHeader>
               <CardTitle>DRE (simplificada)</CardTitle>
               <CardDescription>
@@ -1140,6 +1193,7 @@ const Financeiro = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="rounded-lg border overflow-hidden">
               <Table>
                 <TableBody>
                   <TableRow>
@@ -1174,6 +1228,7 @@ const Financeiro = () => {
                   </TableRow>
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
