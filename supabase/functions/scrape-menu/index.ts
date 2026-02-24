@@ -144,6 +144,41 @@ Deno.serve(async (req: Request) => {
               throw new Error('APIFY_TOKEN não configurado.');
             }
 
+            // 2. CardapioWeb / sites muito dinâmicos: crawler de conteúdo + IA (mais confiável que heurística DOM)
+            if (parsedUrl.host.toLowerCase().includes('cardapioweb.com')) {
+              console.log(`[Start] Iniciando Apify Website Content Crawler (cardapioweb)...`);
+              const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
+              const inputPayload = {
+                startUrls: [{ url: rawUrl }],
+                crawlerType: 'playwright:adaptive',
+                maxCrawlDepth: 2,
+                maxCrawlPages: 60,
+                dynamicContentWaitSecs: 10,
+                maxScrollHeightPixels: 12000,
+                removeCookieWarnings: true,
+                blockMedia: true,
+                saveMarkdown: true,
+                saveHtml: true,
+                saveFiles: false,
+                proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' }
+              };
+              const startResp = await fetch(runUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(inputPayload)
+              });
+              if (!startResp.ok) {
+                const errText = await startResp.text();
+                console.error(`[Start] Erro Website Content Crawler (cardapioweb): ${startResp.status} - ${errText}`);
+                throw new Error(`Erro ao iniciar Website Content Crawler: ${startResp.status}`);
+              }
+              const startData = await startResp.json();
+              return new Response(
+                JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
+            }
+
             console.log(`[Start] Iniciando Apify Web Scraper (universal)...`);
             const isCardapioWeb = parsedUrl.host.toLowerCase().includes('cardapioweb.com');
             const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
@@ -1077,7 +1112,14 @@ function extractTextAndImagesFromApifyItems(items: any[]): { text: string; image
   const pushImages = (value: any) => {
     if (!value) return;
     if (typeof value === 'string') {
-      if (/^https?:\/\//i.test(value) && /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(value)) images.add(value);
+      if (
+        /^https?:\/\//i.test(value) &&
+        (
+          /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(value) ||
+          /ifood-static\.com/i.test(value) ||
+          /storage\.googleapis\.com\/prod-cardapio-web/i.test(value)
+        )
+      ) images.add(value);
       return;
     }
     if (Array.isArray(value)) {
@@ -1108,13 +1150,19 @@ function extractTextAndImagesFromApifyItems(items: any[]): { text: string; image
       (it as any)?.pageText ||
       (it as any)?.pageFunctionResult?.pageText ||
       '';
-    const chunk = typeof textCandidate === 'string' ? textCandidate : JSON.stringify(textCandidate || it).slice(0, 6000);
+    const scanText = typeof textCandidate === 'string' ? textCandidate.slice(0, 50000) : JSON.stringify(textCandidate || it).slice(0, 50000);
+    const chunk = typeof textCandidate === 'string' ? textCandidate.slice(0, 12000) : JSON.stringify(textCandidate || it).slice(0, 12000);
     pushImages(it);
     pushImages((it as any)?.pageFunctionResult?.pageImages);
     if (chunk && chunk.trim()) {
       parts.push(`${url ? `URL: ${url}\n` : ''}${title ? `TÍTULO: ${title}\n` : ''}${chunk}`);
-      const matches = chunk.match(/https?:\/\/[^\s"'<>]+/g) || [];
+      const matches = scanText.match(/https?:\/\/[^\s"'<>]+/g) || [];
       for (const m of matches) pushImages(m);
+      const imgMatches = scanText.match(/(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/gi) || [];
+      for (const m of imgMatches) {
+        const mm = m.match(/https?:\/\/[^"']+/);
+        if (mm?.[0]) pushImages(mm[0]);
+      }
     }
   }
 
