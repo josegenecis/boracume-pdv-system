@@ -656,7 +656,17 @@ Deno.serve(async (req: Request) => {
               JSON.stringify({
                 success: false,
                 status: 'failed',
-                error: 'Não foi possível extrair produtos do dataset.',
+                error: (() => {
+                  const first: any = Array.isArray(items) ? items[0] : null;
+                  const url = String(first?.url || first?.pageUrl || '');
+                  const text = String(first?.text || first?.markdown || first?.content || first?.pageContent || first?.bodyText || first?.pageText || first?.pageFunctionResult?.pageText || '');
+                  const hasPrice = /(?:R\\$\\s*)?\\d+[,.]\\d{2}/.test(text);
+                  const looksClosed = /\\bFechado\\b|\\bAbrimos\\s+às\\b/i.test(text);
+                  if (url.includes('cardapioweb.com') && !hasPrice && looksClosed) {
+                    return 'O CardápioWeb não exibiu os itens (a loja parece estar fechada). Tente importar em horário de funcionamento.';
+                  }
+                  return 'Não foi possível extrair produtos do dataset.';
+                })(),
                 debug: {
                   runId: String(runId || ''),
                   actId,
