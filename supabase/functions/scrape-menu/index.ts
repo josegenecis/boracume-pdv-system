@@ -126,7 +126,8 @@ Deno.serve(async (req: Request) => {
                         const rawText = JSON.stringify(menuItems).slice(0, 200000);
                         aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
                       } catch {}
-                      const finalCats = aiStructured.length > 0 ? aiStructured : (consolidated.length > 0 ? consolidated : mappedCategories);
+                      const baseCats = consolidated.length > 0 ? consolidated : mappedCategories;
+                      const finalCats = aiStructured.length > 0 ? mergeImportedCategories(baseCats, aiStructured) : baseCats;
                       return new Response(
                         JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
                         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -414,7 +415,7 @@ Deno.serve(async (req: Request) => {
                        }
                      } catch {}
  
-                     const uploadImage = async (url: string) => {
+                    const uploadImage = async (url: string) => {
                          try {
                              if (!url || !url.startsWith('http')) return null;
                              const resp = await fetch(url);
@@ -444,7 +445,8 @@ Deno.serve(async (req: Request) => {
                      };
                      
                      let rehostBudget = 40;
-                     const catsForImages = (aiStructured.length > 0 ? aiStructured : consolidated);
+                    const mergedCats = aiStructured.length > 0 ? mergeImportedCategories(consolidated, aiStructured) : consolidated;
+                    const catsForImages = mergedCats;
                      for (const cat of catsForImages) {
                        if (!cat.items || rehostBudget <= 0) continue;
                        const itemsWithImages = (cat.items || []).filter((i: any) => i.image_url && i.image_url.startsWith('http'));
@@ -457,7 +459,7 @@ Deno.serve(async (req: Request) => {
                      }
                  }
                  
-                 const finalCats = aiStructured.length > 0 ? aiStructured : consolidated;
+                const finalCats = aiStructured.length > 0 ? mergeImportedCategories(consolidated, aiStructured) : consolidated;
                  if (finalCats.length > 0) {
                       return new Response(
                         JSON.stringify({ success: true, status: 'completed', categories: finalCats }),
@@ -964,6 +966,66 @@ function consolidateVariantsAndCategories(categories: any[]): any[] {
     }
     if (rebuilt.length > 1) return rebuilt;
   }
+  return out;
+}
+
+function mergeImportedCategories(base: any[], enrich: any[]): any[] {
+  const normalizeKey = (value: string) =>
+    String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const isValidUrl = (v: any) => typeof v === 'string' && /^https?:\/\//.test(v);
+
+  const out: any[] = Array.isArray(base) ? JSON.parse(JSON.stringify(base)) : [];
+  const productIndex = new Map<string, any>();
+  const categoryIndex = new Map<string, any>();
+
+  for (const c of out) {
+    if (!c || typeof c !== 'object') continue;
+    const catKey = normalizeKey(c.name || '');
+    if (catKey) categoryIndex.set(catKey, c);
+    for (const p of c.items || []) {
+      const k = normalizeKey(p?.name || '');
+      if (k) productIndex.set(k, p);
+    }
+  }
+
+  for (const c of enrich || []) {
+    if (!c || typeof c !== 'object') continue;
+    const catName = String(c.name || '').trim() || 'Geral';
+    const catKey = normalizeKey(catName);
+    let outCat = categoryIndex.get(catKey);
+    if (!outCat) {
+      outCat = { name: catName, items: [] };
+      out.push(outCat);
+      if (catKey) categoryIndex.set(catKey, outCat);
+    }
+
+    for (const p of c.items || []) {
+      const k = normalizeKey(p?.name || '');
+      if (!k) continue;
+      const existing = productIndex.get(k);
+      if (!existing) {
+        outCat.items.push(p);
+        productIndex.set(k, p);
+        continue;
+      }
+
+      if ((!existing.description || !String(existing.description).trim()) && p.description) existing.description = p.description;
+      if ((!existing.image_url || !isValidUrl(existing.image_url)) && isValidUrl(p.image_url)) existing.image_url = p.image_url;
+      if ((!existing.price_variants || existing.price_variants.length === 0) && Array.isArray(p.price_variants) && p.price_variants.length > 0) {
+        existing.price_variants = p.price_variants;
+      }
+      if ((!existing.variations || existing.variations.length === 0) && Array.isArray(p.variations) && p.variations.length > 0) {
+        existing.variations = p.variations;
+      }
+    }
+  }
+
   return out;
 }
 
