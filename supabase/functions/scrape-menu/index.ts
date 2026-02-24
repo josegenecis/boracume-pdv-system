@@ -144,42 +144,8 @@ Deno.serve(async (req: Request) => {
               throw new Error('APIFY_TOKEN não configurado.');
             }
 
-            // 2. CardapioWeb / sites dinâmicos: Website Content Crawler tende a ser mais robusto
-            if (parsedUrl.host.toLowerCase().includes('cardapioweb.com')) {
-              console.log(`[Start] Iniciando Apify Website Content Crawler (cardapioweb)...`);
-              const runUrl = `https://api.apify.com/v2/acts/apify~website-content-crawler/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
-              const inputPayload = {
-                startUrls: [{ url: rawUrl }],
-                crawlerType: 'playwright:adaptive',
-                maxCrawlDepth: 2,
-                maxCrawlPages: 40,
-                dynamicContentWaitSecs: 8,
-                maxScrollHeightPixels: 8000,
-                removeCookieWarnings: true,
-                blockMedia: true,
-                saveMarkdown: true,
-                saveHtml: true,
-                saveFiles: false,
-                proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' }
-              };
-              const startResp = await fetch(runUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(inputPayload)
-              });
-              if (!startResp.ok) {
-                const errText = await startResp.text();
-                console.error(`[Start] Erro Website Content Crawler (cardapioweb): ${startResp.status} - ${errText}`);
-                throw new Error(`Erro ao iniciar Website Content Crawler: ${startResp.status}`);
-              }
-              const startData = await startResp.json();
-              return new Response(
-                JSON.stringify({ success: true, runId: startData?.data?.id, status: 'started' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-              );
-            }
-
             console.log(`[Start] Iniciando Apify Web Scraper (universal)...`);
+            const isCardapioWeb = parsedUrl.host.toLowerCase().includes('cardapioweb.com');
             const runUrl = `https://api.apify.com/v2/acts/apify~web-scraper/runs?token=${APIFY_TOKEN}&waitForFinish=0`;
             const pageFunction = `
               async function pageFunction(context) {
@@ -194,19 +160,36 @@ Deno.serve(async (req: Request) => {
                 function priceOf(el){ return priceOfText($(el).text()); }
                 function imgUrlsFrom(el){
                   const urls = [];
+                  const pick = (u) => {
+                    const s = norm(u);
+                    if(!s) return;
+                    let out = s.replace(/^['"]|['"]$/g, '');
+                    if(out.startsWith('//')) out = 'https:' + out;
+                    if(out.startsWith('http')) urls.push(out);
+                  };
                   $(el).find('img').each((_, im) => {
                     const src = $(im).attr('src') || $(im).attr('data-src') || '';
                     const srcset = $(im).attr('srcset') || '';
-                    const pick = (u) => {
-                      const s = norm(u);
-                      if(!s) return;
-                      let out = s;
-                      if(out.startsWith('//')) out = 'https:' + out;
-                      if(out.startsWith('http')) urls.push(out);
-                    };
                     pick(src);
                     if(srcset) srcset.split(',').map(p => p.trim().split(' ')[0]).forEach(pick);
                   });
+
+                  $(el).find('source').each((_, so) => {
+                    const srcset = $(so).attr('srcset') || '';
+                    if(srcset) srcset.split(',').map(p => p.trim().split(' ')[0]).forEach(pick);
+                  });
+
+                  $(el).find('[style*=\"background-image\"]').each((_, node) => {
+                    const style = $(node).attr('style') || '';
+                    const m = style.match(/background-image\\s*:\\s*url\\(([^)]+)\\)/i);
+                    if(m && m[1]) pick(m[1]);
+                  });
+
+                  if (String(el) === 'body' || $(el).is('body')) {
+                    pick($('meta[property=\"og:image\"]').attr('content'));
+                    pick($('meta[name=\"twitter:image\"]').attr('content'));
+                  }
+
                   return Array.from(new Set(urls));
                 }
                 function parseVariationText(blockText){
@@ -265,10 +248,12 @@ Deno.serve(async (req: Request) => {
             `;
             const inputPayload = {
               startUrls: [{ url: rawUrl }],
-              maxRequestsPerCrawl: 25,
+              maxRequestsPerCrawl: isCardapioWeb ? 80 : 35,
               proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: 'BR' },
               pageFunction,
-              linkSelector: 'a[href*="produto"], a[href*="product"], a[href*="item"], a[href*="menu"], a[href*="cardapio"], .product a, .item a'
+              linkSelector: isCardapioWeb
+                ? 'a[href], button, [role=\"button\"], .product a, .item a'
+                : 'a[href*=\"produto\"], a[href*=\"product\"], a[href*=\"item\"], a[href*=\"menu\"], a[href*=\"cardapio\"], .product a, .item a'
             };
             const startResp = await fetch(runUrl, {
               method: 'POST',
