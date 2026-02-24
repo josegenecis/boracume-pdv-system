@@ -341,8 +341,14 @@ Deno.serve(async (req: Request) => {
                  try {
                    const totalItemsHeuristic = consolidated.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
                    if (consolidated.length === 1 || totalItemsHeuristic >= 30) {
-                     const rawText = JSON.stringify(extractedCategories).slice(0, 150000);
-                     aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                     const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
+                     const rawForAi =
+                       `CATEGORIAS EXTRAÍDAS (JSON):\n` +
+                       `${JSON.stringify(extractedCategories).slice(0, 90000)}\n\n` +
+                       `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
+                       `${imageUrls.slice(0, 200).join('\n')}\n\n` +
+                       `TEXTO EXTRAÍDO:\n${String(text || '').slice(0, 50000)}`;
+                     aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
                    }
                  } catch (e) {
                    console.warn('[Check] IA estruturadora (categorias) falhou, usando consolidação heurística.', e);
@@ -620,28 +626,104 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         return null;
     };
 
+    const sizeRegex = /^(P|M|G|GG|Pequeno|Médio|Medio|Grande|Gigante|\d{2,3}\s?(?:cm|ml))$/i;
+    const groupLooksLikeSize = (groupName: string, optionNames: string[]) => {
+      const g = String(groupName || '').toLowerCase();
+      if (/(tamanho|size|por[cç][aã]o|volume|ml|cm|litro|lata)/i.test(g)) return true;
+      const names = (optionNames || []).map(n => String(n || '').trim()).filter(Boolean);
+      if (names.length === 0) return false;
+      const hits = names.filter(n => sizeRegex.test(n)).length;
+      if (hits / names.length >= 0.6) return true;
+      const shortHits = names.filter(n => n.length <= 3 && /^[a-z]{1,3}$/i.test(n)).length;
+      if (shortHits / names.length >= 0.6) return true;
+      return false;
+    };
+
+    const normalizeMoney = (v: any) => {
+      const n = Number(String(v ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const extractGroups = (optionsSource: any) => {
+      const groups: any[] = [];
+      if (Array.isArray(optionsSource)) {
+        for (const g of optionsSource) {
+          if (g && typeof g === 'object') groups.push(g);
+          else if (typeof g === 'string') groups.push({ name: g, options: [] });
+        }
+      } else if (optionsSource && typeof optionsSource === 'object') {
+        groups.push(optionsSource);
+      }
+      return groups;
+    };
+
+    const mapOptionGroup = (group: any) => {
+      const name = String(group?.name || group?.title || group?.groupName || group?.label || '').trim() || 'Opções';
+      const required = Boolean(group?.required) || Number(group?.min || group?.min_selections || group?.minSelections || 0) > 0;
+      const maxSelRaw = group?.max_selections ?? group?.maxSelections ?? group?.max ?? group?.maxQuantity ?? group?.max_quantity;
+      const maxSelections = Math.max(1, Number(maxSelRaw || 1));
+
+      const optionsArr =
+        (Array.isArray(group?.options) ? group.options : null) ||
+        (Array.isArray(group?.items) ? group.items : null) ||
+        (Array.isArray(group?.choices) ? group.choices : null) ||
+        (Array.isArray(group?.values) ? group.values : null) ||
+        [];
+
+      const options = optionsArr
+        .map((o: any) => {
+          const n = String(o?.name || o?.title || o?.label || o?.description || '').trim();
+          if (!n) return null;
+          const p = normalizeMoney(o?.price ?? o?.value ?? o?.amount ?? 0);
+          return { name: n, price: p };
+        })
+        .filter(Boolean);
+
+      return { name, required, max_selections: maxSelections, options };
+    };
+
     for (const item of items) {
         const name = item.name || item.title || item.productName || item.item_name;
-        const price = parseFloat(item.price || item.unitPrice || item.value || item.basePrice || '0');
+        const rawPrice = item.price ?? item.unitPrice ?? item.value ?? item.basePrice ?? '0';
+        const price = normalizeMoney(rawPrice);
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
         const description = item.description || item.details || item.shortDescription || item.desc || item.subtitle || item.content || item.ingredients || '';
         const imageUrl = coerceImageUrl(item.imageUrl) || coerceImageUrl(item.image) || coerceImageUrl(item.image_url) || coerceImageUrl(item.media) || coerceImageUrl(item.thumbnail) || null;
         if (!name) continue;
-        const variants: any[] = [];
-        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || item.addons || item.extras || [];
-        if (Array.isArray(optionsSource)) {
-            for (const opt of optionsSource) {
-                if (opt.options && Array.isArray(opt.options)) {
-                    for (const subOpt of opt.options) {
-                        if (subOpt.name) variants.push({ name: subOpt.name, price: parseFloat(subOpt.price || subOpt.value || '0') });
-                    }
-                } else if (opt.name) {
-                    variants.push({ name: opt.name, price: parseFloat(opt.price || opt.value || '0') });
-                }
+        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || item.addons || item.extras || item.variations || [];
+        const groups = extractGroups(optionsSource);
+        const mappedGroups = groups
+          .map(mapOptionGroup)
+          .filter((g: any) => g && g.options && g.options.length > 0);
+
+        const price_variants: any[] = [];
+        const variations: any[] = [];
+        for (const g of mappedGroups) {
+          const optionNames = (g.options || []).map((o: any) => String(o?.name || '').trim());
+          if (groupLooksLikeSize(g.name, optionNames)) {
+            for (const o of g.options || []) {
+              if (o?.name && Number(o?.price || 0) > 0) price_variants.push({ name: o.name, price: Number(o.price || 0) });
             }
+          } else {
+            variations.push(g);
+          }
         }
+
+        const flatVariants: any[] = mappedGroups
+          .flatMap((g: any) => (g.options || []).map((o: any) => ({ name: o.name, price: Number(o.price || 0) })))
+          .filter((o: any) => o?.name && Number(o?.price || 0) > 0);
+
+        const effectiveBasePrice = price > 0 ? price : (price_variants.length > 0 ? Math.min(...price_variants.map(v => Number(v.price || 0))) : 0);
         if (!categoriesMap[categoryName]) categoriesMap[categoryName] = [];
-        categoriesMap[categoryName].push({ name, price, description, image_url: imageUrl, variants });
+        categoriesMap[categoryName].push({
+          name,
+          price: effectiveBasePrice,
+          description,
+          image_url: imageUrl,
+          variants: flatVariants,
+          price_variants: price_variants.length > 0 ? price_variants : undefined,
+          variations: variations.length > 0 ? variations : undefined
+        });
     }
     return Object.entries(categoriesMap).map(([name, items]) => ({ name, items }));
 }
