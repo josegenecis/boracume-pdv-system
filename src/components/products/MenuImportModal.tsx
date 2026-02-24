@@ -72,7 +72,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
   };
 
   const normalizeImageUrl = (value?: string | null) => {
-    const v = (value || '').trim();
+    const v = (value || '').trim().replace(/^['"]|['"]$/g, '');
     if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return null;
     if (v.startsWith('//')) return `https:${v}`;
     if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
@@ -405,6 +405,45 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       setLoadingMessage('Salvando produtos...');
 
       let totalProducts = 0;
+      let totalImages = 0;
+      let totalAddonGroupsLinked = 0;
+      let totalAddonGroupsCreated = 0;
+      let totalAddonErrors = 0;
+
+      const normalizeOptionsToString = (raw: any) => {
+        let arr: any[] = [];
+        if (!raw) arr = [];
+        else if (typeof raw === 'string') {
+          try { arr = JSON.parse(raw); } catch { arr = []; }
+        } else if (Array.isArray(raw)) {
+          arr = raw;
+        } else if (typeof raw === 'object') {
+          arr = Object.entries(raw).map(([name, price]) => ({ name, price }));
+        }
+        const normalized = (arr || [])
+          .map((o: any) => ({
+            name: String(o?.name || '').trim(),
+            price: Number(o?.price) >= 0 ? Number(o?.price) : 0
+          }))
+          .filter((o: any) => o.name);
+        normalized.sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'));
+        return JSON.stringify(normalized);
+      };
+
+      const keyForGlobalVariation = (name: string, options: any) =>
+        `${normalizeKey(name)}|${normalizeOptionsToString(options)}`;
+
+      const globalVariationByKey = new Map<string, string>();
+      try {
+        const { data: existingGlobals } = await supabase
+          .from('global_variations')
+          .select('id,name,options')
+          .eq('user_id', user?.id);
+        for (const gv of (existingGlobals || []) as any[]) {
+          const k = keyForGlobalVariation(String(gv?.name || ''), gv?.options);
+          if (k) globalVariationByKey.set(k, String(gv.id));
+        }
+      } catch {}
 
       // Salvamento no Banco (igual ao anterior)
       for (const category of categoriesToImport) {
@@ -459,6 +498,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 : (normalizedPriceVariants.length > 0
                     ? Math.min(...normalizedPriceVariants.map(v => v.price))
                     : 0);
+            const normalizedImageUrl = normalizeImageUrl(product.image_url);
 
             const { data: newProduct, error: prodError } = await supabase
                 .from('products')
@@ -467,7 +507,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     name: product.name,
                     price: effectiveBasePrice,
                     description: product.description || '',
-                    image_url: normalizeImageUrl(product.image_url),
+                    image_url: normalizedImageUrl,
                     category: category.name || 'Geral',
                     category_id: categoryId,
                     available: true,
@@ -479,6 +519,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
             if (!prodError && newProduct) {
                 totalProducts++;
+                if (normalizedImageUrl) totalImages++;
                 if (normalizedPriceVariants.length > 0) {
                     const variantsData = normalizedPriceVariants.map(v => ({
                         product_id: newProduct.id,
@@ -493,37 +534,65 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 }
 
                 if (product.variations && product.variations.length > 0) {
-                    const variationGroups = product.variations
-                      .filter(v => v && String(v.name || '').trim() && Array.isArray(v.options) && v.options.length > 0)
-                      .map(v => ({
-                        user_id: user?.id,
-                        product_id: newProduct.id,
-                        name: String(v.name).trim(),
-                        required: Boolean(v.required),
-                        max_selections: Math.max(1, Number(v.max_selections) || 1),
-                        options: (v.options || [])
-                          .filter(o => o && String(o.name || '').trim())
-                          .map(o => ({
-                            name: String(o.name).trim(),
-                            price: Number(o.price) >= 0 ? Number(o.price) : 0
-                          }))
-                      }));
+                    for (const v of product.variations || []) {
+                      const groupName = String(v?.name || '').trim();
+                      if (!groupName) continue;
+                      const optionsString = normalizeOptionsToString(v?.options);
+                      const optionsArr: any[] = (() => { try { return JSON.parse(optionsString); } catch { return []; } })();
+                      if (!Array.isArray(optionsArr) || optionsArr.length === 0) continue;
 
-                    if (variationGroups.length > 0) {
+                      const key = `${normalizeKey(groupName)}|${optionsString}`;
+                      let globalId = globalVariationByKey.get(key);
+
+                      if (!globalId) {
                         try {
-                            await (supabase as any).from('product_variations').insert(variationGroups);
-                        } catch (varError) {
-                            console.error('Error inserting product variations:', varError);
+                          const { data: created, error: createError } = await supabase
+                            .from('global_variations')
+                            .insert({
+                              user_id: user?.id,
+                              name: groupName,
+                              required: Boolean(v?.required),
+                              max_selections: Math.max(1, Number(v?.max_selections) || 1),
+                              options: optionsString,
+                              description: ''
+                            })
+                            .select('id')
+                            .single();
+                          if (!createError && created?.id) {
+                            globalId = String(created.id);
+                            globalVariationByKey.set(key, globalId);
+                            totalAddonGroupsCreated++;
+                          }
+                        } catch (e) {
+                          totalAddonErrors++;
+                          continue;
                         }
+                      }
+
+                      if (globalId) {
+                        try {
+                          await (supabase as any)
+                            .from('product_global_variation_links')
+                            .upsert(
+                              { product_id: newProduct.id, global_variation_id: globalId },
+                              { onConflict: 'product_id,global_variation_id', ignoreDuplicates: true }
+                            );
+                          totalAddonGroupsLinked++;
+                        } catch (e) {
+                          totalAddonErrors++;
+                        }
+                      }
                     }
                 }
             }
         }
       }
 
+      const addonsSummary = `${totalAddonGroupsLinked} complementos vinculados` + (totalAddonGroupsCreated > 0 ? ` (${totalAddonGroupsCreated} novos)` : '');
+      const addonsErrorsSummary = totalAddonErrors > 0 ? ` • ${totalAddonErrors} falhas em complementos` : '';
       toast({
         title: 'Importação Concluída!',
-        description: `${totalProducts} produtos importados com sucesso.`,
+        description: `${totalProducts} produtos importados. ${totalImages} imagens. ${addonsSummary}${addonsErrorsSummary}.`,
       });
       
       onImportComplete();
