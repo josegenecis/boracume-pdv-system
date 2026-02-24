@@ -660,7 +660,20 @@ Deno.serve(async (req: Request) => {
                   runId: String(runId || ''),
                   actId,
                   datasetId: String(datasetId || ''),
-                  itemsCount: Array.isArray(items) ? items.length : 0
+                  itemsCount: Array.isArray(items) ? items.length : 0,
+                  sample: (() => {
+                    const first: any = Array.isArray(items) ? items[0] : null;
+                    if (!first || typeof first !== 'object') return null;
+                    const keys = Object.keys(first).slice(0, 40);
+                    const text = String(first.text || first.markdown || first.content || first.pageContent || first.bodyText || first.pageText || first.pageFunctionResult?.pageText || '');
+                    return {
+                      keys,
+                      url: String(first.url || first.pageUrl || first.page_url || ''),
+                      title: String(first.title || first.pageTitle || ''),
+                      textLen: text.length,
+                      preview: text.slice(0, 300)
+                    };
+                  })()
                 }
               }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
