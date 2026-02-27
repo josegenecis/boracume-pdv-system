@@ -23,6 +23,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState(normalizeImageUrlForDisplay(currentImageUrl));
+  const [previewError, setPreviewError] = useState(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -31,6 +32,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
 
   useEffect(() => {
     setImagePreview(normalizeImageUrlForDisplay(currentImageUrl));
+    setPreviewError(false);
   }, [currentImageUrl]);
 
   const uploadImage = async (file: File) => {
@@ -200,6 +202,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
 
   const removeImage = () => {
     setImagePreview('');
+    setPreviewError(false);
     onImageUploaded('');
 
     setUploadProgress(0);
@@ -211,8 +214,13 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
     return (
       <div className="relative">
         <div className="w-20 h-20 rounded-lg border bg-white overflow-hidden flex items-center justify-center">
-          {imagePreview ? (
-            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+          {imagePreview && !previewError ? (
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="w-full h-full object-cover"
+              onError={() => setPreviewError(true)}
+            />
           ) : (
             <Image className="h-8 w-8 text-gray-300" />
           )}
@@ -240,12 +248,18 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
       
       {imagePreview ? (
         <div className="relative">
-          <img
-            src={imagePreview}
-            alt="Preview"
-            className="w-32 h-32 object-cover rounded-lg border"
-
-          />
+          {previewError ? (
+            <div className="w-32 h-32 rounded-lg border bg-gray-50 flex items-center justify-center">
+              <Image className="h-8 w-8 text-gray-300" />
+            </div>
+          ) : (
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="w-32 h-32 object-cover rounded-lg border"
+              onError={() => setPreviewError(true)}
+            />
+          )}
           <Button
             type="button"
             variant="destructive"
