@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, Trash2, Eye, EyeOff } from 'lucide-react';
 import ProductVariationsButton from './ProductVariationsButton';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface Product {
   id: string;
@@ -35,13 +36,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const [imageError, setImageError] = useState(false);
 
   const imageUrl = useMemo(() => {
-    const v = (product.image_url || '').trim();
-    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return '';
-    if (v.startsWith('//')) return `https:${v}`;
-    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
-    if (v.startsWith('https://') || v.startsWith('data:') || v.startsWith('blob:')) return v;
-    if (v.includes('ifood-static.com.br') || v.includes('ifood-static.com')) return `https://${v}`;
-    return '';
+    return normalizeImageUrlForDisplay(product.image_url);
   }, [product.image_url]);
 
   const formatCurrency = (value: number) => {

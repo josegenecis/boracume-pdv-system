@@ -7,6 +7,7 @@ import { Upload, X, Image, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ensureStorageSetup } from '@/utils/storageSetup';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 
 interface ProductImageUploadProps {
@@ -21,7 +22,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
   compact = false
 }) => {
   const [uploading, setUploading] = useState(false);
-  const [imagePreview, setImagePreview] = useState(currentImageUrl || '');
+  const [imagePreview, setImagePreview] = useState(normalizeImageUrlForDisplay(currentImageUrl));
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -29,7 +30,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
   const { toast } = useToast();
 
   useEffect(() => {
-    setImagePreview(currentImageUrl || '');
+    setImagePreview(normalizeImageUrlForDisplay(currentImageUrl));
   }, [currentImageUrl]);
 
   const uploadImage = async (file: File) => {

@@ -17,6 +17,7 @@ import GlobalVariationManager from '@/components/products/GlobalVariationManager
 import CategoryManager from '@/components/products/CategoryManager';
 import { useSearchParams } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface ProductItem {
   id: string;
@@ -43,15 +44,7 @@ interface Category {
 }
 
 const Products = () => {
-  const normalizeImageUrl = (value?: string | null) => {
-    const v = (value || '').trim();
-    if (!v || v === 'null' || v === 'undefined' || v === '[object Object]') return '';
-    if (v.startsWith('//')) return `https:${v}`;
-    if (v.startsWith('http://')) return `https://${v.slice('http://'.length)}`;
-    if (v.startsWith('https://') || v.startsWith('data:') || v.startsWith('blob:')) return v;
-    if (v.includes('ifood-static.com.br') || v.includes('ifood-static.com')) return `https://${v}`;
-    return '';
-  };
+  const normalizeImageUrl = normalizeImageUrlForDisplay;
 
   const FALLBACK_PIXEL =
     'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';

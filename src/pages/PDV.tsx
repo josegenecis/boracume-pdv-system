@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
@@ -1147,10 +1148,10 @@ const PDV = () => {
                         onClick={(e) => handleProductClick(product, e)}
                       >
                         <div className="aspect-square relative overflow-hidden bg-gray-100">
-                          {product.image_url ? (
+                          {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
-                              src={product.image_url} 
+                              src={normalizeImageUrlForDisplay(product.image_url)} 
                               alt={product.name} 
                               className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
                               loading="lazy"
