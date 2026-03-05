@@ -246,7 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Ignore TOKEN_REFRESHED events to prevent loops if they are firing too often
             if (event === 'TOKEN_REFRESHED') return;
 
-            if (event === 'SIGNED_IN' && session?.user) {
+            if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session?.user) {
               console.log('✅ [AUTH] SIGNED_IN - Processando nova autenticação');
               setUser(session.user);
               setSession(session);

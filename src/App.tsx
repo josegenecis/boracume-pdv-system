@@ -18,6 +18,7 @@ import { ConfirmDialogProvider } from '@/contexts/ConfirmDialogContext';
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
 import Signup from '@/pages/Signup';
+import ResetPassword from '@/pages/ResetPassword';
 import LandingPage from '@/pages/LandingPage';
 import Dashboard from '@/pages/Dashboard';
 import DashboardSimple from '@/pages/DashboardSimple';
@@ -112,6 +113,7 @@ function AppContent() {
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
