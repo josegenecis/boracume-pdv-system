@@ -103,9 +103,6 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/financeiro')} title="Caixa">
-            <Wallet size={18} />
-          </Button>
           <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>

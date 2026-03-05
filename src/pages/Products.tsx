@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
 import MenuImportModal from '@/components/products/MenuImportModal';
@@ -95,6 +96,7 @@ const Products = () => {
   }, []);
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (user) {
@@ -294,7 +296,14 @@ const Products = () => {
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+    const ok = await confirm({
+      title: 'Excluir produto',
+      description: 'Tem certeza que deseja excluir este produto?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       setIsLoading(true);
@@ -336,7 +345,16 @@ const Products = () => {
       .map(p => p.id)
       .filter(id => selectedIds.has(id));
     if (ids.length === 0) return;
-    if (!confirm(`Excluir ${ids.length} produto(s) desta categoria?`)) return;
+    {
+      const ok = await confirm({
+        title: 'Excluir produtos',
+        description: `Excluir ${ids.length} produto(s) desta categoria?`,
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+        variant: 'destructive',
+      });
+      if (!ok) return;
+    }
     try {
       setIsLoading(true);
       const { error } = await supabase
@@ -384,7 +402,16 @@ const Products = () => {
   const bulkDeleteSelected = async () => {
     const ids = filteredProducts.map(p => p.id).filter(id => selectedIds.has(id));
     if (ids.length === 0) return;
-    if (!confirm(`Excluir ${ids.length} produto(s) selecionados?`)) return;
+    {
+      const ok = await confirm({
+        title: 'Excluir produtos',
+        description: `Excluir ${ids.length} produto(s) selecionados?`,
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar',
+        variant: 'destructive',
+      });
+      if (!ok) return;
+    }
     try {
       setIsLoading(true);
       const { error } = await supabase
@@ -734,9 +761,16 @@ const Products = () => {
                             e.stopPropagation(); 
                             const ids = filteredProducts.filter(p => !p.category_id).map(p => p.id).filter(id => selectedIds.has(id));
                             if (ids.length === 0) return;
-                            if (!confirm(`Excluir ${ids.length} produto(s) desta categoria?`)) return;
                             (async () => {
                               try {
+                                const ok = await confirm({
+                                  title: 'Excluir produtos',
+                                  description: `Excluir ${ids.length} produto(s) desta categoria?`,
+                                  confirmText: 'Excluir',
+                                  cancelText: 'Cancelar',
+                                  variant: 'destructive',
+                                });
+                                if (!ok) return;
                                 setIsLoading(true);
                                 const { error } = await supabase
                                   .from('products')

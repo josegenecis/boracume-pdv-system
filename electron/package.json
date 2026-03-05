@@ -2,6 +2,7 @@
 {
   "name": "bora-cume-hub-desktop",
   "version": "1.0.0",
+  "author": "BoraCumê Team",
   "description": "Desktop application for Bora Cume Hub",
   "main": "main.js",
   "scripts": {
@@ -23,37 +24,40 @@
     "node-thermal-printer": "^4.5.0"
   },
   "build": {
-    "appId": "com.boracumehub.desktop",
-    "productName": "Bora Cume Hub Desktop",
+    "asar": false,
+    "appId": "com.boracume.desktop",
+    "productName": "BoraCume",
     "directories": {
-      "output": "../dist-electron"
+      "output": "dist-electron"
     },
     "files": [
-      "../dist/**/*",
-      "**/*",
-      "!node_modules/**/*",
-      "node_modules/serialport/**/*",
-      "node_modules/node-thermal-printer/**/*"
+      "dist/**/*",
+      "services/**/*",
+      "config/**/*",
+      "node_modules/**/*",
+      "main.js",
+      "preload.js",
+      "server.js",
+      "package.json"
     ],
     "extraMetadata": {
-      "main": "electron/main.js"
+      "main": "main.js"
     },
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": ["ia32"]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": ["ia32"]
         }
       ],
-      "icon": "../public/favicon.ico",
+      "executableName": "BoraCume",
+      "icon": "../public/icon-512x512.png",
       "requestedExecutionLevel": "asInvoker",
-      "verifyUpdateCodeSignature": false,
-      "artifactName": "${productName}-${version}.${ext}",
-      "publisherName": "Bora Cume Hub"
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
@@ -65,31 +69,11 @@
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {
-      "requestedExecutionLevel": "asInvoker",
+      "requestExecutionLevel": "user",
       "artifactName": "${productName}-Portable-${version}.${ext}"
     },
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        }
-      ],
-      "icon": "../public/favicon.ico",
-      "artifactName": "${productName}-${version}.${ext}"
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        }
-      ],
-      "icon": "../public/favicon.ico",
-      "artifactName": "${productName}-${version}.${ext}"
-    },
-    "nodeGypRebuild": true,
-    "npmRebuild": true,
-    "buildDependenciesFromSource": true
+    "nodeGypRebuild": false,
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false
   }
 }

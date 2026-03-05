@@ -1,9 +1,10 @@
 
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster as SonnerToaster } from '@/components/ui/sonner';
+import { Toaster as ShadcnToaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
@@ -12,6 +13,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import GlobalNotificationSystem from '@/components/notifications/GlobalNotificationSystem';
 import { soundNotifications } from '@/utils/soundUtils';
 import { useAuth } from '@/contexts/AuthContext';
+import { ConfirmDialogProvider } from '@/contexts/ConfirmDialogContext';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -59,6 +61,17 @@ import './App.css';
 import './styles/responsive.css';
 
 const queryClient = new QueryClient();
+
+const Router = (() => {
+  try {
+    const isElectron = !!(window as any)?.electronAPI?.isElectron;
+    if (isElectron) return HashRouter;
+    if (window.location.protocol === 'file:') return HashRouter;
+    return BrowserRouter;
+  } catch {
+    return HashRouter;
+  }
+})();
 
 function AppContent() {
   return (
@@ -152,11 +165,14 @@ function App() {
         <AuthProvider>
           <SubscriptionProvider>
             <ThemeProvider defaultTheme="light" storageKey="boracume-ui-theme">
-              <Router>
-                <AppContent />
-                <GlobalNotificationSystem />
-                <Toaster />
-              </Router>
+              <ConfirmDialogProvider>
+                <Router>
+                  <AppContent />
+                  <GlobalNotificationSystem />
+                  <SonnerToaster />
+                  <ShadcnToaster />
+                </Router>
+              </ConfirmDialogProvider>
             </ThemeProvider>
           </SubscriptionProvider>
         </AuthProvider>

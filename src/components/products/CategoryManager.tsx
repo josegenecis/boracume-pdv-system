@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Pencil, Trash2, FolderPlus, GripVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
@@ -26,6 +28,7 @@ const CategoryManager = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({ 
     name: '', 
     description: '', 
@@ -34,6 +37,7 @@ const CategoryManager = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (user) {
@@ -52,6 +56,10 @@ const CategoryManager = () => {
 
       if (error) throw error;
       setCategories(data || []);
+      setSelectedIds((prev) => {
+        const ids = new Set((data || []).map((c: Category) => c.id));
+        return new Set(Array.from(prev).filter((id) => ids.has(id)));
+      });
     } catch (error: any) {
       console.error('Erro ao carregar categorias:', error);
       toast({
@@ -133,7 +141,14 @@ const CategoryManager = () => {
   };
 
   const handleDelete = async (categoryId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
+    const ok = await confirm({
+      title: 'Excluir categoria',
+      description: 'Tem certeza que deseja excluir esta categoria?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       setIsLoading(true);
@@ -154,6 +169,62 @@ const CategoryManager = () => {
     } catch (error: any) {
       toast({
         title: 'Erro ao excluir categoria',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(categories.map((c) => c.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const bulkDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const ok = await confirm({
+      title: 'Excluir categorias',
+      description: `Tem certeza que deseja excluir ${selectedIds.size} categoria(s)?`,
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+
+    try {
+      setIsLoading(true);
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase
+        .from('product_categories')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Categorias excluídas',
+        description: `${ids.length} categoria(s) excluída(s) com sucesso.`,
+      });
+
+      clearSelection();
+      fetchCategories();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao excluir categorias',
         description: error.message,
         variant: 'destructive',
       });
@@ -262,6 +333,37 @@ const CategoryManager = () => {
             </DialogContent>
           </Dialog>
         </div>
+        {categories.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (selectedIds.size === categories.length) clearSelection();
+                else selectAll();
+              }}
+            >
+              {selectedIds.size === categories.length ? 'Desmarcar todas' : 'Selecionar todas'}
+            </Button>
+            {selectedIds.size > 0 && (
+              <>
+                <Button variant="outline" size="sm" onClick={clearSelection}>
+                  Limpar seleção
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    void bulkDeleteSelected();
+                  }}
+                  disabled={isLoading}
+                >
+                  Excluir selecionadas ({selectedIds.size})
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {categories.length === 0 ? (
@@ -274,6 +376,23 @@ const CategoryManager = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      selectedIds.size === 0
+                        ? false
+                        : selectedIds.size === categories.length
+                          ? true
+                          : 'indeterminate'
+                    }
+                    onCheckedChange={(v) => {
+                      const next = v === true;
+                      if (next) selectAll();
+                      else clearSelection();
+                    }}
+                    aria-label="Selecionar todas as categorias"
+                  />
+                </TableHead>
                 <TableHead className="w-10"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Descrição</TableHead>
@@ -290,6 +409,13 @@ const CategoryManager = () => {
                       <Draggable key={category.id} draggableId={category.id} index={index}>
                         {(draggableProvided) => (
                           <TableRow ref={draggableProvided.innerRef} {...draggableProvided.draggableProps}>
+                            <TableCell className="w-10">
+                              <Checkbox
+                                checked={selectedIds.has(category.id)}
+                                onCheckedChange={(v) => toggleSelect(category.id, v === true)}
+                                aria-label={`Selecionar categoria ${category.name}`}
+                              />
+                            </TableCell>
                             <TableCell className="w-10">
                               <button type="button" {...draggableProvided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-muted-foreground">
                                 <GripVertical className="h-4 w-4" />

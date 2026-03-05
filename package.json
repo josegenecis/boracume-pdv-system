@@ -124,7 +124,7 @@
   "main": "electron/main.js",
   "build": {
     "appId": "com.boracume.desktop",
-    "productName": "BoraCumê Desktop",
+    "productName": "BoraCume",
     "directories": {
       "output": "dist-electron"
     },
@@ -141,6 +141,7 @@
           ]
         }
       ],
+      "executableName": "BoraCume",
       "icon": "public/icon-512x512.png",
       "verifyUpdateCodeSignature": false
     },

@@ -6,6 +6,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import ProductVariationForm from './ProductVariationForm';
 
 interface VariationOption {
@@ -27,6 +28,7 @@ const GlobalVariationManager: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (user) {
@@ -90,7 +92,14 @@ const GlobalVariationManager: React.FC = () => {
   };
 
   const handleDeleteVariation = async (variationId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este complemento?')) return;
+    const ok = await confirm({
+      title: 'Excluir complemento',
+      description: 'Tem certeza que deseja excluir este complemento?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       const { error } = await supabase
         .from('global_variations')

@@ -36,14 +36,14 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, '../public/favicon.ico'),
+    icon: path.join(__dirname, '../public/icon-512x512.png'),
     show: false,
     titleBarStyle: 'default'
   });
 
   const startUrl = isDev 
     ? 'http://localhost:5173/desktop' 
-    : `file://${path.join(__dirname, '../dist/index.html')}`;
+    : `file://${path.join(__dirname, 'dist', 'index.html')}#/desktop`;
   
   mainWindow.loadURL(startUrl);
 

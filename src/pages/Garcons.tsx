@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import { UserPlus, Trash2, Key, Shield, Eye, EyeOff, Check, User, Lock, Mail, CreditCard, Box, FileText, Settings, BadgePercent } from 'lucide-react';
 
@@ -68,6 +69,7 @@ const PERMISSIONS_GROUPS = [
 const Garcons = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirmDialog();
   
   // Data State
   const [waiters, setWaiters] = useState<Waiter[]>([]);
@@ -180,7 +182,14 @@ const Garcons = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja remover este usuário?')) return;
+    const ok = await confirm({
+      title: 'Remover usuário',
+      description: 'Tem certeza que deseja remover este usuário?',
+      confirmText: 'Remover',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     
     try {
       const { error } = await supabase.from('waiters').delete().eq('id', id);

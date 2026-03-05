@@ -7,6 +7,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import ProductVariationForm from './ProductVariationForm';
 
 interface VariationOption {
@@ -38,6 +39,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     fetchVariations();
@@ -158,7 +160,14 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
   };
 
   const handleDeleteVariation = async (variationId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta variação?')) return;
+    const ok = await confirm({
+      title: 'Excluir variação',
+      description: 'Tem certeza que deseja excluir esta variação?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase

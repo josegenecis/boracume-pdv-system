@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Pencil, Trash2, ImageIcon, Upload, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Banner {
@@ -43,6 +44,7 @@ const BannerManager = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (user) {
@@ -234,7 +236,14 @@ const BannerManager = () => {
   };
 
   const handleDelete = async (bannerId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este banner?')) return;
+    const ok = await confirm({
+      title: 'Excluir banner',
+      description: 'Tem certeza que deseja excluir este banner?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       setIsLoading(true);

@@ -40,6 +40,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirmDialog } from "@/contexts/ConfirmDialogContext";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -73,6 +74,7 @@ const Entregadores: React.FC = () => {
   const [currentDeliveryPerson, setCurrentDeliveryPerson] = useState<DeliveryPerson | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirmDialog();
   
   // Initialize form
   const form = useForm<DeliveryPersonFormValues>({
@@ -181,7 +183,14 @@ const Entregadores: React.FC = () => {
   
   // Delete delivery person
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este entregador?')) return;
+    const ok = await confirm({
+      title: 'Excluir entregador',
+      description: 'Tem certeza que deseja excluir este entregador?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     
     try {
       setIsLoading(true);

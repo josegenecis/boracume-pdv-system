@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Receipt, Search, Download, Eye, X, RotateCcw, PlayCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -44,6 +45,7 @@ const NFCeManager: React.FC = () => {
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelCupomId, setPendingCancelCupomId] = useState<string | null>(null);
   const { toast } = useToast();
+  const confirm = useConfirmDialog();
   const { user } = useAuth();
 
   useEffect(() => {
@@ -243,7 +245,14 @@ const NFCeManager: React.FC = () => {
   };
 
   const handleCancelarCupom = async (cupomId: string) => {
-    if (!confirm('Tem certeza que deseja cancelar este cupom fiscal?')) return;
+    const ok = await confirm({
+      title: 'Cancelar cupom fiscal',
+      description: 'Tem certeza que deseja cancelar este cupom fiscal?',
+      confirmText: 'Cancelar cupom',
+      cancelText: 'Voltar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     const session = getLocalOperatorSession();
     if (isAdminOperator(session)) {
       await doCancelCupom(cupomId);

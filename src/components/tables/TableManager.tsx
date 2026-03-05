@@ -10,6 +10,7 @@ import { Plus, Edit, Trash2, Users, MousePointer, ShoppingCart } from 'lucide-re
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
 
@@ -38,6 +39,7 @@ const TableManager: React.FC = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     fetchTables();
@@ -119,7 +121,14 @@ const TableManager: React.FC = () => {
   };
 
   const handleDelete = async (tableId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta mesa?')) return;
+    const ok = await confirm({
+      title: 'Excluir mesa',
+      description: 'Tem certeza que deseja excluir esta mesa?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       const { error } = await supabase

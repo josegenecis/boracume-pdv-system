@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { MapPin, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 
 interface DeliveryZone {
@@ -23,6 +24,7 @@ const BairrosEntrega = () => {
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (user) {
@@ -144,7 +146,14 @@ const BairrosEntrega = () => {
   };
 
   const handleDeleteZone = async (zoneId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este bairro?')) return;
+    const ok = await confirm({
+      title: 'Excluir bairro',
+      description: 'Tem certeza que deseja excluir este bairro?',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
 
     try {
       setIsLoading(true);
