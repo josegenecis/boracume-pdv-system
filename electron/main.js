@@ -176,6 +176,17 @@ ipcMain.handle('scan-serial-ports', async () => {
   }
 });
 
+ipcMain.handle('list-serial-ports', async () => {
+  try {
+    if (!deviceManager) return { success: false, error: 'Serviços não inicializados', ports: [] };
+    const ports = await deviceManager.listSerialPorts();
+    return { success: true, ports };
+  } catch (error) {
+    console.error('Error listing serial ports:', error);
+    return { success: false, error: error.message, ports: [] };
+  }
+});
+
 ipcMain.handle('connect-printer', async (event, deviceId, protocol = 'epson', options = {}) => {
   try {
     if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
@@ -337,6 +348,49 @@ ipcMain.handle('get-available-printers', async () => {
   } catch (error) {
     console.error('Erro ao listar impressoras:', error);
     return { success: false, error: error.message, printers: [] };
+  }
+});
+
+ipcMain.handle('print-system', async (event, { deviceName, html, silent = true } = {}) => {
+  try {
+    if (!html || typeof html !== 'string') {
+      return { success: false, error: 'HTML inválido' };
+    }
+
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    const encoded = encodeURIComponent(html);
+    await win.loadURL(`data:text/html;charset=utf-8,${encoded}`);
+
+    const printResult = await new Promise((resolve) => {
+      win.webContents.print(
+        {
+          silent: !!silent,
+          deviceName: deviceName || undefined,
+          printBackground: true
+        },
+        (success, failureReason) => resolve({ success, failureReason })
+      );
+    });
+
+    try {
+      win.close();
+    } catch {}
+
+    if (!printResult.success) {
+      return { success: false, error: String(printResult.failureReason || 'Falha ao imprimir') };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao imprimir via sistema:', error);
+    return { success: false, error: error.message };
   }
 });
 

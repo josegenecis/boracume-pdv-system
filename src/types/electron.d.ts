@@ -16,6 +16,21 @@ export interface ProtocolInfo {
   baudRate: number;
 }
 
+export interface SerialPortInfo {
+  id: string;
+  port: string;
+  manufacturer?: string | null;
+  vendorId?: string | null;
+  productId?: string | null;
+  serialNumber?: string | null;
+  pnpId?: string | null;
+  connected: boolean;
+  recognized: boolean;
+  recognizedType?: 'printer' | 'scale' | null;
+  recognizedName?: string | null;
+  recognizedProtocol?: string | null;
+}
+
 export interface WeightReading {
   success: boolean;
   weight?: number;
@@ -38,7 +53,8 @@ export interface ConnectedDevices {
 
 export interface ElectronAPI {
   // Device scanning and management
-  scanSerialPorts: () => Promise<{ success: boolean; devices?: DeviceInfo[]; error?: string }>;
+  scanSerialPorts: () => Promise<any>;
+  listSerialPorts: () => Promise<{ success: boolean; ports: SerialPortInfo[]; error?: string }>;
   getConnectedDevices: () => Promise<{ success: boolean; devices?: ConnectedDevices; error?: string }>;
   getSupportedProtocols: (deviceType: 'printer' | 'scale') => Promise<{ success: boolean; protocols?: ProtocolInfo[]; error?: string }>;
   updateDeviceOptions: (deviceType: 'printer' | 'scale', deviceId: string, options: any) => Promise<DeviceResponse>;
@@ -50,6 +66,7 @@ export interface ElectronAPI {
   printReceipt: (deviceId: string, orderData: any, template?: string) => Promise<DeviceResponse>;
   openCashDrawer: (deviceId: string) => Promise<DeviceResponse>;
   printProductLabel: (deviceId: string, productData: any) => Promise<DeviceResponse>;
+  printSystem: (deviceName: string, html: string, silent?: boolean) => Promise<DeviceResponse>;
   
   // Scale operations
   connectScale: (deviceId: string, protocol?: string, options?: any) => Promise<DeviceResponse>;

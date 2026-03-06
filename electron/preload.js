@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Device scanning and management
   scanSerialPorts: () => ipcRenderer.invoke('scan-serial-ports'),
+  listSerialPorts: () => ipcRenderer.invoke('list-serial-ports'),
   getConnectedDevices: () => ipcRenderer.invoke('get-connected-devices'),
   getSupportedProtocols: (deviceType) => ipcRenderer.invoke('get-supported-protocols', deviceType),
   updateDeviceOptions: (deviceType, deviceId, options) => ipcRenderer.invoke('update-device-options', deviceType, deviceId, options),
@@ -15,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printReceipt: (deviceId, orderData, template) => ipcRenderer.invoke('print-receipt', deviceId, orderData, template),
   openCashDrawer: (deviceId) => ipcRenderer.invoke('open-cash-drawer', deviceId),
   printProductLabel: (deviceId, productData) => ipcRenderer.invoke('print-product-label', deviceId, productData),
+  printSystem: (deviceName, html, silent) => ipcRenderer.invoke('print-system', { deviceName, html, silent }),
   
   // Scale operations
   connectScale: (deviceId, protocol, options) => ipcRenderer.invoke('connect-scale', deviceId, protocol, options),

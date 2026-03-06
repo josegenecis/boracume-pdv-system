@@ -20,6 +20,7 @@
     "dist:electron": "npm run build && electron-builder --publish=never",
     "pack:electron": "electron-builder --dir",
     "build:desktop-portable": "node build-desktop-portable.cjs",
+    "build:desktop-installer": "npm run build && node scripts/build-desktop-installer.cjs",
     "dist:bridge": "node scripts/build-bridge.cjs",
     "pack:bridge": "node scripts/build-bridge.cjs --dir"
   },

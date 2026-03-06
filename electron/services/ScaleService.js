@@ -79,6 +79,24 @@ const SCALE_PROTOCOLS = {
       return match ? parseFloat(match[1]) : null;
     }
   },
+
+  elgin: {
+    name: 'Elgin (Genérico)',
+    baudRate: 9600,
+    dataBits: 8,
+    stopBits: 1,
+    parity: 'none',
+    commands: {
+      requestWeight: Buffer.from([0x05]),
+      tare: Buffer.from('T'),
+      zero: Buffer.from('Z')
+    },
+    parseWeight: (data) => {
+      const dataStr = data.toString().trim();
+      const match = dataStr.match(/([+-]?\d+\.?\d*)/);
+      return match ? parseFloat(match[1]) : null;
+    }
+  },
   
   generic: {
     name: 'Protocolo Genérico',

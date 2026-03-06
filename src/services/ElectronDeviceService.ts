@@ -5,6 +5,8 @@ export interface ElectronDevice {
   type: 'usb' | 'bluetooth';
   manufacturer?: string;
   connected: boolean;
+  deviceType?: 'printer' | 'scale';
+  protocol?: string | null;
 }
 
 export class ElectronDeviceService {
@@ -17,13 +19,16 @@ export class ElectronDeviceService {
     }
 
     try {
-      const ports = await window.electronAPI.scanSerialPorts();
-      return ports.map(port => ({
-        id: port.id,
-        name: port.name,
-        type: port.type === 'bluetooth' ? 'bluetooth' as const : 'usb' as const,
-        manufacturer: port.manufacturer,
-        connected: port.connected
+      const resp = await window.electronAPI.listSerialPorts();
+      if (!resp?.success) return [];
+      return (resp.ports || []).map((p: any) => ({
+        id: p.id,
+        name: p.recognizedName || p.port || p.id,
+        type: 'usb' as const,
+        manufacturer: p.manufacturer || undefined,
+        connected: !!p.connected,
+        deviceType: p.recognizedType || undefined,
+        protocol: p.recognizedProtocol || null,
       }));
     } catch (error) {
       console.error('Error scanning devices:', error);

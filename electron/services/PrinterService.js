@@ -123,6 +123,8 @@ class PrinterService extends EventEmitter {
       'bematech': PrinterTypes.EPSON, // Compatível com ESC/POS
       'daruma': PrinterTypes.EPSON,
       'elgin': PrinterTypes.EPSON,
+      'tanca': PrinterTypes.EPSON,
+      'pos': PrinterTypes.EPSON,
       'generic': PrinterTypes.EPSON
     };
     
@@ -426,6 +428,40 @@ class PrinterService extends EventEmitter {
   getPrinterStatus(deviceId) {
     const printerInfo = this.connectedPrinters.get(deviceId);
     return printerInfo ? printerInfo.status : 'disconnected';
+  }
+
+  getSupportedProtocols() {
+    return [
+      { id: 'epson', name: 'ESC/POS (Epson)', baudRate: 9600 },
+      { id: 'bematech', name: 'ESC/POS (Bematech)', baudRate: 9600 },
+      { id: 'daruma', name: 'ESC/POS (Daruma)', baudRate: 9600 },
+      { id: 'elgin', name: 'ESC/POS (Elgin)', baudRate: 9600 },
+      { id: 'tanca', name: 'ESC/POS (Tanca)', baudRate: 9600 },
+      { id: 'pos', name: 'ESC/POS (POS Genérica)', baudRate: 9600 },
+      { id: 'generic', name: 'ESC/POS (Genérico)', baudRate: 9600 }
+    ];
+  }
+
+  async updatePrinterOptions(deviceId, newOptions) {
+    const printerInfo = this.connectedPrinters.get(deviceId);
+    if (!printerInfo) {
+      return { success: false, message: 'Impressora não conectada' };
+    }
+
+    const merged = { ...(printerInfo.options || {}), ...(newOptions || {}) };
+    printerInfo.options = merged;
+
+    const requiresReconnect = Boolean(
+      (newOptions && typeof newOptions === 'object') &&
+      ('protocol' in newOptions || 'baudRate' in newOptions || 'dataBits' in newOptions || 'stopBits' in newOptions || 'parity' in newOptions || 'timeout' in newOptions || 'width' in newOptions)
+    );
+
+    if (requiresReconnect) {
+      await this.disconnectPrinter(deviceId);
+      return await this.connectPrinter(deviceId, merged);
+    }
+
+    return { success: true, message: 'Opções atualizadas com sucesso' };
   }
 
   async createCustomTemplate(name, templateConfig) {

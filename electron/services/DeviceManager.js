@@ -110,6 +110,32 @@ class DeviceManager extends EventEmitter {
     }
   }
 
+  async listSerialPorts() {
+    try {
+      const ports = await SerialPort.list();
+      return ports.map((p) => {
+        const recognized = this.identifyDevice(p);
+        return {
+          id: p.path,
+          port: p.path,
+          manufacturer: p.manufacturer || null,
+          vendorId: p.vendorId || null,
+          productId: p.productId || null,
+          serialNumber: p.serialNumber || null,
+          pnpId: p.pnpId || null,
+          connected: this.connectedDevices.has(p.path),
+          recognized: !!recognized,
+          recognizedType: recognized?.type || null,
+          recognizedName: recognized?.name || null,
+          recognizedProtocol: recognized?.protocol || null
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao listar portas seriais:', error);
+      return [];
+    }
+  }
+
   identifyDevice(port) {
     const vid = port.vendorId?.toLowerCase();
     const pid = port.productId?.toLowerCase();
@@ -133,11 +159,32 @@ class DeviceManager extends EventEmitter {
     // Dispositivo genérico baseado no fabricante
     if (port.manufacturer) {
       const manufacturer = port.manufacturer.toLowerCase();
-      if (manufacturer.includes('epson') || manufacturer.includes('bematech')) {
+      if (
+        manufacturer.includes('epson') ||
+        manufacturer.includes('bematech') ||
+        manufacturer.includes('tanca') ||
+        manufacturer.includes('elgin') ||
+        manufacturer.includes('pos') ||
+        manufacturer.includes('gprinter') ||
+        manufacturer.includes('g-printer')
+      ) {
         return { name: `${port.manufacturer} Printer`, type: 'printer', protocol: 'generic' };
       }
-      if (manufacturer.includes('toledo') || manufacturer.includes('filizola')) {
-        return { name: `${port.manufacturer} Scale`, type: 'scale', protocol: 'generic' };
+      if (
+        manufacturer.includes('toledo') ||
+        manufacturer.includes('filizola') ||
+        manufacturer.includes('urano') ||
+        manufacturer.includes('magna') ||
+        manufacturer.includes('elgin')
+      ) {
+        const inferred =
+          manufacturer.includes('toledo') ? 'toledo' :
+          manufacturer.includes('urano') ? 'urano' :
+          manufacturer.includes('filizola') ? 'filizola' :
+          manufacturer.includes('magna') ? 'magna' :
+          manufacturer.includes('elgin') ? 'elgin' :
+          'generic';
+        return { name: `${port.manufacturer} Scale`, type: 'scale', protocol: inferred };
       }
     }
     
