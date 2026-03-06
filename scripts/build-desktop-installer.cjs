@@ -30,12 +30,21 @@ async function main() {
   const distSrc = path.join(root, 'dist')
   const electronDir = path.join(root, 'electron')
   const electronDist = path.join(electronDir, 'dist')
+  const electronOut = path.join(electronDir, 'dist-electron')
+  const electronNodeModules = path.join(electronDir, 'node_modules')
+  const electronExpress = path.join(electronNodeModules, 'express')
 
   if (!fs.existsSync(distSrc)) {
     throw new Error('Pasta dist não encontrada. Rode "npm run build" antes.')
   }
 
   await copyDir(distSrc, electronDist)
+
+  if (!fs.existsSync(electronExpress)) {
+    run('npm.cmd ci', electronDir)
+  }
+
+  await rm(electronOut)
 
   run('npm run build-win', electronDir)
 }

@@ -1,7 +1,7 @@
 
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "BoraCumê Team",
   "description": "Desktop application for Bora Cume Hub",
   "main": "main.js",
@@ -20,8 +20,11 @@
     "electron-rebuild": "^3.2.9"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
     "serialport": "^12.0.0",
-    "node-thermal-printer": "^4.5.0"
+    "node-thermal-printer": "^4.5.0",
+    "ws": "^8.19.0"
   },
   "build": {
     "asar": false,
