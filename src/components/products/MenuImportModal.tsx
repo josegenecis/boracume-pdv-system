@@ -232,15 +232,20 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                   
                   // 2. Erro Lógico retornado pelo Backend
                   else if (!data.success) {
+                      try {
+                        console.error('[Import] scrape-menu falhou:', { runId, data });
+                      } catch {}
                       // Se o backend diz que falhou, PARAR IMEDIATAMENTE.
                       // Isso evita o loop infinito quando o backend retorna "Dataset vazio" ou "Erro Apify".
-                      reject(new Error(data.error || 'Falha desconhecida na extração.'));
+                      const details = data?.debug?.datasetId ? ` (runId: ${runId}, dataset: ${data.debug.datasetId})` : ` (runId: ${runId})`;
+                      reject(new Error(`${data.error || 'Falha desconhecida na extração.'}${details}`));
                       return;
                   }
                   
                   // 3. Status Específico do Job
                   else if (data.status === 'failed') {
-                      reject(new Error(data.error || 'O processo de extração falhou.'));
+                      const details = data?.debug?.datasetId ? ` (runId: ${runId}, dataset: ${data.debug.datasetId})` : ` (runId: ${runId})`;
+                      reject(new Error(`${data.error || 'O processo de extração falhou.'}${details}`));
                       return;
                   }
                   else if (data.status === 'completed') {

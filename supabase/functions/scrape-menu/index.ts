@@ -499,6 +499,19 @@ Deno.serve(async (req: Request) => {
             if (looksLikeContentCrawl) {
                  const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
                  if (text) {
+                   const first: any = Array.isArray(items) ? items[0] : null;
+                   const url = String(first?.url || first?.pageUrl || first?.page_url || '');
+                   if (url.includes('cardapioweb.com') && !OPENAI_API_KEY) {
+                     return new Response(
+                       JSON.stringify({
+                         success: false,
+                         status: 'failed',
+                         error: 'Para importar CardapioWeb é necessário configurar OPENAI_API_KEY na Edge Function scrape-menu.',
+                         debug: { runId: String(runId || ''), actId, datasetId: String(datasetId || '') }
+                       }),
+                       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                     );
+                   }
                    if (OPENAI_API_KEY) {
                      let aiStructured: any[] = [];
                      try {
