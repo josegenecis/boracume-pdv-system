@@ -17,6 +17,16 @@ function parseHashParams(hash: string): Record<string, string> {
   return out;
 }
 
+function parseSearchParams(search: string): Record<string, string> {
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  const sp = new URLSearchParams(raw);
+  const out: Record<string, string> = {};
+  sp.forEach((v, k) => {
+    out[k] = v;
+  });
+  return out;
+}
+
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -34,6 +44,14 @@ const ResetPassword: React.FC = () => {
     }
   }, []);
 
+  const searchParams = useMemo(() => {
+    try {
+      return parseSearchParams(window.location.search || '');
+    } catch {
+      return {};
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -46,8 +64,8 @@ const ResetPassword: React.FC = () => {
           } catch {}
         }
 
-        const accessToken = hashParams.access_token || '';
-        const refreshToken = hashParams.refresh_token || '';
+        const accessToken = hashParams.access_token || searchParams.access_token || '';
+        const refreshToken = hashParams.refresh_token || searchParams.refresh_token || '';
         if (accessToken && refreshToken) {
           try {
             await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
@@ -71,7 +89,7 @@ const ResetPassword: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [hashParams]);
+  }, [hashParams, searchParams]);
 
   const handleUpdatePassword = async () => {
     if (saving) return;

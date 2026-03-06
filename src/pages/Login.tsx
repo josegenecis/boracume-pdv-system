@@ -13,6 +13,23 @@ const Login = () => {
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
+  useEffect(() => {
+    try {
+      const search = new URLSearchParams(location.search || '');
+      const code = search.get('code') || '';
+      const typeFromQuery = search.get('type') || '';
+      const hash = window.location.hash || '';
+      const isRecovery =
+        typeFromQuery.toLowerCase() === 'recovery' ||
+        /type=recovery/i.test(hash) ||
+        /recovery/i.test(hash) ||
+        (code && /recovery/i.test(location.search || ''));
+      if (isRecovery) {
+        navigate(`/reset-password${location.search || ''}${hash || ''}`, { replace: true });
+      }
+    } catch {}
+  }, [location.search, navigate]);
+
   // Obter destino do redirecionamento
   const from = location.state?.from?.pathname || '/dashboard';
 

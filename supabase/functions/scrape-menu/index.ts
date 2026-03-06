@@ -141,7 +141,13 @@ Deno.serve(async (req: Request) => {
              }
 
             if (!APIFY_TOKEN) {
-              throw new Error('APIFY_TOKEN não configurado.');
+              if (rawUrl.includes('ifood.com.br')) {
+                throw new Error('Importação por link do iFood requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
+              }
+              if (rawUrl.includes('cardapioweb.com')) {
+                throw new Error('Importação por link do CardapioWeb requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
+              }
+              throw new Error('Importação por link requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
             }
 
             // 2. CardapioWeb / sites muito dinâmicos: crawler de conteúdo + IA (mais confiável que heurística DOM)
@@ -715,7 +721,26 @@ function mapApifyItemsToCategories(items: any[]): any[] {
     const coerceImageUrl = (value: any): string | null => {
         const pickFromObject = (obj: any) => {
             if (!obj || typeof obj !== 'object') return null;
-            const candidates = [obj.url, obj.href, obj.src, obj.imageUrl, obj.image_url, obj.thumbnail, obj.picture, obj.photo];
+            const candidates = [
+              obj.url,
+              obj.href,
+              obj.src,
+              obj.uri,
+              obj.imageUrl,
+              obj.image_url,
+              obj.image,
+              obj.imagePath,
+              obj.image_path,
+              obj.picture,
+              obj.pictureUrl,
+              obj.picture_url,
+              obj.photo,
+              obj.photoUrl,
+              obj.photo_url,
+              obj.thumbnail,
+              obj.thumbnailUrl,
+              obj.thumbnail_url,
+            ];
             for (const c of candidates) {
                 if (typeof c === 'string' && c.trim()) return c.trim();
             }
@@ -751,6 +776,7 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         if (url.startsWith('http://')) url = `https://${url.slice('http://'.length)}`;
         if (url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
         if (url.includes('ifood-static.com.br') || url.includes('ifood-static.com')) return `https://${url}`;
+        if (url.includes('storage.googleapis.com')) return `https://${url}`;
         return null;
     };
 
@@ -808,13 +834,30 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         (Array.isArray(group?.items) ? group.items : null) ||
         (Array.isArray(group?.choices) ? group.choices : null) ||
         (Array.isArray(group?.values) ? group.values : null) ||
+        (Array.isArray(group?.modifiers) ? group.modifiers : null) ||
+        (Array.isArray(group?.addons) ? group.addons : null) ||
+        (Array.isArray(group?.extras) ? group.extras : null) ||
+        (Array.isArray(group?.products) ? group.products : null) ||
         [];
 
       const options = optionsArr
         .map((o: any) => {
           const n = String(o?.name || o?.title || o?.label || o?.description || '').trim();
           if (!n) return null;
-          const p = normalizeMoney(o?.price ?? o?.value ?? o?.amount ?? 0);
+          const p = normalizeMoney(
+            o?.price ??
+              o?.value ??
+              o?.amount ??
+              o?.unitPrice ??
+              o?.unit_price ??
+              o?.additionalPrice ??
+              o?.additional_price ??
+              o?.addPrice ??
+              o?.add_price ??
+              o?.extraPrice ??
+              o?.extra_price ??
+              0
+          );
           return { name: n, price: p };
         })
         .filter(Boolean);
@@ -828,9 +871,43 @@ function mapApifyItemsToCategories(items: any[]): any[] {
         const price = normalizeMoney(rawPrice);
         const categoryName = item.category || item.menuSection || item.group || item.category_name || 'Geral';
         const description = item.description || item.details || item.shortDescription || item.desc || item.subtitle || item.content || item.ingredients || '';
-        const imageUrl = coerceImageUrl(item.imageUrl) || coerceImageUrl(item.image) || coerceImageUrl(item.image_url) || coerceImageUrl(item.media) || coerceImageUrl(item.thumbnail) || null;
+        const imageUrl =
+          coerceImageUrl(item.imageUrl) ||
+          coerceImageUrl(item.image) ||
+          coerceImageUrl(item.image_url) ||
+          coerceImageUrl(item.media) ||
+          coerceImageUrl(item.thumbnail) ||
+          coerceImageUrl(item.images) ||
+          coerceImageUrl(item.photos) ||
+          coerceImageUrl(item.pictures) ||
+          coerceImageUrl(item);
         if (!name) continue;
-        const optionsSource = item.options || item.choices || item.modifiers || item.garnishes || item.addons || item.extras || item.variations || [];
+        const optionsSource =
+          item.options ||
+          item.optionGroups ||
+          item.option_groups ||
+          item.groups ||
+          item.groupOptions ||
+          item.group_options ||
+          item.choices ||
+          item.modifiers ||
+          item.modifierGroups ||
+          item.modifier_groups ||
+          item.garnishes ||
+          item.addons ||
+          item.add_ons ||
+          item.addOns ||
+          item.extras ||
+          item.complements ||
+          item.complementos ||
+          item.complementGroups ||
+          item.complement_groups ||
+          item.additionals ||
+          item.additionalItems ||
+          item.additional_items ||
+          item.variations ||
+          item.variacoes ||
+          [];
         const groups = extractGroups(optionsSource);
         const mappedGroups = groups
           .map(mapOptionGroup)
@@ -1010,7 +1087,8 @@ function consolidateVariantsAndCategories(categories: any[]): any[] {
           description: best?.description || '',
           image_url: best?.image_url || null,
           price: Math.min(...priceVariants.map(v => v.price)),
-          price_variants: priceVariants
+          price_variants: priceVariants,
+          variations: Array.isArray(best?.variations) && best.variations.length > 0 ? best.variations : undefined
         });
       }
     }
