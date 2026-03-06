@@ -1,7 +1,7 @@
 
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "BoraCumê Team",
   "description": "Desktop application for Bora Cume Hub",
   "main": "main.js",

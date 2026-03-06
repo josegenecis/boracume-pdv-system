@@ -43,13 +43,13 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:8080/desktop');
+    mainWindow.loadURL('http://localhost:8080/#/pdv');
   } else {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
     if (!fs.existsSync(indexPath)) {
       dialog.showErrorBox('Erro ao iniciar', `Arquivo não encontrado:\n${indexPath}`);
     } else {
-      mainWindow.loadFile(indexPath, { hash: 'desktop' });
+      mainWindow.loadFile(indexPath, { hash: 'pdv' });
     }
   }
 

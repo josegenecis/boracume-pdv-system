@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +39,10 @@ const DesktopApp: React.FC = () => {
 
   // Verificar se está no Electron
   const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+
+  if (isElectron) {
+    return <Navigate to="/pdv" replace />;
+  }
 
   const testPrint = async () => {
     try {
