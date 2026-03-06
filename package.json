@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop",
     "build:dev": "vite build --mode development",
     "build:prod": "vite build --mode production",
     "lint": "eslint .",
@@ -15,12 +16,11 @@
     "deploy": "npm run build:prod && vercel --prod",
     "deploy:preview": "npm run build && vercel",
     "electron": "electron electron/main.js",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron electron/main.js\"",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:8080 && electron electron/main.js\"",
     "build:electron": "npm run build && electron-builder",
     "dist:electron": "npm run build && electron-builder --publish=never",
     "pack:electron": "electron-builder --dir",
-    "build:desktop-portable": "node build-desktop-portable.cjs",
-    "build:desktop-installer": "npm run build && node scripts/build-desktop-installer.cjs",
+    "build:desktop-installer": "npm run build:desktop && node scripts/build-desktop-installer.cjs",
     "dist:bridge": "node scripts/build-bridge.cjs",
     "pack:bridge": "node scripts/build-bridge.cjs --dir"
   },

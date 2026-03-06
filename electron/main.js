@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const isDev = !app.isPackaged;
 const { SerialPort } = require('serialport');
 const ThermalPrinter = require('node-thermal-printer').printer;
@@ -41,17 +42,27 @@ function createWindow() {
     titleBarStyle: 'default'
   });
 
-  const startUrl = isDev 
-    ? 'http://localhost:5173/desktop' 
-    : `file://${path.join(__dirname, 'dist', 'index.html')}#/desktop`;
-  
-  mainWindow.loadURL(startUrl);
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:8080/desktop');
+  } else {
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    if (!fs.existsSync(indexPath)) {
+      dialog.showErrorBox('Erro ao iniciar', `Arquivo não encontrado:\n${indexPath}`);
+    } else {
+      mainWindow.loadFile(indexPath, { hash: 'desktop' });
+    }
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     if (isDev) {
       mainWindow.webContents.openDevTools();
     }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Falha ao carregar UI:', { errorCode, errorDescription, validatedURL });
+    dialog.showErrorBox('Erro ao carregar interface', `${errorDescription}\n\nURL:\n${validatedURL}`);
   });
 
   mainWindow.on('closed', () => {
