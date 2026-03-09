@@ -167,48 +167,49 @@ Deno.serve(async (req) => {
     const destLoc = geo?.geometry?.location
     const dest = { lat: Number(destLoc?.lat), lng: Number(destLoc?.lng) }
 
-    const match = matchZone(neighborhood, zones)
-    if (match) {
-      const z = match.zone
-      if (typeof cartTotal === 'number' && Number.isFinite(cartTotal) && cartTotal < Number(z.minimum_order || 0)) {
+    const deliveryAreas = (settingsData as any)?.delivery_areas || null
+    const mode = String(deliveryAreas?.pricing?.mode || 'neighborhood').trim()
+    if (mode === 'neighborhood') {
+      const match = matchZone(neighborhood, zones)
+      if (match) {
+        const z = match.zone
+        if (typeof cartTotal === 'number' && Number.isFinite(cartTotal) && cartTotal < Number(z.minimum_order || 0)) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: `Pedido mínimo para ${z.name}: R$ ${Number(z.minimum_order || 0).toFixed(2)}`,
+              code: 'MIN_ORDER',
+              neighborhood,
+              city,
+              state,
+              formattedAddress,
+              zone: { id: z.id, name: z.name }
+            }),
+            { status: 400, headers: corsHeaders }
+          )
+        }
+
         return new Response(
           JSON.stringify({
-            ok: false,
-            error: `Pedido mínimo para ${z.name}: R$ ${Number(z.minimum_order || 0).toFixed(2)}`,
-            code: 'MIN_ORDER',
+            ok: true,
+            mode: 'neighborhood',
+            matchedBy: match.matchedBy,
             neighborhood,
             city,
             state,
             formattedAddress,
-            zone: { id: z.id, name: z.name }
+            zone: {
+              id: z.id,
+              name: z.name,
+              delivery_fee: z.delivery_fee,
+              minimum_order: z.minimum_order,
+              delivery_time: z.delivery_time
+            }
           }),
-          { status: 400, headers: corsHeaders }
+          { headers: corsHeaders }
         )
       }
-
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          mode: 'neighborhood',
-          matchedBy: match.matchedBy,
-          neighborhood,
-          city,
-          state,
-          formattedAddress,
-          zone: {
-            id: z.id,
-            name: z.name,
-            delivery_fee: z.delivery_fee,
-            minimum_order: z.minimum_order,
-            delivery_time: z.delivery_time
-          }
-        }),
-        { headers: corsHeaders }
-      )
     }
-
-    const deliveryAreas = (settingsData as any)?.delivery_areas || null
-    const mode = String(deliveryAreas?.pricing?.mode || '').trim()
     if (mode === 'free') {
       return new Response(
         JSON.stringify({
@@ -327,6 +328,80 @@ Deno.serve(async (req) => {
           distanceKm,
           durationMin: Math.round(seconds / 60),
           zone: { id: null, name: null, delivery_fee: Number(delivery_fee.toFixed(2)), minimum_order, delivery_time }
+        }),
+        { headers: corsHeaders }
+      )
+    }
+
+    if (mode === 'distance_bands') {
+      const cfg = deliveryAreas?.pricing?.distance_bands || {}
+      const bands = Array.isArray(cfg?.bands) ? cfg.bands : []
+
+      const store = deliveryAreas?.store_location || null
+      const origin = { lat: Number(store?.lat), lng: Number(store?.lng) }
+      if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng)) {
+        return new Response(JSON.stringify({ ok: false, error: 'Defina a localização do restaurante em Configurações > Delivery', code: 'STORE_LOCATION_REQUIRED' }), { status: 400, headers: corsHeaders })
+      }
+      if (!Number.isFinite(dest.lat) || !Number.isFinite(dest.lng)) {
+        return new Response(JSON.stringify({ ok: false, error: 'Não foi possível localizar o endereço do cliente', code: 'DEST_LOCATION_INVALID' }), { status: 400, headers: corsHeaders })
+      }
+
+      const { meters, seconds } = await withRetry(() => distanceMatrixGoogle(origin, dest, apiKey), 2)
+      const distanceKm = meters / 1000
+
+      const match = bands.find((b: any) => {
+        const min = Number(b?.min_km || 0) || 0
+        const maxRaw = b?.max_km
+        const max = maxRaw === null || maxRaw === undefined || maxRaw === '' ? Number.POSITIVE_INFINITY : (Number(maxRaw) || 0)
+        return distanceKm >= min && distanceKm <= max
+      })
+
+      if (!match) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: 'Fora da área de entrega',
+            code: 'OUT_OF_AREA',
+            neighborhood,
+            city,
+            state,
+            formattedAddress,
+            distanceKm
+          }),
+          { status: 404, headers: corsHeaders }
+        )
+      }
+
+      const delivery_fee = Number(match?.delivery_fee || 0) || 0
+      const minimum_order = Number(match?.minimum_order || 0) || 0
+      const delivery_time = String(match?.delivery_time || '30-45 min')
+      if (typeof cartTotal === 'number' && Number.isFinite(cartTotal) && cartTotal < minimum_order) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: `Pedido mínimo: R$ ${Number(minimum_order).toFixed(2)}`,
+            code: 'MIN_ORDER',
+            neighborhood,
+            city,
+            state,
+            formattedAddress,
+            distanceKm
+          }),
+          { status: 400, headers: corsHeaders }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          mode: 'distance_bands',
+          neighborhood,
+          city,
+          state,
+          formattedAddress,
+          distanceKm,
+          durationMin: Math.round(seconds / 60),
+          zone: { id: null, name: null, delivery_fee: Number(Math.max(0, delivery_fee).toFixed(2)), minimum_order, delivery_time }
         }),
         { headers: corsHeaders }
       )

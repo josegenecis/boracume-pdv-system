@@ -22,7 +22,7 @@ interface DeliveryZone {
   active: boolean;
 }
 
-type PricingMode = 'free' | 'fixed' | 'neighborhood' | 'distance_km' | 'radius_km' | 'polygon';
+type PricingMode = 'free' | 'fixed' | 'neighborhood' | 'distance_km' | 'distance_bands' | 'radius_km' | 'polygon';
 
 const DeliverySettings = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -36,6 +36,9 @@ const DeliverySettings = () => {
   const [editorMode, setEditorMode] = useState<PricingMode>('neighborhood');
   const [fixedPricing, setFixedPricing] = useState({ delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' });
   const [distancePricing, setDistancePricing] = useState({ base_fee: '0', fee_per_km: '0', max_distance_km: '5', minimum_order: '0', delivery_time: '30-45 min' });
+  const [distanceBands, setDistanceBands] = useState<Array<{ min_km: string; max_km: string; delivery_fee: string; minimum_order: string; delivery_time: string }>>([
+    { min_km: '0', max_km: '5', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' }
+  ]);
   const [radiusPricing, setRadiusPricing] = useState({ radius_km: '5', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' });
   const [modalities, setModalities] = useState({ delivery: true, pickup: true });
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
@@ -85,7 +88,7 @@ const DeliverySettings = () => {
           setStoreLocation({ lat: Number(loc.lat), lng: Number(loc.lng), formattedAddress: String(loc.formattedAddress || '') || undefined });
         }
         const mode = String(areas?.pricing?.mode || '');
-        if (mode === 'free' || mode === 'fixed' || mode === 'neighborhood' || mode === 'distance_km' || mode === 'radius_km' || mode === 'polygon') {
+        if (mode === 'free' || mode === 'fixed' || mode === 'neighborhood' || mode === 'distance_km' || mode === 'distance_bands' || mode === 'radius_km' || mode === 'polygon') {
           setPricingMode(mode as PricingMode);
         }
         if (areas?.pricing?.fixed) {
@@ -103,6 +106,18 @@ const DeliverySettings = () => {
             minimum_order: String(areas.pricing.distance_km.minimum_order ?? '0'),
             delivery_time: String(areas.pricing.distance_km.delivery_time ?? '30-45 min'),
           });
+        }
+        if (areas?.pricing?.distance_bands?.bands && Array.isArray(areas.pricing.distance_bands.bands)) {
+          const bands = areas.pricing.distance_bands.bands;
+          setDistanceBands(
+            bands.map((b: any) => ({
+              min_km: String(b?.min_km ?? '0'),
+              max_km: b?.max_km === null || b?.max_km === undefined ? '' : String(b?.max_km),
+              delivery_fee: String(b?.delivery_fee ?? '0'),
+              minimum_order: String(b?.minimum_order ?? '0'),
+              delivery_time: String(b?.delivery_time ?? '30-45 min'),
+            }))
+          );
         }
         if (areas?.pricing?.radius_km) {
           setRadiusPricing({
@@ -328,7 +343,7 @@ const DeliverySettings = () => {
         setProfileAddress(normalizedAddress);
       }
 
-      const needsStoreLocation = pricingMode === 'distance_km' || pricingMode === 'radius_km' || pricingMode === 'polygon';
+      const needsStoreLocation = pricingMode === 'distance_km' || pricingMode === 'distance_bands' || pricingMode === 'radius_km' || pricingMode === 'polygon';
       let nextStoreLocation = storeLocation;
       if (needsStoreLocation) {
         if (!normalizedAddress) {
@@ -367,6 +382,15 @@ const DeliverySettings = () => {
             max_distance_km: parseFloat(distancePricing.max_distance_km || '0') || 0,
             minimum_order: parseFloat(distancePricing.minimum_order || '0') || 0,
             delivery_time: distancePricing.delivery_time || '30-45 min',
+          },
+          distance_bands: {
+            bands: distanceBands.map((b) => ({
+              min_km: parseFloat(b.min_km || '0') || 0,
+              max_km: b.max_km === '' ? null : (parseFloat(b.max_km || '0') || 0),
+              delivery_fee: parseFloat(b.delivery_fee || '0') || 0,
+              minimum_order: parseFloat(b.minimum_order || '0') || 0,
+              delivery_time: b.delivery_time || '30-45 min',
+            }))
           },
           radius_km: {
             radius_km: parseFloat(radiusPricing.radius_km || '0') || 0,
@@ -433,6 +457,7 @@ const DeliverySettings = () => {
       { id: 'fixed', title: 'Preço fixo', subtitle: 'O mesmo preço de envio se aplica a todos os pedidos' },
       { id: 'neighborhood', title: 'Bairro de destino', subtitle: 'O preço varia de acordo com o bairro' },
       { id: 'distance_km', title: 'Distância percorrida', subtitle: 'O cliente paga de acordo com os quilômetros' },
+      { id: 'distance_bands', title: 'Faixas personalizadas', subtitle: 'Calcule o frete por faixa de km' },
       { id: 'radius_km', title: 'Raio de entrega', subtitle: 'O preço varia pelo raio (km) do restaurante' },
       { id: 'polygon', title: 'Áreas personalizadas', subtitle: 'Defina áreas no mapa para cálculo do preço' },
     ] as const;
@@ -530,6 +555,111 @@ const DeliverySettings = () => {
               value={distancePricing.delivery_time}
               onChange={(e) => setDistancePricing(prev => ({ ...prev, delivery_time: e.target.value }))}
             />
+          </div>
+        </div>
+      );
+    }
+
+    if (editorMode === 'distance_bands') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">Faixas de entrega</div>
+              <div className="text-xs text-muted-foreground">Defina o valor por intervalo de km</div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setDistanceBands((prev) => [
+                  ...prev,
+                  { min_km: '', max_km: '', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' }
+                ])
+              }
+            >
+              <Plus size={16} className="mr-2" />
+              Adicionar faixa
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {distanceBands.map((band, idx) => (
+              <div key={idx} className="p-3 border rounded-lg space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                  <div className="space-y-2">
+                    <Label>De (km)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={band.min_km}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDistanceBands((prev) => prev.map((b, i) => (i === idx ? { ...b, min_km: v } : b)));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Até (km)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="(vazio = sem limite)"
+                      value={band.max_km}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDistanceBands((prev) => prev.map((b, i) => (i === idx ? { ...b, max_km: v } : b)));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Taxa (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={band.delivery_fee}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDistanceBands((prev) => prev.map((b, i) => (i === idx ? { ...b, delivery_fee: v } : b)));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mínimo (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={band.minimum_order}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDistanceBands((prev) => prev.map((b, i) => (i === idx ? { ...b, minimum_order: v } : b)));
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tempo</Label>
+                    <Input
+                      value={band.delivery_time}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDistanceBands((prev) => prev.map((b, i) => (i === idx ? { ...b, delivery_time: v } : b)));
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDistanceBands((prev) => prev.filter((_, i) => i !== idx))}
+                    disabled={distanceBands.length <= 1}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       );
