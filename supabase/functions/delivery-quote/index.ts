@@ -112,6 +112,21 @@ function matchZone(neighborhood: string, zones: Zone[]) {
   return null
 }
 
+function pointInPolygon(point: { lat: number; lng: number }, polygon: Array<{ lat: number; lng: number }>) {
+  let inside = false
+  const x = point.lng
+  const y = point.lat
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng
+    const yi = polygon[i].lat
+    const xj = polygon[j].lng
+    const yj = polygon[j].lat
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + 0.0) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -169,6 +184,30 @@ Deno.serve(async (req) => {
 
     const deliveryAreas = (settingsData as any)?.delivery_areas || null
     const mode = String(deliveryAreas?.pricing?.mode || 'neighborhood').trim()
+    const policies = (deliveryAreas as any)?.policies || {}
+    const validateWithGoogle = policies?.validate_with_google !== false
+    const acceptOutsideCoverage = policies?.accept_outside_coverage === true
+    const outsideDeliveryFee = Number(policies?.outside_delivery_fee || 0) || 0
+
+    const needsValidation = mode === 'distance_km' || mode === 'distance_bands' || mode === 'radius_km' || mode === 'polygon'
+    if (needsValidation && !validateWithGoogle) {
+      if (acceptOutsideCoverage) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode,
+            outsideCoverage: true,
+            neighborhood,
+            city,
+            state,
+            formattedAddress,
+            zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+          }),
+          { headers: corsHeaders }
+        )
+      }
+      return new Response(JSON.stringify({ ok: false, error: 'Validação com mapa desativada', code: 'VALIDATION_DISABLED' }), { status: 400, headers: corsHeaders })
+    }
     if (mode === 'neighborhood') {
       const match = matchZone(neighborhood, zones)
       if (match) {
@@ -285,6 +324,23 @@ Deno.serve(async (req) => {
       const { meters, seconds } = await withRetry(() => distanceMatrixGoogle(origin, dest, apiKey), 2)
       const distanceKm = meters / 1000
       if (max_distance_km > 0 && distanceKm > max_distance_km) {
+        if (acceptOutsideCoverage) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              mode: 'distance_km',
+              outsideCoverage: true,
+              neighborhood,
+              city,
+              state,
+              formattedAddress,
+              distanceKm,
+              durationMin: Math.round(seconds / 60),
+              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+            }),
+            { headers: corsHeaders }
+          )
+        }
         return new Response(
           JSON.stringify({
             ok: false,
@@ -357,6 +413,23 @@ Deno.serve(async (req) => {
       })
 
       if (!match) {
+        if (acceptOutsideCoverage) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              mode: 'distance_bands',
+              outsideCoverage: true,
+              neighborhood,
+              city,
+              state,
+              formattedAddress,
+              distanceKm,
+              durationMin: Math.round(seconds / 60),
+              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+            }),
+            { headers: corsHeaders }
+          )
+        }
         return new Response(
           JSON.stringify({
             ok: false,
@@ -426,6 +499,23 @@ Deno.serve(async (req) => {
       const { meters, seconds } = await withRetry(() => distanceMatrixGoogle(origin, dest, apiKey), 2)
       const distanceKm = meters / 1000
       if (radius_km > 0 && distanceKm > radius_km) {
+        if (acceptOutsideCoverage) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              mode: 'radius_km',
+              outsideCoverage: true,
+              neighborhood,
+              city,
+              state,
+              formattedAddress,
+              distanceKm,
+              durationMin: Math.round(seconds / 60),
+              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+            }),
+            { headers: corsHeaders }
+          )
+        }
         return new Response(
           JSON.stringify({
             ok: false,
@@ -472,10 +562,92 @@ Deno.serve(async (req) => {
       )
     }
 
+    if (mode === 'polygon') {
+      const cfg = deliveryAreas?.pricing?.polygon || {}
+      const areas = Array.isArray(cfg?.areas) ? cfg.areas : []
+      if (!Number.isFinite(dest.lat) || !Number.isFinite(dest.lng)) {
+        return new Response(JSON.stringify({ ok: false, error: 'Não foi possível localizar o endereço do cliente', code: 'DEST_LOCATION_INVALID' }), { status: 400, headers: corsHeaders })
+      }
+
+      for (const a of areas) {
+        if (a?.active === false) continue
+        const rawPoints = Array.isArray(a?.points) ? a.points : []
+        const points = rawPoints
+          .map((p: any) => ({ lat: Number(p?.lat), lng: Number(p?.lng) }))
+          .filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+        if (points.length < 3) continue
+        if (!pointInPolygon({ lat: dest.lat, lng: dest.lng }, points)) continue
+
+        const delivery_fee = Number(a?.delivery_fee || 0) || 0
+        const minimum_order = Number(a?.minimum_order || 0) || 0
+        const delivery_time = String(a?.delivery_time || '30-45 min')
+        const areaId = a?.id ? String(a.id) : null
+        const areaName = a?.name ? String(a.name) : null
+
+        if (typeof cartTotal === 'number' && Number.isFinite(cartTotal) && cartTotal < minimum_order) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: `Pedido mínimo: R$ ${Number(minimum_order).toFixed(2)}`,
+              code: 'MIN_ORDER',
+              neighborhood,
+              city,
+              state,
+              formattedAddress,
+              zone: { id: areaId, name: areaName }
+            }),
+            { status: 400, headers: corsHeaders }
+          )
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode: 'polygon',
+            neighborhood,
+            city,
+            state,
+            formattedAddress,
+            zone: { id: areaId, name: areaName, delivery_fee: Number(Math.max(0, delivery_fee).toFixed(2)), minimum_order, delivery_time }
+          }),
+          { headers: corsHeaders }
+        )
+      }
+
+      if (acceptOutsideCoverage) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode: 'polygon',
+            outsideCoverage: true,
+            neighborhood,
+            city,
+            state,
+            formattedAddress,
+            zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+          }),
+          { headers: corsHeaders }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: 'Fora da área de entrega',
+          code: 'OUT_OF_AREA',
+          neighborhood,
+          city,
+          state,
+          formattedAddress
+        }),
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
     return new Response(
       JSON.stringify({
         ok: false,
-        error: 'Bairro fora da área de entrega',
+        error: 'Fora da área de entrega',
         code: 'OUT_OF_AREA',
         neighborhood,
         city,

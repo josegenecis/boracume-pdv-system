@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 // import SimpleApp from './App.simple.tsx'
 // import AuthOnlyApp from './App.auth-only.tsx'
+import 'leaflet/dist/leaflet.css'
 import './index.css'
 
 // Global Error Handler for debugging white screens

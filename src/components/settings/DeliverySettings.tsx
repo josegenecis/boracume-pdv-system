@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import PolygonAreasEditor, { PolygonAreaDraft } from '@/components/settings/delivery/PolygonAreasEditor';
 
 interface DeliveryZone {
   id: string;
@@ -40,7 +41,10 @@ const DeliverySettings = () => {
     { min_km: '0', max_km: '5', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' }
   ]);
   const [radiusPricing, setRadiusPricing] = useState({ radius_km: '5', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' });
+  const [polygonAreas, setPolygonAreas] = useState<PolygonAreaDraft[]>([]);
+  const [selectedPolygonAreaId, setSelectedPolygonAreaId] = useState<string | null>(null);
   const [modalities, setModalities] = useState({ delivery: true, pickup: true });
+  const [policies, setPolicies] = useState({ validate_with_google: true, accept_outside_coverage: false, outside_delivery_fee: '0' });
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -125,6 +129,28 @@ const DeliverySettings = () => {
             delivery_fee: String(areas.pricing.radius_km.delivery_fee ?? '0'),
             minimum_order: String(areas.pricing.radius_km.minimum_order ?? '0'),
             delivery_time: String(areas.pricing.radius_km.delivery_time ?? '30-45 min'),
+          });
+        }
+        if (areas?.pricing?.polygon?.areas && Array.isArray(areas.pricing.polygon.areas)) {
+          const areasList = areas.pricing.polygon.areas;
+          setPolygonAreas(
+            areasList.map((a: any) => ({
+              id: String(a?.id || ''),
+              name: String(a?.name || 'Área'),
+              delivery_fee: String(a?.delivery_fee ?? '0'),
+              minimum_order: String(a?.minimum_order ?? '0'),
+              delivery_time: String(a?.delivery_time ?? '30-45 min'),
+              active: a?.active !== false,
+              points: Array.isArray(a?.points) ? a.points.map((p: any) => ({ lat: Number(p?.lat), lng: Number(p?.lng) })).filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng)) : []
+            }))
+          );
+          setSelectedPolygonAreaId(areasList[0]?.id ? String(areasList[0].id) : null);
+        }
+        if (areas?.policies) {
+          setPolicies({
+            validate_with_google: areas.policies.validate_with_google !== false,
+            accept_outside_coverage: areas.policies.accept_outside_coverage === true,
+            outside_delivery_fee: String(areas.policies.outside_delivery_fee ?? '0'),
           });
         }
         if (areas?.modalities) {
@@ -397,7 +423,23 @@ const DeliverySettings = () => {
             delivery_fee: parseFloat(radiusPricing.delivery_fee || '0') || 0,
             minimum_order: parseFloat(radiusPricing.minimum_order || '0') || 0,
             delivery_time: radiusPricing.delivery_time || '30-45 min',
+          },
+          polygon: {
+            areas: polygonAreas.map((a) => ({
+              id: a.id,
+              name: a.name,
+              delivery_fee: parseFloat(a.delivery_fee || '0') || 0,
+              minimum_order: parseFloat(a.minimum_order || '0') || 0,
+              delivery_time: a.delivery_time || '30-45 min',
+              active: a.active !== false,
+              points: Array.isArray(a.points) ? a.points.map((p) => ({ lat: p.lat, lng: p.lng })) : []
+            }))
           }
+        },
+        policies: {
+          validate_with_google: policies.validate_with_google !== false,
+          accept_outside_coverage: policies.accept_outside_coverage === true,
+          outside_delivery_fee: parseFloat(policies.outside_delivery_fee || '0') || 0
         },
         modalities: {
           delivery: !!modalities.delivery,
@@ -708,9 +750,13 @@ const DeliverySettings = () => {
 
     if (editorMode === 'polygon') {
       return (
-        <div className="text-sm text-muted-foreground">
-          Configure suas áreas no mapa no próximo passo.
-        </div>
+        <PolygonAreasEditor
+          storeLocation={storeLocation ? { lat: storeLocation.lat, lng: storeLocation.lng } : null}
+          areas={polygonAreas}
+          setAreas={setPolygonAreas}
+          selectedId={selectedPolygonAreaId}
+          setSelectedId={setSelectedPolygonAreaId}
+        />
       );
     }
 
@@ -887,6 +933,41 @@ const DeliverySettings = () => {
               {storeLocLoading ? 'Localizando...' : 'Definir pelo endereço'}
             </Button>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">Validação com Google Maps</div>
+                <div className="text-xs text-muted-foreground">Verifica endereço e cobertura automaticamente</div>
+              </div>
+              <Switch
+                checked={policies.validate_with_google}
+                onCheckedChange={(v) => setPolicies((prev) => ({ ...prev, validate_with_google: v }))}
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">Aceitar fora da cobertura</div>
+                <div className="text-xs text-muted-foreground">Permite finalizar mesmo fora da área</div>
+              </div>
+              <Switch
+                checked={policies.accept_outside_coverage}
+                onCheckedChange={(v) => setPolicies((prev) => ({ ...prev, accept_outside_coverage: v }))}
+              />
+            </div>
+          </div>
+
+          {policies.accept_outside_coverage && (
+            <div className="p-3 border rounded-lg space-y-2">
+              <div className="text-sm font-medium">Taxa fora da cobertura (R$)</div>
+              <Input
+                type="number"
+                step="0.01"
+                value={policies.outside_delivery_fee}
+                onChange={(e) => setPolicies((prev) => ({ ...prev, outside_delivery_fee: e.target.value }))}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="text-sm font-medium">Selecione o preço e a cobertura de envio</div>
