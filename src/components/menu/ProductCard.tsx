@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { MessageCircle, Plus } from 'lucide-react';
+import { Loader2, MessageCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DiscountBadge from './DiscountBadge';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -13,14 +13,17 @@ interface Product {
   discount_percentage?: number;
   image_url?: string;
   order_count: number;
+  track_stock?: boolean;
+  stock_quantity?: number;
 }
 
 interface ProductCardProps {
   product: Product;
   onProductClick: (product: Product) => void;
+  isAdding?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAdding }) => {
   const [imageError, setImageError] = useState(false);
 
   const imageUrl = useMemo(() => {
@@ -76,9 +79,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick }) =>
           )}
 
           <div className="mt-3 flex items-center gap-2">
-            <Button size="sm" onClick={handleAddClick} className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Adicionar</span>
+            <Button size="sm" onClick={handleAddClick} disabled={!!isAdding} className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
+              {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              <span className="hidden sm:inline ml-1">{isAdding ? 'Adicionando' : 'Adicionar'}</span>
             </Button>
             <Button size="sm" onClick={handleWhatsAppShare} className="text-white" style={{ backgroundColor: '#25D366' }}>
               <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp

@@ -21,6 +21,7 @@
     "dist:electron": "npm run build && electron-builder --publish=never",
     "pack:electron": "electron-builder --dir",
     "build:desktop-installer": "npm run build:desktop && node scripts/build-desktop-installer.cjs",
+    "test:menu-perf": "playwright test tests/menu-cart-perf.spec.ts",
     "dist:bridge": "node scripts/build-bridge.cjs",
     "pack:bridge": "node scripts/build-bridge.cjs --dir"
   },

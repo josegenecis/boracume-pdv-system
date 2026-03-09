@@ -31,7 +31,7 @@
     "appId": "com.boracume.desktop",
     "productName": "BoraCume",
     "directories": {
-      "output": "dist-electron"
+      "output": "dist-electron-1.0.3"
     },
     "files": [
       "dist/**/*",

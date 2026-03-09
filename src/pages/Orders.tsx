@@ -400,6 +400,8 @@ const Orders = () => {
           });
         });
 
+        PrinterService.printOrderOnAccept(order);
+
         (async () => {
           try {
             if (!order.customer_phone || !user?.id) return;

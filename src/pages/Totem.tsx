@@ -55,7 +55,7 @@ export default function Totem() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
 
-  const { products, categories, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: false });
+  const { products, categories, isLoading: menuLoading, error: menuError } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
 
   const categoryIds = categories.map((cat: any) => `category-${cat.id}`);
   const { activeSection, registerSection } = useScrollSpy(categoryIds);

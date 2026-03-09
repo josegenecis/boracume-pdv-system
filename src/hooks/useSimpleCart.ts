@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { perfStart } from '@/utils/perf';
 
 interface CartProduct {
   id: string;
@@ -28,10 +29,46 @@ export const useSimpleCart = () => {
   });
   
   const { toast } = useToast();
+  const persistTimerRef = useRef<number | null>(null);
+  const pendingPerfRef = useRef<{ start: ReturnType<typeof perfStart> } | null>(null);
 
   // Persistir carrinho
   useEffect(() => {
-    localStorage.setItem('boracume_menu_cart', JSON.stringify(cart));
+    try {
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+      }
+      persistTimerRef.current = window.setTimeout(() => {
+        try {
+          const payload = JSON.stringify(cart);
+          const idle = (window as any).requestIdleCallback as undefined | ((cb: () => void, opts?: any) => number);
+          if (idle) {
+            idle(() => {
+              try {
+                localStorage.setItem('boracume_menu_cart', payload);
+              } catch {}
+            }, { timeout: 500 });
+          } else {
+            localStorage.setItem('boracume_menu_cart', payload);
+          }
+        } catch {}
+      }, 120);
+    } catch {}
+  }, [cart]);
+
+  useEffect(() => {
+    if (pendingPerfRef.current) {
+      pendingPerfRef.current.start.end({ cartItems: cart.length });
+      pendingPerfRef.current = null;
+    }
+  }, [cart]);
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((total, item) => total + (Number(item.totalPrice) || 0), 0);
+  }, [cart]);
+
+  const cartItemCount = useMemo(() => {
+    return cart.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
   }, [cart]);
 
   const addToCart = (
@@ -41,7 +78,7 @@ export const useSimpleCart = () => {
     notes: string = '',
     variationPrice: number = 0
   ) => {
-    console.log('🛒 Adicionando ao carrinho:', { product, quantity, variations, notes, variationPrice });
+    pendingPerfRef.current = { start: perfStart('menu.cart.add', { productId: product.id, qty: quantity }) };
 
     // Garantir tipos numéricos para evitar NaN
     const basePrice = Number(product.price) || 0;
@@ -70,8 +107,6 @@ export const useSimpleCart = () => {
         updated[existingIndex].quantity += quantity;
         updated[existingIndex].totalPrice = 
           (basePrice + extraPrice) * updated[existingIndex].quantity;
-
-        console.log('🔄 Item atualizado:', updated[existingIndex]);
         
         toast({
           title: "Produto atualizado",
@@ -89,8 +124,6 @@ export const useSimpleCart = () => {
           totalPrice,
           uniqueId
         };
-
-        console.log('➕ Novo item:', newItem);
 
         toast({
           title: "Adicionado ao carrinho",
@@ -135,11 +168,11 @@ export const useSimpleCart = () => {
   };
 
   const getCartTotal = () => {
-    return cart.reduce((total, item) => total + (Number(item.totalPrice) || 0), 0);
+    return cartTotal;
   };
 
   const getCartItemCount = () => {
-    return cart.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
+    return cartItemCount;
   };
 
   return {

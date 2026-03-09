@@ -5,12 +5,17 @@ import { Label } from '@/components/ui/label';
 interface QuantitySelectorProps {
   quantity: number;
   onQuantityChange: (quantity: number) => void;
+  max?: number;
 }
 
 export const QuantitySelector: React.FC<QuantitySelectorProps> = ({
   quantity,
-  onQuantityChange
+  onQuantityChange,
+  max
 }) => {
+  const maxQty = typeof max === 'number' && Number.isFinite(max) ? Math.max(1, Math.floor(max)) : null;
+  const canInc = maxQty === null ? true : quantity < maxQty;
+
   return (
     <div className="flex items-center gap-4">
       <Label>Quantidade:</Label>
@@ -27,6 +32,7 @@ export const QuantitySelector: React.FC<QuantitySelectorProps> = ({
           variant="outline"
           size="sm"
           onClick={() => onQuantityChange(quantity + 1)}
+          disabled={!canInc}
         >
           +
         </Button>

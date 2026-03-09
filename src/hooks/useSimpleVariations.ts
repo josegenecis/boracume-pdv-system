@@ -1,321 +1,172 @@
+import { useState } from 'react';
+import { supabase } from '../integrations/supabase/client';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { perfStart } from '@/utils/perf';
 
-import { useEffect, useState } from "react";
-import { supabase } from "../integrations/supabase/client";
-import { invokeEdgeFunction } from "@/utils/invokeEdgeFunction";
+type VariationOption = { name: string; price: number };
+
+type Variation = {
+  id: string;
+  name: string;
+  required: boolean;
+  max_selections: number;
+  options: VariationOption[];
+};
+
+const TTL_MS = 10 * 60 * 1000;
+const cache = new Map<string, { ts: number; data: Variation[] }>();
+const inflight = new Map<string, Promise<Variation[]>>();
+
+async function sleep(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries: number) {
+  let lastErr: any = null;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < retries) await sleep(Math.min(1500, 200 * Math.pow(2, i)));
+    }
+  }
+  throw lastErr;
+}
+
+function parseOptions(raw: any): any[] {
+  if (!raw) return [];
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      const names = String(raw).split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      return names.map((name) => ({ name, price: 0 }));
+    }
+  }
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object') return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }));
+  return [];
+}
+
+function normalizeVariation(item: any): Variation | null {
+  if (!item || !item.id) return null;
+  const name = String(item.name || '').trim();
+  if (!name) return null;
+  const maxSelections = item.max_selections !== undefined && item.max_selections !== null ? Math.max(1, Number(item.max_selections) || 1) : 1;
+  const processedOptions = parseOptions(item.options);
+  const validOptions: VariationOption[] = [];
+  for (const opt of processedOptions as any[]) {
+    if (!opt?.name) continue;
+    const optionName = String(opt.name).trim();
+    if (!optionName) continue;
+    const optionPrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
+    validOptions.push({ name: optionName, price: Number.isFinite(optionPrice) ? Math.max(0, optionPrice) : 0 });
+  }
+  if (validOptions.length === 0) return null;
+  return {
+    id: String(item.id),
+    name,
+    required: Boolean(item.required ?? item.is_required ?? false),
+    max_selections: maxSelections,
+    options: validOptions
+  };
+}
+
+async function fetchVariationsUncached(productId: string): Promise<Variation[]> {
+  const span = perfStart('menu.variations.fetch', { productId });
+  try {
+    let isAuthenticated = false;
+    try {
+      const { data } = await supabase.auth.getSession();
+      isAuthenticated = !!data?.session?.access_token;
+    } catch {}
+
+    if (!isAuthenticated) {
+      try {
+        const { data: j } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }).then((r) => r as any), 2);
+        if (j?.ok && Array.isArray(j.variations)) {
+          return (j.variations || [])
+            .map((item: any) => normalizeVariation({ ...item, options: parseOptions(item.options) }))
+            .filter(Boolean) as Variation[];
+        }
+      } catch {}
+    }
+
+    const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
+      withRetry(() => supabase.from('product_variations').select('*').eq('product_id', productId) as any, 2),
+      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id').eq('product_id', productId) as any, 2)
+    ]);
+
+    if (productError) throw productError;
+    if (globalError) throw globalError;
+
+    const linkIds = Array.isArray(globalLinks) ? globalLinks.map((l: any) => l.global_variation_id).filter(Boolean) : [];
+    let globalVariations: any[] = [];
+    if (linkIds.length > 0) {
+      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('*').in('id', linkIds as any) as any, 2);
+      if (globalVarError) throw globalVarError;
+      globalVariations = Array.isArray(globalVars) ? globalVars : [];
+    }
+
+    const combined = [...(Array.isArray(productVariations) ? productVariations : []), ...globalVariations];
+    return combined.map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
+  } catch {
+    return [];
+  } finally {
+    span.end();
+  }
+}
 
 export function useSimpleVariations() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchVariations = async (productId: string): Promise<any[]> => {
-    console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
-    console.log('🔍 CARDÁPIO DIGITAL - URL atual:', window.location.href);
-    console.log('🔍 CARDÁPIO DIGITAL - Produto ID tipo:', typeof productId, 'valor:', productId);
+  const fetchVariations = async (productId: string): Promise<Variation[]> => {
+    const key = String(productId || '').trim();
+    if (!key) return [];
+
+    const cached = cache.get(key);
+    if (cached && Date.now() - cached.ts < TTL_MS) return cached.data;
+
+    const running = inflight.get(key);
+    if (running) return running;
+
     setIsLoading(true);
-    
-    try {
-      let isAuthenticated = false;
-      try {
-        const { data } = await supabase.auth.getSession();
-        isAuthenticated = !!data?.session?.access_token;
-      } catch {}
-
-      if (!isAuthenticated) {
-        try {
-          const { data: j } = await invokeEdgeFunction<any>('product-variations-public', { productId });
-          if (j?.ok && Array.isArray(j.variations)) {
-            const variations = j.variations.map((item: any) => ({
-              id: String(item.id),
-              name: String(item.name || ''),
-              required: Boolean(item.required ?? false),
-              max_selections: Math.max(1, Number(item.max_selections ?? 1)),
-              options: (() => {
-                const raw = item.options;
-                if (!raw) return [];
-                if (typeof raw === 'string') {
-                  try { return JSON.parse(raw); } catch { return String(raw).split(/[,;\n]/).map((name: string) => ({ name: name.trim(), price: 0 })); }
-                }
-                if (Array.isArray(raw)) return raw;
-                if (typeof raw === 'object') return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }));
-                return [];
-              })()
-            }));
-            return variations as any[];
-          }
-        } catch (e) {
-          console.warn('Fallback público (edge) de variações falhou', e);
-        }
-      }
-
-      // Buscar variações específicas do produto
-      console.log('📡 CARDÁPIO DIGITAL - Executando query variações específicas...');
-
-      const { data: productVariations, error: productError } = await supabase
-        .from('product_variations')
-        .select('*')
-        .eq('product_id', productId);
-
-
-      if (productError) {
-        console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar variações específicas:', productError);
-        throw productError
-      } else {
-        console.log('📋 CARDÁPIO DIGITAL - Variações específicas encontradas:', productVariations?.length || 0, productVariations);
-      }
-
-      // Buscar variações globais associadas ao produto
-      console.log('🔍 CARDÁPIO DIGITAL - Buscando links de variações globais...');
-      const { data: globalVariationLinks, error: globalError } = await supabase
-        .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId) as any;
-
-      if (globalError) {
-        console.error('❌ CARDÁPIO DIGITAL - Erro ao carregar links de variações globais:', globalError);
-        throw globalError
-      } else {
-        console.log('🔗 CARDÁPIO DIGITAL - Links de variações globais encontrados:', globalVariationLinks?.length || 0, globalVariationLinks);
-      }
-
-      // Buscar as variações globais pelos IDs
-      let globalVariations: any[] = [];
-      const linksArr: any[] = Array.isArray(globalVariationLinks) ? globalVariationLinks as any[] : [];
-      if (linksArr.length > 0) {
-        const globalVariationIds = linksArr.map((link: any) => link.global_variation_id);
-        console.log('🆔 CARDÁPIO DIGITAL - IDs das variações globais a buscar:', globalVariationIds);
-        
-        const { data: globalVars, error: globalVarError } = await supabase
-          .from('global_variations')
-          .select('*')
-          .in('id', globalVariationIds as any) as any;
-
-        if (globalVarError) {
-          console.error('❌ CARDÁPIO DIGITAL - Erro ao buscar variações globais:', globalVarError);
-          throw globalVarError
-        } else if (globalVars) {
-          console.log('🌐 CARDÁPIO DIGITAL - Variações globais encontradas:', globalVars.length, globalVars);
-          
-          // Mesclar configurações do vínculo nas variações globais
-          const globalsArr: any[] = Array.isArray(globalVars) ? globalVars as any[] : [];
-          globalVariations = globalsArr.map((globalVar: any) => {
-            const mergedVariation = {
-              ...globalVar,
-              required: globalVar?.required ?? false,
-              min_selections: 0,
-              max_selections: globalVar?.max_selections ?? 1
-            };
-            console.log('🔧 CARDÁPIO DIGITAL - Variação global mesclada:', mergedVariation);
-            return mergedVariation;
-          });
-        }
-      } else {
-        console.log('⚠️ CARDÁPIO DIGITAL - Nenhum link de variação global encontrado para o produto');
-      }
-
-      // Combinar todas as variações
-      const allVariations = [
-        ...(productVariations || []),
-        ...globalVariations
-      ];
-      
-      console.log('📊 CARDÁPIO DIGITAL - Total de variações combinadas:', allVariations.length, allVariations);
-
-      if (allVariations.length === 0) {
-        console.log('⚠️ CARDÁPIO DIGITAL - NENHUMA VARIAÇÃO ENCONTRADA!');
-        console.log('⚠️ CARDÁPIO DIGITAL - Verificações:');
-        console.log('  ✓ Query executou sem erro');
-        console.log('  ✓ ProductId:', productId);
-        console.log('  ? Produto tem variações cadastradas na tabela product_variations?');
-        console.log('  ? Produto tem variações globais vinculadas?');
-        console.log('  ? User_id está correto nas variações?');
-        return [];
-      }
-
-      const formatted: any[] = [];
-
-      for (const item of allVariations as any[]) {
-        console.log('🔄 CARDÁPIO DIGITAL - Processando variação:', item.name);
-        console.log('🔍 CARDÁPIO DIGITAL - Dados brutos da variação:', JSON.stringify(item, null, 2));
-        
-        try {
-
-
-          if (!item || !item.id) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem ID:', item);
-            continue;
-          }
-
-
-          if (!item.name || String(item.name).trim() === '') {
-            console.log('⚠️ CARDÁPIO DIGITAL - Variação sem nome:', item);
-            continue;
-          }
-
-
-          console.log('🔍 CARDÁPIO DIGITAL - Verificando opções para:', item.name, 'Opções:', item.options);
-
-          let processedOptions = [];
-          
-          if (!item.options) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Propriedade options não existe para:', item.name);
-            continue;
-          }
-
-
-
-          if (typeof item.options === 'string') {
-            console.log('🔄 CARDÁPIO DIGITAL - Options é string, tentando converter:', item.options);
-            try {
-              processedOptions = JSON.parse(item.options);
-              console.log('✅ CARDÁPIO DIGITAL - Conversão de string bem sucedida:', processedOptions);
-            } catch (parseError) {
-              console.log('❌ CARDÁPIO DIGITAL - Erro ao converter string JSON. Tentando sanitizar...');
-              try {
-                const sanitized = String(item.options)
-                  .replace(/\s+/g, ' ')
-                  .replace(/'/g, '"')
-                  .replace(/,\s*]/g, ']')
-                  .trim();
-                processedOptions = JSON.parse(sanitized);
-                console.log('✅ CARDÁPIO DIGITAL - Conversão após sanitização bem sucedida:', processedOptions);
-              } catch (sanError) {
-                console.log('❌ CARDÁPIO DIGITAL - Falha na sanitização. Aplicando fallback por vírgulas.');
-                const names = String(item.options).split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
-                processedOptions = names.map((name: string) => ({ name, price: 0 }));
-                console.log('✅ CARDÁPIO DIGITAL - Fallback por vírgulas aplicado:', processedOptions);
-              }
-            }
-          } else if (Array.isArray(item.options)) {
-            processedOptions = item.options;
-          } else if (typeof item.options === 'object' && item.options !== null) {
-            // Suportar formato { "Bacon": 2.5, "Queijo": 1 }
-            processedOptions = Object.entries(item.options).map(([name, price]) => ({
-              name,
-              price: Number(price) || 0
-            }));
-          } else {
-            console.log('⚠️ CARDÁPIO DIGITAL - Options em formato desconhecido:', typeof item.options, item.options);
-            continue;
-          }
-
-          if (processedOptions.length === 0) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Array de options vazio para:', item.name);
-            continue;
-          }
-
-
-          const validOptions: any[] = [];
-
-          for (let i = 0; i < processedOptions.length; i++) {
-            const opt = processedOptions[i] as any;
-            console.log(`🔍 CARDÁPIO DIGITAL - Processando opção ${i + 1}:`, opt);
-            
-            if (!opt) {
-              console.log(`⚠️ CARDÁPIO DIGITAL - Opção ${i + 1} é null/undefined`);
-              continue;
-            }
-
-
-            if (!opt.name || String(opt.name).trim() === '') {
-              console.log(`⚠️ CARDÁPIO DIGITAL - Opção ${i + 1} sem nome válido:`, opt);
-              continue;
-            }
-
-            const optionName = String(opt.name).trim();
-            const optionPrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
-
-            const finalPrice = isNaN(optionPrice) ? 0 : Math.max(0, optionPrice);
-
-
-            validOptions.push({
-              name: optionName,
-              price: finalPrice
-            });
-
-
-            console.log(`✅ CARDÁPIO DIGITAL - Opção ${i + 1} processada:`, { name: optionName, price: finalPrice });
-          }
-
-          if (validOptions.length === 0) {
-            console.log('⚠️ CARDÁPIO DIGITAL - Nenhuma opção válida encontrada para:', item.name);
-            console.log('🔍 CARDÁPIO DIGITAL - Opções originais eram:', processedOptions);
-            continue;
-          }
-
-
-
-          const maxSelections = item.max_selections !== undefined && item.max_selections !== null 
-            ? Math.max(1, Number(item.max_selections) || 1) 
-            : 1;
-
-          const processedVariation: any = {
-            id: String(item.id),
-            name: String(item.name).trim(),
-            required: Boolean(item.required ?? item.is_required ?? false),
-            max_selections: maxSelections,
-            options: validOptions
-          };
-
-          formatted.push(processedVariation);
-          console.log('✅ CARDÁPIO DIGITAL - Variação processada com sucesso:', {
-            name: processedVariation.name,
-            opções: processedVariation.options.length,
-            required: processedVariation.required,
-            maxSelections: processedVariation.max_selections
-          });
-
-        } catch (itemError) {
-          console.error('❌ CARDÁPIO DIGITAL - Erro ao processar variação:', itemError);
-          console.error('❌ CARDÁPIO DIGITAL - Item que causou erro:', item);
-        }
-      }
-
-      console.log('🎯 CARDÁPIO DIGITAL - RESULTADO FINAL:', {
-
-        total: formatted.length,
-        variações: formatted.map(v => ({ 
-          name: v.name, 
-          opções: v.options.length, 
-          required: v.required,
-          maxSelections: v.max_selections
-        }))
+    const p = fetchVariationsUncached(key)
+      .then((data) => {
+        cache.set(key, { ts: Date.now(), data });
+        return data;
+      })
+      .finally(() => {
+        inflight.delete(key);
+        setIsLoading(false);
       });
 
-      
-      return formatted as any[];
-    } catch (error) {
-      console.error('💥 CARDÁPIO DIGITAL - Erro geral ao carregar variações:', error);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
+    inflight.set(key, p);
+    return p;
   };
 
-  const calculateVariationPrice = (selectedVariations: Record<string, string[]>, variations: any[]) => {
+  const calculateVariationPrice = (selectedVariations: Record<string, string[]>, variations: Variation[]) => {
     let total = 0;
-
-
-    variations.forEach(variation => {
+    for (const variation of variations) {
       const selected = selectedVariations[variation.id] || [];
-      selected.forEach(optionName => {
-        const option = variation.options.find(opt => opt.name === optionName);
+      for (const optionName of selected) {
+        const option = variation.options.find((opt) => opt.name === optionName);
         if (option) total += option.price;
-      });
-    });
-
-
+      }
+    }
     return total;
   };
 
   const getSelectedVariationsText = (selectedVariations: Record<string, string[]>) => {
     const texts: string[] = [];
-    Object.values(selectedVariations).forEach(options => {
+    for (const options of Object.values(selectedVariations)) {
       texts.push(...options);
-    });
-
-    // Remover duplicatas
+    }
     return Array.from(new Set(texts));
-
   };
 
   return { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText };
 }
+

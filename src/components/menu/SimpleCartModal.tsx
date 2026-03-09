@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
@@ -57,6 +57,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [customerAddress, setCustomerAddress] = React.useState('');
   const [isExistingCustomer, setIsExistingCustomer] = React.useState(false);
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
+  const [isDetectingZone, setIsDetectingZone] = React.useState(false);
+  const [detectZoneError, setDetectZoneError] = React.useState<string | null>(null);
+  const [deliveryQuote, setDeliveryQuote] = React.useState<any | null>(null);
+  const detectTimerRef = useRef<number | null>(null);
+  const zoneWasAutoRef = useRef(false);
   const [paymentMethod, setPaymentMethod] = React.useState('');
   const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
@@ -126,8 +131,63 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     };
     if (isOpen) fetchPaymentMethods();
   }, [isOpen, userId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!userId) return;
+
+    const addr = String(customerAddress || '').trim();
+    const hasGps = typeof location.latitude === 'number' && typeof location.longitude === 'number';
+    if (!hasGps && addr.length < 8) return;
+
+    if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
+    detectTimerRef.current = window.setTimeout(async () => {
+      try {
+        setIsDetectingZone(true);
+        setDetectZoneError(null);
+
+        const { data } = await invokeEdgeFunction('delivery-quote', {
+          userId,
+          address: addr || undefined,
+          lat: hasGps ? location.latitude : undefined,
+          lng: hasGps ? location.longitude : undefined,
+          cartTotal: total
+        });
+
+        if (data?.ok) {
+          setDeliveryQuote(data);
+          const mode = String(data?.mode || '');
+          if (mode === 'neighborhood' && data?.zone?.id) {
+            if (!deliveryZoneId || zoneWasAutoRef.current) {
+              zoneWasAutoRef.current = true;
+              setDeliveryZoneId(String(data.zone.id));
+            }
+          } else {
+            if (zoneWasAutoRef.current) setDeliveryZoneId('');
+          }
+          return;
+        }
+
+        const message = String(data?.error || 'Não foi possível detectar a área de entrega.')
+        setDetectZoneError(message);
+        setDeliveryQuote(null);
+      } catch (e: any) {
+        setDetectZoneError(e?.message || 'Falha ao detectar área de entrega. Tente novamente.')
+        setDeliveryQuote(null);
+      } finally {
+        setIsDetectingZone(false);
+      }
+    }, 650);
+
+    return () => {
+      if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
+      detectTimerRef.current = null;
+    };
+  }, [isOpen, userId, customerAddress, location.latitude, location.longitude, total, deliveryZoneId]);
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
-  const deliveryFee = selectedZone?.delivery_fee || 0;
+  const quoteMode = String(deliveryQuote?.mode || '');
+  const quoteZone = deliveryQuote?.zone || null;
+  const deliveryFee = deliveryZoneId !== '' ? (selectedZone?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
   
@@ -264,12 +324,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     const isPaymentValid = paymentMethod !== '';
 
+    const hasDelivery = deliveryZoneId !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
     
     const valid = (
       customerName.trim() !== '' &&
       customerPhone.trim() !== '' &&
       customerAddress.trim() !== '' &&
-      deliveryZoneId !== '' &&
+      hasDelivery &&
       isPaymentValid &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
     );
@@ -279,6 +340,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       customerPhone: customerPhone.trim() !== '',
       customerAddress: customerAddress.trim() !== '',
       deliveryZoneId: deliveryZoneId !== '',
+      quoteMode,
       paymentMethod: paymentMethod,
       isPaymentValid,
       changeValid: paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal,
@@ -301,7 +363,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_address: customerAddress,
-        delivery_zone_id: deliveryZoneId,
+        delivery_zone_id: deliveryZoneId || null,
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
         delivery_instructions: notes,
@@ -561,21 +623,48 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               </p>
             </div>
 
-            <div>
-              <Label htmlFor="zone">Área de entrega *</Label>
-              <Select value={deliveryZoneId} onValueChange={setDeliveryZoneId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione sua área" />
-                </SelectTrigger>
-                <SelectContent>
-                  {deliveryZones.map((zone) => (
-                    <SelectItem key={zone.id} value={zone.id}>
-                      {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
+              <div className="p-3 border rounded-lg bg-gray-50">
+                <div className="text-sm font-medium">Frete calculado automaticamente</div>
+                <div className="text-sm text-muted-foreground">
+                  R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
+                  {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="zone">Área de entrega *</Label>
+                <Select
+                  value={deliveryZoneId}
+                  onValueChange={(v) => {
+                    zoneWasAutoRef.current = false;
+                    setDeliveryQuote(null);
+                    setDeliveryZoneId(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione sua área" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryZones.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        {zone.name} - R$ {zone.delivery_fee.toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isDetectingZone && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Detectando bairro automaticamente...
+                  </div>
+                )}
+                {detectZoneError && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+                    ❌ {detectZoneError}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
 

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // ESC/POS Commands
 const ESC = '\x1B';
@@ -14,6 +15,225 @@ const ALIGN_RIGHT = ESC + 'a' + '\x02';
 
 // Variável global para manter a conexão ativa (singleton pattern simples)
 let usbDevice: any = null;
+
+type PrintOrderOptions = {
+  onlyIfAuto?: boolean;
+};
+
+type ElectronTarget =
+  | { type: 'system'; printerName: string }
+  | { type: 'device'; deviceId: string; protocol: string };
+
+function safeJsonParse<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function resolveElectronTarget(): ElectronTarget | null {
+  try {
+    const mode = (localStorage.getItem('hw.receipt.mode') || '').trim();
+    const systemPrinterName = (localStorage.getItem('hw.report.printer') || '').trim();
+    const serialDeviceId = (localStorage.getItem('hw.receipt.port') || '').trim();
+    const serialProtocol = (localStorage.getItem('hw.receipt.protocol') || 'epson').trim() || 'epson';
+
+    if (mode === 'serial') {
+      if (serialDeviceId) return { type: 'device', deviceId: serialDeviceId, protocol: serialProtocol };
+      if (systemPrinterName) return { type: 'system', printerName: systemPrinterName };
+    }
+
+    if (mode === 'system') {
+      if (systemPrinterName) return { type: 'system', printerName: systemPrinterName };
+      if (serialDeviceId) return { type: 'device', deviceId: serialDeviceId, protocol: serialProtocol };
+    }
+
+    if (systemPrinterName) return { type: 'system', printerName: systemPrinterName };
+    if (serialDeviceId) return { type: 'device', deviceId: serialDeviceId, protocol: serialProtocol };
+
+    const legacy = safeJsonParse<{
+      mode?: 'system' | 'network';
+      systemName?: string;
+      ip?: string;
+      port?: number;
+      protocol?: string;
+    }>(localStorage.getItem('pdv_printer'));
+
+    if (legacy?.mode === 'system') {
+      const printerName = String(legacy.systemName || '').trim();
+      if (printerName) return { type: 'system', printerName };
+    }
+
+    if (legacy?.mode === 'network') {
+      const ip = String(legacy.ip || '').trim();
+      const port = Number(legacy.port || 9100) || 9100;
+      const protocol = String(legacy.protocol || 'epson').trim() || 'epson';
+      if (ip) return { type: 'device', deviceId: `tcp://${ip}:${port}`, protocol };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function buildOrderHtml(order: any, config: any) {
+  const width = config.paper_width === '58mm' ? '58mm' : '80mm';
+  const bodyWidth = config.paper_width === '58mm' ? '210px' : '280px';
+  const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
+
+  return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Imprimir Pedido #${order.order_number}</title>
+        <style>
+          @page { margin: 0; size: auto; }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            width: ${width};
+            margin: 0;
+            padding: 5px;
+            font-size: ${fontSize};
+            color: #000;
+            line-height: 1.2;
+          }
+          .container {
+            width: 100%;
+            max-width: ${bodyWidth};
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .flex { display: flex; justify-content: space-between; }
+          .item-row { margin-bottom: 4px; }
+          .notes { font-size: 0.9em; font-style: italic; margin-left: 10px; }
+          .total-row { font-size: 1.2em; margin-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="center bold" style="font-size: 1.2em;">${config.print_header || 'RESTAURANTE'}</div>
+          <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
+          <div class="divider"></div>
+          
+          <div class="center bold" style="font-size: 1.4em;">SENHA: ${order.order_number?.slice(-4) || '----'}</div>
+          <div class="center">Pedido #${order.order_number}</div>
+          
+          <div class="divider"></div>
+          
+          <div class="bold">CLIENTE:</div>
+          <div>${order.customer_name || 'Balcão'}</div>
+          ${order.customer_phone ? `<div>Tel: ${order.customer_phone}</div>` : ''}
+          ${order.customer_address ? `<div>End: ${order.customer_address}</div>` : ''}
+          ${order.delivery_zone_id ? `<div>Entrega: ${order.order_type === 'delivery' ? 'Delivery' : 'Retirada'}</div>` : ''}
+          
+          <div class="divider"></div>
+          
+          <div class="bold" style="margin-bottom: 5px;">ITENS:</div>
+          ${(order.items || []).map((item: any) => `
+            <div class="item-row">
+              <div class="flex">
+                <span style="width: 10%;">${item.quantity}x</span>
+                <span style="width: 65%;">${item.product_name || item.name}</span>
+                <span style="width: 25%; text-align: right;">${(item.total || item.subtotal || item.price * item.quantity).toFixed(2)}</span>
+              </div>
+              ${item.variations && item.variations.length ? `<div class="notes">+ ${item.variations.join(', ')}</div>` : ''}
+              ${item.notes ? `<div class="notes">Obs: ${item.notes}</div>` : ''}
+            </div>
+          `).join('')}
+          
+          <div class="divider"></div>
+          
+          <div class="flex">
+            <span>Subtotal:</span>
+            <span>R$ ${(order.total - (order.delivery_fee || 0)).toFixed(2)}</span>
+          </div>
+          ${order.delivery_fee ? `
+          <div class="flex">
+            <span>Taxa Entrega:</span>
+            <span>R$ ${order.delivery_fee.toFixed(2)}</span>
+          </div>` : ''}
+          ${order.discount ? `
+          <div class="flex">
+            <span>Desconto:</span>
+            <span>- R$ ${order.discount.toFixed(2)}</span>
+          </div>` : ''}
+          
+          <div class="divider"></div>
+          
+          <div class="flex total-row bold">
+            <span>TOTAL:</span>
+            <span>R$ ${order.total.toFixed(2)}</span>
+          </div>
+          
+          <div style="margin-top: 5px;">Pagamento: ${order.payment_method?.toUpperCase().replace('_', ' ') || 'N/A'}</div>
+          ${order.change_amount ? `<div>Troco para: R$ ${order.change_amount.toFixed(2)}</div>` : ''}
+          
+          <div class="divider"></div>
+          <div class="center" style="margin-top: 10px;">${config.print_footer}</div>
+          <div class="center" style="font-size: 0.8em; margin-top: 5px;">Sistema BoraCumê</div>
+        </div>
+      </body>
+      </html>
+    `;
+}
+
+async function printElectron(order: any, config: any) {
+  const api = (window as any)?.electronAPI;
+  if (!api?.printSystem || !api?.printReceipt) return { success: false, error: 'API do Desktop indisponível' };
+
+  const target = resolveElectronTarget();
+  if (!target) return { success: false, error: 'Impressora não configurada em Configurações' };
+
+  const copies = Math.max(1, Number(config.copies || 1) || 1);
+
+  if (target.type === 'system') {
+    const html = buildOrderHtml(order, config);
+    for (let i = 0; i < copies; i++) {
+      const resp = await api.printSystem(target.printerName, html, true);
+      if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
+    }
+    return { success: true };
+  }
+
+  const deviceId = target.deviceId;
+  const protocol = target.protocol || 'epson';
+
+  const normalized = {
+    order_number: order.order_number,
+    customer_name: order.customer_name || 'Balcão',
+    customer_phone: order.customer_phone || '',
+    customer_address: order.customer_address || '',
+    date: order.created_at,
+    items: (Array.isArray(order.items) ? order.items : []).map((it: any) => ({
+      product_name: it.product_name || it.name,
+      name: it.product_name || it.name,
+      quantity: Number(it.quantity || 1),
+      price: Number(it.price || it.unit_price || 0),
+      subtotal: Number(it.subtotal || it.total || (Number(it.price || 0) * Number(it.quantity || 1)) || 0),
+      notes: it.notes || it.observations || ''
+    })),
+    total: Number(order.total || 0),
+    subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
+    discount: Number(order.discount || 0),
+    delivery_fee: Number(order.delivery_fee || 0),
+    payment_method: String(order.payment_method || '').toUpperCase()
+  };
+
+  const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: 48 });
+  if (!conn?.success) return { success: false, error: conn?.error || conn?.message || 'Falha ao conectar impressora' };
+
+  for (let i = 0; i < copies; i++) {
+    const resp = await api.printReceipt(deviceId, normalized, 'receipt');
+    if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao imprimir' };
+  }
+
+  return { success: true };
+}
 
 export const PrinterService = {
   // Conectar Impressora USB
@@ -43,13 +263,24 @@ export const PrinterService = {
   },
 
   // Método principal de impressão
-  async printOrder(order: any) {
+  async printOrder(order: any, options: PrintOrderOptions = {}) {
+    const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
+    const isElectron = Boolean(api?.printSystem && api?.printReceipt);
+
     // 1. Buscar configurações
     const { data: settings } = await supabase
       .from('printer_settings')
       .select('*')
       .eq('user_id', order.user_id)
       .maybeSingle();
+
+    if (options.onlyIfAuto) {
+      if (isElectron) {
+        if (settings?.auto_print === false) return;
+      } else {
+        if (settings?.auto_print !== true) return;
+      }
+    }
 
     const config = settings || {
       paper_width: '80mm',
@@ -58,6 +289,14 @@ export const PrinterService = {
       print_footer: 'Obrigado!',
       copies: 1
     };
+
+    if (isElectron) {
+      const resp = await printElectron(order, config);
+      if (!resp.success) {
+        toast.error(resp.error || 'Falha ao imprimir');
+      }
+      return;
+    }
 
     // 2. Tentar impressão via USB (Silenciosa)
     if (usbDevice && usbDevice.opened) {
@@ -72,6 +311,12 @@ export const PrinterService = {
 
     // 3. Fallback: Janela de Impressão HTML (Navegador)
     this.printHtml(order, config);
+  },
+
+  async printOrderOnAccept(order: any) {
+    const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
+    const isElectron = Boolean(api?.printSystem && api?.printReceipt);
+    return this.printOrder(order, { onlyIfAuto: !isElectron });
   },
 
   // Impressão USB (ESC/POS)
@@ -162,110 +407,10 @@ export const PrinterService = {
 
   // Impressão HTML (Fallback)
   printHtml(order: any, config: any) {
-    const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-    const bodyWidth = config.paper_width === '58mm' ? '210px' : '280px';
-    const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Imprimir Pedido #${order.order_number}</title>
-        <style>
-          @page { margin: 0; size: auto; }
-          body {
-            font-family: 'Courier New', Courier, monospace;
-            width: ${width};
-            margin: 0;
-            padding: 5px;
-            font-size: ${fontSize};
-            color: #000;
-            line-height: 1.2;
-          }
-          .container {
-            width: 100%;
-            max-width: ${bodyWidth};
-          }
-          .center { text-align: center; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .flex { display: flex; justify-content: space-between; }
-          .item-row { margin-bottom: 4px; }
-          .notes { font-size: 0.9em; font-style: italic; margin-left: 10px; }
-          .total-row { font-size: 1.2em; margin-top: 10px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="center bold" style="font-size: 1.2em;">${config.print_header || 'RESTAURANTE'}</div>
-          <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
-          <div class="divider"></div>
-          
-          <div class="center bold" style="font-size: 1.4em;">SENHA: ${order.order_number?.slice(-4) || '----'}</div>
-          <div class="center">Pedido #${order.order_number}</div>
-          
-          <div class="divider"></div>
-          
-          <div class="bold">CLIENTE:</div>
-          <div>${order.customer_name || 'Balcão'}</div>
-          ${order.customer_phone ? `<div>Tel: ${order.customer_phone}</div>` : ''}
-          ${order.customer_address ? `<div>End: ${order.customer_address}</div>` : ''}
-          ${order.delivery_zone_id ? `<div>Entrega: ${order.order_type === 'delivery' ? 'Delivery' : 'Retirada'}</div>` : ''}
-          
-          <div class="divider"></div>
-          
-          <div class="bold" style="margin-bottom: 5px;">ITENS:</div>
-          ${order.items.map((item: any) => `
-            <div class="item-row">
-              <div class="flex">
-                <span style="width: 10%;">${item.quantity}x</span>
-                <span style="width: 65%;">${item.product_name || item.name}</span>
-                <span style="width: 25%; text-align: right;">${(item.total || item.price * item.quantity).toFixed(2)}</span>
-              </div>
-              ${item.variations && item.variations.length ? `<div class="notes">+ ${item.variations.join(', ')}</div>` : ''}
-              ${item.notes ? `<div class="notes">Obs: ${item.notes}</div>` : ''}
-            </div>
-          `).join('')}
-          
-          <div class="divider"></div>
-          
-          <div class="flex">
-            <span>Subtotal:</span>
-            <span>R$ ${(order.total - (order.delivery_fee || 0)).toFixed(2)}</span>
-          </div>
-          ${order.delivery_fee ? `
-          <div class="flex">
-            <span>Taxa Entrega:</span>
-            <span>R$ ${order.delivery_fee.toFixed(2)}</span>
-          </div>` : ''}
-          ${order.discount ? `
-          <div class="flex">
-            <span>Desconto:</span>
-            <span>- R$ ${order.discount.toFixed(2)}</span>
-          </div>` : ''}
-          
-          <div class="divider"></div>
-          
-          <div class="flex total-row bold">
-            <span>TOTAL:</span>
-            <span>R$ ${order.total.toFixed(2)}</span>
-          </div>
-          
-          <div style="margin-top: 5px;">Pagamento: ${order.payment_method?.toUpperCase().replace('_', ' ') || 'N/A'}</div>
-          ${order.change_amount ? `<div>Troco para: R$ ${order.change_amount.toFixed(2)}</div>` : ''}
-          
-          <div class="divider"></div>
-          <div class="center" style="margin-top: 10px;">${config.print_footer}</div>
-          <div class="center" style="font-size: 0.8em; margin-top: 5px;">Sistema BoraCumê</div>
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `;
+    const htmlContent = buildOrderHtml(order, config).replace(
+      '</body>',
+      `<script>window.onload=function(){window.print();}</script></body>`
+    );
 
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (printWindow) {

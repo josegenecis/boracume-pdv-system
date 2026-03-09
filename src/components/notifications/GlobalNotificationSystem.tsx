@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { soundNotifications } from '@/utils/soundUtils';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { PrinterService } from '@/utils/printerService';
 
 interface PendingOrder {
   id: string;
@@ -353,6 +354,19 @@ const GlobalNotificationSystem: React.FC = () => {
       soundNotifications.stopAllSounds();
       const { data } = await invokeEdgeFunction('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
       if (!data?.ok) throw new Error(data?.error || 'Falha ao aceitar');
+
+      try {
+        const { data: fullOrder } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', order.id)
+          .maybeSingle();
+        if (fullOrder) {
+          const normalized = { ...fullOrder, items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [] };
+          PrinterService.printOrderOnAccept(normalized);
+        }
+      } catch {}
+
       setIsAnimatingOut(true);
       window.setTimeout(() => {
         setPendingOrders(prev => prev.filter(o => o.id !== order.id));

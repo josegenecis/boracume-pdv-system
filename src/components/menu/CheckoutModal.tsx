@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,6 +72,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
   const [selectedZone, setSelectedZone] = useState<string>('');
+  const [isDetectingZone, setIsDetectingZone] = useState(false);
+  const [detectZoneError, setDetectZoneError] = useState<string | null>(null);
+  const [deliveryQuote, setDeliveryQuote] = useState<any | null>(null);
+  const detectTimerRef = useRef<number | null>(null);
+  const zoneWasAutoRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
 
@@ -187,8 +192,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   }, [paymentMethod, paymentMethods]);
 
   const selectedZoneData = deliveryZones.find(zone => zone.id === selectedZone);
-  const deliveryFee = selectedZoneData?.delivery_fee || 0;
-  const minimumOrder = selectedZoneData?.minimum_order || 0;
+  const quoteMode = String(deliveryQuote?.mode || '');
+  const quoteZone = deliveryQuote?.zone || null;
+  const deliveryFee = selectedZone !== '' ? (selectedZoneData?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
+  const minimumOrder = selectedZone !== '' ? (selectedZoneData?.minimum_order || 0) : (Number(quoteZone?.minimum_order || 0) || 0);
   const totalWithDelivery = total + deliveryFee;
 
   const extraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
@@ -250,6 +257,59 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     );
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!userId) return;
+
+    const addr = String(customerData.address || '').trim();
+    const hasGps = typeof location.latitude === 'number' && typeof location.longitude === 'number';
+    if (!hasGps && addr.length < 8) return;
+
+    if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
+    detectTimerRef.current = window.setTimeout(async () => {
+      try {
+        setIsDetectingZone(true);
+        setDetectZoneError(null);
+
+        const { data } = await invokeEdgeFunction('delivery-quote', {
+          userId,
+          address: addr || undefined,
+          lat: hasGps ? location.latitude : undefined,
+          lng: hasGps ? location.longitude : undefined,
+          cartTotal: total
+        });
+
+        if (data?.ok) {
+          setDeliveryQuote(data);
+          const mode = String(data?.mode || '');
+          if (mode === 'neighborhood' && data?.zone?.id) {
+            if (!selectedZone || zoneWasAutoRef.current) {
+              zoneWasAutoRef.current = true;
+              setSelectedZone(String(data.zone.id));
+            }
+          } else {
+            if (zoneWasAutoRef.current) setSelectedZone('');
+          }
+          return;
+        }
+
+        const message = String(data?.error || 'Não foi possível detectar a área de entrega.')
+        setDetectZoneError(message);
+        setDeliveryQuote(null);
+      } catch (e: any) {
+        setDetectZoneError(e?.message || 'Falha ao detectar área de entrega. Tente novamente.');
+        setDeliveryQuote(null);
+      } finally {
+        setIsDetectingZone(false);
+      }
+    }, 650);
+
+    return () => {
+      if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
+      detectTimerRef.current = null;
+    };
+  }, [isOpen, userId, customerData.address, location.latitude, location.longitude, total, selectedZone]);
+
   const generateGoogleMapsLink = (lat: number, lng: number) => {
     return `https://maps.google.com/maps?q=${lat},${lng}`;
   };
@@ -258,11 +318,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (!isFormValid()) {
       // Verificar cada campo individualmente para dar feedback específico
       const errors: string[] = [];
+      const needsNeighborhood = quoteMode === 'neighborhood' || !deliveryQuote?.ok;
+      const hasDelivery = selectedZone !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
       if (!customerData.name.trim()) errors.push('Nome é obrigatório');
       if (!customerData.phone.trim()) errors.push('Telefone é obrigatório');
       if (!customerData.address.trim()) errors.push('Endereço é obrigatório');
-      if (!customerData.neighborhood.trim()) errors.push('Bairro é obrigatório');
-      if (!selectedZone) errors.push('Selecione uma área de entrega');
+      if (needsNeighborhood && !customerData.neighborhood.trim()) errors.push('Bairro é obrigatório');
+      if (!hasDelivery) errors.push('Selecione uma área de entrega');
       if (total < minimumOrder) errors.push(`Pedido mínimo: R$ ${minimumOrder.toFixed(2)}`);
       if (!paymentMethod) errors.push('Selecione forma de pagamento');
       if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < totalWithDelivery) {
@@ -354,12 +416,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const isFormValid = () => {
+    const needsNeighborhood = quoteMode === 'neighborhood' || !deliveryQuote?.ok;
+    const hasDelivery = selectedZone !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
     const isValid = (
       customerData.name.trim() !== '' &&
       customerData.phone.trim() !== '' &&
       customerData.address.trim() !== '' &&
-      customerData.neighborhood.trim() !== '' &&
-      selectedZone !== '' &&
+      (!needsNeighborhood || customerData.neighborhood.trim() !== '') &&
+      hasDelivery &&
       total >= minimumOrder &&
       paymentMethod !== '' &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= totalWithDelivery)
@@ -506,18 +570,47 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="space-y-2">
                   <Label htmlFor="delivery-zone">Área de Entrega *</Label>
-                  <Select value={selectedZone} onValueChange={setSelectedZone}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a área" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {deliveryZones.map((zone) => (
-                        <SelectItem key={zone.id} value={zone.id}>
-                          {zone.name} - R$ {zone.delivery_fee.toFixed(2)} ({zone.delivery_time})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
+                    <div className="p-3 border rounded-lg bg-gray-50">
+                      <div className="text-sm font-medium">Frete calculado automaticamente</div>
+                      <div className="text-sm text-muted-foreground">
+                        R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
+                        {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Select
+                        value={selectedZone}
+                        onValueChange={(v) => {
+                          zoneWasAutoRef.current = false;
+                          setDeliveryQuote(null);
+                          setSelectedZone(v);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a área" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {deliveryZones.map((zone) => (
+                            <SelectItem key={zone.id} value={zone.id}>
+                              {zone.name} - R$ {zone.delivery_fee.toFixed(2)} ({zone.delivery_time})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {isDetectingZone && (
+                        <p className="text-xs text-muted-foreground">
+                          Detectando bairro automaticamente...
+                        </p>
+                      )}
+                      {detectZoneError && (
+                        <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+                          ❌ {detectZoneError}
+                        </div>
+                      )}
+                    </>
+                  )}
                   {selectedZoneData && total < minimumOrder && (
                     <p className="text-sm text-red-500">
                       Pedido mínimo para esta área: R$ {minimumOrder.toFixed(2)}

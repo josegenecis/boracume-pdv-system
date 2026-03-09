@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { QrCode, Download, Copy, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { buildPublicMenuUrl } from '@/utils/publicUrl';
 
 const QRCodeGenerator = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
@@ -17,8 +18,7 @@ const QRCodeGenerator = () => {
   useEffect(() => {
     if (user) {
       // Gera a URL do cardápio usando o ID do usuário
-      const baseUrl = window.location.origin;
-      const url = `${baseUrl}/menu/${user.id}`;
+      const url = buildPublicMenuUrl(user.id);
       setMenuUrl(url);
       
       // Gera o QR Code usando uma API gratuita

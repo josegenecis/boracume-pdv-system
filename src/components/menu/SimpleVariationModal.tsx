@@ -3,9 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { QuantitySelector } from './variation/QuantitySelector';
 import { VariationGroup } from './variation/VariationGroup';
+import { Loader2 } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -20,53 +22,43 @@ interface SimpleVariationModalProps {
   onClose: () => void;
   product: Product | null;
   onAddToCart: (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => void;
+  maxQuantity?: number | null;
 }
 
 export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   isOpen,
   onClose,
   product,
-  onAddToCart
+  onAddToCart,
+  maxQuantity
 }) => {
   const [variations, setVariations] = useState<any[]>([]);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
-  const { fetchVariations, calculateVariationPrice, getSelectedVariationsText } = useSimpleVariations();
+  const { toast } = useToast();
+  const [loadingVariations, setLoadingVariations] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText } = useSimpleVariations();
 
   useEffect(() => {
     if (product && isOpen) {
-      console.log('🔄 MODAL - Iniciando carregamento de variações para:', product.name);
       loadVariations();
     }
   }, [product, isOpen]);
 
   const loadVariations = async () => {
-    if (!product) {
-      console.log('⚠️ MODAL - Produto não encontrado');
-      return;
-    }
-    
-    console.log('🔍 MODAL - Buscando variações para produto:', product.id, product.name);
+    if (!product) return;
     
     try {
+      setLoadingVariations(true);
       const productVariations = await fetchVariations(product.id);
-      console.log('✅ MODAL - Variações carregadas:', productVariations.length, productVariations);
-      
       setVariations(productVariations);
       setSelectedVariations({});
-      
-      console.log('📊 MODAL - Estado atualizado - Total de variações:', productVariations.length);
-      console.log('📋 MODAL - Variações detalhadas:', productVariations.map(v => ({
-        id: v.id,
-        name: v.name,
-        required: v.required,
-        optionsCount: v.options.length,
-        options: v.options
-      })));
     } catch (error) {
-      console.error('❌ MODAL - Erro ao carregar variações:', error);
       setVariations([]);
+    } finally {
+      setLoadingVariations(false);
     }
   };
 
@@ -116,16 +108,26 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   const handleAddToCart = () => {
     if (!product) return;
+    if (typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) && quantity > Math.max(1, Math.floor(maxQuantity))) {
+      toast({
+        title: 'Estoque insuficiente',
+        description: `Quantidade máxima disponível: ${Math.max(1, Math.floor(maxQuantity))}.`,
+        variant: 'destructive'
+      });
+      return;
+    }
     
     const variationPrice = calculateVariationPrice(selectedVariations, variations);
     const variationTexts = getSelectedVariationsText(selectedVariations);
     
+    setSubmitting(true);
     onAddToCart(product, quantity, variationTexts, notes, variationPrice);
     
     // Reset
     setQuantity(1);
     setNotes('');
     setSelectedVariations({});
+    setSubmitting(false);
     onClose();
   };
 
@@ -161,52 +163,28 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           <QuantitySelector 
             quantity={quantity}
             onQuantityChange={setQuantity}
+            max={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? Math.max(1, Math.floor(maxQuantity)) : undefined}
           />
 
           {/* Variações */}
-          {(() => {
-            console.log('🎨 MODAL - RENDERIZAÇÃO DE VARIAÇÕES');
-            console.log('🎨 MODAL - Total de variações:', variations.length);
-            console.log('🎨 MODAL - Lista completa de variações:', variations);
-            console.log('🎨 MODAL - Produto atual:', product?.name, product?.id);
-            
-            if (variations.length === 0) {
-              console.log('⚠️ MODAL - NENHUMA VARIAÇÃO ENCONTRADA!');
-              console.log('⚠️ MODAL - Possíveis causas:');
-              console.log('  - Produto não tem variações cadastradas');
-              console.log('  - Erro no carregamento das variações');
-              console.log('  - Problema na consulta do banco de dados');
-            } else {
-              console.log('✅ MODAL - Variações encontradas, renderizando cada uma:');
-              variations.forEach((variation, index) => {
-                console.log(`  ${index + 1}. ${variation.name} (${variation.options.length} opções)`);
-              });
-            }
-            
-            return null;
-          })()}
+          {(loadingVariations || isLoading) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando opções...
+            </div>
+          )}
           
           {variations.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Personalize seu pedido</h3>
-              {variations.map((variation, index) => {
-                console.log(`🎨 MODAL - Renderizando variação ${index + 1}:`, variation.name, {
-                  id: variation.id,
-                  required: variation.required,
-                  maxSelections: variation.max_selections,
-                  optionsCount: variation.options.length,
-                  options: variation.options
-                });
-                
-                return (
-                  <VariationGroup
-                    key={variation.id}
-                    variation={variation}
-                    selectedVariations={selectedVariations}
-                    onVariationChange={handleVariationChange}
-                  />
-                );
-              })}
+              {variations.map((variation) => (
+                <VariationGroup
+                  key={variation.id}
+                  variation={variation}
+                  selectedVariations={selectedVariations}
+                  onVariationChange={handleVariationChange}
+                />
+              ))}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
@@ -249,10 +227,10 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               </Button>
               <Button 
                 onClick={handleAddToCart}
-                disabled={!isValidSelection()}
+                disabled={!isValidSelection() || loadingVariations || submitting}
                 className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold"
               >
-                Adicionar
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Adicionar'}
               </Button>
             </div>
           </div>

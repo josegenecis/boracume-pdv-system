@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
-import { useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
@@ -31,6 +30,8 @@ interface Product {
   is_highlight: boolean;
   order_count: number;
   category_id: string;
+  track_stock?: boolean;
+  stock_quantity?: number;
 }
 
 interface Category {
@@ -60,13 +61,13 @@ const MenuDigital = () => {
     getCartItemCount 
   } = useSimpleCart();
 
-  const { fetchVariations } = useSimpleVariations();
-
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [showCartModal, setShowCartModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
+  const [openingProductId, setOpeningProductId] = useState<string | null>(null);
+  const warnedStockRef = useRef<Set<string>>(new Set());
   const navigate = useNavigate();
 
   // Buscar dados do menu
@@ -78,7 +79,41 @@ const MenuDigital = () => {
     deliveryZones, 
     isLoading: menuLoading,
     error: menuError 
-  } = useMenuData({ userId: finalUserId, enableCache: false });
+  } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
+
+  useEffect(() => {
+    const stockById = new Map<string, number>();
+    for (const p of products as any[]) {
+      const track = Boolean(p.track_stock);
+      const available = Number(p.stock_quantity);
+      if (track && Number.isFinite(available)) {
+        stockById.set(String(p.id), Math.max(0, Math.floor(available)));
+      }
+    }
+    if (stockById.size === 0) return;
+
+    const qtyInCart = new Map<string, number>();
+    for (const item of cart) {
+      const pid = String(item.product.id);
+      qtyInCart.set(pid, (qtyInCart.get(pid) || 0) + (Number(item.quantity) || 0));
+    }
+
+    for (const [pid, qty] of qtyInCart.entries()) {
+      const available = stockById.get(pid);
+      if (available === undefined) continue;
+      if (qty > available && !warnedStockRef.current.has(pid)) {
+        warnedStockRef.current.add(pid);
+        toast({
+          title: 'Estoque atualizado',
+          description: 'Alguns itens no carrinho excedem o estoque disponível.',
+          variant: 'destructive'
+        });
+      }
+      if (qty <= available && warnedStockRef.current.has(pid)) {
+        warnedStockRef.current.delete(pid);
+      }
+    }
+  }, [products, cart]);
 
   // Pré-carregar imagens dos destaques para exibição instantânea
   useEffect(() => {
@@ -117,19 +152,44 @@ const MenuDigital = () => {
       return;
     }
 
+    setOpeningProductId(product.id);
     try {
-      const variations = await fetchVariations(product.id);
+      const track = Boolean((product as any).track_stock);
+      const stock = Number((product as any).stock_quantity);
+      const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);
+      if (track && Number.isFinite(stock)) {
+        const remaining = Math.max(0, Math.floor(stock) - inCart);
+        if (remaining <= 0) {
+          toast({
+            title: 'Produto sem estoque',
+            description: 'Este item está indisponível no momento.',
+            variant: 'destructive'
+          });
+          return;
+        }
+      }
       setSelectedProduct(product);
       setShowVariationModal(true);
-    } catch (error) {
-      console.error('❌ Erro ao buscar variações:', error);
-      // Em caso de erro, ainda assim abrir o modal para permitir adicionar quantidade
-      setSelectedProduct(product);
-      setShowVariationModal(true);
+    } finally {
+      window.setTimeout(() => setOpeningProductId(null), 60);
     }
   };
 
   const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => {
+    const track = Boolean((product as any).track_stock);
+    const stock = Number((product as any).stock_quantity);
+    const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);
+    if (track && Number.isFinite(stock)) {
+      const remaining = Math.max(0, Math.floor(stock) - inCart);
+      if (quantity > remaining) {
+        toast({
+          title: 'Estoque insuficiente',
+          description: `Quantidade máxima disponível: ${remaining}.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
     addToCart(product, quantity, variations, notes, variationPrice);
     setShowVariationModal(false);
     setSelectedProduct(null);
@@ -149,6 +209,51 @@ const MenuDigital = () => {
       }
       if (!orderData.items || orderData.items.length === 0) {
         throw new Error('Pedido deve ter pelo menos um item');
+      }
+
+      const qtyByProduct: Record<string, number> = {};
+      const nameByProduct: Record<string, string> = {};
+      for (const item of orderData.items as any[]) {
+        const pid = String(item.product_id || '').trim();
+        if (!pid) continue;
+        qtyByProduct[pid] = (qtyByProduct[pid] || 0) + (Number(item.quantity) || 0);
+        nameByProduct[pid] = String(item.product_name || item.name || '').trim() || nameByProduct[pid] || 'Produto';
+      }
+
+      const productIds = Object.keys(qtyByProduct);
+      if (productIds.length > 0) {
+        let lastError: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const { data: stockRows, error: stockError } = await (supabase as any)
+              .from('products')
+              .select('id, track_stock, stock_quantity')
+              .eq('user_id', orderData.user_id)
+              .in('id', productIds as any);
+
+            if (stockError) throw stockError;
+            const rows: any[] = Array.isArray(stockRows) ? stockRows : [];
+            for (const row of rows) {
+              const pid = String(row.id);
+              const requested = Number(qtyByProduct[pid] || 0);
+              const track = Boolean(row.track_stock);
+              const available = Number(row.stock_quantity);
+              if (track && Number.isFinite(available) && requested > Math.max(0, Math.floor(available))) {
+                throw new Error(`Estoque insuficiente para ${nameByProduct[pid] || 'produto'}. Disponível: ${Math.max(0, Math.floor(available))}.`);
+              }
+            }
+            lastError = null;
+            break;
+          } catch (e: any) {
+            lastError = e;
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 250 * Math.pow(2, attempt)));
+            }
+          }
+        }
+        if (lastError) {
+          throw new Error(lastError?.message || 'Não foi possível validar estoque. Tente novamente.');
+        }
       }
 
       // Primeiro, verificar se o cliente já existe
@@ -413,6 +518,7 @@ const MenuDigital = () => {
                     key={product.id}
                     product={product}
                     onProductClick={handleProductClick}
+                    isAdding={openingProductId === product.id}
                   />
                 ))}
               </div>
@@ -430,6 +536,14 @@ const MenuDigital = () => {
         }}
         product={selectedProduct}
         onAddToCart={handleAddToCartFromModal}
+        maxQuantity={(() => {
+          if (!selectedProduct) return null;
+          const track = Boolean((selectedProduct as any).track_stock);
+          const stock = Number((selectedProduct as any).stock_quantity);
+          if (!track || !Number.isFinite(stock)) return null;
+          const inCart = cart.reduce((sum, item) => sum + (item.product.id === selectedProduct.id ? Number(item.quantity || 0) : 0), 0);
+          return Math.max(0, Math.floor(stock) - inCart);
+        })()}
       />
 
       <SimpleCartModal

@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { perfStart } from '@/utils/perf';
 
 interface Product {
   id: string;
@@ -14,6 +16,9 @@ interface Product {
   is_highlight: boolean;
   order_count: number;
   category_id: string;
+  track_stock?: boolean;
+  stock_quantity?: number;
+  low_stock_threshold?: number;
 }
 
 interface Category {
@@ -42,6 +47,13 @@ interface DeliveryZone {
   active: boolean;
 }
 
+type MenuPayload = {
+  products: Product[];
+  categories: Category[];
+  profile: RestaurantProfile | null;
+  deliveryZones: DeliveryZone[];
+};
+
 interface MenuData {
   products: Product[];
   categories: Category[];
@@ -55,164 +67,84 @@ interface MenuData {
 interface UseMenuDataOptions {
   userId: string;
   enableCache?: boolean;
-  cacheTTL?: number; // em minutos
+  cacheTTL?: number;
 }
 
-// Cache simples com localStorage
-const CACHE_KEY = 'boracume_menu_data';
-const DEFAULT_CACHE_TTL = 5; // 5 minutos
+const CACHE_PREFIX = 'boracume_menu_data_v2';
 
-const getCachedData = (userId: string): MenuData | null => {
+function safeParse<T>(value: string | null): T | null {
+  if (!value) return null;
   try {
-    const cached = localStorage.getItem(`${CACHE_KEY}_${userId}`);
-    if (!cached) return null;
-    
-    const { data, timestamp } = JSON.parse(cached);
-    const now = Date.now();
-    const ttl = DEFAULT_CACHE_TTL * 60 * 1000; // converter para milissegundos
-    
-    if (now - timestamp > ttl) {
-      localStorage.removeItem(`${CACHE_KEY}_${userId}`);
-      return null;
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('Erro ao buscar cache:', error);
+    return JSON.parse(value) as T;
+  } catch {
     return null;
   }
-};
+}
 
-const setCachedData = (userId: string, data: MenuData) => {
+function readCache(userId: string, cacheTTLMinutes: number) {
   try {
-    const cacheData = {
-      data,
-      timestamp: Date.now()
-    };
-    localStorage.setItem(`${CACHE_KEY}_${userId}`, JSON.stringify(cacheData));
-  } catch (error) {
-    console.error('Erro ao salvar cache:', error);
+    const key = `${CACHE_PREFIX}_${userId}`;
+    const cached = safeParse<{ ts: number; data: MenuPayload }>(localStorage.getItem(key));
+    if (!cached) return null;
+    const ttlMs = Math.max(1, cacheTTLMinutes) * 60 * 1000;
+    if (Date.now() - cached.ts > ttlMs) return null;
+    return cached.data;
+  } catch {
+    return null;
   }
-};
+}
 
-export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions): MenuData => {
-  const [data, setData] = useState<MenuData>({
-    products: [],
-    categories: [],
-    highlights: [],
-    profile: null,
-    deliveryZones: [],
-    isLoading: true,
-    error: null
-  });
+function writeCache(userId: string, data: MenuPayload) {
+  try {
+    const key = `${CACHE_PREFIX}_${userId}`;
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch {}
+}
 
-  useEffect(() => {
-    let mounted = true;
+async function fetchMenuData(userId: string): Promise<MenuPayload> {
+  const span = perfStart('menu.data.fetch', { userId });
+  try {
+    const [
+      { data: profileArr, error: profileError },
+      { data: categoriesData, error: categoriesError },
+      { data: productsData, error: productsError },
+      { data: deliveryZonesData, error: deliveryZonesError }
+    ] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+        .eq('id', userId)
+        .limit(1) as any,
+      supabase
+        .from('product_categories')
+        .select('id, name, description, display_order')
+        .eq('user_id', userId)
+        .order('display_order', { ascending: true }) as any,
+      (supabase.from('products') as any)
+        .select('id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, order_count, category_id, track_stock, stock_quantity, low_stock_threshold')
+        .eq('user_id', userId)
+        .eq('is_available', true)
+        .eq('show_in_delivery', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('delivery_zones')
+        .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .order('name', { ascending: true }) as any
+    ]);
 
-    async function fetchData() {
-      // 1. Verificar cache primeiro (Instantâneo) — apenas se habilitado
-      const cacheKey = `menu_data_${userId}`;
-      if (enableCache) {
-        const cachedData = localStorage.getItem(cacheKey);
-        
-        if (cachedData) {
-          try {
-            const { timestamp, data } = JSON.parse(cachedData);
-            // Cache válido por 15 minutos (aumentado para melhor UX)
-            if (Date.now() - timestamp < 15 * 60 * 1000) {
-              console.log('📦 Usando dados do cache local');
-              if (mounted) {
-                const highlightsData = (data.products || [])
-                .filter((p: any) => p.is_highlight)
-                .sort((a: any, b: any) => (b.order_count || 0) - (a.order_count || 0))
-                .slice(0, 6);
+    if (profileError && (profileError as any)?.code !== 'PGRST116') {
+      throw profileError;
+    }
+    if (categoriesError) throw categoriesError;
+    if (productsError) throw productsError;
+    if (deliveryZonesError) throw deliveryZonesError;
 
-                setData({
-                  products: data.products || [],
-                  categories: data.categories || [],
-                  profile: data.profile,
-                  deliveryZones: data.deliveryZones || [],
-                  highlights: highlightsData || [],
-                  isLoading: false,
-                  error: null
-                });
-              }
-            }
-          } catch (e) {
-            console.warn('Erro ao ler cache', e);
-          }
-        }
-      } else {
-        // Bust cache quando explicitamente desabilitado (Safari pode manter estado)
-        localStorage.removeItem(cacheKey);
-      }
-
-      // 2. Buscar dados atualizados diretamente do Supabase (Mais rápido que Edge Function fria)
-      // Disparamos isso em paralelo, sem esperar (mas atualiza o estado quando chegar)
-      try {
-        const [
-          { data: profilesArr, error: profileError },
-          { data: categoriesData, error: categoriesError },
-          { data: productsData, error: productsError },
-          { data: deliveryZonesData, error: deliveryZonesError }
-        ] = await Promise.all([
-          // Buscar perfil do restaurante
-          supabase
-            .from('profiles')
-            .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
-            .eq('id', userId)
-            .limit(1) as any,
-          // Buscar categorias
-          supabase
-            .from('product_categories')
-            .select('id, name, description, display_order')
-            .eq('user_id', userId)
-            .order('display_order', { ascending: true }) as any,
-          // Buscar produtos disponíveis
-          (supabase
-            .from('products') as any)
-            .select(`
-              *,
-              product_categories!inner(name)
-            `)
-            .eq('user_id', userId)
-            .eq('is_available', true)
-            .eq('show_in_delivery', true)
-            .order('name', { ascending: true }),
-          // Buscar zonas de entrega
-          supabase
-            .from('delivery_zones')
-            .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-            .eq('user_id', userId)
-            .eq('active', true)
-            .order('name', { ascending: true }) as any
-        ]);
-
-        if (profileError) {
-           if ((profileError as any)?.code !== 'PGRST116') console.warn('Erro perfil:', profileError);
-        }
-        if (categoriesError) throw categoriesError;
-        if (productsError) throw productsError;
-        if (deliveryZonesError) throw deliveryZonesError;
-
-        // Se não trouxe nada (Safari/ITP pode afetar cache), tentar consulta simplificada sem JOIN
-        let processedProducts = (productsData || []) as any[];
-        if ((!processedProducts || processedProducts.length === 0)) {
-          const { data: fallbackProducts } = await (supabase.from('products') as any)
-            .select('*')
-            .eq('user_id', userId)
-            .eq('is_available', true)
-            .eq('show_in_delivery', true)
-            .order('name', { ascending: true });
-          processedProducts = (fallbackProducts || []) as any[];
-        }
-        const highlights = processedProducts
-          .filter(p => p.is_highlight)
-          .sort((a, b) => (b.order_count || 0) - (a.order_count || 0))
-          .slice(0, 6);
-
-        const profileData = Array.isArray(profilesArr) && profilesArr.length > 0 ? profilesArr[0] : null;
-        const fallbackProfile = profileData ? profileData : {
+    const profileData = Array.isArray(profileArr) && profileArr.length > 0 ? (profileArr[0] as any) : null;
+    const profile = profileData
+      ? (profileData as RestaurantProfile)
+      : ({
           id: userId,
           restaurant_name: 'Cardápio',
           description: '',
@@ -220,94 +152,153 @@ export const useMenuData = ({ userId, enableCache = true }: UseMenuDataOptions):
           phone: '',
           address: '',
           opening_hours: ''
-        } as RestaurantProfile;
+        } as RestaurantProfile);
 
-        const menuData: MenuData = {
-          products: processedProducts as any,
-          categories: categoriesData || [],
-          highlights,
-          profile: fallbackProfile,
-          deliveryZones: deliveryZonesData || [],
-          isLoading: false,
-          error: null
-        };
-
-        if(mounted) {
-          setData(menuData);
-          // Atualizar cache com dados frescos — apenas se habilitado
-          if (enableCache) {
-            localStorage.setItem(cacheKey, JSON.stringify({
-              timestamp: Date.now(),
-              data: { 
-                products: processedProducts,
-                categories: categoriesData,
-                profile: fallbackProfile,
-                deliveryZones: deliveryZonesData
-               }
-            }));
-          }
-        }
-
-      } catch (err) {
-        console.error('Erro ao buscar dados atualizados:', err);
-        if (mounted && !cachedData) {
-          setData(prev => ({ ...prev, isLoading: false, error: 'Erro ao carregar cardápio.' }));
-        }
-      }
+    return {
+      products: (productsData || []) as any,
+      categories: (categoriesData || []) as any,
+      profile,
+      deliveryZones: (deliveryZonesData || []) as any
     };
+  } finally {
+    span.end();
+  }
+}
 
-    if (userId) {
-      fetchData();
-    }
-    
-    return () => { mounted = false; };
-  }, [userId, enableCache]);
+export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMenuDataOptions): MenuData => {
+  const queryClient = useQueryClient();
+
+  const initialData = enableCache && userId ? readCache(userId, cacheTTL) : null;
+
+  const query = useQuery({
+    queryKey: ['menuData', userId],
+    enabled: Boolean(userId),
+    queryFn: () => fetchMenuData(userId),
+    staleTime: 30_000,
+    gcTime: 15 * 60 * 1000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(2000, 250 * Math.pow(2, attempt)),
+    initialData: initialData || undefined
+  });
+
+  useEffect(() => {
+    if (!userId || !enableCache) return;
+    if (query.data) writeCache(userId, query.data);
+  }, [userId, enableCache, query.data]);
 
   useEffect(() => {
     if (!userId) return;
+
+    const patch = (updater: (prev: MenuPayload) => MenuPayload) => {
+      queryClient.setQueryData(['menuData', userId], (prev: MenuPayload | undefined) => {
+        const base: MenuPayload = prev || { products: [], categories: [], profile: null, deliveryZones: [] };
+        return updater(base);
+      });
+    };
+
     const channel = supabase
-      .channel(`menu-realtime-${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones', filter: `user_id=eq.${userId}` }, () => {
-        // refetch delivery zones
-        supabase
-          .from('delivery_zones')
-          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-          .eq('user_id', userId)
-          .eq('active', true)
-          .order('name', { ascending: true })
-          .then(({ data: dz }) => {
-            setData(prev => ({ ...prev, deliveryZones: dz || [] }));
-          });
+      .channel(`menu-data:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `user_id=eq.${userId}` }, (payload: any) => {
+        patch((prev) => {
+          const next = [...(prev.products || [])];
+          const eventType = String(payload.eventType || '').toUpperCase();
+          const newRow = payload.new || null;
+          const oldRow = payload.old || null;
+          const id = String((newRow && newRow.id) || (oldRow && oldRow.id) || '');
+          if (!id) return prev;
+
+          if (eventType === 'DELETE') {
+            return { ...prev, products: next.filter((p: any) => String(p.id) !== id) };
+          }
+
+          const include = Boolean(newRow?.is_available) && Boolean(newRow?.show_in_delivery);
+          const idx = next.findIndex((p: any) => String(p.id) === id);
+          if (!include) {
+            if (idx >= 0) next.splice(idx, 1);
+            return { ...prev, products: next };
+          }
+
+          if (idx >= 0) next[idx] = { ...next[idx], ...newRow };
+          else next.unshift(newRow);
+
+          next.sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+          return { ...prev, products: next as any };
+        });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `user_id=eq.${userId}` }, () => {
-        (supabase
-          .from('products') as any)
-          .select('*')
-          .eq('user_id', userId)
-          .eq('is_available', true)
-          .eq('show_in_delivery', true)
-          .order('name', { ascending: true })
-          .then(({ data: productsData }: any) => {
-            const processedProducts = (productsData || []) as any[];
-            setData(prev => ({ ...prev, products: processedProducts as any } as any));
-          });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_categories', filter: `user_id=eq.${userId}` }, (payload: any) => {
+        patch((prev) => {
+          const next = [...(prev.categories || [])];
+          const eventType = String(payload.eventType || '').toUpperCase();
+          const newRow = payload.new || null;
+          const oldRow = payload.old || null;
+          const id = String((newRow && newRow.id) || (oldRow && oldRow.id) || '');
+          if (!id) return prev;
+
+          if (eventType === 'DELETE') {
+            return { ...prev, categories: next.filter((c: any) => String(c.id) !== id) };
+          }
+
+          const idx = next.findIndex((c: any) => String(c.id) === id);
+          if (idx >= 0) next[idx] = { ...next[idx], ...newRow };
+          else next.push(newRow);
+
+          next.sort((a: any, b: any) => Number(a.display_order || 0) - Number(b.display_order || 0));
+          return { ...prev, categories: next as any };
+        });
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_categories', filter: `user_id=eq.${userId}` }, () => {
-        supabase
-          .from('product_categories')
-          .select('id, name, description, display_order')
-          .eq('user_id', userId)
-          .order('display_order', { ascending: true })
-          .then(({ data: categoriesData }) => {
-            setData(prev => ({ ...prev, categories: categoriesData || [] }));
-          });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones', filter: `user_id=eq.${userId}` }, (payload: any) => {
+        patch((prev) => {
+          const next = [...(prev.deliveryZones || [])];
+          const eventType = String(payload.eventType || '').toUpperCase();
+          const newRow = payload.new || null;
+          const oldRow = payload.old || null;
+          const id = String((newRow && newRow.id) || (oldRow && oldRow.id) || '');
+          if (!id) return prev;
+
+          if (eventType === 'DELETE') {
+            return { ...prev, deliveryZones: next.filter((z: any) => String(z.id) !== id) };
+          }
+
+          const include = Boolean(newRow?.active);
+          const idx = next.findIndex((z: any) => String(z.id) === id);
+          if (!include) {
+            if (idx >= 0) next.splice(idx, 1);
+            return { ...prev, deliveryZones: next as any };
+          }
+
+          if (idx >= 0) next[idx] = { ...next[idx], ...newRow };
+          else next.push(newRow);
+
+          next.sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+          return { ...prev, deliveryZones: next as any };
+        });
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, queryClient]);
 
-  return data;
+  const payload = query.data || { products: [], categories: [], profile: null, deliveryZones: [] };
+
+  const highlights = useMemo(() => {
+    return (payload.products || [])
+      .filter((p: any) => p.is_highlight)
+      .sort((a: any, b: any) => (Number(b.order_count || 0) - Number(a.order_count || 0)))
+      .slice(0, 6);
+  }, [payload.products]);
+
+  const error = query.error ? String((query.error as any)?.message || 'Erro ao carregar cardápio.') : null;
+  const isLoading = Boolean(userId) && query.isLoading && !initialData;
+
+  return {
+    products: payload.products || [],
+    categories: payload.categories || [],
+    highlights,
+    profile: payload.profile,
+    deliveryZones: payload.deliveryZones || [],
+    isLoading,
+    error
+  };
 };
