@@ -707,7 +707,6 @@ const DeliverySettings = () => {
                       </Button>
                     )}
                   </div>
-                  </Button>
                 </div>
               </div>
 
