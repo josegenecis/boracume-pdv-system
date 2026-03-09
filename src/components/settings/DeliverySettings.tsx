@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Plus, Trash2, Save, Map, Pencil, X } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +32,8 @@ const DeliverySettings = () => {
   const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number; formattedAddress?: string } | null>(null);
   const [storeLocLoading, setStoreLocLoading] = useState(false);
   const [pricingMode, setPricingMode] = useState<PricingMode>('neighborhood');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<PricingMode>('neighborhood');
   const [fixedPricing, setFixedPricing] = useState({ delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' });
   const [distancePricing, setDistancePricing] = useState({ base_fee: '0', fee_per_km: '0', max_distance_km: '5', minimum_order: '0', delivery_time: '30-45 min' });
   const [radiusPricing, setRadiusPricing] = useState({ radius_km: '5', delivery_fee: '0', minimum_order: '0', delivery_time: '30-45 min' });
@@ -304,8 +307,8 @@ const DeliverySettings = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (!user) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (!user) return false;
     
     setLoading(true);
     try {
@@ -403,6 +406,7 @@ const DeliverySettings = () => {
         title: "Configurações salvas!",
         description: "As configurações de delivery foram atualizadas com sucesso.",
       });
+      return true;
     } catch (error) {
       console.error('Erro ao salvar:', error);
       toast({
@@ -410,6 +414,7 @@ const DeliverySettings = () => {
         description: "Não foi possível salvar as configurações. Tente novamente.",
         variant: "destructive"
       });
+      return false;
     } finally {
       setLoading(false);
     }
@@ -432,6 +437,267 @@ const DeliverySettings = () => {
       { id: 'polygon', title: 'Áreas personalizadas', subtitle: 'Defina áreas no mapa para cálculo do preço' },
     ] as const;
   }, []);
+
+  const openEditorForMode = (mode: PricingMode) => {
+    setPricingMode(mode);
+    setEditorMode(mode);
+    setEditorOpen(true);
+  };
+
+  const renderEditorContent = () => {
+    if (editorMode === 'free') {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Frete grátis para todos os pedidos.
+        </div>
+      );
+    }
+
+    if (editorMode === 'fixed') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <Label>Taxa fixa (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={fixedPricing.delivery_fee}
+              onChange={(e) => setFixedPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Pedido mínimo (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={fixedPricing.minimum_order}
+              onChange={(e) => setFixedPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Tempo estimado</Label>
+            <Input
+              value={fixedPricing.delivery_time}
+              onChange={(e) => setFixedPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (editorMode === 'distance_km') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <Label>Taxa base (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={distancePricing.base_fee}
+              onChange={(e) => setDistancePricing(prev => ({ ...prev, base_fee: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Preço por km (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={distancePricing.fee_per_km}
+              onChange={(e) => setDistancePricing(prev => ({ ...prev, fee_per_km: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Distância máxima (km)</Label>
+            <Input
+              type="number"
+              step="0.1"
+              value={distancePricing.max_distance_km}
+              onChange={(e) => setDistancePricing(prev => ({ ...prev, max_distance_km: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Pedido mínimo (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={distancePricing.minimum_order}
+              onChange={(e) => setDistancePricing(prev => ({ ...prev, minimum_order: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Tempo estimado</Label>
+            <Input
+              value={distancePricing.delivery_time}
+              onChange={(e) => setDistancePricing(prev => ({ ...prev, delivery_time: e.target.value }))}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (editorMode === 'radius_km') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <Label>Raio máximo (km)</Label>
+            <Input
+              type="number"
+              step="0.1"
+              value={radiusPricing.radius_km}
+              onChange={(e) => setRadiusPricing(prev => ({ ...prev, radius_km: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Taxa (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={radiusPricing.delivery_fee}
+              onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Pedido mínimo (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={radiusPricing.minimum_order}
+              onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Tempo estimado</Label>
+            <Input
+              value={radiusPricing.delivery_time}
+              onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (editorMode === 'polygon') {
+      return (
+        <div className="text-sm text-muted-foreground">
+          Configure suas áreas no mapa no próximo passo.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="zone-name">Nome do Bairro</Label>
+            <Input
+              id="zone-name"
+              placeholder="Ex: Centro"
+              value={newZone.name}
+              onChange={(e) => setNewZone(prev => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="delivery-fee">Taxa (R$)</Label>
+            <Input
+              id="delivery-fee"
+              type="number"
+              step="0.01"
+              placeholder="5.00"
+              value={newZone.delivery_fee}
+              onChange={(e) => setNewZone(prev => ({ ...prev, delivery_fee: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="minimum-order">Mínimo (R$)</Label>
+            <Input
+              id="minimum-order"
+              type="number"
+              step="0.01"
+              placeholder="25.00"
+              value={newZone.minimum_order}
+              onChange={(e) => setNewZone(prev => ({ ...prev, minimum_order: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="delivery-time">Tempo</Label>
+            <Input
+              id="delivery-time"
+              placeholder="30-45 min"
+              value={newZone.delivery_time}
+              onChange={(e) => setNewZone(prev => ({ ...prev, delivery_time: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>&nbsp;</Label>
+            <div className="flex gap-2">
+              <Button onClick={addDeliveryZone} className="w-full">
+                {editingZone ? <Save size={16} className="mr-2" /> : <Plus size={16} className="mr-2" />}
+                {editingZone ? 'Atualizar' : 'Adicionar'}
+              </Button>
+              {editingZone && (
+                <Button type="button" variant="outline" onClick={cancelEditZone} className="w-full">
+                  <X size={16} className="mr-2" />
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {deliveryZones.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum bairro de entrega cadastrado ainda.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {deliveryZones.map((zone) => (
+                <div key={zone.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{zone.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Taxa: {formatCurrency(zone.delivery_fee)} | 
+                      Mín: {formatCurrency(zone.minimum_order)} | 
+                      Tempo: {zone.delivery_time}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant={zone.active ? "default" : "secondary"}
+                      className="cursor-pointer"
+                      onClick={() => toggleZoneStatus(zone.id, zone.active)}
+                    >
+                      {zone.active ? 'Ativo' : 'Inativo'}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startEditZone(zone)}
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeDeliveryZone(zone.id)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -507,6 +773,19 @@ const DeliverySettings = () => {
                     {pricingMode === c.id && <Badge>Selecionado</Badge>}
                   </div>
                   <div className="text-sm text-muted-foreground">{c.subtitle}</div>
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openEditorForMode(c.id);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                  </div>
                 </button>
               ))}
             </div>
@@ -528,246 +807,47 @@ const DeliverySettings = () => {
               <Switch checked={modalities.pickup} onCheckedChange={(v) => setModalities(prev => ({ ...prev, pickup: v }))} />
             </div>
           </div>
-
-          {pricingMode === 'fixed' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>Taxa fixa (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={fixedPricing.delivery_fee}
-                  onChange={(e) => setFixedPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Pedido mínimo (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={fixedPricing.minimum_order}
-                  onChange={(e) => setFixedPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tempo estimado</Label>
-                <Input
-                  value={fixedPricing.delivery_time}
-                  onChange={(e) => setFixedPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
-                />
-              </div>
-            </div>
-          )}
-
-          {pricingMode === 'distance_km' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>Taxa base (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={distancePricing.base_fee}
-                  onChange={(e) => setDistancePricing(prev => ({ ...prev, base_fee: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Preço por km (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={distancePricing.fee_per_km}
-                  onChange={(e) => setDistancePricing(prev => ({ ...prev, fee_per_km: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Distância máxima (km)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={distancePricing.max_distance_km}
-                  onChange={(e) => setDistancePricing(prev => ({ ...prev, max_distance_km: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Pedido mínimo (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={distancePricing.minimum_order}
-                  onChange={(e) => setDistancePricing(prev => ({ ...prev, minimum_order: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tempo estimado</Label>
-                <Input
-                  value={distancePricing.delivery_time}
-                  onChange={(e) => setDistancePricing(prev => ({ ...prev, delivery_time: e.target.value }))}
-                />
-              </div>
-            </div>
-          )}
-
-          {pricingMode === 'radius_km' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label>Raio máximo (km)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={radiusPricing.radius_km}
-                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, radius_km: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Taxa (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={radiusPricing.delivery_fee}
-                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Pedido mínimo (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={radiusPricing.minimum_order}
-                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tempo estimado</Label>
-                <Input
-                  value={radiusPricing.delivery_time}
-                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
-                />
-              </div>
-            </div>
-          )}
-
-          {pricingMode === 'neighborhood' && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="zone-name">Nome do Bairro</Label>
-                  <Input
-                    id="zone-name"
-                    placeholder="Ex: Centro"
-                    value={newZone.name}
-                    onChange={(e) => setNewZone(prev => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-fee">Taxa (R$)</Label>
-                  <Input
-                    id="delivery-fee"
-                    type="number"
-                    step="0.01"
-                    placeholder="5.00"
-                    value={newZone.delivery_fee}
-                    onChange={(e) => setNewZone(prev => ({ ...prev, delivery_fee: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="minimum-order">Mínimo (R$)</Label>
-                  <Input
-                    id="minimum-order"
-                    type="number"
-                    step="0.01"
-                    placeholder="25.00"
-                    value={newZone.minimum_order}
-                    onChange={(e) => setNewZone(prev => ({ ...prev, minimum_order: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="delivery-time">Tempo</Label>
-                  <Input
-                    id="delivery-time"
-                    placeholder="30-45 min"
-                    value={newZone.delivery_time}
-                    onChange={(e) => setNewZone(prev => ({ ...prev, delivery_time: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>&nbsp;</Label>
-                  <div className="flex gap-2">
-                    <Button onClick={addDeliveryZone} className="w-full">
-                      {editingZone ? <Save size={16} className="mr-2" /> : <Plus size={16} className="mr-2" />}
-                      {editingZone ? 'Atualizar' : 'Adicionar'}
-                    </Button>
-                    {editingZone && (
-                      <Button type="button" variant="outline" onClick={cancelEditZone} className="w-full">
-                        <X size={16} className="mr-2" />
-                        Cancelar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-          <div className="space-y-3">
-            {deliveryZones.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum bairro de entrega cadastrado ainda.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {deliveryZones.map((zone) => (
-                  <div key={zone.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{zone.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Taxa: {formatCurrency(zone.delivery_fee)} | 
-                        Mín: {formatCurrency(zone.minimum_order)} | 
-                        Tempo: {zone.delivery_time}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant={zone.active ? "default" : "secondary"}
-                        className="cursor-pointer"
-                        onClick={() => toggleZoneStatus(zone.id, zone.active)}
-                      >
-                        {zone.active ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => startEditZone(zone)}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => removeDeliveryZone(zone.id)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-            </>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Clique em Editar para configurar o modo selecionado.
+          </p>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
+        <Button onClick={() => void handleSave()} className="w-full md:w-auto" disabled={loading}>
           <Save size={16} className="mr-2" />
           {loading ? 'Salvando...' : 'Salvar Configurações'}
         </Button>
       </div>
+
+      <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Editar: {pricingCards.find((c) => c.id === editorMode)?.title || 'Delivery'}</SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-6">
+            {renderEditorContent()}
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  const ok = await handleSave();
+                  if (ok) setEditorOpen(false);
+                }}
+                disabled={loading}
+              >
+                <Save size={16} className="mr-2" />
+                {loading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
