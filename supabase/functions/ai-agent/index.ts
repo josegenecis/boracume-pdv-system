@@ -62,6 +62,33 @@ Deno.serve(async (req) => {
         {
             type: "function",
             function: {
+                name: "create_products",
+                description: "Cria vários produtos no cardápio de uma vez. Use quando o usuário pedir para criar 3 ou mais produtos.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        products: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string", description: "Nome do produto" },
+                                    price: { type: "number", description: "Preço do produto" },
+                                    category: { type: "string", description: "Categoria do produto" },
+                                    description: { type: "string", description: "Descrição opcional do produto" }
+                                },
+                                required: ["name", "price", "category"]
+                            },
+                            description: "Lista de produtos a criar"
+                        }
+                    },
+                    required: ["products"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
                 name: "update_product_price",
                 description: "Atualiza o preço de um produto existente.",
                 parameters: {
@@ -166,14 +193,18 @@ Deno.serve(async (req) => {
     // =================================================================================
     // 2. Chamada à OpenAI (Function Calling)
     // =================================================================================
+    const requestedCountMatch = String(command || '').match(/(?:criar|crie|gere)\s+(\d{1,3})\s+(?:produtos?|itens?)/i);
+    const requestedCount = requestedCountMatch ? Number(requestedCountMatch[1]) : 0;
+
     const systemPrompt = `Você é um assistente administrativo inteligente para um sistema de PDV de restaurante.
     Seu objetivo é executar ações no banco de dados conforme o pedido do usuário.
     
     Regras:
     - Se o usuário pedir para criar algo, chame a função apropriada.
+    - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
     - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
     - Seja direto e confirme a ação realizada.
-    - O ID do usuário (restaurante) é: ${userId}`;
+    - O ID do usuário (restaurante) é: ${userId}${requestedCount >= 3 ? `\n- O usuário solicitou ${requestedCount} produtos. Gere exatamente ${requestedCount} produtos.` : ''}`;
 
     const messages = [
         { role: "system", content: systemPrompt },
@@ -253,6 +284,64 @@ Deno.serve(async (req) => {
                     
                     if (error) throw error;
                     result = { success: true, product: prod };
+                }
+
+                // --- CREATE PRODUCTS (BATCH) ---
+                else if (fnName === "create_products") {
+                    const products = Array.isArray(args.products) ? args.products : [];
+                    const max = 50;
+                    const toCreate = products.slice(0, max);
+                    const categoryCache = new Map<string, string>();
+                    const createdNames: string[] = [];
+
+                    for (const p of toCreate) {
+                        const catName = String(p.category || '').trim() || 'Sem categoria';
+                        let categoryId = categoryCache.get(catName) || null;
+
+                        if (!categoryId) {
+                            const { data: existingCat } = await supabase
+                                .from('product_categories')
+                                .select('id, name')
+                                .eq('user_id', userId)
+                                .ilike('name', catName)
+                                .maybeSingle();
+
+                            if (existingCat) {
+                                categoryId = existingCat.id;
+                            } else {
+                                const { data: newCat } = await supabase
+                                    .from('product_categories')
+                                    .insert({ user_id: userId, name: catName })
+                                    .select('id')
+                                    .single();
+                                if (newCat) categoryId = newCat.id;
+                            }
+
+                            if (categoryId) categoryCache.set(catName, categoryId);
+                        }
+
+                        const name = String(p.name || '').trim();
+                        const price = Number(p.price);
+                        if (!name || !Number.isFinite(price)) continue;
+
+                        const { error } = await supabase
+                            .from('products')
+                            .insert({
+                                user_id: userId,
+                                name,
+                                price,
+                                description: String(p.description || ''),
+                                category: catName,
+                                category_id: categoryId,
+                                available: true,
+                                show_in_pdv: true,
+                                show_in_delivery: true
+                            });
+                        if (error) throw error;
+                        createdNames.push(name);
+                    }
+
+                    result = { success: true, created_count: createdNames.length, created_names: createdNames };
                 }
 
                 // --- UPDATE PRICE ---

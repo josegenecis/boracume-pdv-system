@@ -45,6 +45,7 @@ interface ProductVariation {
 }
 
 interface CartItem extends Product {
+  cartItemId: string;
   quantity: number;
   selectedVariations?: any[];
   notes?: string;
@@ -586,6 +587,13 @@ const PDV = () => {
     }
   };
 
+  const makeCartItemId = () => {
+    try {
+      if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
+    } catch {}
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
     setCart(prev => {
       const variationKey = JSON.stringify(selectedVariations) + notes;
@@ -597,7 +605,7 @@ const PDV = () => {
       
       if (existing) {
         return prev.map(item =>
-          item === existing
+          item.cartItemId === existing.cartItemId
             ? { ...item, quantity: item.quantity + quantity }
             : item
         );
@@ -605,6 +613,7 @@ const PDV = () => {
       
       return [...prev, { 
         ...product, 
+        cartItemId: makeCartItemId(),
         quantity, 
         selectedVariations: selectedVariations.length > 0 ? selectedVariations : undefined,
         notes: notes || undefined
@@ -613,7 +622,7 @@ const PDV = () => {
 
     toast({
       title: "Produto adicionado",
-      description: `${product.name} foi adicionado ao carrinho.`,
+      description: `${product.name} foi adicionado ao pedido.`,
       duration: 1500,
     });
   };
@@ -646,18 +655,18 @@ const PDV = () => {
     }
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
+  const removeFromCart = (cartItemId: string) => {
+    setCart(prev => prev.filter(item => item.cartItemId !== cartItemId));
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
+  const updateQuantity = (cartItemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(cartItemId);
       return;
     }
     setCart(prev =>
       prev.map(item =>
-        item.id === productId ? { ...item, quantity: newQuantity } : item
+        item.cartItemId === cartItemId ? { ...item, quantity: newQuantity } : item
       )
     );
   };
@@ -690,8 +699,8 @@ const PDV = () => {
   const addToTable = async () => {
     if (cart.length === 0) {
       toast({
-        title: "Carrinho vazio",
-        description: "Adicione produtos ao carrinho antes de adicionar à mesa.",
+        title: "Pedido vazio",
+        description: "Adicione produtos ao pedido antes de adicionar à mesa.",
         variant: "destructive",
       });
       return;
@@ -796,8 +805,8 @@ const PDV = () => {
     
     if (cart.length === 0) {
       toast({
-        title: "Carrinho vazio",
-        description: "Adicione produtos ao carrinho antes de finalizar a venda.",
+        title: "Pedido vazio",
+        description: "Adicione produtos ao pedido antes de finalizar a venda.",
         variant: "destructive",
       });
       return;
@@ -1200,7 +1209,7 @@ const PDV = () => {
             <div className="p-3 border-b bg-gray-50/80 backdrop-blur-sm shrink-0">
               <div className="flex items-center gap-2 mb-3">
                 <Calculator className="text-primary w-5 h-5" />
-                <h2 className="font-bold text-base">Carrinho</h2>
+                <h2 className="font-bold text-base">Pedido</h2>
                 <span className="ml-auto text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                   {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
                 </span>
@@ -1224,17 +1233,19 @@ const PDV = () => {
               {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2 p-4">
                   <Store size={40} strokeWidth={1.5} />
-                  <p className="text-sm">Carrinho vazio</p>
+                  <p className="text-sm">Sem itens</p>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-100">
                   {cart.map((item, index) => {
                     const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                    const seq = String(index + 1).padStart(2, '0');
                     return (
-                      <div key={`${item.id}-${index}`} className="flex items-start justify-between p-3 hover:bg-gray-50 transition-colors group">
+                      <div key={item.cartItemId} className="flex items-start justify-between p-3 hover:bg-gray-50 transition-colors group">
                         <div className="flex-1 min-w-0 pr-3">
                           <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-sm text-gray-900 leading-tight line-clamp-2">
+                              <span className="text-gray-500 mr-1">{seq}.</span>
                               {item.name}
                             </span>
                             <span className="font-bold text-sm text-gray-900 ml-2 whitespace-nowrap">
@@ -1242,11 +1253,29 @@ const PDV = () => {
                             </span>
                           </div>
                           
-                          <div className="flex items-center text-xs text-gray-500 mb-1">
-                             <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-medium mr-2">
-                               {item.quantity}x
-                             </span>
-                             <span>{formatCurrency(item.price)} un.</span>
+                          <div className="flex items-center text-xs text-gray-500 mb-1 gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                              >
+                                <Minus size={12} />
+                              </Button>
+                              <span className="w-7 text-center text-xs font-medium text-gray-700">{item.quantity}</span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                              >
+                                <Plus size={12} />
+                              </Button>
+                            </div>
+                            <span>{formatCurrency(item.price)} un.</span>
                           </div>
 
                           {formattedVariations.length > 0 && (
@@ -1266,7 +1295,7 @@ const PDV = () => {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-gray-400 hover:text-red-500 hover:bg-red-50 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(item.cartItemId)}
                         >
                           <Trash2 size={14} />
                         </Button>
@@ -1517,23 +1546,27 @@ const PDV = () => {
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0">
                <SheetHeader className="p-4 border-b">
-                 <SheetTitle>Carrinho de Compras</SheetTitle>
+                 <SheetTitle>Pedido</SheetTitle>
                </SheetHeader>
                
                <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
                       <Store size={48} />
-                      <p>Carrinho vazio</p>
+                      <p>Sem itens</p>
                     </div>
                   ) : (
                     cart.map((item, index) => {
                       const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                      const seq = String(index + 1).padStart(2, '0');
                       return (
-                        <div key={`mob-${item.id}-${index}`} className="flex flex-col p-3 border rounded-lg bg-gray-50">
+                        <div key={item.cartItemId} className="flex flex-col p-3 border rounded-lg bg-gray-50">
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex-1 mr-2">
-                              <span className="font-medium text-sm line-clamp-1">{item.name}</span>
+                              <span className="font-medium text-sm line-clamp-1">
+                                <span className="text-muted-foreground mr-1">{seq}.</span>
+                                {item.name}
+                              </span>
                               <span className="text-xs text-muted-foreground block">
                                 {formatCurrency(item.price)} un.
                               </span>
@@ -1562,7 +1595,7 @@ const PDV = () => {
                               variant="outline"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                             >
                               <Minus size={12} />
                             </Button>
@@ -1571,7 +1604,7 @@ const PDV = () => {
                               variant="outline"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                             >
                               <Plus size={12} />
                             </Button>
@@ -1579,7 +1612,7 @@ const PDV = () => {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 ml-2"
-                              onClick={() => removeFromCart(item.id)}
+                              onClick={() => removeFromCart(item.cartItemId)}
                             >
                               <Trash2 size={14} />
                             </Button>
