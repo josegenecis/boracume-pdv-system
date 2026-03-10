@@ -149,7 +149,7 @@ Deno.serve(async (req: Request) => {
     const orderId = String(body?.orderId || '')
     const newStatus = String(body?.newStatus || '')
 
-    const validStatuses = ['pending', 'preparing', 'ready', 'delivered', 'cancelled']
+    const validStatuses = ['pending', 'preparing', 'ready', 'in_delivery', 'delivered', 'completed', 'cancelled']
     if (!orderId || !validStatuses.includes(newStatus)) {
       return ok({ ok: false, error: 'invalid_payload' })
     }

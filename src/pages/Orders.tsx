@@ -220,7 +220,11 @@ const Orders = () => {
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(order => order.status === statusFilter);
+      if (statusFilter === 'delivered') {
+        filtered = filtered.filter(order => order.status === 'delivered' || order.status === 'completed');
+      } else {
+        filtered = filtered.filter(order => order.status === statusFilter);
+      }
     }
 
     if (typeFilter !== 'all') {
@@ -268,7 +272,7 @@ const Orders = () => {
       });
 
       // Verificar se a mudança de status é válida
-      const validStatuses = ['pending', 'preparing', 'ready', 'delivered', 'cancelled'];
+      const validStatuses = ['pending', 'preparing', 'ready', 'in_delivery', 'delivered', 'cancelled', 'completed'];
       if (!validStatuses.includes(newStatus)) {
         throw new Error(`Status '${newStatus}' não é válido. Status válidos: ${validStatuses.join(', ')}`);
       }
@@ -538,9 +542,9 @@ const Orders = () => {
           break;
 
         case 'deliver_all':
-          // Finalizar todos
+          // Saiu para entrega (todos os prontos)
           updatePromises = orderIds.map(async (orderId) => {
-            await updateOrderStatus(orderId, 'delivered');
+            await updateOrderStatus(orderId, 'in_delivery');
           });
           break;
       }
@@ -568,8 +572,9 @@ const Orders = () => {
       pending: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
       preparing: { label: 'Preparando', className: 'bg-blue-100 text-blue-800 border-blue-200' },
       ready: { label: 'Pronto', className: 'bg-green-100 text-green-800 border-green-200' },
-      delivered: { label: 'Entregue', className: 'bg-gray-100 text-gray-800 border-gray-200' },
-      completed: { label: 'Finalizado', className: 'bg-green-100 text-green-800 border-green-200' },
+      in_delivery: { label: 'Saiu para Entrega', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+      delivered: { label: 'Finalizado', className: 'bg-gray-100 text-gray-800 border-gray-200' },
+      completed: { label: 'Finalizado', className: 'bg-gray-100 text-gray-800 border-gray-200' },
       cancelled: { label: 'Cancelado', className: 'bg-red-100 text-red-800 border-red-200' }
     };
 
@@ -622,7 +627,8 @@ const Orders = () => {
   const pendingOrders = filteredOrders.filter(order => order.acceptance_status === 'pending_acceptance' || order.status === 'pending');
   const activeOrders = filteredOrders.filter(order => order.status === 'preparing');
   const completedOrders = filteredOrders.filter(order => order.status === 'ready');
-  const deliveredOrders = filteredOrders.filter(order => order.status === 'delivered');
+  const inDeliveryOrders = filteredOrders.filter(order => order.status === 'in_delivery');
+  const deliveredOrders = filteredOrders.filter(order => order.status === 'delivered' || order.status === 'completed');
   const cancelledOrders = filteredOrders.filter(order => order.status === 'cancelled');
 
   if (loading) {
@@ -696,7 +702,8 @@ const Orders = () => {
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="preparing">Preparando</SelectItem>
                   <SelectItem value="ready">Pronto</SelectItem>
-                  <SelectItem value="completed">Finalizado</SelectItem>
+                  <SelectItem value="in_delivery">Saiu para Entrega</SelectItem>
+                  <SelectItem value="delivered">Finalizado</SelectItem>
                   <SelectItem value="cancelled">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
@@ -718,12 +725,13 @@ const Orders = () => {
 
         {ordersView === 'kanban' ? (
           <DragDropContext onDragEnd={(r) => { void onKanbanDragEnd(r); }}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               {[
                 { id: 'pending', title: 'Novos', items: pendingOrders, headerClass: 'bg-yellow-50 border-yellow-500 text-yellow-800' },
                 { id: 'preparing', title: 'Preparando', items: activeOrders, headerClass: 'bg-blue-50 border-blue-500 text-blue-800' },
                 { id: 'ready', title: 'Prontos', items: completedOrders, headerClass: 'bg-green-50 border-green-500 text-green-800' },
-                { id: 'delivered', title: 'Entregues', items: deliveredOrders, headerClass: 'bg-gray-50 border-gray-400 text-gray-800' },
+                { id: 'in_delivery', title: 'Em entrega', items: inDeliveryOrders, headerClass: 'bg-purple-50 border-purple-500 text-purple-800' },
+                { id: 'delivered', title: 'Finalizados', items: deliveredOrders, headerClass: 'bg-gray-50 border-gray-400 text-gray-800' },
                 { id: 'cancelled', title: 'Cancelados', items: cancelledOrders, headerClass: 'bg-red-50 border-red-500 text-red-800' },
               ].map((col) => (
                 <div key={col.id} className="space-y-3">
@@ -1149,12 +1157,132 @@ const Orders = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateOrderStatus(order.id, 'delivered');
+                              updateOrderStatus(order.id, 'in_delivery');
                             }}
                             className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700"
                           >
                             Saiu para Entrega
                           </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Em entrega */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                <h2 className="text-lg font-semibold text-purple-800">Em entrega ({inDeliveryOrders.length})</h2>
+              </div>
+            </div>
+
+            {inDeliveryOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido em entrega</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {inDeliveryOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-purple-500 cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          {getStatusBadge(order.status)}
+                          <div className="flex items-center gap-1 min-w-0">
+                            {getOrderTypeIcon(order.order_type)}
+                            <span className="text-sm text-gray-600">{getOrderTypeLabel(order.order_type)}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          <div className="font-medium">{order.customer_name}</div>
+                          {order.customer_phone && (
+                            <div className="flex items-center gap-1">
+                              <Phone size={14} />
+                              {order.customer_phone}
+                            </div>
+                          )}
+                          <div>{formatDate(order.created_at)}</div>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          {order.items.length} item(s) • {formatCurrency(order.total)} •
+                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'preparing');
+                            }}
+                            className="w-full sm:flex-1"
+                          >
+                            Voltar para produção
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateOrderStatus(order.id, 'delivered');
+                            }}
+                            className="w-full sm:flex-1 bg-green-600 hover:bg-green-700"
+                          >
+                            Finalizar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Finalizados */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-gray-50 rounded-lg border-l-4 border-gray-400">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                <h2 className="text-lg font-semibold text-gray-800">Finalizados ({deliveredOrders.length})</h2>
+              </div>
+            </div>
+
+            {deliveredOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Nenhum pedido finalizado</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {deliveredOrders.map((order) => (
+                  <Card key={order.id} className="border-l-4 border-l-gray-400 cursor-pointer hover:shadow-md transition-shadow">
+                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
+                          {getStatusBadge(order.status)}
+                          <div className="flex items-center gap-1 min-w-0">
+                            {getOrderTypeIcon(order.order_type)}
+                            <span className="text-sm text-gray-600">{getOrderTypeLabel(order.order_type)}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          <div className="font-medium">{order.customer_name}</div>
+                          <div>{formatDate(order.created_at)}</div>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          {order.items.length} item(s) • {formatCurrency(order.total)} •
+                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
                       </div>
                     </CardContent>

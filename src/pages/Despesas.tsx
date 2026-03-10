@@ -6,10 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Calendar, Upload, FileText, Search } from 'lucide-react';
+import { Plus, DollarSign, Calendar, Upload, FileText, Search, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -22,6 +23,10 @@ interface Expense {
   receipt_url?: string;
   user_id: string;
   created_at: string;
+  is_active?: boolean;
+  reversed_at?: string | null;
+  reversal_reason?: string | null;
+  reversed_by?: string | null;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -48,6 +53,7 @@ export default function Despesas() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [showReversed, setShowReversed] = useState(false);
   
   // Form states
   const [description, setDescription] = useState('');
@@ -65,7 +71,7 @@ export default function Despesas() {
 
   useEffect(() => {
     filterExpenses();
-  }, [expenses, searchTerm, selectedCategory, dateFrom, dateTo]);
+  }, [expenses, searchTerm, selectedCategory, dateFrom, dateTo, showReversed]);
 
   const loadExpenses = async () => {
     try {
@@ -92,6 +98,9 @@ export default function Despesas() {
 
   const filterExpenses = () => {
     let filtered = expenses;
+    if (!showReversed) {
+      filtered = filtered.filter((exp) => exp.is_active !== false);
+    }
 
     if (searchTerm) {
       filtered = filtered.filter(exp => 
@@ -114,6 +123,43 @@ export default function Despesas() {
     setFilteredExpenses(filtered);
   };
 
+  const reverseExpense = async (expense: Expense) => {
+    const reason = window.prompt('Motivo do estorno (opcional):') || '';
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .update({
+          is_active: false,
+          reversed_at: new Date().toISOString(),
+          reversal_reason: reason.trim() || null,
+          reversed_by: user.id
+        })
+        .eq('id', expense.id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        toast({
+          title: 'Erro ao estornar',
+          description: error.message,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      toast({
+        title: 'Estornado',
+        description: 'Lançamento estornado com sucesso.'
+      });
+      loadExpenses();
+    } catch (err: any) {
+      toast({
+        title: 'Erro',
+        description: err?.message || 'Não foi possível estornar a despesa.',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -121,6 +167,15 @@ export default function Despesas() {
       toast({
         title: 'Campos obrigatórios',
         description: 'Por favor, preencha todos os campos obrigatórios.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const amountValue = parseFloat(amount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast({
+        title: 'Valor inválido',
+        description: 'A despesa deve ser maior que zero.',
         variant: 'destructive'
       });
       return;
@@ -161,7 +216,7 @@ export default function Despesas() {
         .from('expenses')
         .insert({
           description: description.trim(),
-          amount: parseFloat(amount),
+          amount: amountValue,
           category,
           expense_date: expenseDate,
           receipt_url: receiptUrl,
@@ -404,6 +459,10 @@ export default function Despesas() {
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-medium">Mostrar estornadas</div>
+            <Switch checked={showReversed} onCheckedChange={setShowReversed} />
+          </div>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="searchExpenses">Pesquisar</Label>
@@ -479,17 +538,16 @@ export default function Despesas() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Data</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Valor</TableHead>
                     <TableHead>Comprovante</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredExpenses.map((expense) => (
                     <TableRow key={expense.id}>
-                      <TableCell>{formatDate(expense.expense_date)}</TableCell>
                       <TableCell className="font-medium">{expense.description}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="capitalize">
@@ -507,6 +565,16 @@ export default function Despesas() {
                           </Button>
                         ) : (
                           <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {expense.is_active === false ? (
+                          <Badge variant="secondary">Estornado</Badge>
+                        ) : (
+                          <Button variant="outline" size="sm" onClick={() => reverseExpense(expense)}>
+                            <Undo2 className="h-3 w-3 mr-1" />
+                            Estornar
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>

@@ -187,6 +187,67 @@ Deno.serve(async (req) => {
                     }
                 }
             }
+        },
+        {
+            type: "function",
+            function: {
+                name: "create_expense",
+                description: "Registra uma despesa.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        description: { type: "string", description: "Descrição da despesa" },
+                        amount: { type: "number", description: "Valor da despesa" },
+                        category: { type: "string", description: "Categoria (ex: Aluguel, Água, Energia, Insumos)" },
+                        expense_date: { type: "string", description: "Data no formato YYYY-MM-DD" },
+                        receipt_url: { type: "string", description: "URL do comprovante (opcional)" }
+                    },
+                    required: ["description", "amount"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "list_expenses",
+                description: "Lista despesas registradas.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        search: { type: "string", description: "Busca por descrição/categoria (opcional)" },
+                        limit: { type: "integer", description: "Limite de resultados (padrão 20)" }
+                    }
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "reverse_expense",
+                description: "Estorna uma despesa pelo id (mantém histórico).",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string", description: "ID da despesa" },
+                        reason: { type: "string", description: "Motivo do estorno (opcional)" }
+                    },
+                    required: ["id"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "delete_expense",
+                description: "Remove uma despesa pelo id.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string", description: "ID da despesa" }
+                    },
+                    required: ["id"]
+                }
+            }
         }
     ];
 
@@ -201,8 +262,10 @@ Deno.serve(async (req) => {
     
     Regras:
     - Se o usuário pedir para criar algo, chame a função apropriada.
+    - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
     - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
     - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
+    - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
     - Seja direto e confirme a ação realizada.
     - O ID do usuário (restaurante) é: ${userId}${requestedCount >= 3 ? `\n- O usuário solicitou ${requestedCount} produtos. Gere exatamente ${requestedCount} produtos.` : ''}`;
 
@@ -212,33 +275,50 @@ Deno.serve(async (req) => {
         { role: "user", content: command }
     ];
 
-    const completion = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-            model: "gpt-4o-mini", // Modelo rápido e capaz de function calling
-            messages: messages,
-            tools: tools,
-            tool_choice: "auto"
-        })
-    });
+    const callOpenAI = async (msgs: any[]) => {
+        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: msgs,
+                tools: tools,
+                tool_choice: "auto"
+            })
+        });
+        const data = await completion.json();
+        const msg = data?.choices?.[0]?.message;
+        if (!msg) throw new Error('Resposta inválida do modelo');
+        return msg;
+    };
 
-    const completionData = await completion.json();
-    const message = completionData.choices[0].message;
+    let currentMessages: any[] = [...messages];
+    const allToolResults: any[] = [];
+    let finalMessageText: string | null = null;
 
-    // =================================================================================
-    // 3. Execução das Tools (se houver chamada)
-    // =================================================================================
-    if (message.tool_calls) {
-        const toolResults = [];
+    for (let step = 0; step < 6; step++) {
+        const message = await callOpenAI(currentMessages);
+        currentMessages = [...currentMessages, message];
+
+        if (!message.tool_calls || message.tool_calls.length === 0) {
+            finalMessageText = message.content || '';
+            break;
+        }
+
+        const toolResults: any[] = [];
 
         for (const toolCall of message.tool_calls) {
             const fnName = toolCall.function.name;
-            const args = JSON.parse(toolCall.function.arguments);
-            let result = null;
+            let args: any = {};
+            try {
+                args = JSON.parse(toolCall.function.arguments || '{}');
+            } catch {
+                args = {};
+            }
+            let result: any = null;
 
             console.log(`[Agent] Executing tool: ${fnName}`, args);
 
@@ -462,6 +542,83 @@ Deno.serve(async (req) => {
                     result = { success: true, products: products };
                 }
 
+                else if (fnName === "create_expense") {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const payload = {
+                        user_id: userId,
+                        description: String(args.description || '').trim(),
+                        amount: Number(args.amount),
+                        category: String(args.category || 'Outros'),
+                        expense_date: String(args.expense_date || today),
+                        receipt_url: args.receipt_url ? String(args.receipt_url) : null
+                    };
+                    if (!payload.description || !Number.isFinite(payload.amount) || payload.amount <= 0) {
+                        result = { success: false, error: 'Descrição e valor (maior que zero) são obrigatórios.' };
+                    } else {
+                        const { data: expense, error } = await supabase
+                            .from('expenses')
+                            .insert(payload)
+                            .select('id, description, amount, category, expense_date, receipt_url')
+                            .single();
+                        if (error) throw error;
+                        result = { success: true, expense };
+                    }
+                }
+
+                else if (fnName === "list_expenses") {
+                    const limit = Math.min(Math.max(Number(args.limit || 20) || 20, 1), 100);
+                    let query = supabase
+                        .from('expenses')
+                        .select('id, description, amount, category, expense_date, receipt_url')
+                        .eq('user_id', userId)
+                        .order('expense_date', { ascending: false })
+                        .limit(limit);
+
+                    if (args.search) {
+                        const term = String(args.search);
+                        query = query.or(`description.ilike.%${term}%,category.ilike.%${term}%`);
+                    }
+                    const { data: expenses, error } = await query;
+                    if (error) throw error;
+                    result = { success: true, expenses };
+                }
+
+                else if (fnName === "delete_expense") {
+                    const id = String(args.id || '').trim();
+                    if (!id) {
+                        result = { success: false, error: 'ID é obrigatório.' };
+                    } else {
+                        const { error } = await supabase
+                            .from('expenses')
+                            .delete()
+                            .eq('user_id', userId)
+                            .eq('id', id);
+                        if (error) throw error;
+                        result = { success: true, deleted_id: id };
+                    }
+                }
+
+                else if (fnName === "reverse_expense") {
+                    const id = String(args.id || '').trim();
+                    const reason = args.reason ? String(args.reason) : '';
+                    if (!id) {
+                        result = { success: false, error: 'ID é obrigatório.' };
+                    } else {
+                        const { error } = await supabase
+                            .from('expenses')
+                            .update({
+                                is_active: false,
+                                reversed_at: new Date().toISOString(),
+                                reversal_reason: reason.trim() || null,
+                                reversed_by: userId
+                            })
+                            .eq('user_id', userId)
+                            .eq('id', id);
+                        if (error) throw error;
+                        result = { success: true, reversed_id: id };
+                    }
+                }
+
             } catch (err: any) {
                 console.error(`Error executing ${fnName}:`, err);
                 result = { success: false, error: err.message };
@@ -474,44 +631,15 @@ Deno.serve(async (req) => {
                 content: JSON.stringify(result)
             });
         }
-
-        // =================================================================================
-        // 4. Chamada Final à OpenAI (com os resultados das tools)
-        // =================================================================================
-        const finalResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
-                    ...messages,
-                    message, // A resposta original com tool_calls
-                    ...toolResults // Os resultados das tools
-                ]
-            })
-        });
-
-        const finalData = await finalResponse.json();
-        const finalMessage = finalData.choices[0].message.content;
-
-        return new Response(
-            JSON.stringify({ 
-                success: true, 
-                message: finalMessage,
-                tool_results: toolResults 
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
+        allToolResults.push(...toolResults);
+        currentMessages = [...currentMessages, ...toolResults];
     }
 
-    // Se não houve tool call, retorna a resposta direta (conversação)
     return new Response(
-        JSON.stringify({ 
-            success: true, 
-            message: message.content 
+        JSON.stringify({
+            success: true,
+            message: finalMessageText || '',
+            tool_results: allToolResults
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

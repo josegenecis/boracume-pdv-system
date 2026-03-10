@@ -41,6 +41,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { PrinterService } from '@/utils/printerService';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import {
   Dialog,
@@ -315,6 +316,10 @@ const Financeiro = () => {
         }
         if (error) throw error;
         toast({ title: 'Caixa aberto com sucesso' });
+        await PrinterService.printCashReport({
+          title: 'Abertura de Caixa',
+          lines: [`Data/Hora: ${new Date().toLocaleString('pt-BR')}`, `Valor inicial: R$ ${Number(amount).toFixed(2)}`]
+        });
       } else if (cashOperation === 'close') {
         if (!currentSession) return;
         const { error } = await (supabase as any).from('cash_register_sessions').update({
@@ -325,6 +330,14 @@ const Financeiro = () => {
         }).eq('id', currentSession.id);
         if (error) throw error;
         toast({ title: 'Caixa fechado com sucesso' });
+        await PrinterService.printCashReport({
+          title: 'Fechamento de Caixa',
+          lines: [
+            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            `Valor final: R$ ${Number(amount).toFixed(2)}`,
+            cashDescription ? `Obs: ${cashDescription}` : ''
+          ].filter(Boolean) as string[]
+        });
       } else {
         // Suprimento ou Sangria
         if (!currentSession) {
@@ -340,6 +353,14 @@ const Financeiro = () => {
         });
         if (error) throw error;
         toast({ title: cashOperation === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
+        await PrinterService.printCashReport({
+          title: cashOperation === 'in' ? 'Suprimento' : 'Sangria',
+          lines: [
+            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            `Valor: R$ ${Number(amount).toFixed(2)}`,
+            cashDescription ? `Descrição: ${cashDescription}` : ''
+          ].filter(Boolean) as string[]
+        });
       }
       
       setIsCashDialogOpen(false);

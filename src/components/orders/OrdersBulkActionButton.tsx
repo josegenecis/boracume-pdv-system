@@ -38,9 +38,9 @@ const OrdersBulkActionButton: React.FC<OrdersBulkActionButtonProps> = ({
         };
       case 'deliver_all':
         return {
-          label: 'Finalizar Todos',
-          confirmTitle: 'Finalizar todos os pedidos?',
-          confirmDescription: `Todos os ${orderIds.length} pedidos prontos serão marcados como entregues.`,
+          label: 'Saiu para Entrega',
+          confirmTitle: 'Enviar para entrega?',
+          confirmDescription: `Todos os ${orderIds.length} pedidos prontos serão marcados como saiu para entrega.`,
           className: 'bg-purple-600 hover:bg-purple-700'
         };
       default:

@@ -39,6 +39,7 @@ import Entregadores from '@/pages/Entregadores';
 import Garcons from '@/pages/Garcons';
 import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
+import Despesas from '@/pages/Despesas';
 import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
@@ -139,6 +140,7 @@ function AppContent() {
           <Route path="/garcons" element={<Garcons />} />
           <Route path="/nfce" element={<NFCe />} />
           <Route path="/financeiro" element={<Financeiro />} />
+          <Route path="/despesas" element={<Despesas />} />
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />

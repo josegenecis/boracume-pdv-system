@@ -33,7 +33,7 @@ const OrderStatusBadge: React.FC<OrderStatusBadgeProps> = ({ status, className =
       case 'in_delivery':
         return { label: 'Saiu para Entrega', color: 'bg-purple-100 text-purple-800 border-purple-300' };
       case 'delivered':
-        return { label: 'Entregue', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+        return { label: 'Finalizado', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
       case 'cancelled':
         return { label: 'Cancelado', color: 'bg-red-100 text-red-800 border-red-300' };
       default:

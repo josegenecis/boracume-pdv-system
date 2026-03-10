@@ -72,9 +72,9 @@ const Products = () => {
 
   useEffect(() => {
     const t = searchParams.get('tab');
-    if (!t) return;
-    if (t === tab) return;
-    if (t === 'products' || t === 'categories' || t === 'global-variations') setTab(t);
+    const next = t === 'products' || t === 'categories' || t === 'global-variations' ? t : 'products';
+    if (next === tab) return;
+    setTab(next);
   }, [searchParams, tab]);
 
   useEffect(() => {

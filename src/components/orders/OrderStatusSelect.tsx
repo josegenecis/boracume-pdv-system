@@ -12,7 +12,8 @@ const OrderStatusSelect: React.FC<OrderStatusSelectProps> = ({ currentStatus, on
     { value: 'confirmed', label: 'Confirmado' },
     { value: 'preparing', label: 'Preparando' },
     { value: 'ready', label: 'Pronto' },
-    { value: 'delivered', label: 'Entregue' },
+    { value: 'in_delivery', label: 'Saiu para Entrega' },
+    { value: 'delivered', label: 'Finalizado' },
     { value: 'completed', label: 'Finalizado' },
     { value: 'cancelled', label: 'Cancelado' }
   ];

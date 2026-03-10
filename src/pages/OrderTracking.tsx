@@ -33,7 +33,8 @@ const OrderTracking: React.FC = () => {
       { key: 'pending', label: 'Recebido', icon: Clock },
       { key: 'preparing', label: 'Preparando', icon: Package },
       { key: 'ready', label: 'Pronto', icon: CheckCircle },
-      { key: 'delivered', label: 'Saiu para Entrega', icon: Truck },
+      { key: 'in_delivery', label: 'Saiu para Entrega', icon: Truck },
+      { key: 'delivered', label: 'Finalizado', icon: CheckCircle },
       { key: 'completed', label: 'Finalizado', icon: CheckCircle },
     ]
   ), []);

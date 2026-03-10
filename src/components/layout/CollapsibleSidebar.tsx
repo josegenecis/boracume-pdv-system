@@ -19,6 +19,7 @@ import {
   MapPin, 
   CreditCard,
   BarChart3,
+  DollarSign,
   MessageCircle,
   ChefHat,
   Utensils,
@@ -93,8 +94,16 @@ const CollapsibleSidebar = () => {
       label: 'Caixa',
       items: [
         { to: '/pdv', label: 'PDV' },
-        { to: '/financeiro', label: 'Financeiro' },
         { to: '/pix', label: 'PIX' },
+      ]
+    },
+    {
+      id: 'financeiro',
+      icon: DollarSign,
+      label: 'Financeiro',
+      items: [
+        { to: '/financeiro', label: 'Receitas' },
+        { to: '/despesas', label: 'Despesas' },
       ]
     },
     {

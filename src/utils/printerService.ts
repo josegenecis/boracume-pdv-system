@@ -182,6 +182,51 @@ function buildOrderHtml(order: any, config: any) {
     `;
 }
 
+function buildReportHtml(title: string, lines: string[]) {
+  return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${title}</title>
+        <style>
+          @page { margin: 0; size: auto; }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 10px;
+            font-size: 12px;
+            color: #000;
+            line-height: 1.25;
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .line { white-space: pre-wrap; word-break: break-word; }
+        </style>
+      </head>
+      <body>
+        <div class="center bold">${title}</div>
+        <div class="divider"></div>
+        ${lines.map((l) => `<div class="line">${String(l).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')}
+        <div class="divider"></div>
+        <div class="center" style="font-size: 0.8em;">Sistema BoraCumê</div>
+      </body>
+      </html>
+    `;
+}
+
+async function printReportElectron(html: string) {
+  const api = (window as any)?.electronAPI;
+  if (!api?.printSystem) return { success: false, error: 'API do Desktop indisponível' };
+  const target = resolveElectronTarget();
+  if (!target) return { success: false, error: 'Impressora não configurada em Configurações' };
+  if (target.type !== 'system') return { success: false, error: 'Selecione uma impressora do sistema para imprimir relatórios' };
+  const resp = await api.printSystem(target.printerName, html, true);
+  if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
+  return { success: true };
+}
+
 async function printElectron(order: any, config: any) {
   const api = (window as any)?.electronAPI;
   if (!api?.printSystem || !api?.printReceipt) return { success: false, error: 'API do Desktop indisponível' };
@@ -317,6 +362,31 @@ export const PrinterService = {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
     return this.printOrder(order, { onlyIfAuto: !isElectron });
+  },
+
+  async printCashReport(report: { title: string; lines: string[] }) {
+    const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
+    const isElectron = Boolean(api?.printSystem);
+    const htmlContent = buildReportHtml(report.title, report.lines).replace(
+      '</body>',
+      `<script>window.onload=function(){window.print();}</script></body>`
+    );
+
+    if (isElectron) {
+      const resp = await printReportElectron(htmlContent);
+      if (!resp.success) {
+        toast.error(resp.error || 'Falha ao imprimir');
+      }
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=420,height=600');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    } else {
+      toast.error('Pop-up bloqueado! Permita pop-ups para imprimir.');
+    }
   },
 
   // Impressão USB (ESC/POS)

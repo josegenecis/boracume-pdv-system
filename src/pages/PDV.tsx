@@ -23,6 +23,7 @@ import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
+import { PrinterService } from '@/utils/printerService';
 
 interface Product {
   id: string;
@@ -256,6 +257,14 @@ const PDV = () => {
         }
         if (error) throw error;
         toast({ title: 'Caixa aberto' });
+        await PrinterService.printCashReport({
+          title: 'Abertura de Caixa',
+          lines: [
+            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            `Valor inicial: R$ ${amount.toFixed(2)}`,
+            operatorSession?.name ? `Operador: ${operatorSession.name}` : ''
+          ].filter(Boolean) as string[]
+        });
       } else {
         if (!cashSession?.id) {
           toast({ title: 'Caixa não encontrado', variant: 'destructive' });
@@ -292,6 +301,20 @@ const PDV = () => {
         }
         if (error) throw error;
         toast({ title: 'Caixa fechado' });
+        await PrinterService.printCashReport({
+          title: 'Fechamento de Caixa',
+          lines: [
+            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+            `Valor informado: R$ ${amount.toFixed(2)}`,
+            cashCloseSummary?.expectedCash != null ? `Valor esperado: R$ ${Number(cashCloseSummary.expectedCash).toFixed(2)}` : '',
+            cashCloseSummary?.pix != null ? `PIX: R$ ${Number(cashCloseSummary.pix).toFixed(2)}` : '',
+            cashCloseSummary?.card != null ? `Cartão: R$ ${Number(cashCloseSummary.card).toFixed(2)}` : '',
+            cashCloseSummary?.cash != null ? `Dinheiro (vendas): R$ ${Number(cashCloseSummary.cash).toFixed(2)}` : '',
+            cashCloseSummary?.inAmount != null ? `Suprimentos: R$ ${Number(cashCloseSummary.inAmount).toFixed(2)}` : '',
+            cashCloseSummary?.outAmount != null ? `Sangrias: R$ ${Number(cashCloseSummary.outAmount).toFixed(2)}` : '',
+            operatorSession?.name ? `Operador: ${operatorSession.name}` : ''
+          ].filter(Boolean) as string[]
+        });
       }
       setCashDialogOpen(false);
       await fetchOpenCashSession();
@@ -332,6 +355,15 @@ const PDV = () => {
       });
       if (error) throw error;
       toast({ title: cashMoveType === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
+      await PrinterService.printCashReport({
+        title: cashMoveType === 'in' ? 'Suprimento' : 'Sangria',
+        lines: [
+          `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
+          `Valor: R$ ${amount.toFixed(2)}`,
+          cashMoveDesc ? `Descrição: ${cashMoveDesc}` : '',
+          session?.name ? `Operador: ${session.name}` : ''
+        ].filter(Boolean) as string[]
+      });
       setCashMoveOpen(false);
       setCashMoveAmount('');
       setCashMoveDesc('');

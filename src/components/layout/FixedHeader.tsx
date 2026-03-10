@@ -88,7 +88,7 @@ const FixedHeader = () => {
                 <Package className="mr-2 h-4 w-4" />
                 Produtos
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/produtos?tab=categorias')}>
+              <DropdownMenuItem onClick={() => navigate('/produtos?tab=categories')}>
                 <Layers className="mr-2 h-4 w-4" />
                 Categorias
               </DropdownMenuItem>

@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useInputValidation } from '@/hooks/useInputValidation';
 import { loginSchema, signupSchema, type LoginData, type SignupData } from '@/schemas/authSchemas';
 import { logSecurityEvent, logSignupEvent } from '@/utils/securityLogger';
-import { Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { debugLogger } from '@/utils/debugLogger';
 
 import { handleOAuthError } from '../../utils/oauth-errors';
@@ -28,6 +28,10 @@ const AuthForm: React.FC = () => {
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [isSubmittingSignup, setIsSubmittingSignup] = useState(false);
   const [isSubmittingGoogle, setIsSubmittingGoogle] = useState(false);
+
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirmPassword, setShowSignupConfirmPassword] = useState(false);
   
   // Refs para debounce
   const loginTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -275,15 +279,28 @@ const AuthForm: React.FC = () => {
               
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Sua senha"
-                  value={loginData.password}
-                  onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                  disabled={isSubmittingLogin || isLoading}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showLoginPassword ? 'text' : 'password'}
+                    placeholder="Sua senha"
+                    value={loginData.password}
+                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    disabled={isSubmittingLogin || isLoading}
+                    required
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowLoginPassword((v) => !v)}
+                    tabIndex={-1}
+                  >
+                    {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </Button>
+                </div>
                 {loginValidation.errors.password && (
                   <p className="text-sm text-red-500">{loginValidation.errors.password}</p>
                 )}
@@ -390,15 +407,28 @@ const AuthForm: React.FC = () => {
               
               <div className="space-y-2">
                 <Label htmlFor="registerPassword">Senha</Label>
-                <Input
-                  id="registerPassword"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={signupData.password}
-                  onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                  disabled={isSubmittingSignup || isLoading}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="registerPassword"
+                    type={showSignupPassword ? 'text' : 'password'}
+                    placeholder="Mínimo 6 caracteres"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                    disabled={isSubmittingSignup || isLoading}
+                    required
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowSignupPassword((v) => !v)}
+                    tabIndex={-1}
+                  >
+                    {showSignupPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </Button>
+                </div>
                 {signupValidation.errors.password && (
                   <p className="text-sm text-red-500">{signupValidation.errors.password}</p>
                 )}
@@ -406,15 +436,28 @@ const AuthForm: React.FC = () => {
               
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar senha</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Confirme sua senha"
-                  value={signupData.confirmPassword}
-                  onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
-                  disabled={isSubmittingSignup || isLoading}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showSignupConfirmPassword ? 'text' : 'password'}
+                    placeholder="Confirme sua senha"
+                    value={signupData.confirmPassword}
+                    onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
+                    disabled={isSubmittingSignup || isLoading}
+                    required
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowSignupConfirmPassword((v) => !v)}
+                    tabIndex={-1}
+                  >
+                    {showSignupConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </Button>
+                </div>
                 {signupValidation.errors.confirmPassword && (
                   <p className="text-sm text-red-500">{signupValidation.errors.confirmPassword}</p>
                 )}

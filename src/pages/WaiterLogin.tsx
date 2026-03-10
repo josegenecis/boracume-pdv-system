@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowRight } from 'lucide-react';
+import { User, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 const WaiterLogin = () => {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -77,16 +78,26 @@ const WaiterLogin = () => {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <Input
                   id="pin"
-                  type="password"
+                  type={showPin ? 'text' : 'password'}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  className="pl-10 text-center text-2xl tracking-widest h-14"
+                  className="pl-10 pr-10 text-center text-2xl tracking-widest h-14"
                   placeholder="••••"
                   autoFocus
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9"
+                  onClick={() => setShowPin((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                </Button>
               </div>
             </div>
             
