@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Polygon, CircleMarker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Polygon, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,6 +36,22 @@ function MapClickAdder(props: { enabled: boolean; onAdd: (p: PolygonPoint) => vo
   return null
 }
 
+function LeafletAutoResize() {
+  const map = useMap()
+  useEffect(() => {
+    const t1 = window.setTimeout(() => map.invalidateSize(), 50)
+    const t2 = window.setTimeout(() => map.invalidateSize(), 250)
+    const onResize = () => map.invalidateSize()
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [map])
+  return null
+}
+
 declare global {
   interface Window {
     __boracumeGoogleMapsPromise?: Promise<void>
@@ -69,6 +85,8 @@ function GooglePolygonMap(props: {
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonRef = useRef<google.maps.Polygon | null>(null)
   const markersRef = useRef<google.maps.Marker[]>([])
+  const enabledRef = useRef<boolean>(props.enabled)
+  enabledRef.current = props.enabled
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -94,7 +112,7 @@ function GooglePolygonMap(props: {
     polygonRef.current.setMap(mapRef.current)
 
     mapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
-      if (!props.enabled) return
+      if (!enabledRef.current) return
       const lat = e.latLng?.lat()
       const lng = e.latLng?.lng()
       if (typeof lat !== 'number' || typeof lng !== 'number') return
@@ -106,6 +124,24 @@ function GooglePolygonMap(props: {
     if (!mapRef.current) return
     mapRef.current.setCenter(props.center)
   }, [props.center])
+
+  useEffect(() => {
+    if (!mapRef.current) return
+    const g = window.google
+    if (!g?.maps) return
+    const t1 = window.setTimeout(() => {
+      g.maps.event.trigger(mapRef.current!, 'resize')
+      mapRef.current!.setCenter(props.center)
+    }, 50)
+    const t2 = window.setTimeout(() => {
+      g.maps.event.trigger(mapRef.current!, 'resize')
+      mapRef.current!.setCenter(props.center)
+    }, 250)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [props.center, props.enabled])
 
   useEffect(() => {
     if (!mapRef.current || !polygonRef.current) return
@@ -253,6 +289,7 @@ export default function PolygonAreasEditor(props: {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+              <LeafletAutoResize />
               <MapClickAdder enabled={!!selected} onAdd={addPoint} />
               {selected?.points?.map((p, idx) => (
                 <CircleMarker key={idx} center={[p.lat, p.lng]} radius={5} pathOptions={{ color: '#f97316' }} />
