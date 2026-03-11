@@ -140,6 +140,7 @@ function AppContent() {
           <Route path="/garcons" element={<Garcons />} />
           <Route path="/nfce" element={<NFCe />} />
           <Route path="/financeiro" element={<Financeiro />} />
+          <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
           <Route path="/despesas" element={<Despesas />} />
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
