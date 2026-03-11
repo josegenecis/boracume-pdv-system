@@ -33,10 +33,22 @@ const LeafletAutoResize = () => {
     const t2 = window.setTimeout(() => map.invalidateSize(), 250);
     const onResize = () => map.invalidateSize();
     window.addEventListener('resize', onResize);
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            map.invalidateSize();
+          })
+        : null;
+    try {
+      const el = map.getContainer();
+      ro?.observe(el);
+      if ((el as any)?.parentElement) ro?.observe((el as any).parentElement);
+    } catch {}
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       window.removeEventListener('resize', onResize);
+      ro?.disconnect();
     };
   }, [map]);
   return null;

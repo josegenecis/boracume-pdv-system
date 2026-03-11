@@ -43,10 +43,22 @@ function LeafletAutoResize() {
     const t2 = window.setTimeout(() => map.invalidateSize(), 250)
     const onResize = () => map.invalidateSize()
     window.addEventListener('resize', onResize)
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            map.invalidateSize()
+          })
+        : null
+    try {
+      const el = map.getContainer()
+      ro?.observe(el)
+      if (el.parentElement) ro?.observe(el.parentElement)
+    } catch {}
     return () => {
       window.clearTimeout(t1)
       window.clearTimeout(t2)
       window.removeEventListener('resize', onResize)
+      ro?.disconnect()
     }
   }, [map])
   return null
@@ -137,9 +149,18 @@ function GooglePolygonMap(props: {
       g.maps.event.trigger(mapRef.current!, 'resize')
       mapRef.current!.setCenter(props.center)
     }, 250)
+    const ro =
+      typeof ResizeObserver !== 'undefined' && containerRef.current
+        ? new ResizeObserver(() => {
+            g.maps.event.trigger(mapRef.current!, 'resize')
+            mapRef.current!.setCenter(props.center)
+          })
+        : null
+    if (ro && containerRef.current) ro.observe(containerRef.current)
     return () => {
       window.clearTimeout(t1)
       window.clearTimeout(t2)
+      ro?.disconnect()
     }
   }, [props.center, props.enabled])
 
@@ -179,6 +200,7 @@ export default function PolygonAreasEditor(props: {
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY
   const [googleReady, setGoogleReady] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
+  const [osmTileError, setOsmTileError] = useState(false)
 
   const center = useMemo(() => {
     if (selected?.points?.length) return [selected.points[0].lat, selected.points[0].lng] as [number, number]
@@ -240,6 +262,11 @@ export default function PolygonAreasEditor(props: {
       return
     }
     let cancelled = false
+    ;(window as any).gm_authFailure = () => {
+      if (cancelled) return
+      setGoogleReady(false)
+      setGoogleError('Falha na autenticação do Google Maps (verifique chave/restrições/billing).')
+    }
     loadGoogleMaps(googleKey)
       .then(() => {
         if (cancelled) return
@@ -253,6 +280,9 @@ export default function PolygonAreasEditor(props: {
       })
     return () => {
       cancelled = true
+      try {
+        if ((window as any).gm_authFailure) delete (window as any).gm_authFailure
+      } catch {}
     }
   }, [googleKey])
 
@@ -268,6 +298,11 @@ export default function PolygonAreasEditor(props: {
               Defina VITE_GOOGLE_MAPS_BROWSER_API_KEY e faça redeploy
             </div>
           )}
+        {osmTileError && (
+          <div className="shrink-0 text-destructive">
+            Sem tiles do mapa (rede/bloqueio). Tente liberar tile.openstreetmap.org
+          </div>
+        )}
         </div>
         {googleKey ? (
           googleReady ? (
@@ -288,6 +323,10 @@ export default function PolygonAreasEditor(props: {
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                eventHandlers={{
+                  tileerror: () => setOsmTileError(true),
+                  load: () => setOsmTileError(false)
+                }}
               />
               <LeafletAutoResize />
               <MapClickAdder enabled={!!selected} onAdd={addPoint} />
