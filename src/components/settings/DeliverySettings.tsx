@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import PolygonAreasEditor, { PolygonAreaDraft } from '@/components/settings/delivery/PolygonAreasEditor';
+import { Circle, CircleMarker, MapContainer, TileLayer, useMap } from 'react-leaflet';
 
 interface DeliveryZone {
   id: string;
@@ -24,6 +25,22 @@ interface DeliveryZone {
 }
 
 type PricingMode = 'free' | 'fixed' | 'neighborhood' | 'distance_km' | 'distance_bands' | 'radius_km' | 'polygon';
+
+const LeafletAutoResize = () => {
+  const map = useMap();
+  useEffect(() => {
+    const t1 = window.setTimeout(() => map.invalidateSize(), 50);
+    const t2 = window.setTimeout(() => map.invalidateSize(), 250);
+    const onResize = () => map.invalidateSize();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [map]);
+  return null;
+};
 
 const DeliverySettings = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -708,42 +725,77 @@ const DeliverySettings = () => {
     }
 
     if (editorMode === 'radius_km') {
+      const radiusKm = Number(String(radiusPricing.radius_km || '0').replace(',', '.'));
+      const radiusMeters = Number.isFinite(radiusKm) ? Math.max(0, radiusKm) * 1000 : 0;
       return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="space-y-2">
-            <Label>Raio máximo (km)</Label>
-            <Input
-              type="number"
-              step="0.1"
-              value={radiusPricing.radius_km}
-              onChange={(e) => setRadiusPricing(prev => ({ ...prev, radius_km: e.target.value }))}
-            />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label>Raio máximo (km)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={radiusPricing.radius_km}
+                onChange={(e) => setRadiusPricing(prev => ({ ...prev, radius_km: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Taxa (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={radiusPricing.delivery_fee}
+                onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Pedido mínimo (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={radiusPricing.minimum_order}
+                onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tempo estimado</Label>
+              <Input
+                value={radiusPricing.delivery_time}
+                onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>Taxa (R$)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={radiusPricing.delivery_fee}
-              onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Pedido mínimo (R$)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={radiusPricing.minimum_order}
-              onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Tempo estimado</Label>
-            <Input
-              value={radiusPricing.delivery_time}
-              onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_time: e.target.value }))}
-            />
-          </div>
+
+          {storeLocation ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 border-b text-xs text-muted-foreground">
+                Prévia do raio (clique em “Definir pelo endereço” se estiver errado)
+              </div>
+              <div className="h-[320px]">
+                <MapContainer
+                  center={[storeLocation.lat, storeLocation.lng]}
+                  zoom={radiusKm >= 8 ? 12 : radiusKm >= 4 ? 13 : 14}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LeafletAutoResize />
+                  <Circle
+                    center={[storeLocation.lat, storeLocation.lng]}
+                    radius={radiusMeters || 0}
+                    pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.2 }}
+                  />
+                  <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#ef4444' }} />
+                </MapContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Defina a localização do restaurante para visualizar o raio no mapa.
+            </div>
+          )}
         </div>
       );
     }
