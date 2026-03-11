@@ -64,9 +64,12 @@ export default function Despesas() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      loadExpenses();
+    if (!user) {
+      setExpenses([]);
+      setLoading(false);
+      return;
     }
+    loadExpenses();
   }, [user]);
 
   useEffect(() => {
@@ -76,14 +79,16 @@ export default function Despesas() {
   const loadExpenses = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('expense_date', { ascending: false });
-
-      if (error) throw error;
-      setExpenses(data || []);
+      const base = supabase.from('expenses').select('*').eq('user_id', user.id);
+      const first = await base.order('expense_date', { ascending: false });
+      if (first.error) {
+        const msg = String(first.error.message || '');
+        const fallback = msg.includes('expense_date') || msg.includes('column') ? await base.order('created_at', { ascending: false }) : first;
+        if (fallback.error) throw fallback.error;
+        setExpenses((fallback.data as any[]) || []);
+      } else {
+        setExpenses((first.data as any[]) || []);
+      }
     } catch (error) {
       console.error('Error loading expenses:', error);
       toast({
@@ -171,7 +176,16 @@ export default function Despesas() {
       });
       return;
     }
-    const amountValue = parseFloat(amount);
+    const parseMoney = (raw: string) => {
+      const cleaned = String(raw || '')
+        .replace(/\s/g, '')
+        .replace(/[^\d,.-]/g, '')
+        .replace(/-/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+      return Number(cleaned);
+    };
+    const amountValue = parseMoney(amount);
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
       toast({
         title: 'Valor inválido',
@@ -343,11 +357,9 @@ export default function Despesas() {
                   <Label htmlFor="amount">Valor (R$) *</Label>
                   <Input
                     id="amount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
+                    inputMode="decimal"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => setAmount(e.target.value.replace(/-/g, '').replace(/[^\d,.-]/g, ''))}
                     placeholder="0,00"
                     required
                   />

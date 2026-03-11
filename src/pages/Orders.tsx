@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search, Filter, Eye, Check, Clock, Truck, Phone, MapPin, Copy, ExternalLink, QrCode, MessageCircle, Printer, GripVertical } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +56,9 @@ const Orders = () => {
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
   const [ordersView, setOrdersView] = useState<'list' | 'kanban'>('list');
+  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
+  const [deliveryDialogTab, setDeliveryDialogTab] = useState<'in_delivery' | 'delivered'>('in_delivery');
+  const [bulkFinalizing, setBulkFinalizing] = useState(false);
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -558,6 +562,20 @@ const Orders = () => {
     }
   };
 
+  const finalizeAllInDelivery = async () => {
+    if (inDeliveryOrders.length === 0) return;
+    try {
+      setBulkFinalizing(true);
+      await Promise.all(inDeliveryOrders.map((o) => updateOrderStatus(o.id, 'delivered')));
+      setDeliveryDialogTab('delivered');
+      toast({ title: 'Finalizado', description: 'Todos os pedidos em entrega foram finalizados.' });
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Não foi possível finalizar todos.', variant: 'destructive' });
+    } finally {
+      setBulkFinalizing(false);
+    }
+  };
+
   const handlePixPayment = (order: Order) => {
     setPixOrder(order);
     setIsPixModalOpen(true);
@@ -664,6 +682,82 @@ const Orders = () => {
             setPendingCancelId(null);
           }}
         />
+        <Dialog open={deliveryDialogOpen} onOpenChange={setDeliveryDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Entregas e Despachados</DialogTitle>
+            </DialogHeader>
+            <Tabs value={deliveryDialogTab} onValueChange={(v) => setDeliveryDialogTab(v as any)}>
+              <TabsList>
+                <TabsTrigger value="in_delivery">Em entrega ({inDeliveryOrders.length})</TabsTrigger>
+                <TabsTrigger value="delivered">Despachados ({deliveredOrders.length})</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="in_delivery" className="mt-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="text-sm text-muted-foreground">Pedidos que saíram para entrega</div>
+                  <Button onClick={finalizeAllInDelivery} disabled={bulkFinalizing || inDeliveryOrders.length === 0}>
+                    Finalizar todos
+                  </Button>
+                </div>
+                <div className="max-h-[65vh] overflow-y-auto space-y-3 pr-1">
+                  {inDeliveryOrders.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido em entrega</div>
+                  ) : (
+                    inDeliveryOrders.map((order) => (
+                      <Card key={order.id} className="border-l-4 border-l-purple-500">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold">Pedido {order.order_number}</div>
+                              <div className="text-sm text-muted-foreground truncate">{order.customer_name}</div>
+                              <div className="text-sm text-muted-foreground">{formatCurrency(order.total)}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => updateOrderStatus(order.id, 'preparing')}
+                              >
+                                Voltar produção
+                              </Button>
+                              <Button size="sm" onClick={() => updateOrderStatus(order.id, 'delivered')}>
+                                Finalizar
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="delivered" className="mt-4">
+                <div className="max-h-[70vh] overflow-y-auto space-y-3 pr-1">
+                  {deliveredOrders.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido despachado</div>
+                  ) : (
+                    deliveredOrders.map((order) => (
+                      <Card key={order.id} className="border-l-4 border-l-gray-400 cursor-pointer" onClick={() => openOrderDetails(order)}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold">Pedido {order.order_number}</div>
+                              <div className="text-sm text-muted-foreground truncate">{order.customer_name}</div>
+                              <div className="text-sm text-muted-foreground">{formatCurrency(order.total)}</div>
+                            </div>
+                            {getStatusBadge(order.status)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
           <div className="flex items-center gap-2">
@@ -673,6 +767,15 @@ const Orders = () => {
                 <TabsTrigger value="kanban">Kanban</TabsTrigger>
               </TabsList>
             </Tabs>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeliveryDialogOpen(true);
+                setDeliveryDialogTab('in_delivery');
+              }}
+            >
+              Entregas/Despachados
+            </Button>
             <Button onClick={fetchOrders} variant="outline">
               Atualizar
             </Button>
@@ -725,14 +828,11 @@ const Orders = () => {
 
         {ordersView === 'kanban' ? (
           <DragDropContext onDragEnd={(r) => { void onKanbanDragEnd(r); }}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
                 { id: 'pending', title: 'Novos', items: pendingOrders, headerClass: 'bg-yellow-50 border-yellow-500 text-yellow-800' },
                 { id: 'preparing', title: 'Preparando', items: activeOrders, headerClass: 'bg-blue-50 border-blue-500 text-blue-800' },
                 { id: 'ready', title: 'Prontos', items: completedOrders, headerClass: 'bg-green-50 border-green-500 text-green-800' },
-                { id: 'in_delivery', title: 'Em entrega', items: inDeliveryOrders, headerClass: 'bg-purple-50 border-purple-500 text-purple-800' },
-                { id: 'delivered', title: 'Finalizados', items: deliveredOrders, headerClass: 'bg-gray-50 border-gray-400 text-gray-800' },
-                { id: 'cancelled', title: 'Cancelados', items: cancelledOrders, headerClass: 'bg-red-50 border-red-500 text-red-800' },
               ].map((col) => (
                 <div key={col.id} className="space-y-3">
                   <div className={`p-3 rounded-lg border-l-4 ${col.headerClass}`}>
@@ -1163,126 +1263,6 @@ const Orders = () => {
                           >
                             Saiu para Entrega
                           </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Em entrega */}
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                <h2 className="text-lg font-semibold text-purple-800">Em entrega ({inDeliveryOrders.length})</h2>
-              </div>
-            </div>
-
-            {inDeliveryOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Nenhum pedido em entrega</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {inDeliveryOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-purple-500 cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
-                          {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1 min-w-0">
-                            {getOrderTypeIcon(order.order_type)}
-                            <span className="text-sm text-gray-600">{getOrderTypeLabel(order.order_type)}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-sm text-gray-600">
-                          <div className="font-medium">{order.customer_name}</div>
-                          {order.customer_phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={14} />
-                              {order.customer_phone}
-                            </div>
-                          )}
-                          <div>{formatDate(order.created_at)}</div>
-                        </div>
-
-                        <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateOrderStatus(order.id, 'preparing');
-                            }}
-                            className="w-full sm:flex-1"
-                          >
-                            Voltar para produção
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateOrderStatus(order.id, 'delivered');
-                            }}
-                            className="w-full sm:flex-1 bg-green-600 hover:bg-green-700"
-                          >
-                            Finalizar
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Finalizados */}
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-gray-50 rounded-lg border-l-4 border-gray-400">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                <h2 className="text-lg font-semibold text-gray-800">Finalizados ({deliveredOrders.length})</h2>
-              </div>
-            </div>
-
-            {deliveredOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Nenhum pedido finalizado</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {deliveredOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-gray-400 cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-4" onClick={() => openOrderDetails(order)}>
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-lg font-semibold min-w-0 break-words">Pedido {order.order_number}</h3>
-                          {getStatusBadge(order.status)}
-                          <div className="flex items-center gap-1 min-w-0">
-                            {getOrderTypeIcon(order.order_type)}
-                            <span className="text-sm text-gray-600">{getOrderTypeLabel(order.order_type)}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-sm text-gray-600">
-                          <div className="font-medium">{order.customer_name}</div>
-                          <div>{formatDate(order.created_at)}</div>
-                        </div>
-
-                        <div className="text-sm text-gray-600">
-                          {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
                         </div>
                       </div>
                     </CardContent>

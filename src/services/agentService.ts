@@ -147,6 +147,9 @@ async function executeDisableIngredient(ingredientName: string, userId: string, 
 
 async function executeRegisterExpense(amount: number, category: string, description: string, userId: string, aiReply: string): Promise<AgentCommandResult> {
   try {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { success: false, message: 'Valor inválido. A despesa deve ser maior que zero.' };
+    }
      const expense: Omit<Expense, 'id' | 'created_at'> = {
       description: description,
       amount: amount,

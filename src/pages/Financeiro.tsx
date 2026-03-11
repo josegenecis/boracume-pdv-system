@@ -272,12 +272,26 @@ const Financeiro = () => {
   const handleAddExpense = async () => {
     if (!newExpense.description || !newExpense.amount) return;
     try {
+      const parseMoney = (raw: string) => {
+        const cleaned = String(raw || '')
+          .replace(/\s/g, '')
+          .replace(/[^\d,.-]/g, '')
+          .replace(/-/g, '')
+          .replace(/\./g, '')
+          .replace(',', '.');
+        return Number(cleaned);
+      };
+      const amountValue = parseMoney(newExpense.amount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        toast({ title: 'Valor inválido', description: 'A despesa deve ser maior que zero.', variant: 'destructive' });
+        return;
+      }
       const { error } = await (supabase as any).from('expenses').insert({
         user_id: user?.id,
         description: newExpense.description,
-        amount: parseFloat(newExpense.amount),
+        amount: amountValue,
         category: newExpense.category,
-        date: new Date().toISOString()
+        expense_date: new Date().toISOString().slice(0, 10)
       });
       if (error) throw error;
       

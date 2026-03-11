@@ -102,7 +102,6 @@ const CollapsibleSidebar = () => {
       icon: DollarSign,
       label: 'Financeiro',
       items: [
-        { to: '/financeiro', label: 'Receitas' },
         { to: '/despesas', label: 'Despesas' },
       ]
     },
