@@ -35,7 +35,10 @@ interface OrderItem {
   quantity: number;
   price: number;
 
-  total_price: number;
+  total_price?: number;
+  subtotal?: number;
+  total?: number;
+  unit_price?: number;
   options?: any[];
   variations?: Array<{name: string; options: string[]}>;
 
@@ -89,68 +92,88 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   // Log detalhado quando o modal é renderizado
   useEffect(() => {
-    console.log('🔍 ORDER_DETAILS_MODAL - Renderização:', {
-      isOpen,
-      hasOrder: !!order,
-      orderId: order?.id,
-      orderNumber: order?.order_number,
-      timestamp: new Date().toISOString()
-    });
-
-    if (isOpen && order) {
-      console.log('🔍 ORDER_DETAILS_MODAL - Dados do pedido recebidos:', {
-        id: order.id,
-        order_number: order.order_number,
-        customer_name: order.customer_name,
-        status: order.status,
-        items: order.items?.length || 0,
-        total: order.total,
-        payment_method: order.payment_method,
-        created_at: order.created_at
-      });
-      
-      console.log('🔍 ORDER_DETAILS_MODAL - Itens do pedido:', order.items);
-      console.log('🔍 ORDER_DETAILS_MODAL - Estrutura completa do pedido:', JSON.stringify(order, null, 2));
-    }
-
-    if (isOpen && !order) {
-      console.error('❌ ORDER_DETAILS_MODAL - Modal aberto mas sem dados do pedido!');
-    }
+    if (isOpen && !order) return;
   }, [isOpen, order]);
 
   // Adicionar try-catch para capturar erros de renderização
   try {
-    console.log('🔍 ORDER_DETAILS_MODAL - Iniciando renderização, order:', !!order);
-    
     if (!order) {
-      console.log('🔍 ORDER_DETAILS_MODAL - Retornando null (sem pedido)');
       return null;
     }
 
-    console.log('🔍 ORDER_DETAILS_MODAL - Renderizando modal com pedido:', order.order_number);
-
-    const formatCurrency = (value: number) => {
-      console.log('🔍 ORDER_DETAILS_MODAL - formatCurrency chamado com:', value);
-      try {
-        return new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL',
-        }).format(value);
-      } catch (error) {
-        console.error('❌ ORDER_DETAILS_MODAL - Erro em formatCurrency:', error);
-        return `R$ ${value?.toFixed(2) || '0,00'}`;
+    const toNumber = (v: any) => {
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') {
+        let s = v.trim();
+        s = s.replace(/[^0-9.,-]/g, '');
+        const lastComma = s.lastIndexOf(',');
+        const lastDot = s.lastIndexOf('.');
+        const decPos = Math.max(lastComma, lastDot);
+        if (decPos >= 0) {
+          const intPart = s.slice(0, decPos).replace(/[^0-9-]/g, '');
+          const frac = s.slice(decPos + 1).replace(/[^0-9]/g, '');
+          s = `${intPart}.${frac}`;
+        } else {
+          s = s.replace(/[^0-9-]/g, '');
+        }
+        const n = Number(s);
+        return Number.isFinite(n) ? n : 0;
       }
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const formatCurrency = (value: any) => {
+      const n = toNumber(value);
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
     };
 
     const formatDateTime = (dateString: string) => {
-      console.log('🔍 ORDER_DETAILS_MODAL - formatDateTime chamado com:', dateString);
       try {
         return new Date(dateString).toLocaleString('pt-BR');
-      } catch (error) {
-        console.error('❌ ORDER_DETAILS_MODAL - Erro em formatDateTime:', error);
+      } catch {
         return dateString || 'Data não disponível';
       }
     };
+
+    const itemQuantity = (item: any) => {
+      const q = toNumber(item?.quantity);
+      return q > 0 ? q : 1;
+    };
+
+    const itemUnitPrice = (item: any) => {
+      const p = toNumber(item?.unit_price ?? item?.price);
+      return p >= 0 ? p : 0;
+    };
+
+    const optionsExtra = (item: any) => {
+      const opts = Array.isArray(item?.options) ? item.options : [];
+      return opts.reduce((acc: number, o: any) => {
+        if (!o || typeof o === 'string') return acc;
+        const p = toNumber(o?.price ?? o?.additional_price);
+        return acc + (p > 0 ? p : 0);
+      }, 0);
+    };
+
+    const itemTotal = (item: any) => {
+      const t = toNumber(item?.total_price ?? item?.subtotal ?? item?.total);
+      if (t > 0) return t;
+      const q = itemQuantity(item);
+      const unit = itemUnitPrice(item);
+      const extra = optionsExtra(item);
+      return q * unit + q * extra;
+    };
+
+    const itemsSubtotal = Array.isArray(order.items)
+      ? order.items.reduce((acc, it) => acc + itemTotal(it), 0)
+      : 0;
+
+    const deliveryFee = toNumber(order?.delivery_fee);
+    const orderTotal = toNumber(order?.total);
+    const orderSubtotal = toNumber(order?.subtotal);
+    const subtotalValue =
+      orderSubtotal > 0 ? orderSubtotal : itemsSubtotal > 0 ? itemsSubtotal : Math.max(0, orderTotal - (deliveryFee > 0 ? deliveryFee : 0));
+    const totalValue = orderTotal > 0 ? orderTotal : subtotalValue + (deliveryFee > 0 ? deliveryFee : 0);
 
     const copyLocation = async () => {
       try {
@@ -375,11 +398,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           <div className="flex-1">
                             <h4 className="font-medium text-sm">{item?.product_name || 'Produto não informado'}</h4>
                             <div className="text-xs text-gray-600 mt-1">
-                              Quantidade: {item?.quantity || 0} × {formatCurrency(item?.price || 0)}
+                              Quantidade: {itemQuantity(item)} × {formatCurrency(itemUnitPrice(item))}
                             </div>
                           </div>
                           <div className="text-sm font-medium">
-                            {formatCurrency(item?.total_price || 0)}
+                            {formatCurrency(itemTotal(item))}
                           </div>
                         </div>
                         
@@ -388,9 +411,6 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             <span className="font-medium text-gray-700">Variações:</span>
                             <div className="mt-1 space-y-1">
                               {item.options.map((option, oIndex) => {
-                                console.log('🔍 OPTION_DEBUG - Opção completa:', option);
-                                console.log('🔍 OPTION_DEBUG - Tipo da opção:', typeof option);
-                                
                                 // Se for string simples
                                 if (typeof option === 'string') {
                                   return (
@@ -405,7 +425,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                                   // Tentar diferentes formatos de dados
                                   const displayName = option?.name || option?.option_name || option?.title || 'Variação';
                                   const displayValue = option?.value || option?.selected_option || option?.choice || '';
-                                  const displayPrice = option?.price || option?.additional_price || 0;
+                                  const displayPrice = toNumber(option?.price ?? option?.additional_price);
                                   
                                   return (
                                     <div key={oIndex} className="text-gray-600 flex justify-between">
@@ -449,18 +469,18 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
-                    <span>{formatCurrency(order?.subtotal || order?.total || 0)}</span>
+                    <span>{formatCurrency(subtotalValue)}</span>
                   </div>
-                  {order?.delivery_fee && order.delivery_fee > 0 && (
+                  {deliveryFee > 0 && (
                     <div className="flex justify-between">
                       <span>Taxa de entrega:</span>
-                      <span>{formatCurrency(order.delivery_fee)}</span>
+                      <span>{formatCurrency(deliveryFee)}</span>
                     </div>
                   )}
                   <Separator />
                   <div className="flex justify-between font-semibold text-base">
                     <span>Total:</span>
-                    <span>{formatCurrency(order?.total || 0)}</span>
+                    <span>{formatCurrency(totalValue)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>Método de pagamento:</span>
