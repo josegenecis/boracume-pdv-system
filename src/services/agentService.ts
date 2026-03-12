@@ -7,6 +7,8 @@ export interface AgentCommandResult {
   metadata?: any;
 }
 
+export type SupportChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
+
 export interface Ingredient {
   id: string;
   name: string;
@@ -104,6 +106,20 @@ export async function processAgentCommand(command: string, userId: string): Prom
       message: 'Erro ao processar comando. Tente novamente.'
     };
   }
+}
+
+export async function processSupportChat(command: string, userId: string, conversationHistory: SupportChatHistoryMessage[] = []): Promise<AgentCommandResult> {
+  const { data, status } = await invokeEdgeFunction('ai-agent', {
+    command,
+    userId,
+    conversationHistory,
+    supportMode: true
+  });
+
+  if (status === 200 && data && data.success) {
+    return { success: true, message: data.message, metadata: { tool_results: data.tool_results } };
+  }
+  return { success: false, message: data?.error || data?.message || 'Não foi possível responder agora.' };
 }
 
 // ... (Existing regex functions renamed to processLocalAgentCommand or kept as helpers)
