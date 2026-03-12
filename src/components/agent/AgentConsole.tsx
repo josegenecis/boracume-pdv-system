@@ -29,6 +29,8 @@ export function AgentConsole({ className }: AgentConsoleProps) {
   const [suggestedCommands] = useState([
     'Desativar carne de sol de todos os produtos',
     'Lançar despesa de R$ 150,00 para alimentação',
+    'Criar produto Pizza Calabresa com tamanhos P/M/G e adicionais',
+    'Gerar imagens para produtos sem imagem',
     'Mostrar ingredientes ativos',
     'Registrar nota fiscal como despesa',
     'Desativar queijo coalho'

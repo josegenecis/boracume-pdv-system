@@ -62,6 +62,62 @@ Deno.serve(async (req) => {
         {
             type: "function",
             function: {
+                name: "create_product_full",
+                description: "Cria um produto completo com variações de preço (product_variants) e complementos/adicionais (product_variations). Use quando o usuário pedir tamanhos/variações de preço ou complementos/adicionais.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        name: { type: "string", description: "Nome do produto (ex: Pizza Calabresa)" },
+                        category: { type: "string", description: "Categoria do produto (ex: Pizzas, Bebidas)" },
+                        description: { type: "string", description: "Descrição opcional do produto" },
+                        price: { type: "number", description: "Preço base do produto (usado se não houver variações de preço)" },
+                        price_variants: {
+                            type: "array",
+                            description: "Variações de preço do produto (ex: tamanhos).",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string", description: "Nome da variação (ex: Pequena, Média, Grande)" },
+                                    price: { type: "number", description: "Preço da variação" },
+                                    promotional_price: { type: "number", description: "Preço promocional (opcional)" }
+                                },
+                                required: ["name", "price"]
+                            }
+                        },
+                        variation_groups: {
+                            type: "array",
+                            description: "Grupos de complementos/adicionais do produto.",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string", description: "Nome do grupo (ex: Adicionais, Bordas, Sabores)" },
+                                    description: { type: "string", description: "Descrição do grupo (opcional)" },
+                                    required: { type: "boolean", description: "Se é obrigatório escolher" },
+                                    max_selections: { type: "integer", description: "Número máximo de opções selecionáveis" },
+                                    options: {
+                                        type: "array",
+                                        description: "Lista de opções com nome e preço adicional",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                name: { type: "string" },
+                                                price: { type: "number" }
+                                            },
+                                            required: ["name", "price"]
+                                        }
+                                    }
+                                },
+                                required: ["name", "options"]
+                            }
+                        }
+                    },
+                    required: ["name", "category"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
                 name: "create_products",
                 description: "Cria vários produtos no cardápio de uma vez. Use quando o usuário pedir para criar 3 ou mais produtos.",
                 parameters: {
@@ -139,6 +195,33 @@ Deno.serve(async (req) => {
                         max_selections: { type: "integer", description: "Número máximo de opções selecionáveis" }
                     },
                     required: ["name", "options"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "generate_product_image",
+                description: "Gera e define uma imagem de produto (AI) baseado no nome/descrição. Use quando o usuário pedir imagem para um produto.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        product_name: { type: "string", description: "Nome do produto (busca aproximada)" },
+                        product_id: { type: "string", description: "ID do produto (opcional, preferível se conhecido)" }
+                    }
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "generate_missing_product_images",
+                description: "Gera imagens para produtos sem imagem (image_url vazio). Use quando o usuário pedir para preencher imagens faltantes.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        limit: { type: "integer", description: "Quantidade máxima de produtos a processar (padrão 10, máx 25)" }
+                    }
                 }
             }
         },
@@ -264,6 +347,8 @@ Deno.serve(async (req) => {
     - Se o usuário pedir para criar algo, chame a função apropriada.
     - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
     - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
+    - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
+    - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
     - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
     - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
     - Seja direto e confirme a ação realizada.
@@ -331,7 +416,7 @@ Deno.serve(async (req) => {
                         .from('product_categories')
                         .select('id')
                         .eq('user_id', userId)
-                        .ilike('name', args.category)
+                        .ilike('name', `%${args.category}%`)
                         .maybeSingle();
                     
                     if (existingCat) {
@@ -366,6 +451,110 @@ Deno.serve(async (req) => {
                     result = { success: true, product: prod };
                 }
 
+                else if (fnName === "create_product_full") {
+                    const catName = String(args.category || '').trim() || 'Sem categoria';
+                    const prodName = String(args.name || '').trim();
+                    const description = String(args.description || '');
+                    const variants = Array.isArray(args.price_variants) ? args.price_variants : [];
+                    const groups = Array.isArray(args.variation_groups) ? args.variation_groups : [];
+
+                    if (!prodName || !catName) {
+                        result = { success: false, error: 'Nome e categoria são obrigatórios.' };
+                    } else {
+                        let categoryId: string | null = null;
+                        const { data: existingCat } = await supabase
+                            .from('product_categories')
+                            .select('id')
+                            .eq('user_id', userId)
+                            .ilike('name', `%${catName}%`)
+                            .maybeSingle();
+                        if (existingCat) {
+                            categoryId = existingCat.id;
+                        } else {
+                            const { data: newCat } = await supabase
+                                .from('product_categories')
+                                .insert({ user_id: userId, name: catName })
+                                .select('id')
+                                .single();
+                            if (newCat) categoryId = newCat.id;
+                        }
+
+                        const parsedVariantPrices = variants
+                            .map((v: any) => ({
+                                name: String(v?.name || '').trim(),
+                                price: Number(v?.price),
+                                promotional_price: v?.promotional_price === undefined ? null : Number(v?.promotional_price)
+                            }))
+                            .filter((v: any) => v.name && Number.isFinite(v.price) && v.price >= 0);
+
+                        const basePrice =
+                            parsedVariantPrices.length > 0
+                                ? Math.min(...parsedVariantPrices.map((v: any) => v.price))
+                                : (Number.isFinite(Number(args.price)) ? Number(args.price) : 0);
+
+                        const { data: prod, error } = await supabase
+                            .from('products')
+                            .insert({
+                                user_id: userId,
+                                name: prodName,
+                                price: basePrice,
+                                description,
+                                category: catName,
+                                category_id: categoryId,
+                                available: true,
+                                show_in_pdv: true,
+                                show_in_delivery: true
+                            })
+                            .select('id, name, price, category')
+                            .single();
+                        if (error) throw error;
+
+                        let createdVariants = 0;
+                        if (parsedVariantPrices.length > 0) {
+                            const payload = parsedVariantPrices.map((v: any, idx: number) => ({
+                                product_id: prod.id,
+                                name: v.name,
+                                price: v.price,
+                                promotional_price: Number.isFinite(v.promotional_price) ? v.promotional_price : null,
+                                display_order: idx
+                            }));
+                            const { error: vErr } = await supabase.from('product_variants').insert(payload);
+                            if (vErr) throw vErr;
+                            createdVariants = payload.length;
+                        }
+
+                        let createdGroups = 0;
+                        for (const g of groups) {
+                            const gName = String(g?.name || '').trim();
+                            const gOptionsRaw = Array.isArray(g?.options) ? g.options : [];
+                            const gOptions = gOptionsRaw
+                                .map((o: any) => ({ name: String(o?.name || '').trim(), price: Number(o?.price) }))
+                                .filter((o: any) => o.name && Number.isFinite(o.price) && o.price >= 0);
+                            if (!gName || gOptions.length === 0) continue;
+                            const payload = {
+                                user_id: userId,
+                                product_id: prod.id,
+                                name: gName,
+                                description: g?.description ? String(g.description) : null,
+                                required: g?.required === undefined ? false : Boolean(g.required),
+                                max_selections: Number.isFinite(Number(g?.max_selections)) ? Number(g.max_selections) : 1,
+                                options: gOptions,
+                                price: 0
+                            };
+                            const { error: gErr } = await supabase.from('product_variations').insert(payload);
+                            if (gErr) throw gErr;
+                            createdGroups++;
+                        }
+
+                        result = {
+                            success: true,
+                            product: prod,
+                            created_price_variants: createdVariants,
+                            created_variation_groups: createdGroups
+                        };
+                    }
+                }
+
                 // --- CREATE PRODUCTS (BATCH) ---
                 else if (fnName === "create_products") {
                     const products = Array.isArray(args.products) ? args.products : [];
@@ -383,7 +572,7 @@ Deno.serve(async (req) => {
                                 .from('product_categories')
                                 .select('id, name')
                                 .eq('user_id', userId)
-                                .ilike('name', catName)
+                                .ilike('name', `%${catName}%`)
                                 .maybeSingle();
 
                             if (existingCat) {
@@ -477,8 +666,9 @@ Deno.serve(async (req) => {
                         .insert({
                             user_id: userId,
                             name: args.name,
-                            min_selections: args.required ? 1 : 0,
-                            max_selections: args.max_selections || 1,
+                            description: args.description ? String(args.description) : null,
+                            required: args.required === undefined ? false : Boolean(args.required),
+                            max_selections: Number.isFinite(Number(args.max_selections)) ? Number(args.max_selections) : 1,
                             options: args.options // JSONB
                         })
                         .select()
@@ -486,6 +676,133 @@ Deno.serve(async (req) => {
 
                     if (varError) throw varError;
                     result = { success: true, variation: globalVar };
+                }
+
+                else if (fnName === "generate_product_image" || fnName === "generate_missing_product_images") {
+                    const toUint8 = (b64: string) => {
+                        const bin = atob(b64);
+                        const bytes = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                        return bytes;
+                    };
+
+                    const generateImage = async (prompt: string) => {
+                        const resp = await fetch('https://api.openai.com/v1/images/generations', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${OPENAI_API_KEY}`
+                            },
+                            body: JSON.stringify({
+                                model: 'gpt-image-1',
+                                prompt,
+                                size: '1024x1024',
+                                n: 1
+                            })
+                        });
+                        const data = await resp.json();
+                        const b64 = data?.data?.[0]?.b64_json;
+                        if (!b64) {
+                            throw new Error('Falha ao gerar imagem (sem base64). Verifique permissões/billing.');
+                        }
+                        return String(b64);
+                    };
+
+                    const buildPrompt = (name: string, desc: string) => {
+                        const parts = [
+                            `Foto realista e profissional de um produto de restaurante: ${name}.`,
+                            desc ? `Descrição do produto: ${desc}.` : '',
+                            'Fundo claro e neutro, iluminação de estúdio, alta qualidade.',
+                            'Sem texto, sem logotipos, sem marca d’água, sem pessoas, sem embalagens com marca.'
+                        ].filter(Boolean);
+                        return parts.join(' ');
+                    };
+
+                    if (fnName === "generate_product_image") {
+                        const pid = String(args.product_id || '').trim();
+                        const pname = String(args.product_name || '').trim();
+                        let product: any = null;
+
+                        if (pid) {
+                            const { data, error } = await supabase
+                                .from('products')
+                                .select('id, name, description, image_url')
+                                .eq('user_id', userId)
+                                .eq('id', pid)
+                                .maybeSingle();
+                            if (error) throw error;
+                            product = data;
+                        } else if (pname) {
+                            const { data, error } = await supabase
+                                .from('products')
+                                .select('id, name, description, image_url')
+                                .eq('user_id', userId)
+                                .ilike('name', `%${pname}%`)
+                                .limit(1);
+                            if (error) throw error;
+                            product = (data || [])[0] || null;
+                        }
+
+                        if (!product) {
+                            result = { success: false, error: 'Produto não encontrado.' };
+                        } else {
+                            const prompt = buildPrompt(String(product.name), String(product.description || ''));
+                            const b64 = await generateImage(prompt);
+                            const bytes = toUint8(b64);
+                            const fileName = `ai-${product.id}-${Date.now()}.png`;
+                            const filePath = `products/${fileName}`;
+                            const { error: upErr } = await supabase.storage
+                                .from('product-images')
+                                .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
+                            if (upErr) throw upErr;
+                            const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
+                            const imageUrl = pub.publicUrl;
+                            const { error: updErr } = await supabase
+                                .from('products')
+                                .update({ image_url: imageUrl })
+                                .eq('user_id', userId)
+                                .eq('id', product.id);
+                            if (updErr) throw updErr;
+                            result = { success: true, product_id: product.id, image_url: imageUrl };
+                        }
+                    } else {
+                        const limit = Math.min(Math.max(Number(args.limit || 10) || 10, 1), 25);
+                        const { data: products, error } = await supabase
+                            .from('products')
+                            .select('id, name, description, image_url')
+                            .eq('user_id', userId)
+                            .or('image_url.is.null,image_url.eq.')
+                            .limit(limit);
+                        if (error) throw error;
+                        const list = products || [];
+                        let updated = 0;
+                        const failures: any[] = [];
+                        for (const p of list) {
+                            try {
+                                const prompt = buildPrompt(String(p.name), String(p.description || ''));
+                                const b64 = await generateImage(prompt);
+                                const bytes = toUint8(b64);
+                                const fileName = `ai-${p.id}-${Date.now()}.png`;
+                                const filePath = `products/${fileName}`;
+                                const { error: upErr } = await supabase.storage
+                                    .from('product-images')
+                                    .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
+                                if (upErr) throw upErr;
+                                const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
+                                const imageUrl = pub.publicUrl;
+                                const { error: updErr } = await supabase
+                                    .from('products')
+                                    .update({ image_url: imageUrl })
+                                    .eq('user_id', userId)
+                                    .eq('id', p.id);
+                                if (updErr) throw updErr;
+                                updated++;
+                            } catch (e: any) {
+                                failures.push({ id: p.id, name: p.name, error: String(e?.message || e) });
+                            }
+                        }
+                        result = { success: true, processed: list.length, updated, failures };
+                    }
                 }
 
                 // --- ADD DELIVERY ZONE ---
