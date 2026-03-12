@@ -30,13 +30,19 @@ Deno.serve(async (req) => {
     // @ts-ignore
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     // @ts-ignore
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!OPENAI_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error('Variáveis de ambiente (OPENAI/SUPABASE) não configuradas.');
+    if (!OPENAI_API_KEY) {
+        throw new Error('Secret OPENAI_API_KEY não configurado.');
+    }
+    if (!SUPABASE_URL) {
+        throw new Error('SUPABASE_URL indisponível no ambiente da Edge Function.');
+    }
+    if (!SERVICE_ROLE_KEY) {
+        throw new Error('Secret SERVICE_ROLE_KEY não configurado.');
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     // =================================================================================
     // 1. Definição das TOOLS (Ferramentas que o Agente pode usar)
