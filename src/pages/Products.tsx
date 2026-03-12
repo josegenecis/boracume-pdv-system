@@ -321,9 +321,10 @@ const Products = () => {
       
       fetchProducts();
     } catch (error: any) {
+      const msg = error?.message || error?.details || error?.hint || 'Não foi possível excluir este produto.';
       toast({
         title: 'Erro ao excluir produto',
-        description: error.message,
+        description: msg,
         variant: 'destructive',
       });
     } finally {
@@ -371,7 +372,8 @@ const Products = () => {
       toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
       fetchProducts();
     } catch (e: any) {
-      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+      const msg = e?.message || e?.details || e?.hint || 'Não foi possível excluir os produtos.';
+      toast({ title: 'Erro ao excluir', description: msg, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -424,7 +426,8 @@ const Products = () => {
       toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
       fetchProducts();
     } catch (e: any) {
-      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+      const msg = e?.message || e?.details || e?.hint || 'Não foi possível excluir os produtos.';
+      toast({ title: 'Erro ao excluir', description: msg, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
