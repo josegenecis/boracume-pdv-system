@@ -70,9 +70,11 @@ export async function processAgentCommand(command: string, userId: string): Prom
                 message: data.message,
                 metadata: { tool_results: data.tool_results }
             };
-        } else {
-            console.warn('[AgentService] AI Agent falhou ou retornou erro:', data);
         }
+
+        const edgeMsg = String(data?.error || data?.message || 'Falha ao executar no agente.');
+        await logAgentActivity(userId, 'ai_command_error', edgeMsg.substring(0, 120));
+        return { success: false, message: edgeMsg, metadata: { edge_status: status, edge_data: data } };
     } catch (edgeError) {
         console.error('[AgentService] Erro na Edge Function:', edgeError);
         // Fallback para processamento local se a Edge Function falhar (timeout, etc)

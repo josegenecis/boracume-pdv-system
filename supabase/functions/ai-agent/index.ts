@@ -227,7 +227,8 @@ Deno.serve(async (req) => {
                     type: "object",
                     properties: {
                         limit: { type: "integer", description: "Quantidade máxima de produtos a processar (padrão 25, máx 100 por execução)" },
-                        process_all: { type: "boolean", description: "Se true, tenta processar todos (em lotes) até o limite máximo por execução." }
+                        process_all: { type: "boolean", description: "Se true, tenta processar todos (em lotes) até o limite máximo por execução." },
+                        job_id: { type: "string", description: "ID do job para continuar uma execução anterior (opcional)." }
                     }
                 }
             }
@@ -787,34 +788,51 @@ Regras:
                         }
                     } else {
                         const requested = Number(args.limit || 25) || 25;
-                        const maxPerExecution = 100;
+                        const maxPerExecution = 25;
                         const limit = Math.min(Math.max(requested, 1), maxPerExecution);
                         const processAll = Boolean(args.process_all);
+                        const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
+                        const startedAt = Date.now();
+                        const timeBudgetMs = 90_000;
 
                         const failures: any[] = [];
                         const updatedIds: string[] = [];
                         let processed = 0;
                         let updated = 0;
-                        let offset = 0;
 
-                        while (processed < limit) {
-                            const batchSize = Math.min(25, limit - processed);
-                            const { data: products, error, count } = await supabase
+                        const { data: existingJob } = await supabase
+                            .from('agent_activity_logs')
+                            .select('id')
+                            .eq('user_id', userId)
+                            .eq('id', jobId)
+                            .maybeSingle();
+
+                        if (!existingJob) {
+                            await supabase.from('agent_activity_logs').insert({
+                                id: jobId,
+                                user_id: userId,
+                                action_type: 'image_job',
+                                description: 'Geração de imagens para produtos sem imagem',
+                                metadata: { status: 'running', updated: 0, failures: 0, started_at: new Date().toISOString() }
+                            } as any);
+                        }
+
+                        while (updated < limit) {
+                            const { data: products, error } = await supabase
                                 .from('products')
-                                .select('id, name, description, image_url', { count: 'exact' })
+                                .select('id, name, description, image_url')
                                 .eq('user_id', userId)
                                 .or('image_url.is.null,image_url.eq.')
                                 .order('created_at', { ascending: true })
-                                .range(offset, offset + batchSize - 1);
+                                .limit(10);
                             if (error) throw error;
                             const list = products || [];
                             if (list.length === 0) break;
 
-                            processed += list.length;
-                            offset += list.length;
-
                             for (const p of list) {
                                 if (updated >= limit) break;
+                                if (Date.now() - startedAt > timeBudgetMs) break;
+                                processed++;
                                 try {
                                     const prompt = buildPrompt(String(p.name), String(p.description || ''));
                                     const b64 = await generateImage(prompt);
@@ -840,10 +858,8 @@ Regras:
                                 }
                             }
 
-                            const remaining = typeof count === 'number' ? Math.max(0, count - offset) : null;
                             if (!processAll) break;
-                            if (remaining !== null && remaining <= 0) break;
-                            if (processed >= limit) break;
+                            if (Date.now() - startedAt > timeBudgetMs) break;
                         }
 
                         const { count: remainingCount } = await supabase
@@ -852,13 +868,31 @@ Regras:
                             .eq('user_id', userId)
                             .or('image_url.is.null,image_url.eq.');
 
+                        await supabase
+                            .from('agent_activity_logs')
+                            .update({
+                                metadata: {
+                                    status: typeof remainingCount === 'number' && remainingCount === 0 ? 'done' : 'running',
+                                    updated,
+                                    processed,
+                                    failures: failures.length,
+                                    remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                                    updated_ids: updatedIds,
+                                    last_update_at: new Date().toISOString()
+                                }
+                            } as any)
+                            .eq('user_id', userId)
+                            .eq('id', jobId);
+
                         result = {
                             success: true,
+                            job_id: jobId,
                             processed,
                             updated,
                             failures,
                             remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
-                            updated_ids: updatedIds
+                            updated_ids: updatedIds,
+                            note: `Processo em lotes (até ${maxPerExecution} por execução). Se faltar, peça para continuar informando o job_id.`
                         };
                     }
                 }
