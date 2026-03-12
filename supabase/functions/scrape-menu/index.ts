@@ -12,6 +12,46 @@ const corsHeaders = {
 
 console.log("Edge Function scrape-menu V11 (Skip Step & Image Rehosting) iniciada!");
 
+const UUID_RE = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
+
+function extractUuidFromAny(text: string): string | null {
+  const m = String(text || '').match(UUID_RE);
+  return m ? m[0] : null;
+}
+
+async function resolveIfoodStoreId(rawUrl: string): Promise<string | null> {
+  const direct = extractUuidFromAny(rawUrl);
+  if (direct) return direct;
+
+  try {
+    const u = new URL(rawUrl);
+    const keys = ['merchant_uuid', 'restaurant_uuid', 'store_id', 'restaurantId', 'merchantId', 'id'];
+    for (const k of keys) {
+      const v = u.searchParams.get(k);
+      const id = extractUuidFromAny(v || '');
+      if (id) return id;
+    }
+  } catch {}
+
+  try {
+    const resp = await fetch(rawUrl, {
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      redirect: 'follow'
+    });
+    if (resp.ok) {
+      const html = await resp.text();
+      const id = extractUuidFromAny(html);
+      if (id) return id;
+    }
+  } catch {}
+
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -71,8 +111,19 @@ Deno.serve(async (req: Request) => {
 
              // 1. iFood Logic
              if (APIFY_TOKEN && rawUrl.includes('ifood.com.br')) {
-                const ifoodIdMatch = rawUrl.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/);
-                const storeId = ifoodIdMatch ? ifoodIdMatch[1] : null;
+                const storeId = await resolveIfoodStoreId(rawUrl);
+
+                if (!storeId) {
+                    return new Response(
+                      JSON.stringify({
+                        success: false,
+                        status: 'failed',
+                        error:
+                          'Link do iFood inválido para importação. Copie o link completo do restaurante (de preferência o link de compartilhar), pois não encontrei o ID (UUID) da loja.'
+                      }),
+                      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                    );
+                }
 
                 if (storeId) {
                     console.log(`[Start] Iniciando Apify iFood Async para loja: ${storeId}`);
@@ -81,8 +132,8 @@ Deno.serve(async (req: Request) => {
                     
                     const inputPayload = {
                         "store_ids": [storeId],
-                        "latitude": "-23.550520",
-                        "longitude": "-46.633308",
+                        "latitude": "-15.793889",
+                        "longitude": "-47.882778",
                         "useApifyProxy": true,
                         "proxyCountry": "BR"
                     };
@@ -370,7 +421,13 @@ Deno.serve(async (req: Request) => {
 
             if (!items || items.length === 0) {
                 return new Response(
-                    JSON.stringify({ success: false, status: 'failed', error: 'Dataset vazio. O scraper não encontrou itens.' }),
+                    JSON.stringify({
+                      success: false,
+                      status: 'failed',
+                      error:
+                        'Dataset vazio. O scraper não encontrou itens. Em links do iFood, isso costuma acontecer quando o link não é o do restaurante (ou está incompleto/bloqueado). Tente copiar o link de compartilhar do restaurante e tente novamente.',
+                      debug: { runId, datasetId, actId }
+                    }),
                     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                 );
             }
