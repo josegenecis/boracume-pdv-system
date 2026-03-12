@@ -46,6 +46,28 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+    const parseMoney = (v: any): number => {
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') {
+            let s = v.trim();
+            s = s.replace(/[^0-9.,-]/g, '');
+            const lastComma = s.lastIndexOf(',');
+            const lastDot = s.lastIndexOf('.');
+            const decPos = Math.max(lastComma, lastDot);
+            if (decPos >= 0) {
+                const intPart = s.slice(0, decPos).replace(/[^0-9-]/g, '');
+                const frac = s.slice(decPos + 1).replace(/[^0-9]/g, '');
+                s = `${intPart}.${frac}`;
+            } else {
+                s = s.replace(/[^0-9-]/g, '');
+            }
+            const n = Number(s);
+            return Number.isFinite(n) ? n : NaN;
+        }
+        const n = Number(v);
+        return Number.isFinite(n) ? n : NaN;
+    };
+
     // =================================================================================
     // 1. Definição das TOOLS (Ferramentas que o Agente pode usar)
     // =================================================================================
@@ -535,15 +557,15 @@ Regras:
                         const parsedVariantPrices = variants
                             .map((v: any) => ({
                                 name: String(v?.name || '').trim(),
-                                price: Number(v?.price),
-                                promotional_price: v?.promotional_price === undefined ? null : Number(v?.promotional_price)
+                                price: parseMoney(v?.price),
+                                promotional_price: v?.promotional_price === undefined ? null : parseMoney(v?.promotional_price)
                             }))
                             .filter((v: any) => v.name && Number.isFinite(v.price) && v.price >= 0);
 
                         const basePrice =
                             parsedVariantPrices.length > 0
                                 ? Math.min(...parsedVariantPrices.map((v: any) => v.price))
-                                : (Number.isFinite(Number(args.price)) ? Number(args.price) : 0);
+                                : (Number.isFinite(parseMoney(args.price)) ? parseMoney(args.price) : 0);
 
                         const { data: prod, error } = await supabase
                             .from('products')
@@ -581,7 +603,7 @@ Regras:
                             const gName = String(g?.name || '').trim();
                             const gOptionsRaw = Array.isArray(g?.options) ? g.options : [];
                             const gOptions = gOptionsRaw
-                                .map((o: any) => ({ name: String(o?.name || '').trim(), price: Number(o?.price) }))
+                                .map((o: any) => ({ name: String(o?.name || '').trim(), price: parseMoney(o?.price) }))
                                 .filter((o: any) => o.name && Number.isFinite(o.price) && o.price >= 0);
                             if (!gName || gOptions.length === 0) continue;
                             const payload = {
@@ -643,7 +665,7 @@ Regras:
                         }
 
                         const name = String(p.name || '').trim();
-                        const price = Number(p.price);
+                        const price = parseMoney((p as any).price);
                         if (!name || !Number.isFinite(price)) continue;
 
                         const { error } = await supabase
@@ -679,13 +701,18 @@ Regras:
                     if (!products || products.length === 0) {
                         result = { success: false, error: "Produto não encontrado." };
                     } else {
+                        const next = parseMoney(args.new_price);
+                        if (!Number.isFinite(next) || next < 0) {
+                            result = { success: false, error: "Preço inválido." };
+                        } else {
                         const { error } = await supabase
                             .from('products')
-                            .update({ price: args.new_price })
+                            .update({ price: next })
                             .eq('id', products[0].id);
                         
                         if (error) throw error;
-                        result = { success: true, updated: products[0].name, new_price: args.new_price };
+                        result = { success: true, updated: products[0].name, new_price: next };
+                        }
                     }
                 }
 
