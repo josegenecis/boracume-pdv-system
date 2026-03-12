@@ -226,7 +226,8 @@ Deno.serve(async (req) => {
                 parameters: {
                     type: "object",
                     properties: {
-                        limit: { type: "integer", description: "Quantidade máxima de produtos a processar (padrão 10, máx 25)" }
+                        limit: { type: "integer", description: "Quantidade máxima de produtos a processar (padrão 25, máx 100 por execução)" },
+                        process_all: { type: "boolean", description: "Se true, tenta processar todos (em lotes) até o limite máximo por execução." }
                     }
                 }
             }
@@ -785,42 +786,80 @@ Regras:
                             result = { success: true, product_id: product.id, image_url: imageUrl };
                         }
                     } else {
-                        const limit = Math.min(Math.max(Number(args.limit || 10) || 10, 1), 25);
-                        const { data: products, error } = await supabase
-                            .from('products')
-                            .select('id, name, description, image_url')
-                            .eq('user_id', userId)
-                            .or('image_url.is.null,image_url.eq.')
-                            .limit(limit);
-                        if (error) throw error;
-                        const list = products || [];
-                        let updated = 0;
+                        const requested = Number(args.limit || 25) || 25;
+                        const maxPerExecution = 100;
+                        const limit = Math.min(Math.max(requested, 1), maxPerExecution);
+                        const processAll = Boolean(args.process_all);
+
                         const failures: any[] = [];
-                        for (const p of list) {
-                            try {
-                                const prompt = buildPrompt(String(p.name), String(p.description || ''));
-                                const b64 = await generateImage(prompt);
-                                const bytes = toUint8(b64);
-                                const fileName = `ai-${p.id}-${Date.now()}.png`;
-                                const filePath = `products/${fileName}`;
-                                const { error: upErr } = await supabase.storage
-                                    .from('product-images')
-                                    .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
-                                if (upErr) throw upErr;
-                                const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
-                                const imageUrl = pub.publicUrl;
-                                const { error: updErr } = await supabase
-                                    .from('products')
-                                    .update({ image_url: imageUrl })
-                                    .eq('user_id', userId)
-                                    .eq('id', p.id);
-                                if (updErr) throw updErr;
-                                updated++;
-                            } catch (e: any) {
-                                failures.push({ id: p.id, name: p.name, error: String(e?.message || e) });
+                        const updatedIds: string[] = [];
+                        let processed = 0;
+                        let updated = 0;
+                        let offset = 0;
+
+                        while (processed < limit) {
+                            const batchSize = Math.min(25, limit - processed);
+                            const { data: products, error, count } = await supabase
+                                .from('products')
+                                .select('id, name, description, image_url', { count: 'exact' })
+                                .eq('user_id', userId)
+                                .or('image_url.is.null,image_url.eq.')
+                                .order('created_at', { ascending: true })
+                                .range(offset, offset + batchSize - 1);
+                            if (error) throw error;
+                            const list = products || [];
+                            if (list.length === 0) break;
+
+                            processed += list.length;
+                            offset += list.length;
+
+                            for (const p of list) {
+                                if (updated >= limit) break;
+                                try {
+                                    const prompt = buildPrompt(String(p.name), String(p.description || ''));
+                                    const b64 = await generateImage(prompt);
+                                    const bytes = toUint8(b64);
+                                    const fileName = `ai-${p.id}-${Date.now()}.png`;
+                                    const filePath = `products/${fileName}`;
+                                    const { error: upErr } = await supabase.storage
+                                        .from('product-images')
+                                        .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
+                                    if (upErr) throw upErr;
+                                    const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
+                                    const imageUrl = pub.publicUrl;
+                                    const { error: updErr } = await supabase
+                                        .from('products')
+                                        .update({ image_url: imageUrl })
+                                        .eq('user_id', userId)
+                                        .eq('id', p.id);
+                                    if (updErr) throw updErr;
+                                    updated++;
+                                    updatedIds.push(String(p.id));
+                                } catch (e: any) {
+                                    failures.push({ id: p.id, name: p.name, error: String(e?.message || e) });
+                                }
                             }
+
+                            const remaining = typeof count === 'number' ? Math.max(0, count - offset) : null;
+                            if (!processAll) break;
+                            if (remaining !== null && remaining <= 0) break;
+                            if (processed >= limit) break;
                         }
-                        result = { success: true, processed: list.length, updated, failures };
+
+                        const { count: remainingCount } = await supabase
+                            .from('products')
+                            .select('id', { count: 'exact', head: true })
+                            .eq('user_id', userId)
+                            .or('image_url.is.null,image_url.eq.');
+
+                        result = {
+                            success: true,
+                            processed,
+                            updated,
+                            failures,
+                            remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                            updated_ids: updatedIds
+                        };
                     }
                 }
 
