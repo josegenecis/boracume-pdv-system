@@ -28,6 +28,8 @@ Deno.serve(async (req) => {
     // @ts-ignore
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     // @ts-ignore
+    const PEXELS_API_KEY = Deno.env.get('PEXELS_API_KEY');
+    // @ts-ignore
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     // @ts-ignore
     const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -214,6 +216,36 @@ Deno.serve(async (req) => {
                     properties: {
                         product_name: { type: "string", description: "Nome do produto (busca aproximada)" },
                         product_id: { type: "string", description: "ID do produto (opcional, preferível se conhecido)" }
+                    }
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "set_product_image_from_pexels",
+                description: "Busca uma imagem no Pexels e define no produto. Use quando o usuário pedir para usar imagens gratuitas do Pexels.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        product_name: { type: "string", description: "Nome do produto (busca aproximada)" },
+                        product_id: { type: "string", description: "ID do produto (opcional, preferível se conhecido)" },
+                        query: { type: "string", description: "Termo de busca opcional (se omitido, usa nome/descrição do produto)" }
+                    }
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "set_missing_product_images_from_pexels",
+                description: "Busca imagens no Pexels e aplica em produtos sem imagem. Mais barato que gerar por IA.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        limit: { type: "integer", description: "Máximo por execução (padrão 25, máx 100)." },
+                        process_all: { type: "boolean", description: "Se true, tenta processar em lotes até o limite máximo." },
+                        job_id: { type: "string", description: "ID do job para continuar uma execução anterior (opcional)." }
                     }
                 }
             }
@@ -894,6 +926,192 @@ Regras:
                             updated_ids: updatedIds,
                             note: `Processo em lotes (até ${maxPerExecution} por execução). Se faltar, peça para continuar informando o job_id.`
                         };
+                    }
+                }
+
+                else if (fnName === "set_product_image_from_pexels" || fnName === "set_missing_product_images_from_pexels") {
+                    if (!PEXELS_API_KEY) {
+                        result = { success: false, error: 'Secret PEXELS_API_KEY não configurado.' };
+                    } else {
+                        const searchPexels = async (query: string) => {
+                            const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=square`;
+                            const resp = await fetch(url, { headers: { Authorization: PEXELS_API_KEY } });
+                            const data = await resp.json();
+                            const photo = data?.photos?.[0];
+                            const src = photo?.src?.large || photo?.src?.medium || photo?.src?.original;
+                            if (!src) throw new Error('Nenhuma imagem encontrada no Pexels.');
+                            return { src: String(src), photo };
+                        };
+
+                        const uploadFromUrl = async (productId: string, imageUrl: string) => {
+                            const resp = await fetch(imageUrl);
+                            if (!resp.ok) throw new Error('Falha ao baixar imagem do Pexels.');
+                            const ct = resp.headers.get('content-type') || 'image/jpeg';
+                            const bytes = new Uint8Array(await resp.arrayBuffer());
+                            const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
+                            const fileName = `pexels-${productId}-${Date.now()}.${ext}`;
+                            const filePath = `products/${fileName}`;
+                            const { error: upErr } = await supabase.storage
+                                .from('product-images')
+                                .upload(filePath, bytes, { contentType: ct, upsert: true } as any);
+                            if (upErr) throw upErr;
+                            const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
+                            return pub.publicUrl;
+                        };
+
+                        const pickQuery = (name: string, desc: string, manual?: string) => {
+                            const q = String(manual || '').trim();
+                            if (q) return q;
+                            const base = `${name}${desc ? ` ${desc}` : ''}`.trim();
+                            return `${base} food`;
+                        };
+
+                        if (fnName === "set_product_image_from_pexels") {
+                            const pid = String(args.product_id || '').trim();
+                            const pname = String(args.product_name || '').trim();
+                            let product: any = null;
+                            if (pid) {
+                                const { data, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .eq('id', pid)
+                                    .maybeSingle();
+                                if (error) throw error;
+                                product = data;
+                            } else if (pname) {
+                                const { data, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .ilike('name', `%${pname}%`)
+                                    .limit(1);
+                                if (error) throw error;
+                                product = (data || [])[0] || null;
+                            }
+                            if (!product) {
+                                result = { success: false, error: 'Produto não encontrado.' };
+                            } else {
+                                const q = pickQuery(String(product.name), String(product.description || ''), args.query);
+                                const { src, photo } = await searchPexels(q);
+                                const publicUrl = await uploadFromUrl(String(product.id), src);
+                                const { error: updErr } = await supabase
+                                    .from('products')
+                                    .update({ image_url: publicUrl })
+                                    .eq('user_id', userId)
+                                    .eq('id', product.id);
+                                if (updErr) throw updErr;
+                                result = {
+                                    success: true,
+                                    product_id: product.id,
+                                    image_url: publicUrl,
+                                    source: { provider: 'pexels', id: photo?.id, url: photo?.url, photographer: photo?.photographer }
+                                };
+                            }
+                        } else {
+                            const requested = Number(args.limit || 25) || 25;
+                            const maxPerExecution = 25;
+                            const limit = Math.min(Math.max(requested, 1), maxPerExecution);
+                            const processAll = Boolean(args.process_all);
+                            const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
+                            const startedAt = Date.now();
+                            const timeBudgetMs = 90_000;
+
+                            const failures: any[] = [];
+                            const updatedIds: string[] = [];
+                            let processed = 0;
+                            let updated = 0;
+
+                            try {
+                                const { data: existingJob } = await supabase
+                                    .from('agent_activity_logs')
+                                    .select('id')
+                                    .eq('user_id', userId)
+                                    .eq('id', jobId)
+                                    .maybeSingle();
+                                if (!existingJob) {
+                                    await supabase.from('agent_activity_logs').insert({
+                                        id: jobId,
+                                        user_id: userId,
+                                        action_type: 'pexels_image_job',
+                                        description: 'Busca de imagens no Pexels para produtos sem imagem',
+                                        metadata: { status: 'running', updated: 0, failures: 0, started_at: new Date().toISOString() }
+                                    } as any);
+                                }
+                            } catch {}
+
+                            while (updated < limit) {
+                                const { data: products, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .or('image_url.is.null,image_url.eq.')
+                                    .order('created_at', { ascending: true })
+                                    .limit(10);
+                                if (error) throw error;
+                                const list = products || [];
+                                if (list.length === 0) break;
+
+                                for (const p of list) {
+                                    if (updated >= limit) break;
+                                    if (Date.now() - startedAt > timeBudgetMs) break;
+                                    processed++;
+                                    try {
+                                        const q = pickQuery(String(p.name), String(p.description || ''), '');
+                                        const { src, photo } = await searchPexels(q);
+                                        const publicUrl = await uploadFromUrl(String(p.id), src);
+                                        const { error: updErr } = await supabase
+                                            .from('products')
+                                            .update({ image_url: publicUrl })
+                                            .eq('user_id', userId)
+                                            .eq('id', p.id);
+                                        if (updErr) throw updErr;
+                                        updated++;
+                                        updatedIds.push(String(p.id));
+                                    } catch (e: any) {
+                                        failures.push({ id: p.id, name: p.name, error: String(e?.message || e) });
+                                    }
+                                }
+
+                                if (!processAll) break;
+                                if (Date.now() - startedAt > timeBudgetMs) break;
+                            }
+
+                            const { count: remainingCount } = await supabase
+                                .from('products')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('user_id', userId)
+                                .or('image_url.is.null,image_url.eq.');
+
+                            try {
+                                await supabase
+                                    .from('agent_activity_logs')
+                                    .update({
+                                        metadata: {
+                                            status: typeof remainingCount === 'number' && remainingCount === 0 ? 'done' : 'running',
+                                            updated,
+                                            processed,
+                                            failures: failures.length,
+                                            remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                                            updated_ids: updatedIds,
+                                            last_update_at: new Date().toISOString()
+                                        }
+                                    } as any)
+                                    .eq('user_id', userId)
+                                    .eq('id', jobId);
+                            } catch {}
+
+                            result = {
+                                success: true,
+                                job_id: jobId,
+                                processed,
+                                updated,
+                                failures,
+                                remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                                updated_ids: updatedIds,
+                                note: `Processo em lotes (até ${maxPerExecution} por execução). Se faltar, peça para continuar informando o job_id.`
+                            };
+                        }
                     }
                 }
 
