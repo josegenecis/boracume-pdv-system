@@ -2,16 +2,16 @@ import { supabase } from '@/integrations/supabase/client'
 
 export const invokeEdgeFunction = async (
   functionName: string,
-  body: unknown
+  body: unknown,
+  options?: { timeoutMs?: number }
 ): Promise<{ data: any | null; status: number }> => {
   console.log(`[EdgeFunction] Invoking ${functionName}...`);
   const startTime = Date.now();
 
   try {
-    // Create a custom timeout signal (120 seconds)
-    // This is much longer than the default 30s to allow for AI processing
+    const timeoutMs = Math.max(1000, Number(options?.timeoutMs ?? 120000) || 120000);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const { data, error } = await supabase.functions.invoke(functionName, {
       body: body, 

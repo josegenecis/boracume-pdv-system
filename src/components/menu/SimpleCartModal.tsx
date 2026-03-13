@@ -157,7 +157,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           lat: hasGps ? location.latitude : undefined,
           lng: hasGps ? location.longitude : undefined,
           cartTotal: total
-        });
+        }, { timeoutMs: 8000 });
 
         if (data?.ok) {
           setDeliveryQuote(data);
@@ -207,7 +207,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (!isOpen || !isPixSelected || !userId) return;
     setPixPublicLoading(true);
     setPixPublicSettings(null);
-    invokeEdgeFunction('pix-settings-public', { userId })
+    invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 })
       .then(({ data, status }) => {
         if (status === 200 && data?.settings) setPixPublicSettings(data.settings);
       })
@@ -416,7 +416,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           restaurantUserId: userId,
           orderPayload: orderData,
           preferredMethod: paymentMethod
-        })
+        }, { timeoutMs: 20000 })
 
         if (!data) {
           throw new Error(`Erro na conexão com checkout (HTTP ${status})`)

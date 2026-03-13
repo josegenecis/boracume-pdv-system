@@ -106,7 +106,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
   const span = perfStart('menu.variations.fetch', { productId });
   try {
     try {
-      const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }).then((r) => r as any), 2);
+      const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }, { timeoutMs: 7000 }).then((r) => r as any), 2);
       if (status === 200 && j?.ok && Array.isArray(j.variations)) {
         return (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
       }
