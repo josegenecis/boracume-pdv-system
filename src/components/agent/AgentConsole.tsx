@@ -67,6 +67,14 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     e.preventDefault();
     
     if (!input.trim() || isProcessing) return;
+    if (!user?.id) {
+      toast({
+        title: 'Faça login',
+        description: 'Entre no sistema para usar o assistente.',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     // Add user message
     addMessage({
@@ -100,7 +108,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
 
     try {
       // Process the command through the agent service
-      const result = await processAgentCommand(userInput, user?.id || '');
+      const result = await processAgentCommand(userInput, user.id);
       
       clearInterval(thinkingInterval);
       

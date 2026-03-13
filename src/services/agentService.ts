@@ -52,10 +52,15 @@ const EXPENSE_CATEGORIES = [
  */
 export async function processAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
   try {
+    if (!String(userId || '').trim()) {
+      return { success: false, message: 'Faça login para usar o assistente.' };
+    }
+
     // Log the command for tracking
     await logAgentActivity(userId, 'command_received', command);
 
     // 1. Tentar processar via Edge Function (AI Agent)
+    let edgeFailureMsg: string | null = null;
     try {
         console.log('[AgentService] Enviando para Edge Function ai-agent...');
         const { data, status } = await invokeEdgeFunction('ai-agent', {
@@ -73,11 +78,11 @@ export async function processAgentCommand(command: string, userId: string): Prom
         }
 
         const edgeMsg = String(data?.error || data?.message || 'Falha ao executar no agente.');
+        edgeFailureMsg = edgeMsg;
         await logAgentActivity(userId, 'ai_command_error', edgeMsg.substring(0, 120));
-        return { success: false, message: edgeMsg, metadata: { edge_status: status, edge_data: data } };
     } catch (edgeError) {
         console.error('[AgentService] Erro na Edge Function:', edgeError);
-        // Fallback para processamento local se a Edge Function falhar (timeout, etc)
+        edgeFailureMsg = String((edgeError as any)?.message || 'Falha ao executar no agente.');
     }
 
     // 2. Fallback: Processamento Local (Regex Legacy)
@@ -96,7 +101,9 @@ export async function processAgentCommand(command: string, userId: string): Prom
       // Se a Edge Function falhou E o regex não pegou, retornamos erro amigável
       return {
         success: false,
-        message: 'A IA está temporariamente indisponível e não reconheci este comando localmente. Tente comandos simples como "Desativar [ingrediente]" ou "Lançar despesa".'
+        message: edgeFailureMsg
+          ? 'A IA está temporariamente indisponível. Tente comandos simples como "Desativar [ingrediente]" ou "Lançar despesa".'
+          : 'Não reconheci este comando. Tente "ajuda" para ver exemplos.'
       };
     }
   } catch (error: any) {
