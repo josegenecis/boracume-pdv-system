@@ -22,6 +22,9 @@ export default function PixSetup() {
   const [enabled, setEnabled] = useState<boolean>(false);
   const [accessToken, setAccessToken] = useState<string>('');
   const [webhookSecret, setWebhookSecret] = useState<string>('');
+  const [pixKey, setPixKey] = useState<string>('');
+  const [merchantName, setMerchantName] = useState<string>('');
+  const [merchantCity, setMerchantCity] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   // Variáveis para OAuth (Substitua pelo seu APP ID real do Mercado Pago)
@@ -57,6 +60,9 @@ export default function PixSetup() {
           setEnabled(!!data.enabled);
           setAccessToken(data.client_id || '');
           setWebhookSecret(data.webhook_secret || '');
+          setPixKey(data.pix_key || '');
+          setMerchantName(data.merchant_name || '');
+          setMerchantCity(data.merchant_city || '');
         }
       } catch (e) {
         console.error('Exceção ao carregar:', e);
@@ -100,6 +106,9 @@ export default function PixSetup() {
         bank: 'mercadopago',
         client_id: accessToken || null,
         webhook_secret: webhookSecret || null,
+        pix_key: pixKey || null,
+        merchant_name: merchantName || null,
+        merchant_city: merchantCity || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -179,11 +188,11 @@ export default function PixSetup() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-3">
               <p className="text-sm text-muted-foreground">
-                Use o Mercado Pago como gateway para PIX, crédito e débito. O pedido só entra no sistema após confirmação do pagamento.
+                Configure PIX para o Cardápio Digital. Você pode usar chave PIX (manual) e/ou Mercado Pago.
               </p>
             </div>
             <div className="md:col-span-3 bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
-              <h3 className="font-semibold text-blue-900 mb-2">Conexão Recomendada</h3>
+              <h3 className="font-semibold text-blue-900 mb-2">Conexão Recomendada (Mercado Pago)</h3>
               <p className="text-sm text-blue-700 mb-4">
                 Conecte sua conta Mercado Pago automaticamente para receber pagamentos via PIX.
                 Não é necessário copiar chaves manualmente.
@@ -212,10 +221,32 @@ export default function PixSetup() {
 
             <div className="flex items-end gap-3">
               <div className="flex-1">
-                <Label>Ativar pagamentos</Label>
+                <Label>Ativar PIX</Label>
                 <div className="mt-2 flex items-center gap-2">
                   <Switch checked={enabled} onCheckedChange={setEnabled} />
                   <span className="text-sm text-muted-foreground">{enabled ? 'Ativo' : 'Inativo'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="md:col-span-3">
+              <div className="p-4 rounded-lg border bg-gray-50">
+                <div className="font-semibold mb-2">PIX manual (chave para copiar)</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-3">
+                    <Label>Chave PIX</Label>
+                    <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória" />
+                  </div>
+                  <div>
+                    <Label>Nome do recebedor</Label>
+                    <Input value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome" />
+                  </div>
+                  <div>
+                    <Label>Cidade</Label>
+                    <Input value={merchantCity} onChange={e => setMerchantCity(e.target.value)} placeholder="Cidade" />
+                  </div>
+                  <div className="md:col-span-3 text-xs text-muted-foreground">
+                    Se Mercado Pago não estiver configurado, o cliente paga copiando o código PIX e o pedido fica aguardando confirmação.
+                  </div>
                 </div>
               </div>
             </div>
