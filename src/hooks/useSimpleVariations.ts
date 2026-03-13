@@ -9,6 +9,7 @@ export type Variation = {
   id: string;
   name: string;
   required: boolean;
+  min_selections: number;
   max_selections: number;
   options: VariationOption[];
 };
@@ -56,6 +57,7 @@ function normalizeVariation(item: any): Variation | null {
   const name = String(item.name || '').trim();
   if (!name) return null;
   const maxSelections = item.max_selections !== undefined && item.max_selections !== null ? Math.max(1, Number(item.max_selections) || 1) : 1;
+  const minSelectionsRaw = item.min_selections !== undefined && item.min_selections !== null ? Math.max(0, Number(item.min_selections) || 0) : 0;
   const processedOptions = parseOptions(item.options);
   const validOptions: VariationOption[] = [];
   for (const opt of processedOptions as any[]) {
@@ -66,10 +68,13 @@ function normalizeVariation(item: any): Variation | null {
     validOptions.push({ name: optionName, price: Number.isFinite(optionPrice) ? Math.max(0, optionPrice) : 0 });
   }
   if (validOptions.length === 0) return null;
+  const required = Boolean(item.required ?? item.is_required ?? false);
+  const minSelections = required ? Math.max(1, minSelectionsRaw) : minSelectionsRaw;
   return {
     id: String(item.id),
     name,
-    required: Boolean(item.required ?? item.is_required ?? false),
+    required,
+    min_selections: Math.min(minSelections, maxSelections),
     max_selections: maxSelections,
     options: validOptions
   };
@@ -114,18 +119,30 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
       withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,options').eq('product_id', productId) as any, 2),
-      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id').eq('product_id', productId) as any, 2)
+      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,display_order').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
     if (productError) throw productError;
     if (globalError) throw globalError;
 
-    const linkIds = Array.isArray(globalLinks) ? globalLinks.map((l: any) => l.global_variation_id).filter(Boolean) : [];
+    const linkRows = Array.isArray(globalLinks) ? globalLinks : [];
+    const linkIds = linkRows.map((l: any) => l.global_variation_id).filter(Boolean);
     let globalVariations: any[] = [];
     if (linkIds.length > 0) {
       const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,options').in('id', linkIds as any) as any, 2);
       if (globalVarError) throw globalVarError;
-      globalVariations = Array.isArray(globalVars) ? globalVars : [];
+      const base = Array.isArray(globalVars) ? globalVars : [];
+      const byId = new Map(linkRows.map((l: any) => [String(l.global_variation_id), l]));
+      globalVariations = base.map((gv: any) => {
+        const link = byId.get(String(gv.id));
+        if (!link) return gv;
+        return {
+          ...gv,
+          required: link.required !== undefined && link.required !== null ? Boolean(link.required) : gv.required,
+          min_selections: link.min_selections ?? 0,
+          max_selections: link.max_selections ?? gv.max_selections
+        };
+      });
     }
 
     const combined = [...(Array.isArray(productVariations) ? productVariations : []), ...globalVariations];

@@ -28,12 +28,13 @@ const { searchParams } = new URL(req.url)
     const [{ data: productVars }, { data: links }] = await Promise.all([
       supabase
         .from('product_variations')
-        .select('id,name,required,max_selections,options')
+        .select('id,name,required,min_selections,max_selections,options')
         .eq('product_id', productId),
       supabase
         .from('product_global_variation_links')
-        .select('global_variation_id')
+        .select('global_variation_id,required,min_selections,max_selections,display_order')
         .eq('product_id', productId)
+        .order('display_order', { ascending: true })
     ])
 
     let globals: any[] = []
@@ -41,10 +42,15 @@ const { searchParams } = new URL(req.url)
       const ids = links.map(l => l.global_variation_id)
       const { data: globalVars } = await supabase
         .from('global_variations')
-        .select('id,name,required,max_selections,options')
+        .select('id,name,required,min_selections,max_selections,options')
         .in('id', ids)
+      const byId = new Map((links || []).map((l: any) => [String(l.global_variation_id), l]))
       globals = (globalVars || []).map((v: any) => {
-        return { ...v, required: !!(v as any)?.required, min_selections: 0, max_selections: (v as any)?.max_selections ?? 1 }
+        const link = byId.get(String(v.id))
+        const required = link?.required !== undefined && link?.required !== null ? !!link.required : !!v.required
+        const minSel = link?.min_selections !== undefined && link?.min_selections !== null ? Number(link.min_selections) || 0 : Number(v.min_selections) || 0
+        const maxSel = link?.max_selections !== undefined && link?.max_selections !== null ? Number(link.max_selections) || 1 : (v as any)?.max_selections ?? 1
+        return { ...v, required, min_selections: Math.max(0, minSel), max_selections: Math.max(1, maxSel) }
       })
     }
 

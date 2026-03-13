@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -105,6 +105,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
   const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
+  const variationSaveTimerRef = useRef<number | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -478,6 +479,70 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     console.log('🔍 Carregando variações do produto:', productId);
     try {
+      let data: any[] | null = null;
+      let error: any = null;
+      try {
+        const res = await supabase
+          .from('product_global_variation_links')
+          .select('global_variation_id, required, min_selections, max_selections, display_order')
+          .eq('product_id', productId)
+          .order('display_order', { ascending: true });
+        data = (res as any).data;
+        error = (res as any).error;
+      } catch (e: any) {
+        error = e;
+      }
+
+      const errMsg = String((error as any)?.message || '');
+      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required'))) {
+        const res = await supabase
+          .from('product_global_variation_links')
+          .select('global_variation_id')
+          .eq('product_id', productId);
+        data = (res as any).data;
+        error = (res as any).error;
+      }
+
+      console.log('📊 Resultado da consulta de variações:', { data, error });
+
+      if (error) throw error;
+      
+      const links = (data || []) as any[];
+      const variationIds = links?.map((link: any) => link.global_variation_id).filter(Boolean) || [];
+      console.log('🎯 IDs das variações carregadas:', variationIds);
+      
+      setSelectedVariations(variationIds);
+      
+      const gvIds = variationIds.length ? variationIds : [];
+      const { data: gvData } = await supabase
+        .from('global_variations')
+        .select('id, required, max_selections')
+        .in('id', gvIds);
+
+      const byId = new Map((gvData || []).map((gv: any) => [String(gv.id), gv]));
+      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
+      for (const link of links) {
+        const id = String(link.global_variation_id || '');
+        if (!id) continue;
+        const gv = byId.get(id);
+        const required = link.required !== undefined && link.required !== null ? Boolean(link.required) : Boolean(gv?.required);
+        const minSel = link.min_selections !== undefined && link.min_selections !== null ? Math.max(0, Number(link.min_selections) || 0) : 0;
+        const maxSel = link.max_selections !== undefined && link.max_selections !== null ? Math.max(1, Number(link.max_selections) || 1) : Math.max(1, Number(gv?.max_selections) || 1);
+        settings[id] = { required, min_selections: minSel, max_selections: Math.max(maxSel, minSel) };
+      }
+      
+      console.log('⚙️ Configurações das variações carregadas:', settings);
+      setVariationSettings(settings);
+      return;
+    } catch (error) {
+      console.error('❌ Erro ao carregar variações do produto:', error);
+      await loadProductVariationsLegacy(productId);
+    }
+  };
+
+  const loadProductVariationsLegacy = async (productId: string) => {
+    console.log('🔍 Carregando variações do produto (legacy):', productId);
+    try {
       const { data, error } = await supabase
         .from('product_global_variation_links')
         .select('global_variation_id')
@@ -746,7 +811,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     setSelectedVariations(items);
   };
 
-  const saveProductVariations = async (productId: string, variations: string[] = selectedVariations) => {
+  const saveProductVariations = async (
+    productId: string,
+    variations: string[] = selectedVariations,
+    options?: { silent?: boolean }
+  ) => {
     console.log('🔄 Iniciando saveProductVariations:', { 
       productId, 
       variations, 
@@ -772,47 +841,88 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (variations.length > 0) {
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
-        const links = variations.map(variationId => ({
-          product_id: productId,
-          global_variation_id: variationId
-        }));
+        const links = variations.map((variationId, idx) => {
+          const s = variationSettings?.[variationId] || { required: false, min_selections: 0, max_selections: 1 };
+          const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
+          const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
+          return {
+            product_id: productId,
+            global_variation_id: variationId,
+            required: Boolean(s.required),
+            min_selections: minSel,
+            max_selections: Math.max(maxSel, minSel),
+            display_order: idx
+          };
+        });
         
         console.log('💾 Inserindo vínculos no banco:', links);
-        const { data, error } = await supabase
-          .from('product_global_variation_links')
-          .insert(links);
+        let data: any = null;
+        let error: any = null;
+        const first = await supabase.from('product_global_variation_links').insert(links);
+        data = (first as any).data;
+        error = (first as any).error;
+
+        const errMsg = String(error?.message || '');
+        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order'))) {
+          const minimalLinks = variations.map((variationId) => ({
+            product_id: productId,
+            global_variation_id: variationId
+          }));
+          const second = await supabase.from('product_global_variation_links').insert(minimalLinks);
+          data = (second as any).data;
+          error = (second as any).error;
+        }
           
         console.log('📊 Resultado da inserção:', { data, error });
         
         if (error) {
           console.error('❌ Erro ao inserir vínculos:', error);
-          toast({
-            title: "Erro ao salvar vínculo de variações globais",
-            description: error.message,
-            variant: "destructive"
-          });
+          if (!options?.silent) {
+            toast({
+              title: "Erro ao salvar vínculo de variações globais",
+              description: error.message,
+              variant: "destructive"
+            });
+          }
           throw error;
         } else {
           console.log('✅ Vínculos inseridos com sucesso!');
-          toast({
-            title: "Variações globais vinculadas",
-            description: `${variations.length} variações globais salvas com sucesso!`,
-            variant: "default"
-          });
+          if (!options?.silent) {
+            toast({
+              title: "Variações globais vinculadas",
+              description: `${variations.length} variações globais salvas com sucesso!`,
+              variant: "default"
+            });
+          }
         }
       } else {
         console.log('ℹ️ Nenhuma variação selecionada para salvar');
       }
     } catch (error) {
       console.error('💥 Erro geral ao salvar variações do produto:', error);
-      toast({
-        title: "Erro ao salvar variações",
-        description: "Ocorreu um erro ao salvar as variações globais",
-        variant: "destructive"
-      });
+      if (!options?.silent) {
+        toast({
+          title: "Erro ao salvar variações",
+          description: "Ocorreu um erro ao salvar as variações globais",
+          variant: "destructive"
+        });
+      }
 
     }
   };
+
+  useEffect(() => {
+    const pid = product?.id || createdProductId;
+    if (!pid) return;
+    if (variationSaveTimerRef.current) window.clearTimeout(variationSaveTimerRef.current);
+    variationSaveTimerRef.current = window.setTimeout(() => {
+      void saveProductVariations(pid, selectedVariations, { silent: true });
+    }, 900);
+    return () => {
+      if (variationSaveTimerRef.current) window.clearTimeout(variationSaveTimerRef.current);
+      variationSaveTimerRef.current = null;
+    };
+  }, [product?.id, createdProductId, selectedVariations, variationSettings]);
 
   const handleVariationToggle = (variationId: string, checked: boolean) => {
 

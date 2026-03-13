@@ -12,6 +12,7 @@ interface ProductVariation {
   id: string;
   name: string;
   required: boolean;
+  min_selections: number;
   max_selections: number;
   options: VariationOption[];
 }
@@ -29,6 +30,7 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
 }) => {
   const isRadio = variation.max_selections === 1;
   const selectedOptions = selectedVariations[variation.id] || [];
+  const minSel = Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
 
   const handleOptionChange = (optionName: string, isSelected: boolean) => {
     onVariationChange(variation.id, optionName, isSelected);
@@ -36,9 +38,14 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
 
   return (
     <div className="border rounded p-3">
-      <Label className="font-medium">
-        {variation.name} {variation.required && <span className="text-red-500">*</span>}
-      </Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label className="font-medium">
+          {variation.name} {variation.required && <span className="text-red-500">*</span>}
+        </Label>
+        <div className="text-xs text-muted-foreground">
+          {minSel > 0 ? `Mín. ${minSel}` : 'Opcional'} • Máx. {variation.max_selections}
+        </div>
+      </div>
       
       <div className="mt-2 space-y-2">
         {isRadio ? (

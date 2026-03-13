@@ -99,7 +99,11 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const isValidSelection = () => {
     return variations.every(variation => {
       const selected = selectedVariations[variation.id] || [];
-      if (variation.required && selected.length === 0) {
+      const minSel = Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
+      if (selected.length < minSel) {
+        return false;
+      }
+      if (selected.length > Number(variation.max_selections || 1)) {
         return false;
       }
       return true;
