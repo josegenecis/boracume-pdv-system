@@ -5,7 +5,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 // @ts-ignore
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-bot-token',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -18,6 +18,25 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get('authorization') || '';
+    const botTokenHeader = req.headers.get('x-bot-token') || '';
+    // @ts-ignore
+    const BOT_WEBHOOK_SECRET = Deno.env.get('BOT_WEBHOOK_SECRET') || '';
+    if (!authHeader) {
+      if (!BOT_WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      if (botTokenHeader !== BOT_WEBHOOK_SECRET) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     const body = await req.json();
     const { command, userId, conversationHistory = [], supportMode = false } = body;
 

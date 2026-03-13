@@ -31,7 +31,7 @@ const OrdersBulkActionButton: React.FC<OrdersBulkActionButtonProps> = ({
         };
       case 'ready_all':
         return {
-          label: 'Marcar Todos como Prontos',
+          label: 'Marcar prontos',
           confirmTitle: 'Marcar todos como prontos?',
           confirmDescription: `Todos os ${orderIds.length} pedidos ativos serão marcados como prontos.`,
           className: 'bg-blue-600 hover:bg-blue-700'
