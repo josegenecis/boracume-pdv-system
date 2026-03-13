@@ -60,6 +60,7 @@ electron/BoraCumê - Instalador/
 
 # Local build logs/artifacts
 build_log*.txt
+test-results/
 
 # Editor/OS files
 .vscode/*
