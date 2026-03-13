@@ -87,6 +87,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const [pixPublicSettings, setPixPublicSettings] = useState<any | null>(null);
   const [pixPublicLoading, setPixPublicLoading] = useState(false);
+  const [pixPublicError, setPixPublicError] = useState<string | null>(null);
   const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
   // Remove this line:
   // const [extraFee, setExtraFee] = useState(0);
@@ -207,9 +208,18 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (!isOpen || !isPixSelected || !userId) return;
     setPixPublicLoading(true);
     setPixPublicSettings(null);
+    setPixPublicError(null);
     invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 })
       .then(({ data, status }) => {
-        if (status === 200 && data?.settings) setPixPublicSettings(data.settings);
+        if (status === 200 && data?.ok && data?.settings) {
+          setPixPublicSettings(data.settings);
+          return;
+        }
+        const msg = String(data?.error || data?.message || 'Não foi possível carregar os dados do PIX.');
+        setPixPublicError(msg);
+      })
+      .catch((e: any) => {
+        setPixPublicError(String(e?.message || 'Não foi possível carregar os dados do PIX.'));
       })
       .finally(() => setPixPublicLoading(false));
   }, [isOpen, isPixSelected, userId]);
@@ -408,9 +418,19 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       };
 
       if (paymentMethod === 'pix') {
-        if (canUseManualPix) {
+        const manualKey = String(pixPublicSettings?.pix_key || '').trim();
+        if (manualKey) {
           await onPlaceOrder({ ...orderData, acceptance_status: 'awaiting_pix_payment' });
           return;
+        }
+        if (!pixPublicLoading && !pixPublicSettings) {
+          const { data: sData, status: sStatus } = await invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 });
+          const key = String(sStatus === 200 && sData?.ok ? sData?.settings?.pix_key : '').trim();
+          if (key) {
+            setPixPublicSettings(sData.settings);
+            await onPlaceOrder({ ...orderData, acceptance_status: 'awaiting_pix_payment' });
+            return;
+          }
         }
         const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
           restaurantUserId: userId,
@@ -733,6 +753,35 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   <div className="text-sm font-medium text-gray-900">PIX</div>
                   {pixPublicLoading ? (
                     <div className="text-sm text-gray-700">Carregando dados do PIX…</div>
+                  ) : pixPublicError ? (
+                    <div className="space-y-2">
+                      <div className="text-sm text-gray-700">Não foi possível carregar os dados do PIX.</div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9"
+                          onClick={() => {
+                            setPixPublicSettings(null);
+                            setPixPublicError(null);
+                            setPixPublicLoading(true);
+                            invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 })
+                              .then(({ data, status }) => {
+                                if (status === 200 && data?.ok && data?.settings) {
+                                  setPixPublicSettings(data.settings);
+                                  return;
+                                }
+                                const msg = String(data?.error || data?.message || 'Não foi possível carregar os dados do PIX.');
+                                setPixPublicError(msg);
+                              })
+                              .catch((e: any) => setPixPublicError(String(e?.message || 'Não foi possível carregar os dados do PIX.')))
+                              .finally(() => setPixPublicLoading(false));
+                          }}
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    </div>
                   ) : canUseManualPix ? (
                     <>
                       <div className="text-sm text-gray-700">

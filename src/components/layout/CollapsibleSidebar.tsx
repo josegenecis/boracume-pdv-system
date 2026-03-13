@@ -161,7 +161,6 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp' },
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
-        { to: '/configuracoes?tab=pix', label: 'PIX' },
         { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div> },
         { to: '/configuracoes?tab=users', label: 'Usuários e Equipe' },
       ]

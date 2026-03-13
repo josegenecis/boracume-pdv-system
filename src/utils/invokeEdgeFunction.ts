@@ -13,11 +13,23 @@ export const invokeEdgeFunction = async (
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const { data, error } = await supabase.functions.invoke(functionName, {
-      body: body, 
-      // @ts-ignore - signal is supported by fetch but might not be in Supabase types
-      signal: controller.signal,
+    const invokePromise = supabase.functions.invoke(functionName, {
+      body: body,
+      // @ts-ignore
+      signal: controller.signal
     });
+
+    const { data, error } = await Promise.race([
+      invokePromise,
+      new Promise((_, reject) =>
+        setTimeout(() => {
+          try {
+            controller.abort();
+          } catch {}
+          reject(new Error('Timeout'));
+        }, timeoutMs)
+      ) as any
+    ]);
 
     clearTimeout(timeoutId);
     

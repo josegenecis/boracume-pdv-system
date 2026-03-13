@@ -12,9 +12,7 @@ import { CreditCard, Copy, RefreshCw } from 'lucide-react';
 
 export default function PixSetup() {
   const { user } = useAuth();
-  // Fallback user ID para debug se o Auth falhar
-  const debugUserId = "e3660528-7067-4286-8167-975986872599"; // Um ID UUID válido qualquer para teste
-  const activeUserId = user?.id || debugUserId;
+  const activeUserId = user?.id || '';
 
   const { toast } = useToast();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -35,7 +33,7 @@ export default function PixSetup() {
 
   useEffect(() => {
     const load = async () => {
-      // if (!user?.id) return; // Removido bloqueio
+      if (!activeUserId) return;
       try {
         console.log('Carregando configurações Pix para usuário:', activeUserId);
         const { data, error } = await (supabase as any)
@@ -95,7 +93,10 @@ export default function PixSetup() {
   };
 
   const save = async () => {
-    // if (!user?.id) return;
+    if (!activeUserId) {
+      toast({ title: 'Faça login', description: 'Entre no sistema para salvar a chave PIX.', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
     try {
       console.log('Salvando configurações Pix (Upsert)...', { user_id: activeUserId });
@@ -135,7 +136,7 @@ export default function PixSetup() {
   };
 
   const testPix = async () => {
-    // if (!user?.id) return;
+    if (!activeUserId) return alert('Faça login para testar.');
     if (!enabled || !accessToken) return alert('Ative e salve o token antes de testar.');
     
     setLoading(true);
