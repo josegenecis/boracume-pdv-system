@@ -57,7 +57,9 @@ Deno.serve(async (req: Request) => {
 
   // @ts-ignore
   const EVOLUTION_WEBHOOK_SECRET = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || '';
-  const token = req.headers.get('x-evolution-token') || '';
+  const headerToken = req.headers.get('x-evolution-token') || '';
+  const urlToken = new URL(req.url).searchParams.get('token') || '';
+  const token = headerToken || urlToken;
   if (EVOLUTION_WEBHOOK_SECRET && token !== EVOLUTION_WEBHOOK_SECRET) {
     return json({ success: false, error: 'Unauthorized' }, 401);
   }
