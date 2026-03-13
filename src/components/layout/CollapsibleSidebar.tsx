@@ -94,7 +94,6 @@ const CollapsibleSidebar = () => {
       label: 'Caixa',
       items: [
         { to: '/pdv', label: 'PDV' },
-        { to: '/pix', label: 'PIX' },
       ]
     },
     {

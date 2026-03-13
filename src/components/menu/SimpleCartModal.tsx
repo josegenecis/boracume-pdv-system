@@ -1,7 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle, Copy } from 'lucide-react';
+import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 
@@ -85,12 +84,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
-  const [pixPublicSettings, setPixPublicSettings] = useState<any | null>(null);
-  const [pixPublicLoading, setPixPublicLoading] = useState(false);
-  const [pixPublicError, setPixPublicError] = useState<string | null>(null);
-  const [pixCheckout, setPixCheckout] = useState<{ correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string } | null>(null);
-  // Remove this line:
-  // const [extraFee, setExtraFee] = useState(0);
+  const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
@@ -200,29 +194,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   // Calcular Total Final com Desconto
   const preTotal = total + deliveryFee + computedExtraFee;
   const finalTotal = Math.max(0, preTotal - discount);
-
-  const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
-  const canUseManualPix = Boolean(pixPublicSettings?.pix_key);
-
-  useEffect(() => {
-    if (!isOpen || !isPixSelected || !userId) return;
-    setPixPublicLoading(true);
-    setPixPublicSettings(null);
-    setPixPublicError(null);
-    invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 })
-      .then(({ data, status }) => {
-        if (status === 200 && data?.ok && data?.settings) {
-          setPixPublicSettings(data.settings);
-          return;
-        }
-        const msg = String(data?.error || data?.message || 'Não foi possível carregar os dados do PIX.');
-        setPixPublicError(msg);
-      })
-      .catch((e: any) => {
-        setPixPublicError(String(e?.message || 'Não foi possível carregar os dados do PIX.'));
-      })
-      .finally(() => setPixPublicLoading(false));
-  }, [isOpen, isPixSelected, userId]);
 
   const handleApplyCoupon = async () => {
     if (!couponCode) return;
@@ -416,54 +387,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         order_type: 'delivery',
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
-
-      if (paymentMethod === 'pix') {
-        const manualKey = String(pixPublicSettings?.pix_key || '').trim();
-        if (manualKey) {
-          await onPlaceOrder({ ...orderData, acceptance_status: 'awaiting_pix_payment' });
-          return;
-        }
-        if (!pixPublicLoading && !pixPublicSettings) {
-          const { data: sData, status: sStatus } = await invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 });
-          const key = String(sStatus === 200 && sData?.ok ? sData?.settings?.pix_key : '').trim();
-          if (key) {
-            setPixPublicSettings(sData.settings);
-            await onPlaceOrder({ ...orderData, acceptance_status: 'awaiting_pix_payment' });
-            return;
-          }
-        }
-        const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
-          restaurantUserId: userId,
-          orderPayload: orderData,
-          preferredMethod: paymentMethod
-        }, { timeoutMs: 20000 })
-
-        if (!data) {
-          throw new Error(`Erro na conexão com checkout (HTTP ${status})`)
-        }
-
-        if (!data.ok) {
-          const code = String(data.error || '').trim();
-          if (code === 'pix_not_configured' || code === 'pix_disabled') {
-            throw new Error('PIX não foi configurado para este restaurante. Cadastre a chave PIX ou configure o Mercado Pago.')
-          }
-          if (code === 'missing_provider_credentials') {
-            throw new Error('Mercado Pago não configurado. Cadastre a chave PIX para pagamento manual ou configure o Mercado Pago.')
-          }
-          throw new Error(data.error || `Não foi possível iniciar pagamento (HTTP ${status})`)
-        }
-        if (data.initPoint) {
-          window.location.href = data.initPoint;
-          return;
-        }
-        setPixCheckout({
-          correlationID: data.correlationID,
-          brCode: data.brCode,
-          qrCodeImage: data.qrCodeImage,
-          paymentLinkUrl: data.paymentLinkUrl
-        });
-        return;
-      }
       await onPlaceOrder(orderData);
     } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
@@ -499,16 +422,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         </DialogHeader>
         
         <div className="space-y-6 pt-2">
-          {pixCheckout && (
-            <PixCheckoutModal
-              isOpen={!!pixCheckout}
-              onClose={() => setPixCheckout(null)}
-              correlationID={pixCheckout.correlationID}
-              brCode={pixCheckout.brCode}
-              qrCodeImage={pixCheckout.qrCodeImage}
-              paymentLinkUrl={pixCheckout.paymentLinkUrl}
-            />
-          )}
           {/* Itens do carrinho */}
           <div className="space-y-4">
             <h3 className="font-bold text-gray-900">Seus itens:</h3>
@@ -751,72 +664,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               {isPixSelected && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
                   <div className="text-sm font-medium text-gray-900">PIX</div>
-                  {pixPublicLoading ? (
-                    <div className="text-sm text-gray-700">Carregando dados do PIX…</div>
-                  ) : pixPublicError ? (
-                    <div className="space-y-2">
-                      <div className="text-sm text-gray-700">Não foi possível carregar os dados do PIX.</div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-9"
-                          onClick={() => {
-                            setPixPublicSettings(null);
-                            setPixPublicError(null);
-                            setPixPublicLoading(true);
-                            invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 6000 })
-                              .then(({ data, status }) => {
-                                if (status === 200 && data?.ok && data?.settings) {
-                                  setPixPublicSettings(data.settings);
-                                  return;
-                                }
-                                const msg = String(data?.error || data?.message || 'Não foi possível carregar os dados do PIX.');
-                                setPixPublicError(msg);
-                              })
-                              .catch((e: any) => setPixPublicError(String(e?.message || 'Não foi possível carregar os dados do PIX.')))
-                              .finally(() => setPixPublicLoading(false));
-                          }}
-                        >
-                          Tentar novamente
-                        </Button>
-                      </div>
-                    </div>
-                  ) : canUseManualPix ? (
-                    <>
-                      <div className="text-sm text-gray-700">
-                        Copie a chave PIX abaixo para fazer o pagamento. O pedido ficará aguardando confirmação.
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Input value={pixPublicSettings.pix_key} readOnly className="h-9 bg-white" />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-9"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(String(pixPublicSettings.pix_key));
-                              alert('Chave PIX copiada!');
-                            } catch {
-                              alert('Não foi possível copiar. Selecione e copie manualmente.');
-                            }
-                          }}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {(pixPublicSettings.merchant_name || pixPublicSettings.merchant_city) && (
-                        <div className="text-xs text-gray-600">
-                          {pixPublicSettings.merchant_name ? String(pixPublicSettings.merchant_name) : ''}
-                          {pixPublicSettings.merchant_city ? ` • ${String(pixPublicSettings.merchant_city)}` : ''}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-sm text-gray-700">
-                      Ao selecionar PIX, vamos gerar o QR Code e liberar o pedido apenas após confirmação do pagamento.
-                    </div>
-                  )}
+                  <div className="text-sm text-gray-700">
+                    Pagamento via PIX será realizado na entrega (maquininha do motoboy).
+                  </div>
                 </div>
               )}
 

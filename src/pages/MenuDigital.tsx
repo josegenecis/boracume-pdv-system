@@ -371,17 +371,6 @@ const MenuDigital = () => {
         console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
       }
 
-      if (orderData.payment_method === 'pix') {
-        toast({
-          title: "Pedido realizado!",
-          description: `Para confirmar, finalize o pagamento PIX do pedido ${orderData.order_number}.`
-        });
-        clearCart();
-        setShowCartModal(false);
-        if (data?.id) navigate(`/track/${data.id}`);
-        return;
-      }
-
       // Push para o restaurante
       try {
         const { data: subs } = await supabase
@@ -403,7 +392,9 @@ const MenuDigital = () => {
       }
       toast({
         title: "Pedido realizado!",
-        description: `Acompanhe o andamento do pedido ${orderData.order_number}.`,
+        description: orderData.payment_method === 'pix'
+          ? `Pagamento via PIX será realizado na entrega do pedido ${orderData.order_number}.`
+          : `Acompanhe o andamento do pedido ${orderData.order_number}.`,
       });
       clearCart();
       setShowCartModal(false);
