@@ -46,7 +46,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
 
             const { data: pixSettings }: any = await supabase.functions.invoke('pix-settings-public', { body: { userId: order.user_id } as any })
             const settings = pixSettings?.settings
-            if (!settings?.enabled || !settings?.pix_key) {
+            if (!settings?.pix_key) {
                 throw new Error('PIX não está configurado para este restaurante');
             }
 

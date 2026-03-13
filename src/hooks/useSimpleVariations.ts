@@ -5,7 +5,7 @@ import { perfStart } from '@/utils/perf';
 
 type VariationOption = { name: string; price: number };
 
-type Variation = {
+export type Variation = {
   id: string;
   name: string;
   required: boolean;
@@ -14,6 +14,7 @@ type Variation = {
 };
 
 const TTL_MS = 10 * 60 * 1000;
+const LS_PREFIX = 'boracume_variations_v1:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 
@@ -74,28 +75,45 @@ function normalizeVariation(item: any): Variation | null {
   };
 }
 
+function lsKey(productId: string) {
+  return `${LS_PREFIX}${String(productId || '').trim()}`;
+}
+
+function loadFromLocalStorage(productId: string): { ts: number; data: Variation[] } | null {
+  try {
+    const raw = localStorage.getItem(lsKey(productId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as any;
+    if (!parsed || typeof parsed.ts !== 'number' || !Array.isArray(parsed.data)) return null;
+    const ts = Number(parsed.ts);
+    if (!Number.isFinite(ts)) return null;
+    const data = (parsed.data || []).map((v: any) => normalizeVariation(v)).filter(Boolean) as Variation[];
+    return { ts, data };
+  } catch {
+    return null;
+  }
+}
+
+function saveToLocalStorage(productId: string, data: Variation[]) {
+  try {
+    const key = lsKey(productId);
+    const payload = JSON.stringify({ ts: Date.now(), data });
+    localStorage.setItem(key, payload);
+  } catch {}
+}
+
 async function fetchVariationsUncached(productId: string): Promise<Variation[]> {
   const span = perfStart('menu.variations.fetch', { productId });
   try {
-    let isAuthenticated = false;
     try {
-      const { data } = await supabase.auth.getSession();
-      isAuthenticated = !!data?.session?.access_token;
+      const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }).then((r) => r as any), 2);
+      if (status === 200 && j?.ok && Array.isArray(j.variations)) {
+        return (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
+      }
     } catch {}
 
-    if (!isAuthenticated) {
-      try {
-        const { data: j } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }).then((r) => r as any), 2);
-        if (j?.ok && Array.isArray(j.variations)) {
-          return (j.variations || [])
-            .map((item: any) => normalizeVariation({ ...item, options: parseOptions(item.options) }))
-            .filter(Boolean) as Variation[];
-        }
-      } catch {}
-    }
-
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
-      withRetry(() => supabase.from('product_variations').select('*').eq('product_id', productId) as any, 2),
+      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,options').eq('product_id', productId) as any, 2),
       withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id').eq('product_id', productId) as any, 2)
     ]);
 
@@ -105,7 +123,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     const linkIds = Array.isArray(globalLinks) ? globalLinks.map((l: any) => l.global_variation_id).filter(Boolean) : [];
     let globalVariations: any[] = [];
     if (linkIds.length > 0) {
-      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('*').in('id', linkIds as any) as any, 2);
+      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,options').in('id', linkIds as any) as any, 2);
       if (globalVarError) throw globalVarError;
       globalVariations = Array.isArray(globalVars) ? globalVars : [];
     }
@@ -119,6 +137,31 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
   }
 }
 
+export function prefetchSimpleVariations(productId: string) {
+  const key = String(productId || '').trim();
+  if (!key) return Promise.resolve([] as Variation[]);
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.ts < TTL_MS) return Promise.resolve(cached.data);
+  const local = loadFromLocalStorage(key);
+  if (local && Date.now() - local.ts < TTL_MS) {
+    cache.set(key, local);
+    return Promise.resolve(local.data);
+  }
+  const running = inflight.get(key);
+  if (running) return running;
+  const p = fetchVariationsUncached(key)
+    .then((data) => {
+      cache.set(key, { ts: Date.now(), data });
+      saveToLocalStorage(key, data);
+      return data;
+    })
+    .finally(() => {
+      inflight.delete(key);
+    });
+  inflight.set(key, p);
+  return p;
+}
+
 export function useSimpleVariations() {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -129,6 +172,12 @@ export function useSimpleVariations() {
     const cached = cache.get(key);
     if (cached && Date.now() - cached.ts < TTL_MS) return cached.data;
 
+    const local = loadFromLocalStorage(key);
+    if (local && Date.now() - local.ts < TTL_MS) {
+      cache.set(key, local);
+      return local.data;
+    }
+
     const running = inflight.get(key);
     if (running) return running;
 
@@ -136,6 +185,7 @@ export function useSimpleVariations() {
     const p = fetchVariationsUncached(key)
       .then((data) => {
         cache.set(key, { ts: Date.now(), data });
+        saveToLocalStorage(key, data);
         return data;
       })
       .finally(() => {

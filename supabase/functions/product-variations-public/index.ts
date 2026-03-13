@@ -25,22 +25,23 @@ const { searchParams } = new URL(req.url)
   }
   if (!productId) return new Response(JSON.stringify({ ok: false, error: 'missing_productId' }), { status: 200, headers: corsHeaders })
   try {
-    const { data: productVars } = await supabase
-      .from('product_variations')
-      .select('*')
-      .eq('product_id', productId)
-
-    const { data: links } = await supabase
-      .from('product_global_variation_links')
-      .select('global_variation_id')
-      .eq('product_id', productId)
+    const [{ data: productVars }, { data: links }] = await Promise.all([
+      supabase
+        .from('product_variations')
+        .select('id,name,required,max_selections,options')
+        .eq('product_id', productId),
+      supabase
+        .from('product_global_variation_links')
+        .select('global_variation_id')
+        .eq('product_id', productId)
+    ])
 
     let globals: any[] = []
     if (Array.isArray(links) && links.length) {
       const ids = links.map(l => l.global_variation_id)
       const { data: globalVars } = await supabase
         .from('global_variations')
-        .select('*')
+        .select('id,name,required,max_selections,options')
         .in('id', ids)
       globals = (globalVars || []).map((v: any) => {
         return { ...v, required: !!(v as any)?.required, min_selections: 0, max_selections: (v as any)?.max_selections ?? 1 }

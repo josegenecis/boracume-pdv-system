@@ -174,7 +174,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </div>
           )}
           
-          {variations.length > 0 ? (
+          {!loadingVariations && !isLoading && variations.length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Personalize seu pedido</h3>
               {variations.map((variation) => (
@@ -186,7 +186,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                 />
               ))}
             </div>
-          ) : (
+          ) : !loadingVariations && !isLoading ? (
             <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
               ⚠️ Nenhuma variação disponível para este produto.
               <br />
@@ -194,7 +194,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                 Você ainda pode ajustar a quantidade e adicionar observações.
               </span>
             </div>
-          )}
+          ) : null}
 
           {/* Observações */}
           <div>

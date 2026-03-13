@@ -109,6 +109,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           }));
           setPaymentMethods(mapped);
           setSelectedPaymentMethod(mapped[0] || null);
+          setPaymentMethod(mapped[0]?.id || '');
         } else {
           // Fallback para ambientes onde o fetch falha ou não há métodos cadastrados
           const fallback = [
@@ -119,6 +120,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           ];
           setPaymentMethods(fallback as any);
           setSelectedPaymentMethod(fallback[0] as any);
+          setPaymentMethod((fallback[0] as any)?.id || '');
         }
       } catch (e) {
         const fallback = [
@@ -129,6 +131,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         ];
         setPaymentMethods(fallback as any);
         setSelectedPaymentMethod(fallback[0] as any);
+        setPaymentMethod((fallback[0] as any)?.id || '');
       }
     };
     if (isOpen) fetchPaymentMethods();
@@ -198,7 +201,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const finalTotal = Math.max(0, preTotal - discount);
 
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
-  const canUseManualPix = Boolean(pixPublicSettings?.enabled && pixPublicSettings?.pix_key);
+  const canUseManualPix = Boolean(pixPublicSettings?.pix_key);
 
   useEffect(() => {
     if (!isOpen || !isPixSelected || !userId) return;
@@ -420,6 +423,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         }
 
         if (!data.ok) {
+          const code = String(data.error || '').trim();
+          if (code === 'pix_not_configured' || code === 'pix_disabled') {
+            throw new Error('PIX não foi configurado para este restaurante. Cadastre a chave PIX ou configure o Mercado Pago.')
+          }
+          if (code === 'missing_provider_credentials') {
+            throw new Error('Mercado Pago não configurado. Cadastre a chave PIX para pagamento manual ou configure o Mercado Pago.')
+          }
           throw new Error(data.error || `Não foi possível iniciar pagamento (HTTP ${status})`)
         }
         if (data.initPoint) {

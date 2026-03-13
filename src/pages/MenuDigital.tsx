@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
+import { prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
@@ -127,6 +128,30 @@ const MenuDigital = () => {
     }
   }, [highlights]);
 
+  useEffect(() => {
+    if (!finalUserId) return;
+    const ids = Array.from(
+      new Set(
+        [...highlights, ...products.slice(0, 12)]
+          .map((p: any) => String(p?.id || '').trim())
+          .filter(Boolean)
+      )
+    );
+    if (ids.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      for (const id of ids) {
+        if (cancelled) break;
+        void prefetchSimpleVariations(id);
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [finalUserId, highlights, products]);
+
   // Configurar scroll spy para tabs
   const categoryIds = categories.map(cat => `category-${cat.id}`);
   const { activeSection, registerSection } = useScrollSpy(categoryIds);
@@ -154,6 +179,7 @@ const MenuDigital = () => {
 
     setOpeningProductId(product.id);
     try {
+      void prefetchSimpleVariations(product.id);
       const track = Boolean((product as any).track_stock);
       const stock = Number((product as any).stock_quantity);
       const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);

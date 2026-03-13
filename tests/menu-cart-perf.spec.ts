@@ -1,4 +1,4 @@
-import { test, expect, chromium, Page } from '@playwright/test';
+import { test, expect, chromium, Page } from 'playwright/test';
 
 async function enable3G(page: Page) {
   const browser = page.context().browser();
