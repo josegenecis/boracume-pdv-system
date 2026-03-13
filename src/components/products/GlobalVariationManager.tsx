@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import ProductVariationForm from './ProductVariationForm';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface VariationOption {
   name: string;
@@ -153,38 +154,44 @@ const GlobalVariationManager: React.FC = () => {
               </CardContent>
             </Card>
           ) : (
-            variations.map((variation) => (
-              <Card key={variation.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-medium">{variation.name}</h4>
-                      </div>
-                      {variation.description && (
-                        <div className="text-xs text-muted-foreground mb-1">{variation.description}</div>
-                      )}
-                      <div className="space-y-1">
-                        {variation.options?.map((option, index) => (
-                          <div key={index} className="flex justify-between text-sm">
-                            <span>{option.name}</span>
-                            <span className="text-gray-600">{option.price > 0 ? `+R$ ${option.price.toFixed(2)}` : 'Grátis'}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 ml-4">
-                      <Button variant="outline" size="sm" onClick={() => { setEditingVariation(variation); setShowForm(true); }}>
-                        <Edit size={14} />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteVariation(variation.id!)}>
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            <Accordion type="multiple" className="space-y-2">
+              {variations.map((variation) => (
+                <AccordionItem key={variation.id} value={String(variation.id)}>
+                  <Card>
+                    <CardContent className="p-0">
+                      <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                        <div className="flex-1 text-left">
+                          <div className="font-medium">{variation.name}</div>
+                          {variation.description && (
+                            <div className="text-xs text-muted-foreground mt-1">{variation.description}</div>
+                          )}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-4">
+                        <div className="space-y-2">
+                          {variation.options?.map((option, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span>{option.name}</span>
+                              <span className="text-gray-600">
+                                {option.price > 0 ? `+R$ ${option.price.toFixed(2)}` : 'Grátis'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 justify-end mt-4">
+                          <Button variant="outline" size="sm" onClick={() => { setEditingVariation(variation); setShowForm(true); }}>
+                            <Edit size={14} className="mr-2" /> Editar
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeleteVariation(variation.id!)}>
+                            <Trash2 size={14} className="mr-2" /> Excluir
+                          </Button>
+                        </div>
+                      </AccordionContent>
+                    </CardContent>
+                  </Card>
+                </AccordionItem>
+              ))}
+            </Accordion>
           )}
         </div>
       )}

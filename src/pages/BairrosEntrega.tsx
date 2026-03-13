@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 interface DeliveryZone {
   id: string;
@@ -21,7 +22,6 @@ const BairrosEntrega = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: 0 });
-  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const confirm = useConfirmDialog();
@@ -106,40 +106,6 @@ const BairrosEntrega = () => {
     }
   };
 
-  // Autosave: cria ou atualiza automaticamente ao editar campos
-  useEffect(() => {
-    if (!user) return;
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
-    }
-    const timer = setTimeout(async () => {
-      if (editingZone) {
-        await handleSaveZone();
-      } else if (newZone.name.trim()) {
-        // cria e entra em modo edição
-        try {
-          const { data, error } = await (supabase as any)
-            .from('delivery_zones')
-            .insert({
-              user_id: user.id,
-              name: newZone.name,
-              delivery_fee: newZone.delivery_fee,
-              active: true
-            })
-            .select('*')
-            .single();
-          if (!error && data) {
-            setEditingZone({ id: data.id, name: data.name, delivery_fee: data.delivery_fee });
-            toast({ title: 'Bairro salvo automaticamente' });
-            fetchZones();
-          }
-        } catch {}
-      }
-    }, 700);
-    setAutoSaveTimer(timer);
-    return () => { clearTimeout(timer); };
-  }, [newZone.name, newZone.delivery_fee, editingZone?.id]);
-
   const handleEditZone = (zone: DeliveryZone) => {
     setEditingZone(zone);
     setNewZone({ name: zone.name, delivery_fee: zone.delivery_fee });
@@ -215,14 +181,10 @@ const BairrosEntrega = () => {
             </div>
             <div>
               <Label htmlFor="fee">Taxa de Entrega (R$)</Label>
-              <Input
+              <CurrencyInput
                 id="fee"
-                type="number"
-                step="0.01"
-                min="0"
                 value={newZone.delivery_fee}
-                onChange={(e) => setNewZone({ ...newZone, delivery_fee: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00"
+                onValueChange={(v) => setNewZone({ ...newZone, delivery_fee: v })}
               />
             </div>
           </div>

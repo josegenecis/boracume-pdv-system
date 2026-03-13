@@ -211,7 +211,7 @@ const Products = () => {
         ordered.map((p, idx) =>
           (supabase as any)
             .from('products')
-            .update({ display_order: idx })
+            .update({ display_order: p.display_order ?? idx })
             .eq('id', p.id)
             .eq('user_id', user?.id)
         )
@@ -225,7 +225,7 @@ const Products = () => {
     }
   };
 
-  const onProductsDragEnd = (result: DropResult) => {
+  const onProductsDragEnd = async (result: DropResult) => {
     if (!canReorderProducts) return;
     if (!result.destination) return;
     
@@ -241,58 +241,42 @@ const Products = () => {
     
     if (result.destination.index === result.source.index) return;
 
-    // Identify category from droppableId "category-{id}"
     const categoryId = result.source.droppableId.replace('category-', '');
-    
-    // Get products for this category
-    const categoryProducts = filteredProducts.filter(p => 
-      categoryId === 'uncategorized' ? !p.category_id : p.category_id === categoryId
-    );
+    const categoryKey = categoryId === 'uncategorized' ? 'uncategorized' : categoryId;
 
-    const newCategoryOrder = Array.from(categoryProducts);
-    const [moved] = newCategoryOrder.splice(result.source.index, 1);
-    newCategoryOrder.splice(result.destination.index, 0, moved);
-
-    // Update global list while maintaining other products
-    const otherProducts = filteredProducts.filter(p => 
-      categoryId === 'uncategorized' ? !!p.category_id : p.category_id !== categoryId
-    );
-
-    // Reconstruct full list with updated order
-    // Note: This simple reconstruction might lose global ordering if mixed. 
-    // Ideally we update display_order for just the changed items relative to their category.
-    // But since we persist global order, let's just update the local state and persist.
-    
-    // Strategy: Update display_order based on new position in category + offset
-    // This is complex. Let's just update the specific products involved.
-    
-    // Simple approach: Update state immediately for UI responsiveness
-    const updatedProducts = products.map(p => {
-        // If it's one of the reordered products, find its new index in the category list
-        // and assign a new temporary display_order or just rely on the array order.
-        // For persistence, we need to be careful.
-        return p; 
+    const sorted = [...products].sort((a, b) => {
+      const ao = typeof a.display_order === 'number' ? a.display_order : Number.MAX_SAFE_INTEGER;
+      const bo = typeof b.display_order === 'number' ? b.display_order : Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
     });
 
-    // Actually, let's just reorder the filtered list in memory for the UI
-    // and call persist for the subset.
-    
-    // Find the global index range for this category to splice correctly? 
-    // No, filteredProducts might be a subset.
-    
-    // Let's just update the order of the affected items in the database.
-    persistProductOrder(newCategoryOrder);
+    const groupsMap = new Map<string, ProductItem[]>();
+    for (const p of sorted) {
+      const key = p.category_id ? String(p.category_id) : 'uncategorized';
+      const arr = groupsMap.get(key) || [];
+      arr.push(p);
+      groupsMap.set(key, arr);
+    }
 
-    // Optimistic UI update
-    // We need to update the 'products' state to reflect the new order within the category
-    // This is tricky because 'products' is the source of truth.
-    // Let's just fetchProducts after a short delay or rely on the fact that we're viewing filteredProducts.
-    
-    // For now, trigger a fetch to be safe and consistent
-    // But to make it snappy, we can try to update local state:
-    const newProducts = [...products];
-    // This is hard without complex logic. Let's just wait for fetch.
-    fetchProducts();
+    const list = Array.from(groupsMap.get(categoryKey) || []);
+    const [moved] = list.splice(result.source.index, 1);
+    list.splice(result.destination.index, 0, moved);
+    groupsMap.set(categoryKey, list);
+
+    const orderedAll: ProductItem[] = [];
+    for (const c of categories) {
+      const key = String(c.id);
+      orderedAll.push(...(groupsMap.get(key) || []));
+    }
+    orderedAll.push(...(groupsMap.get('uncategorized') || []));
+
+    const nextProducts = orderedAll.map((p, idx) => ({ ...p, display_order: idx }));
+    const prevOrder = new Map(products.map((p) => [p.id, p.display_order]));
+    const changed = nextProducts.filter((p) => prevOrder.get(p.id) !== p.display_order);
+
+    setProducts(nextProducts);
+    await persistProductOrder(changed);
   };
 
   const handleDeleteProduct = async (productId: string) => {

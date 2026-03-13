@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 interface VariationOption {
   name: string;
@@ -139,14 +140,10 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
                   </div>
                   <div className="w-32">
                     <Label htmlFor={`option-price-${index}`}>Preço Adicional</Label>
-                    <Input
+                    <CurrencyInput
                       id={`option-price-${index}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
                       value={option.price}
-                      onChange={(e) => updateOption(index, 'price', parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
+                      onValueChange={(v) => updateOption(index, 'price', v)}
                     />
                   </div>
                   <Button
