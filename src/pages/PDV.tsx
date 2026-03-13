@@ -1109,15 +1109,15 @@ const PDV = () => {
       <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
-        <div className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center items-stretch justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
           <TabsList className="grid w-48 sm:w-64 grid-cols-2">
             <TabsTrigger value="products">Vendas</TabsTrigger>
             <TabsTrigger value="accounts">Mesas</TabsTrigger>
           </TabsList>
 
           {activeTab === 'products' && (
-            <div className="flex-1 max-w-md flex items-center gap-2 justify-end sm:justify-start">
-              <div className="relative w-full sm:w-auto sm:flex-1">
+            <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2 justify-end">
+              <div className="relative w-full sm:w-72 md:w-80 flex-1 min-w-[180px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Buscar produtos..."
@@ -1129,7 +1129,7 @@ const PDV = () => {
               <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-9 w-9">
                 <RefreshCw size={16} />
               </Button>
-              <Badge variant={cashSession?.id ? 'default' : 'destructive'} className="hidden sm:inline-flex">
+              <Badge variant={cashSession?.id ? 'default' : 'destructive'} className="rounded-md">
                 {cashSession?.id ? 'Caixa Aberto' : 'Caixa Fechado'}
               </Badge>
               <Button
