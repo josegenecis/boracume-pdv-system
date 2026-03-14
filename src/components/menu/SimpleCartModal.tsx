@@ -425,7 +425,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="text-lg font-bold text-gray-900">
@@ -443,7 +443,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6">
             {step === 'bag' ? (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
