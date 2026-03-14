@@ -83,6 +83,33 @@ const MenuDigital = () => {
   } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
 
   useEffect(() => {
+    const name = String(profile?.restaurant_name || '').trim();
+    if (!name) return;
+    document.title = `${name} • Cardápio`;
+    const upsert = (key: 'name' | 'property', value: string, content: string) => {
+      try {
+        const head = document.head;
+        if (!head) return;
+        const selector = `meta[${key}="${value}"]`;
+        let el = head.querySelector(selector) as HTMLMetaElement | null;
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute(key, value);
+          head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      } catch {}
+    };
+    upsert('property', 'og:title', name);
+    upsert('name', 'twitter:title', name);
+    const image = String((profile as any)?.banner_url || (profile as any)?.logo_url || '').trim();
+    if (image) {
+      upsert('property', 'og:image', image);
+      upsert('name', 'twitter:image', image);
+    }
+  }, [profile]);
+
+  useEffect(() => {
     const stockById = new Map<string, number>();
     for (const p of products as any[]) {
       const track = Boolean(p.track_stock);
@@ -481,33 +508,6 @@ const MenuDigital = () => {
       </div>
     );
   }
-
-  useEffect(() => {
-    const name = String(profile?.restaurant_name || '').trim();
-    if (!name) return;
-    document.title = `${name} • Cardápio`;
-    const upsert = (key: 'name' | 'property', value: string, content: string) => {
-      try {
-        const head = document.head;
-        if (!head) return;
-        const selector = `meta[${key}="${value}"]`;
-        let el = head.querySelector(selector) as HTMLMetaElement | null;
-        if (!el) {
-          el = document.createElement('meta');
-          el.setAttribute(key, value);
-          head.appendChild(el);
-        }
-        el.setAttribute('content', content);
-      } catch {}
-    };
-    upsert('property', 'og:title', name);
-    upsert('name', 'twitter:title', name);
-    const logo = String((profile as any)?.logo_url || '').trim();
-    if (logo) {
-      upsert('property', 'og:image', logo);
-      upsert('name', 'twitter:image', logo);
-    }
-  }, [profile?.restaurant_name, (profile as any)?.logo_url]);
 
   return (
     <div className="min-h-screen bg-white pb-24">
