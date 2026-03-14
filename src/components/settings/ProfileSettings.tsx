@@ -44,7 +44,9 @@ const ProfileSettings = () => {
         .from('profiles')
         .select('*')
         .eq('id', user?.id)
-        .single();
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Erro ao carregar perfil:', error);
@@ -217,24 +219,30 @@ const ProfileSettings = () => {
         updated_at: new Date().toISOString()
       };
 
-      const tryUpsert = async (data: any) => {
-        const { error } = await supabase.from('profiles').upsert(data);
-        return error;
+      const trySave = async (data: any) => {
+        const { id, ...updateData } = data;
+        const upd = await supabase.from('profiles').update(updateData).eq('id', id).select('id');
+        const updateError = (upd as any).error;
+        if (updateError) return updateError;
+        const updatedRows = (upd as any).data;
+        if (Array.isArray(updatedRows) && updatedRows.length > 0) return null;
+        const ins = await supabase.from('profiles').insert(data);
+        return (ins as any).error;
       };
 
-      let error = await tryUpsert(profileData);
+      let error = await trySave(profileData);
 
       if (error && String((error as any)?.message || '').toLowerCase().includes('jwt')) {
         try {
           await supabase.auth.refreshSession();
-          error = await tryUpsert(profileData);
+          error = await trySave(profileData);
         } catch {}
       }
 
       const msg = String((error as any)?.message || '');
       if (error && (msg.includes('banner_url') || String((error as any)?.details || '').includes('banner_url'))) {
         const { banner_url, ...withoutBanner } = profileData as any;
-        error = await tryUpsert(withoutBanner);
+        error = await trySave(withoutBanner);
         if (!error && bannerImage) {
           toast({
             title: "Perfil salvo",
