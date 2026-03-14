@@ -512,23 +512,24 @@ const MenuDigital = () => {
   return (
     <div className="min-h-screen bg-white pb-24">
       <div className="relative">
-        <div className="h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
+        <div className="relative h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
           {(profile as any)?.banner_url ? (
             <img
               src={String((profile as any).banner_url)}
               alt={profile.restaurant_name || 'Banner'}
-              className="w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover"
             />
-          ) : (profile as any)?.logo_url && (
+          ) : (profile as any)?.logo_url ? (
             <img
               src={String((profile as any).logo_url)}
               alt={profile.restaurant_name || 'Logo'}
-              className="w-full h-full object-cover opacity-20 blur-2xl scale-110"
+              className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-110"
             />
-          )}
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/0 to-white/0" />
         </div>
 
-        <div className="max-w-4xl mx-auto px-4 -mt-12 sm:-mt-14">
+        <div className="max-w-4xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
           <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-10 sm:-mt-12">
@@ -609,7 +610,7 @@ const MenuDigital = () => {
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 {category.name}
               </h2>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 {category.products.map((product) => (
                   <ProductCard
                     key={product.id}

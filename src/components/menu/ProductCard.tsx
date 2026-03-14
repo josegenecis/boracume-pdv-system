@@ -37,40 +37,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
   return (
     <div
       onClick={() => onProductClick(product)}
-      className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-4 cursor-pointer hover:shadow-md transition-shadow"
+      className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
     >
-      <div className="flex gap-3 items-start">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-base leading-snug line-clamp-2">
-            {product.name}
-          </h3>
-
-          {product.description && (
-            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-              {product.description}
-            </p>
-          )}
-
-          <div className="mt-3">
-            {product.name.toLowerCase().includes('fartureia') ? (
-              <span className="font-bold text-boracume-orange text-base">Pré-venda</span>
-            ) : product.original_price && product.discount_percentage ? (
-              <div className="space-y-1">
-                <div className="flex items-end gap-2">
-                  <span className="font-bold text-gray-900 text-base">R$ {product.price.toFixed(2)}</span>
-                  <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
-                </div>
-                <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
-                  -{Math.round(Number(product.discount_percentage))}%
-                </div>
-              </div>
-            ) : (
-              <span className="font-bold text-gray-900 text-base">R$ {product.price.toFixed(2)}</span>
-            )}
-          </div>
-        </div>
-
-        <div className="relative w-24 h-24 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+      <div className="relative">
+        <div className="aspect-square w-full bg-gray-100">
           {imageUrl && !imageError ? (
             <img
               src={imageUrl}
@@ -84,16 +54,46 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
               <span className="text-xs">Sem imagem</span>
             </div>
           )}
+        </div>
 
-          <Button
-            type="button"
-            size="icon"
-            onClick={handleAddClick}
-            disabled={!!isAdding}
-            className="absolute -bottom-2 -right-2 h-10 w-10 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
-          >
-            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
-          </Button>
+        <Button
+          type="button"
+          size="icon"
+          onClick={handleAddClick}
+          disabled={!!isAdding}
+          className="absolute bottom-3 right-3 h-11 w-11 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
+        >
+          {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
+        </Button>
+      </div>
+
+      <div className="p-3">
+        <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">
+          {product.name}
+        </h3>
+
+        {product.description && (
+          <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+            {product.description}
+          </p>
+        )}
+
+        <div className="mt-2">
+          {product.name.toLowerCase().includes('fartureia') ? (
+            <span className="font-bold text-boracume-orange">Pré-venda</span>
+          ) : product.original_price && product.discount_percentage ? (
+            <div className="space-y-1">
+              <div className="flex items-end gap-2">
+                <span className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</span>
+                <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
+              </div>
+              <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
+                -{Math.round(Number(product.discount_percentage))}%
+              </div>
+            </div>
+          ) : (
+            <span className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</span>
+          )}
         </div>
       </div>
     </div>
