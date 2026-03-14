@@ -115,35 +115,41 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      let data: any = null;
-      let error: any = null;
+      const runQuery = async () => {
+        let data: any = null;
+        let error: any = null;
 
-      const res1 = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('display_order', { ascending: true })
-        .order('name', { ascending: true });
-
-      data = res1.data;
-      error = res1.error;
-
-      if (error && String(error.message || '').includes('display_order')) {
-        setDisplayOrderSupported(false);
-        const res2 = await supabase
+        const res1 = await supabase
           .from('products')
           .select('*')
           .eq('user_id', user?.id)
+          .order('display_order', { ascending: true })
           .order('name', { ascending: true });
-        data = res2.data;
-        error = res2.error;
-      } else {
-        setDisplayOrderSupported(true);
-      }
+
+        data = res1.data;
+        error = res1.error;
+
+        if (error && String(error.message || '').includes('display_order')) {
+          setDisplayOrderSupported(false);
+          const res2 = await supabase
+            .from('products')
+            .select('*')
+            .eq('user_id', user?.id)
+            .order('name', { ascending: true });
+          data = res2.data;
+          error = res2.error;
+        } else {
+          setDisplayOrderSupported(true);
+        }
+
+        return { data, error };
+      };
+      
+      let { data, error } = await runQuery();
       
       if (error) throw error;
       
-      const transformedProducts = (data || []).map((product: any) => ({
+      let transformedProducts = (data || []).map((product: any) => ({
         ...product,
         category: product.category || 'Sem categoria',
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
@@ -154,6 +160,35 @@ const Products = () => {
         stock_quantity: product.stock_quantity !== undefined ? product.stock_quantity : 0,
         low_stock_threshold: product.low_stock_threshold !== undefined ? product.low_stock_threshold : 5
       })) as ProductItem[];
+
+      if (transformedProducts.length === 0 && products.length > 0) {
+        const { data: sData } = await supabase.auth.getSession();
+        if (!sData?.session) {
+          toast({
+            title: 'Sessão expirada',
+            description: 'Recarregue a página ou faça login novamente.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const refreshed = await supabase.auth.refreshSession();
+        if (refreshed?.data?.session) {
+          const retry = await runQuery();
+          if (retry.error) throw retry.error;
+          transformedProducts = (retry.data || []).map((product: any) => ({
+            ...product,
+            category: product.category || 'Sem categoria',
+            show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
+            show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
+            weight_based: product.weight_based !== undefined ? product.weight_based : false,
+            send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false,
+            track_stock: product.track_stock !== undefined ? product.track_stock : false,
+            stock_quantity: product.stock_quantity !== undefined ? product.stock_quantity : 0,
+            low_stock_threshold: product.low_stock_threshold !== undefined ? product.low_stock_threshold : 5
+          })) as ProductItem[];
+        }
+      }
       
       setProducts(transformedProducts);
     } catch (error: any) {

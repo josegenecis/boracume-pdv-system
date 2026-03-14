@@ -513,7 +513,13 @@ const MenuDigital = () => {
     <div className="min-h-screen bg-white pb-24">
       <div className="relative">
         <div className="h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
-          {(profile as any)?.logo_url && (
+          {(profile as any)?.banner_url ? (
+            <img
+              src={String((profile as any).banner_url)}
+              alt={profile.restaurant_name || 'Banner'}
+              className="w-full h-full object-cover"
+            />
+          ) : (profile as any)?.logo_url && (
             <img
               src={String((profile as any).logo_url)}
               alt={profile.restaurant_name || 'Logo'}

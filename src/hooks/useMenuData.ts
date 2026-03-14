@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
@@ -33,6 +33,7 @@ interface RestaurantProfile {
   restaurant_name: string;
   description?: string;
   logo_url?: string;
+  banner_url?: string;
   phone?: string;
   address?: string;
   opening_hours?: string;
@@ -112,7 +113,7 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
     ] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, restaurant_name, description, logo_url, phone, address, opening_hours')
+        .select('id, restaurant_name, description, logo_url, banner_url, phone, address, opening_hours')
         .eq('id', userId)
         .limit(1) as any,
       supabase
@@ -167,6 +168,7 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
 
 export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMenuDataOptions): MenuData => {
   const queryClient = useQueryClient();
+  const recoverAttemptRef = useRef(false);
 
   const initialData = enableCache && userId ? readCache(userId, cacheTTL) : null;
 
@@ -180,11 +182,31 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     retryDelay: (attempt) => Math.min(2000, 250 * Math.pow(2, attempt)),
     initialData: initialData || undefined
   });
+  const refetch = query.refetch;
 
   useEffect(() => {
     if (!userId || !enableCache) return;
-    if (query.data) writeCache(userId, query.data);
-  }, [userId, enableCache, query.data]);
+    if (!query.data) return;
+    const nextCount = Array.isArray(query.data.products) ? query.data.products.length : 0;
+    const prevCount = Array.isArray(initialData?.products) ? initialData!.products.length : 0;
+    if (nextCount === 0 && prevCount > 0) return;
+    writeCache(userId, query.data);
+  }, [userId, enableCache, query.data, initialData]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (recoverAttemptRef.current) return;
+    if (!query.isSuccess) return;
+    const nextCount = Array.isArray(query.data?.products) ? query.data!.products.length : 0;
+    const prevCount = Array.isArray(initialData?.products) ? initialData!.products.length : 0;
+    if (!(nextCount === 0 && prevCount > 0)) return;
+
+    recoverAttemptRef.current = true;
+    queryClient.setQueryData(['menuData', userId], initialData);
+    void supabase.auth.refreshSession().finally(() => {
+      void refetch();
+    });
+  }, [userId, query.isSuccess, query.data, queryClient, initialData, refetch]);
 
   useEffect(() => {
     if (!userId) return;

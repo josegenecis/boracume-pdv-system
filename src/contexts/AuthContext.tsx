@@ -140,6 +140,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []); // Dependências vazias - executar apenas uma vez
 
+  useEffect(() => {
+    const onFocus = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const s = data?.session;
+        if (!s) return;
+        const exp = Number((s as any).expires_at || 0);
+        const now = Math.floor(Date.now() / 1000);
+        if (exp && exp - now > 120) return;
+        const refreshed = await supabase.auth.refreshSession();
+        const next = refreshed?.data?.session;
+        if (next?.user && isMountedRef.current) {
+          setUser(next.user);
+          setSession(next);
+        }
+      } catch {}
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void onFocus();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   const initializeAuth = async () => {
     const performanceTracker = measurePerformance('AuthContext', 'initializeAuth');
     
@@ -242,11 +272,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!isMountedRef.current) return;
             
             console.log('🔄 [AUTH] Auth state changed:', event, session?.user?.email);
-            
-            // Ignore TOKEN_REFRESHED events to prevent loops if they are firing too often
-            if (event === 'TOKEN_REFRESHED') return;
 
-            if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session?.user) {
+            if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
               console.log('✅ [AUTH] SIGNED_IN - Processando nova autenticação');
               setUser(session.user);
               setSession(session);
