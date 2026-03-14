@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildPublicTrackShareUrl } from '@/utils/publicUrl';
 import HighlightsSection from '@/components/menu/HighlightsSection';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import ProductCard from '@/components/menu/ProductCard';
@@ -387,7 +386,7 @@ const MenuDigital = () => {
         if (orderData.customer_phone && data?.id) {
           const digits = String(orderData.customer_phone).replace(/\D/g, '');
           const to = digits.startsWith('55') ? digits : `55${digits}`;
-          const trackUrl = buildPublicTrackShareUrl(String(data.id), { userId: orderData.user_id, orderNumber: orderData.order_number });
+          const trackUrl = `${window.location.origin}/track/${data.id}`;
           await supabase.functions.invoke('whatsapp-notify', {
             body: {
               to,

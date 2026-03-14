@@ -1,7 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/share/menu/:id", "destination": "/api/share/menu?id=:id" },
-    { "source": "/share/track/:id", "destination": "/api/share/track?id=:id" }
-  ]
-}
-

@@ -36,22 +36,3 @@ export function buildPublicMenuUrl(userId: string) {
   return new URL(`/menu/${id}`, base).toString();
 }
 
-export function buildPublicMenuShareUrl(userId: string) {
-  const id = String(userId || '').trim();
-  if (!id) return '';
-  const base = getPublicWebBaseUrl();
-  return new URL(`/share/menu/${id}`, base).toString();
-}
-
-export function buildPublicTrackShareUrl(orderId: string, opts?: { userId?: string; orderNumber?: string }) {
-  const id = String(orderId || '').trim();
-  if (!id) return '';
-  const base = getPublicWebBaseUrl();
-  const url = new URL(`/share/track/${id}`, base);
-  const userId = String(opts?.userId || '').trim();
-  const orderNumber = String(opts?.orderNumber || '').trim();
-  if (userId) url.searchParams.set('u', userId);
-  if (orderNumber) url.searchParams.set('n', orderNumber);
-  return url.toString();
-}
-

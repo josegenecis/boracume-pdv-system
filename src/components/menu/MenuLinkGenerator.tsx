@@ -7,14 +7,14 @@ import { Label } from '@/components/ui/label';
 import { QrCode, Download, Copy, ExternalLink, Share2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildPublicMenuShareUrl } from '@/utils/publicUrl';
+import { buildPublicMenuUrl } from '@/utils/publicUrl';
 
 const MenuLinkGenerator = () => {
   const [copied, setCopied] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const menuUrl = buildPublicMenuShareUrl(user?.id || '');
+  const menuUrl = buildPublicMenuUrl(user?.id || '');
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(menuUrl)}`;
 
   const copyToClipboard = async () => {
