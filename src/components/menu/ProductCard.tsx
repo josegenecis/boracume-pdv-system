@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Loader2, MessageCircle, Plus } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import DiscountBadge from './DiscountBadge';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface Product {
@@ -35,77 +34,66 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
     onProductClick(product);
   };
 
-  const handleWhatsAppShare = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const message = encodeURIComponent(
-      `*Produto*\n${product.name}\n\nDescrição: ${product.description}\nPreço: R$ ${product.price.toFixed(2)}`
-    );
-    window.open(`https://wa.me/?text=${message}`, '_blank');
-  };
-
   return (
     <div
       onClick={() => onProductClick(product)}
-      className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+      className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-4 cursor-pointer hover:shadow-md transition-shadow"
     >
-      <div className="flex gap-4">
-        {/* Conteúdo do lado esquerdo */}
+      <div className="flex gap-3 items-start">
         <div className="flex-1 min-w-0">
-          {/* Nome do produto */}
-          <h3 className="font-bold text-gray-900 mb-2 text-lg">
+          <h3 className="font-semibold text-gray-900 text-base leading-snug line-clamp-2">
             {product.name}
           </h3>
 
-          {/* Descrição */}
-          <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-            {product.description}
-          </p>
-
-          {/* Preço com desconto ou preço normal */}
-          {product.name.toLowerCase().includes('fartureia') ? (
-            <span className="font-bold text-boracume-orange text-lg">
-              Pré-venda
-            </span>
-          ) : product.original_price && product.discount_percentage ? (
-            <DiscountBadge
-              originalPrice={product.original_price}
-              discountedPrice={product.price}
-              discountPercentage={product.discount_percentage}
-            />
-          ) : (
-            <span className="font-bold text-black text-lg">
-              R$ {product.price.toFixed(2)}
-            </span>
+          {product.description && (
+            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+              {product.description}
+            </p>
           )}
 
-          <div className="mt-3 flex items-center gap-2">
-            <Button size="sm" onClick={handleAddClick} disabled={!!isAdding} className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
-              {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              <span className="hidden sm:inline ml-1">{isAdding ? 'Adicionando' : 'Adicionar'}</span>
-            </Button>
-            <Button size="sm" onClick={handleWhatsAppShare} className="text-white" style={{ backgroundColor: '#25D366' }}>
-              <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
-            </Button>
+          <div className="mt-3">
+            {product.name.toLowerCase().includes('fartureia') ? (
+              <span className="font-bold text-boracume-orange text-base">Pré-venda</span>
+            ) : product.original_price && product.discount_percentage ? (
+              <div className="space-y-1">
+                <div className="flex items-end gap-2">
+                  <span className="font-bold text-gray-900 text-base">R$ {product.price.toFixed(2)}</span>
+                  <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
+                </div>
+                <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
+                  -{Math.round(Number(product.discount_percentage))}%
+                </div>
+              </div>
+            ) : (
+              <span className="font-bold text-gray-900 text-base">R$ {product.price.toFixed(2)}</span>
+            )}
           </div>
         </div>
 
-        {/* Imagem do lado direito */}
-        <div className="flex-shrink-0">
-          <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100">
-            {imageUrl && !imageError ? (
-              <img
-                src={imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">
-                <span className="text-xs">Sem imagem</span>
-              </div>
-            )}
-          </div>
+        <div className="relative w-24 h-24 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+          {imageUrl && !imageError ? (
+            <img
+              src={imageUrl}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <span className="text-xs">Sem imagem</span>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            size="icon"
+            onClick={handleAddClick}
+            disabled={!!isAdding}
+            className="absolute -bottom-2 -right-2 h-10 w-10 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
+          >
+            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
+          </Button>
         </div>
       </div>
     </div>

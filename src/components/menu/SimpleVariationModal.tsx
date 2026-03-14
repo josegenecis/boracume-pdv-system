@@ -5,9 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useSimpleVariations } from '@/hooks/useSimpleVariations';
-import { QuantitySelector } from './variation/QuantitySelector';
 import { VariationGroup } from './variation/VariationGroup';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -150,28 +149,38 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-full h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full">
-          <DialogHeader className="px-4 py-4 border-b border-gray-100">
-            <DialogTitle className="text-lg font-bold text-gray-900">{product.name}</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-            {product.image_url && (
+          <div className="relative">
+            {product.image_url ? (
               <img
                 src={product.image_url}
                 alt={product.name}
-                className="w-full h-48 sm:h-40 object-cover rounded-xl shadow-sm"
+                className="w-full h-56 sm:h-44 object-cover"
               />
+            ) : (
+              <div className="w-full h-56 sm:h-44 bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500" />
             )}
 
-            {product.description && (
-              <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg">{product.description}</p>
-            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 left-4 h-10 w-10 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm border border-gray-200"
+            >
+              <ChevronDown className="h-5 w-5 text-gray-900" />
+            </button>
+          </div>
 
-            <QuantitySelector
-              quantity={quantity}
-              onQuantityChange={setQuantity}
-              max={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? Math.max(1, Math.floor(maxQuantity)) : undefined}
-            />
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+            <div className="space-y-2">
+              <DialogTitle className="text-2xl font-extrabold text-gray-900 leading-tight">
+                {product.name}
+              </DialogTitle>
+              {product.description && (
+                <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
+              )}
+              <div className="text-2xl font-extrabold text-gray-900">
+                {formatBRL(product.price)}
+              </div>
+            </div>
 
             {(loadingVariations || isLoading) && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
@@ -213,14 +222,34 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           </div>
 
           <div className="border-t border-gray-100 p-4 bg-white">
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl h-12">
-                Cancelar
-              </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-12 w-12 rounded-xl"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                >
+                  -
+                </Button>
+                <div className="w-10 text-center font-bold text-gray-900">{quantity}</div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-12 w-12 rounded-xl"
+                  onClick={() => setQuantity((q) => q + 1)}
+                  disabled={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? quantity >= Math.max(1, Math.floor(maxQuantity)) : false}
+                >
+                  +
+                </Button>
+              </div>
+
               <Button
                 onClick={handleAddToCart}
                 disabled={!isValidSelection() || loadingVariations || submitting}
-                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold h-12"
+                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-extrabold h-12"
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : `Adicionar • ${formatBRL(getTotalPrice())}`}
               </Button>
