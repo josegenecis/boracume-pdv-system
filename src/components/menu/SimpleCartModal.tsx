@@ -51,6 +51,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   deliveryZones = [],
   userId
 }) => {
+  const formatBRL = (value: number) =>
+    `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   const [customerName, setCustomerName] = React.useState('');
   const [customerPhone, setCustomerPhone] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
@@ -85,6 +88,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
+  const [step, setStep] = useState<'bag' | 'checkout'>('bag');
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
@@ -131,6 +135,10 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     };
     if (isOpen) fetchPaymentMethods();
   }, [isOpen, userId]);
+
+  useEffect(() => {
+    if (isOpen) setStep('bag');
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -416,66 +424,95 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-white shadow-2xl border border-gray-100 rounded-xl">
-        <DialogHeader className="border-b border-gray-100 pb-4">
-          <DialogTitle className="text-xl font-bold text-gray-900">Finalizar Pedido</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-6 pt-2">
-          {/* Itens do carrinho */}
-          <div className="space-y-4">
-            <h3 className="font-bold text-gray-900">Seus itens:</h3>
-            {cart.map((item) => (
-              <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h4 className="font-bold text-gray-900">{item.product.name}</h4>
-                    {item.variations.length > 0 && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        {item.variations.join(', ')}
-                      </p>
-                    )}
-                    {item.notes && (
-                      <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">
-                        Obs: {item.notes}
-                      </p>
-                    )}
-                    <p className="text-sm font-bold text-boracume-orange mt-2">
-                      R$ {item.totalPrice.toFixed(2)}
-                    </p>
+      <DialogContent className="max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+        <div className="flex flex-col h-full">
+          <DialogHeader className="border-b border-gray-100 px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-lg font-bold text-gray-900">
+                {step === 'bag' ? 'SACOLA' : 'Finalizar pedido'}
+              </DialogTitle>
+              {step === 'checkout' ? (
+                <Button variant="outline" size="sm" className="h-9 rounded-full" onClick={() => setStep('bag')}>
+                  Voltar
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="h-9 rounded-full" onClick={onClose}>
+                  Fechar
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+            {step === 'bag' ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-gray-900">Itens adicionados</h3>
+                  <Button variant="ghost" className="text-boracume-orange" onClick={onClose}>
+                    Adicionar mais itens
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {cart.map((item) => (
+                    <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900">{item.product.name}</h4>
+                          {item.variations.length > 0 && (
+                            <p className="text-sm text-gray-600 mt-1">{item.variations.join(', ')}</p>
+                          )}
+                          {item.notes && (
+                            <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">Obs: {item.notes}</p>
+                          )}
+                          <p className="text-sm font-bold text-boracume-orange mt-2">{formatBRL(item.totalPrice)}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)}
+                            className="rounded-lg border-gray-200"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-8 text-center font-bold">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)}
+                            className="rounded-lg border-gray-200"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onRemoveItem(item.uniqueId)}
+                            className="rounded-lg border-red-200 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3 w-3 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Subtotal</span>
+                    <span className="font-bold">{formatBRL(total)}</span>
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)}
-                      className="rounded-lg border-gray-200"
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-8 text-center font-bold">{item.quantity}</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)}
-                      className="rounded-lg border-gray-200"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onRemoveItem(item.uniqueId)}
-                      className="rounded-lg border-red-200 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-3 w-3 text-red-600" />
-                    </Button>
+                  <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
+                    <span className="text-gray-900">Total</span>
+                    <span className="text-boracume-orange">{formatBRL(total)}</span>
                   </div>
                 </div>
-              </Card>
-            ))}
-          </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
 
           {/* Dados do cliente */}
           <div className="space-y-4">
@@ -751,28 +788,28 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <div className="bg-gray-50 p-4 rounded-xl space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-700">Subtotal:</span>
-                <span className="font-bold">R$ {total.toFixed(2)}</span>
+                <span className="font-bold">{formatBRL(total)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-700">Taxa de entrega:</span>
-                <span className="font-bold">R$ {deliveryFee.toFixed(2)}</span>
+                <span className="font-bold">{formatBRL(deliveryFee)}</span>
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span className="font-medium">Desconto:</span>
-                  <span className="font-bold">- R$ {discount.toFixed(2)}</span>
+                  <span className="font-bold">- {formatBRL(discount)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
                 <span className="text-gray-900">Total:</span>
-                <span className="text-boracume-orange">R$ {finalTotal.toFixed(2)}</span>
+                <span className="text-boracume-orange">{formatBRL(finalTotal)}</span>
               </div>
             </div>
           </div>
 
           {/* Botões */}
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl">
+            <Button variant="outline" onClick={() => setStep('bag')} className="flex-1 rounded-xl">
               Voltar
             </Button>
             <Button 
@@ -783,6 +820,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
             </Button>
           </div>
+              </div>
+            )}
+          </div>
+
+          {step === 'bag' && (
+            <div className="border-t border-gray-100 p-4 bg-white">
+              <Button
+                onClick={() => setStep('checkout')}
+                className="w-full bg-boracume-orange hover:bg-boracume-orange/90 rounded-xl font-bold h-12"
+              >
+                Continuar • {formatBRL(total)}
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -32,6 +32,9 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   onAddToCart,
   maxQuantity
 }) => {
+  const formatBRL = (value: number) =>
+    `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   const [variations, setVariations] = useState<any[]>([]);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
@@ -145,96 +148,81 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto bg-white shadow-2xl border border-gray-100 rounded-xl">
-        <DialogHeader className="border-b border-gray-100 pb-4">
-          <DialogTitle className="text-xl font-bold text-gray-900">{product.name}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-6 pt-2">
-          {product.image_url && (
-            <img 
-              src={product.image_url} 
-              alt={product.name}
-              className="w-full h-32 object-cover rounded-xl shadow-sm"
+      <DialogContent className="max-w-md w-full h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+        <div className="flex flex-col h-full">
+          <DialogHeader className="px-4 py-4 border-b border-gray-100">
+            <DialogTitle className="text-lg font-bold text-gray-900">{product.name}</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+            {product.image_url && (
+              <img
+                src={product.image_url}
+                alt={product.name}
+                className="w-full h-48 sm:h-40 object-cover rounded-xl shadow-sm"
+              />
+            )}
+
+            {product.description && (
+              <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg">{product.description}</p>
+            )}
+
+            <QuantitySelector
+              quantity={quantity}
+              onQuantityChange={setQuantity}
+              max={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? Math.max(1, Math.floor(maxQuantity)) : undefined}
             />
-          )}
-          
-          {product.description && (
-            <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg">{product.description}</p>
-          )}
 
-          {/* Quantidade */}
-          <QuantitySelector 
-            quantity={quantity}
-            onQuantityChange={setQuantity}
-            max={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? Math.max(1, Math.floor(maxQuantity)) : undefined}
-          />
+            {(loadingVariations || isLoading) && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando opções...
+              </div>
+            )}
 
-          {/* Variações */}
-          {(loadingVariations || isLoading) && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando opções...
-            </div>
-          )}
-          
-          {!loadingVariations && !isLoading && variations.length > 0 ? (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900">Personalize seu pedido</h3>
-              {variations.map((variation) => (
-                <VariationGroup
-                  key={variation.id}
-                  variation={variation}
-                  selectedVariations={selectedVariations}
-                  onVariationChange={handleVariationChange}
-                />
-              ))}
-            </div>
-          ) : !loadingVariations && !isLoading ? (
-            <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
-              ⚠️ Nenhuma variação disponível para este produto.
-              <br />
-              <span className="text-xs">
-                Você ainda pode ajustar a quantidade e adicionar observações.
-              </span>
-            </div>
-          ) : null}
+            {!loadingVariations && !isLoading && variations.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-base font-semibold text-gray-900">Personalize seu pedido</h3>
+                {variations.map((variation) => (
+                  <VariationGroup
+                    key={variation.id}
+                    variation={variation}
+                    selectedVariations={selectedVariations}
+                    onVariationChange={handleVariationChange}
+                  />
+                ))}
+              </div>
+            ) : !loadingVariations && !isLoading ? (
+              <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
+                ⚠️ Nenhuma variação disponível para este produto.
+                <br />
+                <span className="text-xs">Você ainda pode ajustar a quantidade e adicionar observações.</span>
+              </div>
+            ) : null}
 
-          {/* Observações */}
-          <div>
-            <Label className="text-sm font-semibold text-gray-900">Observações</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Alguma observação especial..."
-              rows={2}
-              className="mt-2 bg-gray-50 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
-            />
+            <div>
+              <Label className="text-sm font-semibold text-gray-900">Alguma observação?</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Ex: tirar a cebola, maionese à parte..."
+                rows={2}
+                className="mt-2 bg-gray-50 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
+            </div>
           </div>
 
-          {/* Footer com preço e botões */}
-          <div className="border-t border-gray-100 pt-6 space-y-4">
-            <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl">
-              <span className="font-bold text-gray-900">Total:</span>
-              <span className="text-xl font-bold text-primary">
-                R$ {getTotalPrice().toFixed(2)}
-              </span>
-            </div>
-            
+          <div className="border-t border-gray-100 p-4 bg-white">
             <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                onClick={onClose}
-                className="flex-1 rounded-xl"
-              >
+              <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl h-12">
                 Cancelar
               </Button>
-              <Button 
+              <Button
                 onClick={handleAddToCart}
                 disabled={!isValidSelection() || loadingVariations || submitting}
-                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold"
+                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-bold h-12"
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Adicionar'}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : `Adicionar • ${formatBRL(getTotalPrice())}`}
               </Button>
             </div>
           </div>

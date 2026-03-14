@@ -482,31 +482,99 @@ const MenuDigital = () => {
     );
   }
 
+  useEffect(() => {
+    const name = String(profile?.restaurant_name || '').trim();
+    if (!name) return;
+    document.title = `${name} • Cardápio`;
+    const upsert = (key: 'name' | 'property', value: string, content: string) => {
+      try {
+        const head = document.head;
+        if (!head) return;
+        const selector = `meta[${key}="${value}"]`;
+        let el = head.querySelector(selector) as HTMLMetaElement | null;
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute(key, value);
+          head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      } catch {}
+    };
+    upsert('property', 'og:title', name);
+    upsert('name', 'twitter:title', name);
+    const logo = String((profile as any)?.logo_url || '').trim();
+    if (logo) {
+      upsert('property', 'og:image', logo);
+      upsert('name', 'twitter:image', logo);
+    }
+  }, [profile?.restaurant_name, (profile as any)?.logo_url]);
+
   return (
     <div className="min-h-screen bg-white pb-24">
-      {/* Header com busca */}
-      <div className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            {profile?.restaurant_name || 'Cardápio'}
-          </h1>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
-            />
-          </div>
-          {/* Tabs de Categorias dentro do cabeçalho sticky */}
-          {categories.length > 0 && (
-            <CategoryTabs
-              categories={categories}
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
+      <div className="relative">
+        <div className="h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
+          {(profile as any)?.logo_url && (
+            <img
+              src={String((profile as any).logo_url)}
+              alt={profile.restaurant_name || 'Logo'}
+              className="w-full h-full object-cover opacity-20 blur-2xl scale-110"
             />
           )}
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 -mt-12 sm:-mt-14">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-10 sm:-mt-12">
+                {(profile as any)?.logo_url ? (
+                  <img src={String((profile as any).logo_url)} alt={profile.restaurant_name || 'Logo'} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-xs font-bold text-gray-600">
+                    {(profile?.restaurant_name || 'BC').slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
+                  {profile?.restaurant_name || 'Cardápio'}
+                </h1>
+                {((profile as any)?.address || (profile as any)?.phone) && (
+                  <div className="text-xs sm:text-sm text-gray-600 mt-1">
+                    {(profile as any)?.address ? String((profile as any).address) : ''}
+                    {(profile as any)?.address && (profile as any)?.phone ? ' • ' : ''}
+                    {(profile as any)?.phone ? String((profile as any).phone) : ''}
+                  </div>
+                )}
+                {(profile as any)?.description && (
+                  <div className="text-xs sm:text-sm text-gray-600 mt-2 line-clamp-2">
+                    {String((profile as any).description)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white sticky top-0 z-40 mt-3 pb-2">
+            {categories.length > 0 && (
+              <CategoryTabs
+                categories={categories}
+                activeCategory={activeCategory}
+                onCategoryChange={setActiveCategory}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -519,8 +587,7 @@ const MenuDigital = () => {
           />
         )}
 
-        {/* Espaço após header sticky para conteúdo não ficar oculto */}
-        <div className="h-4" />
+        <div className="h-3" />
 
         {/* Produtos por Categoria */}
         <div className="space-y-8">
