@@ -230,21 +230,7 @@ export const useKitchenOrders = () => {
   useEffect(() => {
     fetchOrders();
 
-    // TEMPORARY: Remove user dependency for KDS testing
-    // if (!user) {
-    //   console.log('❌ No user found, skipping realtime setup');
-    //   return;
-    // }
-
-    console.log('🔄 Setting up realtime subscription for kitchen orders...');
-    // console.log('👤 User ID:', user.id);
-    
-    // Test realtime connection first
-    const testChannel = supabase
-      .channel('test_connection')
-      .subscribe((status) => {
-        console.log('🧪 Test channel status:', status);
-      });
+    if (!user?.id) return;
     
     const channel = supabase
       .channel('kitchen_orders_changes')
@@ -254,10 +240,13 @@ export const useKitchenOrders = () => {
           event: '*', // Listen to all events for debugging
           schema: 'public',
           table: 'orders',
-          filter: 'status=in.(pending,preparing,ready,completed)'
+          filter: `user_id=eq.${user.id}`
         },
         (payload) => {
           console.log('📨 Realtime event received:', payload.eventType, payload);
+
+          const nextStatus = String((payload as any)?.new?.status || (payload as any)?.old?.status || '');
+          if (!['pending', 'preparing', 'ready', 'completed'].includes(nextStatus)) return;
           
           if (payload.eventType === 'INSERT') {
             console.log('🆕 New order received via realtime:', payload.new);
@@ -297,10 +286,9 @@ export const useKitchenOrders = () => {
 
     return () => {
       console.log('🔌 Removing realtime subscriptions...');
-      supabase.removeChannel(testChannel);
       supabase.removeChannel(channel);
     };
-  }, []); // Remove user dependency
+  }, [user?.id]);
 
 
   return {

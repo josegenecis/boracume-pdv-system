@@ -520,7 +520,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   {order.status === 'pending' && (
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => handleStatusUpdate('accepted')}
+                        onClick={() => handleStatusUpdate('preparing')}
                         className="flex-1 bg-green-600 hover:bg-green-700 h-8 text-xs"
                       >
                         <Check className="h-3 w-3 mr-1" />

@@ -1,7 +1,7 @@
 
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "BoraCumê Team",
   "description": "Desktop application for Bora Cume Hub",
   "main": "main.js",
@@ -31,7 +31,7 @@
     "appId": "com.boracume.desktop",
     "productName": "BoraCume",
     "directories": {
-      "output": "dist-electron-1.0.3"
+      "output": "dist-electron"
     },
     "files": [
       "dist/**/*",

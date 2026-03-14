@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,14 +67,43 @@ const Orders = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
+  const realtimeOkRef = useRef(false);
+
+  const normalizeItems = (value: any) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
 
   useEffect(() => {
     if (user) {
       fetchOrders();
 
-      // Setup real-time subscription for new orders
+      let pollTimer: number | null = null;
+      const startPolling = () => {
+        if (pollTimer) return;
+        pollTimer = window.setInterval(() => {
+          if (document.visibilityState !== 'visible') return;
+          if (realtimeOkRef.current) return;
+          fetchOrders();
+        }, 3000);
+      };
+
+      const stopPolling = () => {
+        if (!pollTimer) return;
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      };
+
       const channel = supabase
-        .channel('orders-changes')
+        .channel(`orders-changes-${user.id}`)
         .on(
           'postgres_changes',
           {
@@ -89,10 +118,10 @@ const Orders = () => {
             // Add new order to the list
             const newOrder = {
               ...payload.new,
-              items: Array.isArray(payload.new.items) ? payload.new.items : []
+              items: normalizeItems((payload as any)?.new?.items)
             } as Order;
 
-            setOrders(prev => [newOrder, ...prev]);
+            setOrders(prev => (prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev]));
 
             // Play notification sound (handled by useOrderNotifications)
           }
@@ -111,14 +140,25 @@ const Orders = () => {
             // Update order in the list
             setOrders(prev => prev.map(order =>
               order.id === payload.new.id
-                ? { ...payload.new, items: Array.isArray(payload.new.items) ? payload.new.items : [] } as Order
+                ? { ...payload.new, items: normalizeItems((payload as any)?.new?.items) } as Order
                 : order
             ));
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            realtimeOkRef.current = true;
+            stopPolling();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            realtimeOkRef.current = false;
+            startPolling();
+          }
+        });
+
+      startPolling();
 
       return () => {
+        stopPolling();
         supabase.removeChannel(channel);
       };
     }
@@ -142,7 +182,7 @@ const Orders = () => {
       // Transform the data to ensure items is always an array
       const transformedData = (data || []).map(order => ({
         ...order,
-        items: Array.isArray(order.items) ? order.items : []
+        items: normalizeItems((order as any)?.items)
       }));
 
       setOrders(transformedData);
