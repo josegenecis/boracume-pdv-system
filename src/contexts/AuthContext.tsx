@@ -584,9 +584,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Dados do perfil inválidos');
       }
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert(profileData);
+      const { id, ...updateData } = profileData as any;
+      const upd = await supabase.from('profiles').update(updateData).eq('id', id).select('id');
+      let profileError = (upd as any).error;
+      const updatedRows = (upd as any).data;
+      if (!profileError && (!Array.isArray(updatedRows) || updatedRows.length === 0)) {
+        const ins = await supabase.from('profiles').insert(profileData as any);
+        profileError = (ins as any).error;
+      }
 
       if (profileError) {
         console.error('Erro ao sincronizar perfil:', profileError);
