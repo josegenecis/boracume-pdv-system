@@ -452,8 +452,8 @@ const MenuDigital = () => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     return (
-      product.name.toLowerCase().includes(query) ||
-      product.description.toLowerCase().includes(query)
+      String((product as any)?.name || '').toLowerCase().includes(query) ||
+      String((product as any)?.description || '').toLowerCase().includes(query)
     );
   });
 
@@ -610,13 +610,14 @@ const MenuDigital = () => {
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 {category.name}
               </h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 {category.products.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                     onProductClick={handleProductClick}
                     isAdding={openingProductId === product.id}
+                    layout="list"
                   />
                 ))}
               </div>

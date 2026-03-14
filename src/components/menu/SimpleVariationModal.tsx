@@ -148,7 +148,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-full h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
           <div className="relative">
             {product.image_url ? (
               <img
@@ -169,7 +169,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6">
             <div className="space-y-2">
               <DialogTitle className="text-2xl font-extrabold text-gray-900 leading-tight">
                 {product.name}

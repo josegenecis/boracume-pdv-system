@@ -1517,6 +1517,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             />
             <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="is_highlight"
+              checked={!!formData.is_highlight}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
+              disabled={isUnsupported('is_highlight')}
+            />
+            <Label htmlFor="is_highlight">Destaque</Label>
+          </div>
         </div>
 
         <div className="flex gap-2 pt-4">
