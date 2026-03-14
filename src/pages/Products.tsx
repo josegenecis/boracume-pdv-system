@@ -95,14 +95,15 @@ const Products = () => {
     } catch {}
   }, []);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const activeUserIdSync = user?.id || session?.user?.id || '';
   const confirm = useConfirmDialog();
 
   useEffect(() => {
-    if (user) {
+    if (user || session) {
       fetchData();
     }
-  }, [user]);
+  }, [user, session]);
 
   useEffect(() => {
     filterProducts();
@@ -115,6 +116,19 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
+      const getActiveUserId = async () => {
+        const id = user?.id || session?.user?.id;
+        if (id) return id;
+        try {
+          const { data } = await supabase.auth.getSession();
+          return data?.session?.user?.id || '';
+        } catch {
+          return '';
+        }
+      };
+      const activeUserId = await getActiveUserId();
+      if (!activeUserId) return;
+
       const runQuery = async () => {
         let data: any = null;
         let error: any = null;
@@ -122,7 +136,7 @@ const Products = () => {
         const res1 = await supabase
           .from('products')
           .select('*')
-          .eq('user_id', user?.id)
+          .eq('user_id', activeUserId)
           .order('display_order', { ascending: true })
           .order('name', { ascending: true });
 
@@ -134,7 +148,7 @@ const Products = () => {
           const res2 = await supabase
             .from('products')
             .select('*')
-            .eq('user_id', user?.id)
+            .eq('user_id', activeUserId)
             .order('name', { ascending: true });
           data = res2.data;
           error = res2.error;
@@ -205,10 +219,11 @@ const Products = () => {
 
   const fetchCategories = async () => {
     try {
+      if (!activeUserIdSync) return;
       const { data, error } = await supabase
         .from('product_categories')
         .select('id, name')
-        .eq('user_id', user?.id)
+        .eq('user_id', activeUserIdSync)
         .eq('active', true)
         .order('display_order');
 
@@ -242,13 +257,14 @@ const Products = () => {
 
   const persistProductOrder = async (ordered: ProductItem[]) => {
     try {
+      if (!activeUserIdSync) throw new Error('Sessão expirada');
       const results = await Promise.all(
         ordered.map((p, idx) =>
           (supabase as any)
             .from('products')
             .update({ display_order: p.display_order ?? idx })
             .eq('id', p.id)
-            .eq('user_id', user?.id)
+            .eq('user_id', activeUserIdSync)
         )
       );
       const firstError = results.find((r: any) => r?.error)?.error;
@@ -381,7 +397,7 @@ const Products = () => {
         .from('products')
         .delete()
         .in('id', ids)
-        .eq('user_id', user?.id);
+        .eq('user_id', activeUserIdSync);
       if (error) throw error;
       setSelectedIds(prev => {
         const next = new Set(prev);
@@ -439,7 +455,7 @@ const Products = () => {
         .from('products')
         .delete()
         .in('id', ids)
-        .eq('user_id', user?.id);
+        .eq('user_id', activeUserIdSync);
       if (error) throw error;
       clearSelection();
       toast({ title: 'Exclusão concluída', description: `${ids.length} produto(s) removidos.` });
@@ -798,7 +814,7 @@ const Products = () => {
                                   .from('products')
                                   .delete()
                                   .in('id', ids)
-                                  .eq('user_id', user?.id);
+                                  .eq('user_id', activeUserIdSync);
                                 if (error) throw error;
                                 setSelectedIds(prev => {
                                   const next = new Set(prev);
