@@ -391,9 +391,15 @@ const DeliverySettings = () => {
       const oldAddress = String(profileAddress || '').trim();
       const normalizedAddress = String(storeAddress || '').trim();
       if (normalizedAddress && normalizedAddress !== oldAddress) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({ id: user.id, address: normalizedAddress, updated_at: new Date().toISOString() } as any);
+        const payload = { id: user.id, address: normalizedAddress, updated_at: new Date().toISOString() } as any;
+        const { id, ...updateData } = payload;
+        const upd = await supabase.from('profiles').update(updateData).eq('id', id).select('id');
+        let profileError = (upd as any).error;
+        const updatedRows = (upd as any).data;
+        if (!profileError && (!Array.isArray(updatedRows) || updatedRows.length === 0)) {
+          const ins = await supabase.from('profiles').insert(payload);
+          profileError = (ins as any).error;
+        }
         if (profileError) throw profileError;
         setProfileAddress(normalizedAddress);
       }

@@ -90,19 +90,23 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
       }
 
       // Update or Create profile with restaurant info
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          restaurant_name: profile?.restaurant_name || 'Restaurante',
-          address: values.address,
-          phone: values.phone,
-          opening_hours: openingHoursFinal,
-          description: values.description,
-          // Don't set onboarding_completed yet, wait for step 2
-          updated_at: new Date().toISOString()
-        })
-        .select();
+      const profilePayload: any = {
+        id: user.id,
+        restaurant_name: profile?.restaurant_name || 'Restaurante',
+        address: values.address,
+        phone: values.phone,
+        opening_hours: openingHoursFinal,
+        description: values.description,
+        updated_at: new Date().toISOString()
+      };
+      const { id, ...updateData } = profilePayload;
+      const upd = await supabase.from('profiles').update(updateData).eq('id', id).select('id');
+      let profileError = (upd as any).error;
+      const updatedRows = (upd as any).data;
+      if (!profileError && (!Array.isArray(updatedRows) || updatedRows.length === 0)) {
+        const ins = await supabase.from('profiles').insert(profilePayload);
+        profileError = (ins as any).error;
+      }
 
       if (profileError) throw profileError;
 
