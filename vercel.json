@@ -1,8 +1,7 @@
 {
-  "framework": "vite",
-  "buildCommand": "npm run build:prod",
-  "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/share/menu/:id", "destination": "/api/share/menu?id=:id" },
+    { "source": "/share/track/:id", "destination": "/api/share/track?id=:id" }
   ]
 }
+

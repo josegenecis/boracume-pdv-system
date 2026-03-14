@@ -19,6 +19,7 @@ import { PrinterService } from '@/utils/printerService';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { buildPublicTrackShareUrl } from '@/utils/publicUrl';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 interface Order {
@@ -461,7 +462,7 @@ const Orders = () => {
             if (!wa?.enabled) return;
             const digits = String(order.customer_phone).replace(/\D/g, '');
             const to = digits.startsWith('55') ? digits : `55${digits}`;
-            const trackUrl = `${window.location.origin}/track/${order.id}`;
+            const trackUrl = buildPublicTrackShareUrl(order.id, { userId: order.user_id || user.id, orderNumber: order.order_number });
             await supabase.functions.invoke('whatsapp-notify', {
               body: {
                 to,
@@ -483,7 +484,7 @@ const Orders = () => {
             if (!wa?.enabled) return;
             const digits = String(order.customer_phone).replace(/\D/g, '');
             const to = digits.startsWith('55') ? digits : `55${digits}`;
-            const trackUrl = `${window.location.origin}/track/${order.id}`;
+            const trackUrl = buildPublicTrackShareUrl(order.id, { userId: order.user_id || user.id, orderNumber: order.order_number });
             const msgByStatus: Record<string, string> = {
               ready: `Seu pedido ${order?.order_number} está pronto! Acompanhe: ${trackUrl}`,
               delivered: `Seu pedido ${order?.order_number} saiu para entrega. Acompanhe: ${trackUrl}`,
