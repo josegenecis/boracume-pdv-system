@@ -19,7 +19,21 @@ window.addEventListener('unhandledrejection', (event) => {
 // Service Worker: registrar sempre em produção para habilitar PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    (async () => {
+      try {
+        const res = await fetch('/sw.js', { cache: 'no-store' });
+        if (!res.ok) {
+          const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+          (regs || []).forEach((r) => r.unregister());
+          return;
+        }
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        reg.update().catch(() => {});
+      } catch {
+        const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+        (regs || []).forEach((r) => r.unregister());
+      }
+    })();
   })
 }
 
