@@ -195,6 +195,12 @@ const ProfileSettings = () => {
     
     setLoading(true);
     try {
+      const parseMoney = (v: string) => {
+        const cleaned = String(v || '').replace(',', '.').trim();
+        const n = Number.parseFloat(cleaned);
+        return Number.isFinite(n) ? n : 0;
+      };
+
       const profileData = {
         id: user.id,
         restaurant_name: formData.restaurantName,
@@ -204,16 +210,39 @@ const ProfileSettings = () => {
         email: formData.email,
         website: formData.website,
         opening_hours: formData.openingHours,
-        delivery_fee: parseFloat(formData.deliveryFee),
-        minimum_order: parseFloat(formData.minimumOrder),
+        delivery_fee: parseMoney(formData.deliveryFee),
+        minimum_order: parseMoney(formData.minimumOrder),
         logo_url: profileImage,
         banner_url: bannerImage,
         updated_at: new Date().toISOString()
       };
 
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(profileData);
+      const tryUpsert = async (data: any) => {
+        const { error } = await supabase.from('profiles').upsert(data);
+        return error;
+      };
+
+      let error = await tryUpsert(profileData);
+
+      if (error && String((error as any)?.message || '').toLowerCase().includes('jwt')) {
+        try {
+          await supabase.auth.refreshSession();
+          error = await tryUpsert(profileData);
+        } catch {}
+      }
+
+      const msg = String((error as any)?.message || '');
+      if (error && (msg.includes('banner_url') || String((error as any)?.details || '').includes('banner_url'))) {
+        const { banner_url, ...withoutBanner } = profileData as any;
+        error = await tryUpsert(withoutBanner);
+        if (!error && bannerImage) {
+          toast({
+            title: "Perfil salvo",
+            description: "Salvei o perfil. Para salvar o banner, aplique a atualização do banco (banner_url).",
+          });
+          return;
+        }
+      }
 
       if (error) throw error;
       
@@ -225,7 +254,7 @@ const ProfileSettings = () => {
       console.error('Erro ao salvar:', error);
       toast({
         title: "Erro ao salvar",
-        description: "Não foi possível salvar o perfil. Tente novamente.",
+        description: String((error as any)?.message || "Não foi possível salvar o perfil. Tente novamente."),
         variant: "destructive"
       });
     } finally {
