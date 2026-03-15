@@ -6,14 +6,14 @@ import { Input } from '@/components/ui/input';
 import { QrCode, ExternalLink, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { buildPublicMenuUrl } from '@/utils/publicUrl';
+import { buildPublicMenuShareUrl } from '@/utils/publicUrl';
 
 const Menu = () => {
   const [copied, setCopied] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const menuUrl = buildPublicMenuUrl(user?.id || '');
+  const menuUrl = buildPublicMenuShareUrl(user?.id || '');
 
   const copyToClipboard = async () => {
     try {
