@@ -102,7 +102,7 @@ export async function processAgentCommand(command: string, userId: string): Prom
       return {
         success: false,
         message: edgeFailureMsg
-          ? 'A IA está temporariamente indisponível. Tente comandos simples como "Desativar [ingrediente]" ou "Lançar despesa".'
+          ? `A IA está temporariamente indisponível: ${edgeFailureMsg}. Tente comandos simples como "Desativar [ingrediente]" ou "Lançar despesa".`
           : 'Não reconheci este comando. Tente "ajuda" para ver exemplos.'
       };
     }
