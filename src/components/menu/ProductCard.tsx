@@ -139,32 +139,32 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             </span>
           )}
         </div>
+        <div className="relative flex-shrink-0 w-24 h-24">
+          <Button
+            type="button"
+            size="icon"
+            onClick={handleAddClick}
+            disabled={!!isAdding}
+            className="absolute -left-3 bottom-1 h-12 w-12 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
+          >
+            {isAdding ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-6 w-6" />}
+          </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={handleAddClick}
-          disabled={!!isAdding}
-          className="h-10 w-10 rounded-full text-boracume-orange hover:bg-boracume-orange/10"
-        >
-          {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-6 w-6" />}
-        </Button>
-
-        <div className="relative flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden bg-gray-100">
-          {imageUrl && !imageError ? (
-            <img
-              src={imageUrl}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">
-              <span className="text-xs">Sem imagem</span>
-            </div>
-          )}
+          <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gray-100">
+            {imageUrl && !imageError ? (
+              <img
+                src={imageUrl}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                <span className="text-xs">Sem imagem</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
