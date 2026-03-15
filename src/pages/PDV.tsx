@@ -957,8 +957,8 @@ const PDV = () => {
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
-        status: 'pending',
-        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'pending_acceptance',
+        status: paymentMethod === 'pix' ? 'pending' : 'preparing',
+        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'accepted',
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min',
@@ -1019,6 +1019,11 @@ const PDV = () => {
       } else {
         const created = Array.isArray(data) ? data[0] : data;
         setCreatedOrderForNfce(created || null);
+        try {
+          await PrinterService.printOrder(created);
+        } catch (e) {
+          console.warn('Falha ao imprimir automaticamente:', e);
+        }
         try {
           await supabase.from('security_logs').insert({
             user_id: user?.id,
@@ -1885,14 +1890,21 @@ const PDV = () => {
         onPaymentConfirmed={async () => {
           if (!pixOrderId) return;
           try {
-            const { error: updateError } = await supabase
+            const { data: updatedRows, error: updateError } = await supabase
               .from('orders')
-              .update({ acceptance_status: 'pending_acceptance' })
-              .eq('id', pixOrderId);
+              .update({ acceptance_status: 'accepted', status: 'preparing' } as any)
+              .eq('id', pixOrderId)
+              .select();
             if (!updateError) {
+              const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+              try {
+                await PrinterService.printOrder(updated || { id: pixOrderId, user_id: user?.id, order_number: 'PIX', created_at: new Date().toISOString(), items: cart, total: pixAmount, delivery_fee: getDeliveryFee(), payment_method: 'pix', customer_name: customerName });
+              } catch (e) {
+                console.warn('Falha ao imprimir automaticamente (PIX):', e);
+              }
               toast({
                 title: "Pagamento confirmado!",
-                description: "Pedido enviado ao restaurante.",
+                description: "Pedido entrou em preparo e foi enviado para impressão.",
               });
               setNfceModalOpen(true);
               setCart([]);
