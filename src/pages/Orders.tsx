@@ -60,6 +60,14 @@ const Orders = () => {
   const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [deliveryDialogTab, setDeliveryDialogTab] = useState<'in_delivery' | 'delivered'>('in_delivery');
   const [bulkFinalizing, setBulkFinalizing] = useState(false);
+  const [requireDriver, setRequireDriver] = useState(false);
+  const [payoutMode, setPayoutMode] = useState<'delivery_fee' | 'fixed'>('delivery_fee');
+  const [fixedPayout, setFixedPayout] = useState(0);
+  const [deliveryPersonnel, setDeliveryPersonnel] = useState<Array<{ id: string; name: string; status?: string }>>([]);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignOrderIds, setAssignOrderIds] = useState<string[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState('');
+  const [assigningDriver, setAssigningDriver] = useState(false);
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -164,6 +172,61 @@ const Orders = () => {
       };
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      try {
+        const settingsRes = await supabase
+          .from('delivery_settlement_settings' as any)
+          .select('require_driver,payout_mode,fixed_payout')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const settings = (settingsRes as any)?.data;
+        const err = (settingsRes as any)?.error;
+        if (err) throw err;
+
+        if (!settings) {
+          await supabase.from('delivery_settlement_settings' as any).insert({
+            user_id: user.id,
+            require_driver: false,
+            payout_mode: 'delivery_fee',
+            fixed_payout: 0
+          });
+          setRequireDriver(false);
+          setPayoutMode('delivery_fee');
+          setFixedPayout(0);
+        } else {
+          setRequireDriver(Boolean(settings.require_driver));
+          setPayoutMode(settings.payout_mode === 'fixed' ? 'fixed' : 'delivery_fee');
+          setFixedPayout(Math.max(0, Number(settings.fixed_payout) || 0));
+        }
+      } catch {
+        const fromStorage = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('boracume_delivery_settings') || '{}');
+          } catch {
+            return {};
+          }
+        })();
+        setRequireDriver(Boolean(fromStorage?.require_driver));
+        setPayoutMode(fromStorage?.payout_mode === 'fixed' ? 'fixed' : 'delivery_fee');
+        setFixedPayout(Math.max(0, Number(fromStorage?.fixed_payout) || 0));
+      }
+
+      try {
+        const { data } = await supabase
+          .from('delivery_personnel')
+          .select('id,name,status')
+          .eq('user_id', user.id)
+          .order('name');
+        setDeliveryPersonnel(((data as any[]) || []).map(d => ({ id: String(d.id), name: String(d.name), status: d.status })));
+      } catch {
+        setDeliveryPersonnel([]);
+      }
+    })();
+  }, [user?.id]);
 
   useEffect(() => {
     filterOrders();
@@ -552,6 +615,63 @@ const Orders = () => {
     setAdminPinOpen(true);
   };
 
+  const updateOrderInDeliveryWithDriver = async (orderId: string, driverId: string) => {
+    if (!user?.id) return;
+    const order = orders.find(o => o.id === orderId);
+    const payoutAmount =
+      payoutMode === 'fixed'
+        ? Math.max(0, Number(fixedPayout) || 0)
+        : Math.max(0, Number((order as any)?.delivery_fee) || 0);
+    try {
+      const payload = {
+        status: 'in_delivery',
+        delivery_personnel_id: driverId,
+        delivery_assigned_at: new Date().toISOString(),
+        delivery_payout_amount: payoutAmount
+      };
+      const { error } = await supabase
+        .from('orders' as any)
+        .update(payload as any)
+        .eq('id', orderId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+    } catch {
+      await updateOrderStatus(orderId, 'in_delivery');
+    }
+  };
+
+  const requestInDelivery = async (orderIds: string[]) => {
+    const deliveryOrderIds = orderIds.filter(id => {
+      const o = orders.find(x => x.id === id);
+      return String((o as any)?.order_type || '') === 'delivery';
+    });
+    const otherIds = orderIds.filter(id => !deliveryOrderIds.includes(id));
+
+    if (otherIds.length > 0) {
+      await Promise.all(otherIds.map(id => updateOrderStatus(id, 'in_delivery')));
+    }
+
+    if (deliveryOrderIds.length === 0) return;
+
+    if (!requireDriver) {
+      await Promise.all(deliveryOrderIds.map(id => updateOrderStatus(id, 'in_delivery')));
+      return;
+    }
+
+    if (deliveryPersonnel.length === 0) {
+      toast({
+        title: 'Cadastre um motoboy',
+        description: 'Para enviar para rota, cadastre pelo menos 1 entregador em Entregadores.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setAssignOrderIds(deliveryOrderIds);
+    setSelectedDriverId('');
+    setAssignDialogOpen(true);
+  };
+
   const onKanbanDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const orderId = result.draggableId;
@@ -560,6 +680,10 @@ const Orders = () => {
     if (dest === 'pending') return;
     if (dest === 'cancelled') {
       await requestCancelOrder(orderId);
+      return;
+    }
+    if (dest === 'in_delivery') {
+      await requestInDelivery([orderId]);
       return;
     }
     await updateOrderStatus(orderId, dest);
@@ -588,13 +712,14 @@ const Orders = () => {
 
         case 'deliver_all':
           // Saiu para entrega (todos os prontos)
-          updatePromises = orderIds.map(async (orderId) => {
-            await updateOrderStatus(orderId, 'in_delivery');
-          });
+          await requestInDelivery(orderIds);
+          updatePromises = [];
           break;
       }
 
-      await Promise.all(updatePromises);
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+      }
       console.log(`✅ Ação em massa ${action} concluída com sucesso`);
 
     } catch (error) {
@@ -1300,7 +1425,7 @@ const Orders = () => {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateOrderStatus(order.id, 'in_delivery');
+                                requestInDelivery([order.id]);
                               }}
                               className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700"
                             >
@@ -1329,6 +1454,68 @@ const Orders = () => {
         </div>
         </>
         )}
+
+        <Dialog open={assignDialogOpen} onOpenChange={(open) => { if (!assigningDriver) setAssignDialogOpen(open); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Selecionar motoboy</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                {assignOrderIds.length} pedido(s) para sair para entrega.
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Entregador</div>
+                <Select value={selectedDriverId} onValueChange={setSelectedDriverId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o motoboy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deliveryPersonnel.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={assigningDriver}
+                  onClick={() => {
+                    setAssignDialogOpen(false);
+                    setAssignOrderIds([]);
+                    setSelectedDriverId('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  disabled={assigningDriver}
+                  onClick={async () => {
+                    if (!selectedDriverId) {
+                      toast({ title: 'Selecione um motoboy', description: 'Escolha um entregador para continuar.', variant: 'destructive' });
+                      return;
+                    }
+                    try {
+                      setAssigningDriver(true);
+                      await Promise.all(assignOrderIds.map((id) => updateOrderInDeliveryWithDriver(id, selectedDriverId)));
+                      setAssignDialogOpen(false);
+                      setAssignOrderIds([]);
+                      setSelectedDriverId('');
+                    } finally {
+                      setAssigningDriver(false);
+                    }
+                  }}
+                  className="bg-boracume-orange hover:bg-boracume-orange/90"
+                >
+                  Confirmar
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Detalhes */}
         <OrderDetailsModal

@@ -139,13 +139,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             </span>
           )}
         </div>
-        <div className="relative flex-shrink-0 w-24 h-24">
+        <div className="flex items-end gap-2 flex-shrink-0">
           <Button
             type="button"
             size="icon"
             onClick={handleAddClick}
             disabled={!!isAdding}
-            className="absolute -left-3 bottom-1 h-12 w-12 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
+            className="h-12 w-12 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
           >
             {isAdding ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-6 w-6" />}
           </Button>

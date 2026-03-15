@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,6 +73,13 @@ const Entregadores: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentDeliveryPerson, setCurrentDeliveryPerson] = useState<DeliveryPerson | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [requireDriver, setRequireDriver] = useState(false);
+  const [payoutMode, setPayoutMode] = useState<'delivery_fee' | 'fixed'>('delivery_fee');
+  const [fixedPayoutRaw, setFixedPayoutRaw] = useState('0');
+  const [reportDate, setReportDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [settlementLoading, setSettlementLoading] = useState(false);
+  const [settlementRows, setSettlementRows] = useState<Array<{ driverId: string; driverName: string; orderCount: number; total: number; orderIds: string[] }>>([]);
   const { user } = useAuth();
   const { toast } = useToast();
   const confirm = useConfirmDialog();
@@ -117,6 +125,161 @@ const Entregadores: React.FC = () => {
   useEffect(() => {
     fetchDeliveryPersonnel();
   }, [user, toast]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      setSettingsLoading(true);
+      try {
+        const settingsRes = await supabase
+          .from('delivery_settlement_settings' as any)
+          .select('require_driver,payout_mode,fixed_payout')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const settings = (settingsRes as any)?.data;
+        const err = (settingsRes as any)?.error;
+        if (err) throw err;
+
+        if (settings) {
+          setRequireDriver(Boolean(settings.require_driver));
+          setPayoutMode(settings.payout_mode === 'fixed' ? 'fixed' : 'delivery_fee');
+          setFixedPayoutRaw(String(Math.max(0, Number(settings.fixed_payout) || 0)));
+        } else {
+          await supabase.from('delivery_settlement_settings' as any).insert({
+            user_id: user.id,
+            require_driver: false,
+            payout_mode: 'delivery_fee',
+            fixed_payout: 0
+          });
+          setRequireDriver(false);
+          setPayoutMode('delivery_fee');
+          setFixedPayoutRaw('0');
+        }
+      } catch {
+        const fromStorage = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('boracume_delivery_settings') || '{}');
+          } catch {
+            return {};
+          }
+        })();
+        setRequireDriver(Boolean(fromStorage?.require_driver));
+        setPayoutMode(fromStorage?.payout_mode === 'fixed' ? 'fixed' : 'delivery_fee');
+        setFixedPayoutRaw(String(Math.max(0, Number(fromStorage?.fixed_payout) || 0)));
+      } finally {
+        setSettingsLoading(false);
+      }
+    })();
+  }, [user?.id]);
+
+  const saveSettings = async (next: { require_driver: boolean; payout_mode: 'delivery_fee' | 'fixed'; fixed_payout: number }) => {
+    if (!user?.id) return;
+    setSettingsLoading(true);
+    try {
+      await supabase
+        .from('delivery_settlement_settings' as any)
+        .upsert({
+          user_id: user.id,
+          require_driver: next.require_driver,
+          payout_mode: next.payout_mode,
+          fixed_payout: next.fixed_payout,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+    } catch {
+      try {
+        localStorage.setItem('boracume_delivery_settings', JSON.stringify(next));
+      } catch {}
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const loadSettlementReport = async () => {
+    if (!user?.id) return;
+    setSettlementLoading(true);
+    try {
+      const start = new Date(`${reportDate}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+
+      const { data, error } = await supabase
+        .from('orders' as any)
+        .select('id,delivery_personnel_id,delivery_payout_amount,delivery_fee,created_at,status,delivery_settled')
+        .eq('user_id', user.id)
+        .eq('status', 'delivered')
+        .gte('created_at', start.toISOString())
+        .lt('created_at', end.toISOString());
+
+      if (error) throw error;
+
+      const nameById = new Map(deliveryPersonnel.map(p => [p.id, p.name]));
+      const rowsByDriver = new Map<string, { driverId: string; driverName: string; orderCount: number; total: number; orderIds: string[] }>();
+
+      ((data as any[]) || []).forEach(o => {
+        if (o?.delivery_settled) return;
+        const driverId = String(o?.delivery_personnel_id || '');
+        if (!driverId) return;
+        const driverName = nameById.get(driverId) || 'Motoboy';
+        const payout =
+          o?.delivery_payout_amount !== null && o?.delivery_payout_amount !== undefined
+            ? Math.max(0, Number(o.delivery_payout_amount) || 0)
+            : payoutMode === 'fixed'
+              ? Math.max(0, Number(fixedPayoutRaw) || 0)
+              : Math.max(0, Number(o?.delivery_fee) || 0);
+
+        const current = rowsByDriver.get(driverId) || { driverId, driverName, orderCount: 0, total: 0, orderIds: [] };
+        current.orderCount += 1;
+        current.total += payout;
+        current.orderIds.push(String(o.id));
+        rowsByDriver.set(driverId, current);
+      });
+
+      const rows = Array.from(rowsByDriver.values()).sort((a, b) => b.total - a.total);
+      setSettlementRows(rows);
+    } catch (e: any) {
+      setSettlementRows([]);
+      toast({
+        title: 'Erro',
+        description: e?.message || 'Não foi possível gerar o acerto de contas.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSettlementLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettlementReport();
+  }, [user?.id, reportDate, payoutMode, fixedPayoutRaw, deliveryPersonnel.length]);
+
+  const settleDriver = async (driverId: string) => {
+    if (!user?.id) return;
+    const row = settlementRows.find(r => r.driverId === driverId);
+    if (!row || row.orderIds.length === 0) return;
+    const ok = await confirm({
+      title: 'Marcar como pago',
+      description: `Marcar ${row.orderCount} entrega(s) de ${row.driverName} como paga(s)?`,
+      confirmText: 'Marcar',
+      cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+    try {
+      setSettlementLoading(true);
+      const { error } = await supabase
+        .from('orders' as any)
+        .update({ delivery_settled: true, delivery_settled_at: new Date().toISOString() } as any)
+        .in('id', row.orderIds)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      await loadSettlementReport();
+      toast({ title: 'Pago', description: 'Acerto marcado como pago.' });
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e?.message || 'Não foi possível marcar como pago.', variant: 'destructive' });
+    } finally {
+      setSettlementLoading(false);
+    }
+  };
   
   // Handle form submission
   const onSubmit = async (data: DeliveryPersonFormValues) => {
@@ -278,6 +441,9 @@ const Entregadores: React.FC = () => {
     }
   };
 
+  const formatBRL = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -286,6 +452,130 @@ const Entregadores: React.FC = () => {
           <Plus className="mr-2 h-4 w-4" /> Novo Entregador
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Acerto de contas</CardTitle>
+          <CardDescription>
+            Defina regras de motoboy e veja quanto pagar por dia
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="font-medium">Exigir motoboy ao sair para entrega</div>
+              <div className="text-sm text-muted-foreground">
+                Ao marcar “Saiu para entrega”, obriga selecionar um entregador
+              </div>
+            </div>
+            <Switch
+              checked={requireDriver}
+              disabled={settingsLoading}
+              onCheckedChange={(checked) => {
+                setRequireDriver(checked);
+                const next = {
+                  require_driver: checked,
+                  payout_mode: payoutMode,
+                  fixed_payout: Math.max(0, Number(fixedPayoutRaw) || 0)
+                };
+                saveSettings(next);
+              }}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Base do pagamento</Label>
+              <Select
+                value={payoutMode}
+                onValueChange={(value) => {
+                  const mode = value === 'fixed' ? 'fixed' : 'delivery_fee';
+                  setPayoutMode(mode);
+                  const next = {
+                    require_driver: requireDriver,
+                    payout_mode: mode,
+                    fixed_payout: Math.max(0, Number(fixedPayoutRaw) || 0)
+                  };
+                  saveSettings(next);
+                }}
+                disabled={settingsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="delivery_fee">Taxa de entrega</SelectItem>
+                  <SelectItem value="fixed">Valor fixo por entrega</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Valor fixo (R$)</Label>
+              <Input
+                inputMode="decimal"
+                value={fixedPayoutRaw}
+                disabled={settingsLoading || payoutMode !== 'fixed'}
+                onChange={(e) => setFixedPayoutRaw(e.target.value.replace(/[^\d,.-]/g, ''))}
+                onBlur={() => {
+                  const next = {
+                    require_driver: requireDriver,
+                    payout_mode: payoutMode,
+                    fixed_payout: Math.max(0, Number(String(fixedPayoutRaw || '').replace(',', '.')) || 0)
+                  };
+                  setFixedPayoutRaw(String(next.fixed_payout));
+                  saveSettings(next);
+                }}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Dia</Label>
+              <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
+            </div>
+          </div>
+
+          {settlementLoading ? (
+            <div className="py-6 text-center text-muted-foreground">Carregando acerto...</div>
+          ) : settlementRows.length === 0 ? (
+            <div className="py-6 text-center text-muted-foreground">
+              Nenhuma entrega para acertar neste dia
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Motoboy</TableHead>
+                    <TableHead>Entregas</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {settlementRows.map((row) => (
+                    <TableRow key={row.driverId}>
+                      <TableCell className="font-medium">{row.driverName}</TableCell>
+                      <TableCell>{row.orderCount}</TableCell>
+                      <TableCell className="font-semibold">{formatBRL(row.total)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={settlementLoading}
+                          onClick={() => settleDriver(row.driverId)}
+                        >
+                          Marcar como pago
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
       
       <Card>
         <CardHeader>
