@@ -87,6 +87,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
 
   const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number }>>({});
+  const [variationSettingsRaw, setVariationSettingsRaw] = useState<Record<string, { min: string; max: string }>>({});
   const [loading, setLoading] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -119,6 +120,41 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const stockColumns = new Set(['track_stock', 'stock_quantity', 'low_stock_threshold']);
+
+  const syncVariationSettingsRaw = (settings: Record<string, { required: boolean; min_selections: number; max_selections: number }>) => {
+    const raw: Record<string, { min: string; max: string }> = {};
+    Object.entries(settings || {}).forEach(([id, s]) => {
+      raw[id] = {
+        min: String(Math.max(0, Math.floor(Number(s?.min_selections) || 0))),
+        max: String(Math.max(1, Math.floor(Number(s?.max_selections) || 1)))
+      };
+    });
+    setVariationSettingsRaw(raw);
+  };
+
+  const commitVariationMinMax = (variationId: string) => {
+    setVariationSettings(prev => {
+      const current = prev?.[variationId] || { required: false, min_selections: 0, max_selections: 1 };
+      const raw = variationSettingsRaw?.[variationId] || { min: String(current.min_selections ?? 0), max: String(current.max_selections ?? 1) };
+      const minNum = Math.max(0, Math.floor(raw.min === '' ? 0 : Number(raw.min) || 0));
+      const maxNum = Math.max(1, Math.floor(raw.max === '' ? 1 : Number(raw.max) || 1));
+      const safeMax = Math.max(maxNum, minNum);
+
+      setVariationSettingsRaw(prevRaw => ({
+        ...prevRaw,
+        [variationId]: { min: String(minNum), max: String(safeMax) }
+      }));
+
+      return {
+        ...prev,
+        [variationId]: {
+          ...current,
+          min_selections: minNum,
+          max_selections: safeMax
+        }
+      };
+    });
+  };
 
   const getImageAsDataUrl = async (url: string): Promise<string> => {
     const res = await fetch(url);
@@ -533,6 +569,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       
       console.log('⚙️ Configurações das variações carregadas:', settings);
       setVariationSettings(settings);
+      syncVariationSettingsRaw(settings);
       return;
     } catch (error) {
       console.error('❌ Erro ao carregar variações do produto:', error);
@@ -574,6 +611,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       
       console.log('⚙️ Configurações das variações carregadas:', settings);
       setVariationSettings(settings);
+      syncVariationSettingsRaw(settings);
       
     } catch (error) {
       console.error('❌ Erro ao carregar variações do produto:', error);
@@ -934,12 +972,24 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       return updated;
     });
     if (checked) {
-      setVariationSettings(prev => ({
+      setVariationSettings(prev => {
+        const next = {
+          ...prev,
+          [variationId]: prev[variationId] || { required: false, min_selections: 0, max_selections: 1 }
+        };
+        return next;
+      });
+      setVariationSettingsRaw(prev => ({
         ...prev,
-        [variationId]: prev[variationId] || { required: false, min_selections: 0, max_selections: 1 }
+        [variationId]: prev[variationId] || { min: '0', max: '1' }
       }));
     } else {
       setVariationSettings(prev => {
+        const copy = { ...prev };
+        delete copy[variationId];
+        return copy;
+      });
+      setVariationSettingsRaw(prev => {
         const copy = { ...prev };
         delete copy[variationId];
         return copy;
@@ -1355,8 +1405,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                       id={`min-selections-${v.id}`}
                                       type="number"
                                       min="0"
-                                      value={variationSettings[v.id]?.min_selections ?? 0}
-                                      onChange={e => handleVariationSettingChange(v.id, 'min_selections', parseInt(e.target.value) || 0)}
+                                      value={variationSettingsRaw[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0)}
+                                      onChange={e => setVariationSettingsRaw(prev => ({
+                                        ...prev,
+                                        [v.id]: { min: e.target.value, max: prev[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1) }
+                                      }))}
+                                      onBlur={() => commitVariationMinMax(v.id)}
                                       className="w-14 min-w-[56px] text-center appearance-none"
                                     />
                                   </div>
@@ -1366,8 +1420,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                       id={`max-selections-${v.id}`}
                                       type="number"
                                       min="1"
-                                      value={variationSettings[v.id]?.max_selections ?? 1}
-                                      onChange={e => handleVariationSettingChange(v.id, 'max_selections', parseInt(e.target.value) || 1)}
+                                      value={variationSettingsRaw[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1)}
+                                      onChange={e => setVariationSettingsRaw(prev => ({
+                                        ...prev,
+                                        [v.id]: { min: prev[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0), max: e.target.value }
+                                      }))}
+                                      onBlur={() => commitVariationMinMax(v.id)}
                                       className="w-14 min-w-[56px] text-center appearance-none"
                                     />
                                   </div>
@@ -1525,7 +1583,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
               disabled={isUnsupported('is_highlight')}
             />
-            <Label htmlFor="is_highlight">Destaque</Label>
+            <Label htmlFor="is_highlight">Adicionar aos destaques</Label>
           </div>
         </div>
 

@@ -40,6 +40,7 @@ import Garcons from '@/pages/Garcons';
 import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
 import Despesas from '@/pages/Despesas';
+import { ErrorBoundary } from '@/components/utils/ErrorBoundary';
 import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
@@ -141,7 +142,7 @@ function AppContent() {
           <Route path="/nfce" element={<NFCe />} />
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
-          <Route path="/despesas" element={<Despesas />} />
+          <Route path="/despesas" element={<ErrorBoundary><Despesas /></ErrorBoundary>} />
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />

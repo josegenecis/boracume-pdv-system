@@ -78,6 +78,7 @@ export default function Despesas() {
 
   const loadExpenses = async () => {
     try {
+      if (!user?.id) return;
       setLoading(true);
       const base = supabase.from('expenses').select('*').eq('user_id', user.id);
       const first = await base.order('expense_date', { ascending: false });
@@ -131,6 +132,7 @@ export default function Despesas() {
   const reverseExpense = async (expense: Expense) => {
     const reason = window.prompt('Motivo do estorno (opcional):') || '';
     try {
+      if (!user?.id) return;
       const { error } = await supabase
         .from('expenses')
         .update({
@@ -168,6 +170,7 @@ export default function Despesas() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!user?.id) return;
     if (!description.trim() || !amount || !category || !expenseDate) {
       toast({
         title: 'Campos obrigatórios',

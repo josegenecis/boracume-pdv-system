@@ -40,7 +40,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-xl"
+              className="h-10 w-10 rounded-xl text-boracume-orange"
               disabled={removeDisabled}
               onClick={(e) => {
                 e.stopPropagation();
@@ -49,12 +49,12 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             >
               <Minus className="h-4 w-4" />
             </Button>
-            <div className="w-6 text-center font-bold text-gray-900">1</div>
+            <div className="w-6 text-center font-bold text-boracume-orange">1</div>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-xl opacity-40"
+              className="h-10 w-10 rounded-xl text-boracume-orange opacity-40"
               disabled
             >
               <Plus className="h-4 w-4" />
@@ -65,7 +65,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             type="button"
             variant="outline"
             size="icon"
-            className="h-10 w-10 rounded-xl"
+            className="h-10 w-10 rounded-xl text-boracume-orange"
             disabled={addDisabled}
             onClick={(e) => {
               e.stopPropagation();

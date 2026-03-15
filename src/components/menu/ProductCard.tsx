@@ -140,6 +140,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
           )}
         </div>
 
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={handleAddClick}
+          disabled={!!isAdding}
+          className="h-10 w-10 rounded-full text-boracume-orange hover:bg-boracume-orange/10"
+        >
+          {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-6 w-6" />}
+        </Button>
+
         <div className="relative flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden bg-gray-100">
           {imageUrl && !imageError ? (
             <img
@@ -154,16 +165,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
               <span className="text-xs">Sem imagem</span>
             </div>
           )}
-
-          <Button
-            type="button"
-            size="icon"
-            onClick={handleAddClick}
-            disabled={!!isAdding}
-            className="absolute bottom-2 right-2 h-10 w-10 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
-          >
-            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
-          </Button>
         </div>
       </div>
     </div>
