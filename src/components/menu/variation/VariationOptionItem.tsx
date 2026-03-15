@@ -1,7 +1,6 @@
 import React from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Minus, Plus } from 'lucide-react';
 
 interface VariationOption {
   name: string;
@@ -10,57 +9,73 @@ interface VariationOption {
 
 interface VariationOptionItemProps {
   option: VariationOption;
-  index: number;
-  variationId: string;
-  isRadio: boolean;
   isSelected: boolean;
-  onSelectionChange: (optionName: string, isSelected: boolean) => void;
+  addDisabled: boolean;
+  removeDisabled: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
 }
 
 export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   option,
-  index,
-  variationId,
-  isRadio,
   isSelected,
-  onSelectionChange
+  addDisabled,
+  removeDisabled,
+  onAdd,
+  onRemove
 }) => {
-  const inputId = `${variationId}-${index}`;
-
   return (
-    <div
-      className="flex items-center justify-between cursor-pointer select-none"
-      onClick={() => {
-        const el = document.getElementById(inputId) as HTMLElement | null
-        el?.click()
-      }}
-    >
-      <div className="flex items-center space-x-2">
-        {isRadio ? (
-          <RadioGroupItem 
-            value={option.name} 
-            id={inputId} 
-            className="h-5 w-5"
-          />
-        ) : (
-          <Checkbox
-            id={inputId}
-            checked={isSelected}
-            onCheckedChange={(checked) => 
-              onSelectionChange(option.name, checked as boolean)
-            }
-            className="h-5 w-5"
-          />
+    <div className={`flex items-center justify-between gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-gray-900 truncate">{option.name}</div>
+        {option.price > 0 && (
+          <div className="text-xs text-gray-600">+ R$ {option.price.toFixed(2)}</div>
         )}
-        <Label className="text-sm cursor-pointer">
-          {option.name}
-        </Label>
       </div>
-      {option.price > 0 && (
-        <span className="text-sm text-green-600">
-          +R$ {option.price.toFixed(2)}
-        </span>
-      )}
+
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {isSelected ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-xl"
+              disabled={removeDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <div className="w-6 text-center font-bold text-gray-900">1</div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 rounded-xl opacity-40"
+              disabled
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-xl"
+            disabled={addDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 };
