@@ -444,6 +444,8 @@ const Entregadores: React.FC = () => {
   const formatBRL = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
 
+  const settlementByDriverId = new Map(settlementRows.map(r => [r.driverId, r]));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -602,6 +604,8 @@ const Entregadores: React.FC = () => {
                   <TableHead>Veículo</TableHead>
                   <TableHead>Placa</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Entregas (dia)</TableHead>
+                  <TableHead>Saldo (dia)</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -617,6 +621,8 @@ const Entregadores: React.FC = () => {
                         {getStatusLabel(deliveryPerson.status)}
                       </Badge>
                     </TableCell>
+                    <TableCell>{settlementByDriverId.get(deliveryPerson.id)?.orderCount || 0}</TableCell>
+                    <TableCell className="font-semibold">{formatBRL(settlementByDriverId.get(deliveryPerson.id)?.total || 0)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
                         <Button

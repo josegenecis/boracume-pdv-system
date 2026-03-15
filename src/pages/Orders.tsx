@@ -653,12 +653,11 @@ const Orders = () => {
 
     if (deliveryOrderIds.length === 0) return;
 
-    if (!requireDriver) {
-      await Promise.all(deliveryOrderIds.map(id => updateOrderStatus(id, 'in_delivery')));
-      return;
-    }
-
     if (deliveryPersonnel.length === 0) {
+      if (!requireDriver) {
+        await Promise.all(deliveryOrderIds.map(id => updateOrderStatus(id, 'in_delivery')));
+        return;
+      }
       toast({
         title: 'Cadastre um motoboy',
         description: 'Para enviar para rota, cadastre pelo menos 1 entregador em Entregadores.',
@@ -1490,6 +1489,26 @@ const Orders = () => {
                 >
                   Cancelar
                 </Button>
+                {!requireDriver && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={assigningDriver}
+                    onClick={async () => {
+                      try {
+                        setAssigningDriver(true);
+                        await Promise.all(assignOrderIds.map((id) => updateOrderStatus(id, 'in_delivery')));
+                        setAssignDialogOpen(false);
+                        setAssignOrderIds([]);
+                        setSelectedDriverId('');
+                      } finally {
+                        setAssigningDriver(false);
+                      }
+                    }}
+                  >
+                    Continuar sem motoboy
+                  </Button>
+                )}
                 <Button
                   type="button"
                   disabled={assigningDriver}
