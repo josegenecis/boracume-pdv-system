@@ -1,6 +1,7 @@
 
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { geminiGenerateContent } from '../_shared/gemini.ts';
 
 // @ts-ignore
 const corsHeaders = {
@@ -45,7 +46,9 @@ Deno.serve(async (req) => {
     }
 
     // @ts-ignore
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
+    // @ts-ignore
+    const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-flash';
     // @ts-ignore
     const PEXELS_API_KEY = Deno.env.get('PEXELS_API_KEY');
     // @ts-ignore
@@ -53,8 +56,8 @@ Deno.serve(async (req) => {
     // @ts-ignore
     const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!OPENAI_API_KEY) {
-        throw new Error('Secret OPENAI_API_KEY não configurado.');
+    if (!GEMINI_API_KEY) {
+        throw new Error('Secret GEMINI_API_KEY não configurado.');
     }
     if (!SUPABASE_URL) {
         throw new Error('SUPABASE_URL indisponível no ambiente da Edge Function.');
@@ -448,55 +451,61 @@ Regras:
 - Seja direto e confirme a ação realizada.
 - O ID do usuário (restaurante) é: ${userId}${requestedCount >= 3 ? `\n- O usuário solicitou ${requestedCount} produtos. Gere exatamente ${requestedCount} produtos.` : ''}`;
 
-    const messages = [
-        { role: "system", content: systemPrompt },
-        ...conversationHistory,
-        { role: "user", content: command }
+    const functionDeclarations = (tools || [])
+      .map((t: any) => t?.function)
+      .filter(Boolean)
+      .map((fn: any) => ({
+        name: String(fn.name || ''),
+        description: String(fn.description || ''),
+        parameters: fn.parameters || { type: 'object', properties: {} }
+      }))
+      .filter((fn: any) => fn.name);
+
+    const historyContents = (Array.isArray(conversationHistory) ? conversationHistory : [])
+      .map((m: any) => {
+        const role = String(m?.role || '').toLowerCase();
+        const text = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content || '');
+        if (role === 'assistant' || role === 'model') return { role: 'model', parts: [{ text }] };
+        if (role === 'user') return { role: 'user', parts: [{ text }] };
+        return null;
+      })
+      .filter(Boolean) as any[];
+
+    let currentContents: any[] = [
+      ...historyContents,
+      { role: 'user', parts: [{ text: String(command || '') }] }
     ];
-
-    const callOpenAI = async (msgs: any[]) => {
-        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: msgs,
-                tools: tools,
-                tool_choice: "auto"
-            })
-        });
-        const data = await completion.json();
-        const msg = data?.choices?.[0]?.message;
-        if (!msg) throw new Error('Resposta inválida do modelo');
-        return msg;
-    };
-
-    let currentMessages: any[] = [...messages];
     const allToolResults: any[] = [];
     let finalMessageText: string | null = null;
 
     for (let step = 0; step < 6; step++) {
-        const message = await callOpenAI(currentMessages);
-        currentMessages = [...currentMessages, message];
+        const ai = await geminiGenerateContent({
+          apiKey: GEMINI_API_KEY,
+          model: GEMINI_MODEL,
+          system: systemPrompt,
+          user: '',
+          tools: functionDeclarations,
+          functionCallingMode: 'AUTO',
+          temperature: 0.2,
+          contents: currentContents
+        });
 
-        if (!message.tool_calls || message.tool_calls.length === 0) {
-            finalMessageText = message.content || '';
+        const candidateContent = ai.raw?.candidates?.[0]?.content;
+        if (candidateContent?.parts) {
+          currentContents = [...currentContents, { role: 'model', parts: candidateContent.parts }];
+        }
+
+        if (!ai.functionCalls || ai.functionCalls.length === 0) {
+            finalMessageText = ai.text || '';
             break;
         }
 
         const toolResults: any[] = [];
 
-        for (const toolCall of message.tool_calls) {
-            const fnName = toolCall.function.name;
-            let args: any = {};
-            try {
-                args = JSON.parse(toolCall.function.arguments || '{}');
-            } catch {
-                args = {};
-            }
+        for (const call of ai.functionCalls) {
+            const toolCallId = crypto.randomUUID();
+            const fnName = String(call?.name || '');
+            const args: any = call?.args || {};
             let result: any = null;
 
             console.log(`[Agent] Executing tool: ${fnName}`, args);
@@ -778,201 +787,7 @@ Regras:
                 }
 
                 else if (fnName === "generate_product_image" || fnName === "generate_missing_product_images") {
-                    const toUint8 = (b64: string) => {
-                        const bin = atob(b64);
-                        const bytes = new Uint8Array(bin.length);
-                        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                        return bytes;
-                    };
-
-                    const generateImage = async (prompt: string) => {
-                        const resp = await fetch('https://api.openai.com/v1/images/generations', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${OPENAI_API_KEY}`
-                            },
-                            body: JSON.stringify({
-                                model: 'gpt-image-1',
-                                prompt,
-                                size: '1024x1024',
-                                n: 1
-                            })
-                        });
-                        const data = await resp.json();
-                        const b64 = data?.data?.[0]?.b64_json;
-                        if (!b64) {
-                            throw new Error('Falha ao gerar imagem (sem base64). Verifique permissões/billing.');
-                        }
-                        return String(b64);
-                    };
-
-                    const buildPrompt = (name: string, desc: string) => {
-                        const parts = [
-                            `Foto realista e profissional de um produto de restaurante: ${name}.`,
-                            desc ? `Descrição do produto: ${desc}.` : '',
-                            'Fundo claro e neutro, iluminação de estúdio, alta qualidade.',
-                            'Sem texto, sem logotipos, sem marca d’água, sem pessoas, sem embalagens com marca.'
-                        ].filter(Boolean);
-                        return parts.join(' ');
-                    };
-
-                    if (fnName === "generate_product_image") {
-                        const pid = String(args.product_id || '').trim();
-                        const pname = String(args.product_name || '').trim();
-                        let product: any = null;
-
-                        if (pid) {
-                            const { data, error } = await supabase
-                                .from('products')
-                                .select('id, name, description, image_url')
-                                .eq('user_id', userId)
-                                .eq('id', pid)
-                                .maybeSingle();
-                            if (error) throw error;
-                            product = data;
-                        } else if (pname) {
-                            const { data, error } = await supabase
-                                .from('products')
-                                .select('id, name, description, image_url')
-                                .eq('user_id', userId)
-                                .ilike('name', `%${pname}%`)
-                                .limit(1);
-                            if (error) throw error;
-                            product = (data || [])[0] || null;
-                        }
-
-                        if (!product) {
-                            result = { success: false, error: 'Produto não encontrado.' };
-                        } else {
-                            const prompt = buildPrompt(String(product.name), String(product.description || ''));
-                            const b64 = await generateImage(prompt);
-                            const bytes = toUint8(b64);
-                            const fileName = `ai-${product.id}-${Date.now()}.png`;
-                            const filePath = `products/${fileName}`;
-                            const { error: upErr } = await supabase.storage
-                                .from('product-images')
-                                .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
-                            if (upErr) throw upErr;
-                            const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
-                            const imageUrl = pub.publicUrl;
-                            const { error: updErr } = await supabase
-                                .from('products')
-                                .update({ image_url: imageUrl })
-                                .eq('user_id', userId)
-                                .eq('id', product.id);
-                            if (updErr) throw updErr;
-                            result = { success: true, product_id: product.id, image_url: imageUrl };
-                        }
-                    } else {
-                        const requested = Number(args.limit || 25) || 25;
-                        const maxPerExecution = 25;
-                        const limit = Math.min(Math.max(requested, 1), maxPerExecution);
-                        const processAll = Boolean(args.process_all);
-                        const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
-                        const startedAt = Date.now();
-                        const timeBudgetMs = 90_000;
-
-                        const failures: any[] = [];
-                        const updatedIds: string[] = [];
-                        let processed = 0;
-                        let updated = 0;
-
-                        const { data: existingJob } = await supabase
-                            .from('agent_activity_logs')
-                            .select('id')
-                            .eq('user_id', userId)
-                            .eq('id', jobId)
-                            .maybeSingle();
-
-                        if (!existingJob) {
-                            await supabase.from('agent_activity_logs').insert({
-                                id: jobId,
-                                user_id: userId,
-                                action_type: 'image_job',
-                                description: 'Geração de imagens para produtos sem imagem',
-                                metadata: { status: 'running', updated: 0, failures: 0, started_at: new Date().toISOString() }
-                            } as any);
-                        }
-
-                        while (updated < limit) {
-                            const { data: products, error } = await supabase
-                                .from('products')
-                                .select('id, name, description, image_url')
-                                .eq('user_id', userId)
-                                .or('image_url.is.null,image_url.eq.')
-                                .order('created_at', { ascending: true })
-                                .limit(10);
-                            if (error) throw error;
-                            const list = products || [];
-                            if (list.length === 0) break;
-
-                            for (const p of list) {
-                                if (updated >= limit) break;
-                                if (Date.now() - startedAt > timeBudgetMs) break;
-                                processed++;
-                                try {
-                                    const prompt = buildPrompt(String(p.name), String(p.description || ''));
-                                    const b64 = await generateImage(prompt);
-                                    const bytes = toUint8(b64);
-                                    const fileName = `ai-${p.id}-${Date.now()}.png`;
-                                    const filePath = `products/${fileName}`;
-                                    const { error: upErr } = await supabase.storage
-                                        .from('product-images')
-                                        .upload(filePath, bytes, { contentType: 'image/png', upsert: true } as any);
-                                    if (upErr) throw upErr;
-                                    const { data: pub } = supabase.storage.from('product-images').getPublicUrl(filePath);
-                                    const imageUrl = pub.publicUrl;
-                                    const { error: updErr } = await supabase
-                                        .from('products')
-                                        .update({ image_url: imageUrl })
-                                        .eq('user_id', userId)
-                                        .eq('id', p.id);
-                                    if (updErr) throw updErr;
-                                    updated++;
-                                    updatedIds.push(String(p.id));
-                                } catch (e: any) {
-                                    failures.push({ id: p.id, name: p.name, error: String(e?.message || e) });
-                                }
-                            }
-
-                            if (!processAll) break;
-                            if (Date.now() - startedAt > timeBudgetMs) break;
-                        }
-
-                        const { count: remainingCount } = await supabase
-                            .from('products')
-                            .select('id', { count: 'exact', head: true })
-                            .eq('user_id', userId)
-                            .or('image_url.is.null,image_url.eq.');
-
-                        await supabase
-                            .from('agent_activity_logs')
-                            .update({
-                                metadata: {
-                                    status: typeof remainingCount === 'number' && remainingCount === 0 ? 'done' : 'running',
-                                    updated,
-                                    processed,
-                                    failures: failures.length,
-                                    remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
-                                    updated_ids: updatedIds,
-                                    last_update_at: new Date().toISOString()
-                                }
-                            } as any)
-                            .eq('user_id', userId)
-                            .eq('id', jobId);
-
-                        result = {
-                            success: true,
-                            job_id: jobId,
-                            processed,
-                            updated,
-                            failures,
-                            remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
-                            updated_ids: updatedIds,
-                            note: `Processo em lotes (até ${maxPerExecution} por execução). Se faltar, peça para continuar informando o job_id.`
-                        };
-                    }
+                    result = { success: false, error: 'Geração de imagem foi desativada: Gemini API Key suporta apenas texto neste projeto.' };
                 }
 
                 else if (fnName === "set_product_image_from_pexels" || fnName === "set_missing_product_images_from_pexels") {
@@ -1298,14 +1113,18 @@ Regras:
             }
 
             toolResults.push({
-                tool_call_id: toolCall.id,
+                tool_call_id: toolCallId,
                 role: "tool",
                 name: fnName,
                 content: JSON.stringify(result)
             });
+
+            currentContents = [
+              ...currentContents,
+              { role: 'user', parts: [{ functionResponse: { name: fnName, response: result } }] }
+            ];
         }
         allToolResults.push(...toolResults);
-        currentMessages = [...currentMessages, ...toolResults];
     }
 
     return new Response(

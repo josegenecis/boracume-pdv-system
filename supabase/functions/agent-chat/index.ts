@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { geminiGenerateContent, safeParseJson } from "../_shared/gemini.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,31 +16,18 @@ serve(async (req) => {
 
   try {
     const { message } = await req.json()
-    const openAiKey = Deno.env.get('OPENAI_API_KEY');
+    const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
+    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-flash';
 
-    if (!openAiKey) {
-      throw new Error('Chave da API OpenAI não configurada no Supabase Secrets.');
+    if (!geminiKey) {
+      throw new Error('Chave da API Gemini não configurada no Supabase Secrets (GEMINI_API_KEY).');
     }
 
     if (!message) {
       throw new Error('Mensagem é obrigatória.');
     }
 
-    console.log('Sending to OpenAI:', message);
-
-    // Call OpenAI API
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `Você é o assistente inteligente do sistema PDV "Bora Cumê". 
+    const system = `Você é o assistente inteligente do sistema PDV "Bora Cumê". 
             Sua função é ajudar o dono do restaurante a gerenciar o negócio.
             
             Você deve identificar a INTENÇÃO do usuário e retornar um JSON estruturado para que o frontend execute a ação.
@@ -65,28 +53,21 @@ serve(async (req) => {
 
             User: "Acabou a Coca-Cola, desativa ela"
             Response: { "intent": "TOGGLE_PRODUCT_AVAILABILITY", "parameters": { "product_name": "Coca-Cola", "status": "inactive" }, "reply": "Ok, pausando a venda de Coca-Cola." }
-            `
-          },
-          {
-            role: 'user',
-            content: message
-          }
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-      }),
+            `;
+
+    const ai = await geminiGenerateContent({
+      apiKey: geminiKey,
+      model: geminiModel,
+      system,
+      user: String(message),
+      temperature: 0.2,
+      responseMimeType: 'application/json'
     });
 
-    if (!aiResponse.ok) {
-      const errorData = await aiResponse.text();
-      console.error('OpenAI API Error:', errorData);
-      throw new Error(`Erro na API OpenAI: ${aiResponse.status} - ${errorData}`);
+    const content = safeParseJson(ai.text);
+    if (!content) {
+      throw new Error('Resposta inválida do modelo (JSON não parseável).');
     }
-
-    const aiData = await aiResponse.json();
-    console.log('OpenAI Success Response');
-    
-    const content = JSON.parse(aiData.choices[0].message.content);
 
     return new Response(
       JSON.stringify({ 

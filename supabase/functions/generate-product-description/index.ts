@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { geminiGenerateContent, safeParseJson } from "../_shared/gemini.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,9 +24,10 @@ serve(async (req) => {
       })
     }
 
-    const openAiKey = Deno.env.get("OPENAI_API_KEY")
-    if (!openAiKey) {
-      return new Response(JSON.stringify({ ok: false, error: "missing_openai_key" }), {
+    const geminiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_API_KEY")
+    const geminiModel = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash"
+    if (!geminiKey) {
+      return new Response(JSON.stringify({ ok: false, error: "missing_gemini_key" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
@@ -47,48 +49,16 @@ serve(async (req) => {
       .filter(Boolean)
       .join("\n")
 
-    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: "Retorne apenas JSON válido." },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Retorne no formato: {\"description\":\"...\"}\n\n${prompt}`,
-              },
-            ],
-          },
-        ],
-        temperature: 0.4,
-        max_tokens: 300,
-        response_format: { type: "json_object" },
-      }),
+    const ai = await geminiGenerateContent({
+      apiKey: geminiKey,
+      model: geminiModel,
+      system: "Retorne apenas JSON válido.",
+      user: `Retorne no formato: {"description":"..."}\n\n${prompt}`,
+      temperature: 0.4,
+      responseMimeType: "application/json"
     })
 
-    const text = await aiResponse.text()
-    let json: any = null
-    try {
-      json = text ? JSON.parse(text) : null
-    } catch {
-      json = null
-    }
-
-    const content = json?.choices?.[0]?.message?.content
-    let parsed: any = null
-    try {
-      parsed = content ? JSON.parse(content) : null
-    } catch {
-      parsed = null
-    }
-
+    const parsed: any = safeParseJson(ai.text)
     const description = String(parsed?.description || "").trim()
     if (!description) {
       return new Response(JSON.stringify({ ok: false, error: "empty_description" }), {

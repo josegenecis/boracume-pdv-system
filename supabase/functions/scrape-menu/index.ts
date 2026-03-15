@@ -1,6 +1,7 @@
 
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { geminiGenerateContent, safeParseJson } from '../_shared/gemini.ts';
 declare const Deno: any;
 
 // @ts-ignore
@@ -72,7 +73,8 @@ Deno.serve(async (req: Request) => {
     console.log(`[ScrapeMenu] Action: ${action}, Type: ${type}, RunID: ${runId}`);
 
     const APIFY_TOKEN = Deno.env.get('APIFY_TOKEN');
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
+    const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-flash';
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -175,7 +177,7 @@ Deno.serve(async (req: Request) => {
                       let aiStructured: any[] = [];
                       try {
                         const rawText = JSON.stringify(menuItems).slice(0, 200000);
-                        aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                        aiStructured = await aiStructurize(rawText, GEMINI_API_KEY, GEMINI_MODEL);
                       } catch {}
                       const baseCats = consolidated.length > 0 ? consolidated : mappedCategories;
                       const finalCats = aiStructured.length > 0 ? mergeImportedCategories(baseCats, aiStructured) : baseCats;
@@ -373,7 +375,7 @@ Deno.serve(async (req: Request) => {
                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                );
              }
-             const categories = consolidateVariantsAndCategories(await aiStructurize(text, OPENAI_API_KEY));
+             const categories = consolidateVariantsAndCategories(await aiStructurize(text, GEMINI_API_KEY, GEMINI_MODEL));
              if (!categories || categories.length === 0) {
                return new Response(
                  JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível estruturar o cardápio a partir do texto.' }),
@@ -387,7 +389,7 @@ Deno.serve(async (req: Request) => {
         }
         
         if (type === 'image') {
-             const result = await processWithAI(data, OPENAI_API_KEY, true);
+             const result = await processWithAI(data, GEMINI_API_KEY, true, false, GEMINI_MODEL);
              return result;
         }
     }
@@ -483,7 +485,7 @@ Deno.serve(async (req: Request) => {
                        `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
                        `${imageUrls.slice(0, 200).join('\n')}\n\n` +
                        `TEXTO EXTRAÍDO:\n${String(text || '').slice(0, 50000)}`;
-                     aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                     aiStructured = await aiStructurize(rawForAi, GEMINI_API_KEY, GEMINI_MODEL);
                    }
                  } catch (e) {
                    console.warn('[Check] IA estruturadora (categorias) falhou, usando consolidação heurística.', e);
@@ -558,25 +560,25 @@ Deno.serve(async (req: Request) => {
                  if (text) {
                    const first: any = Array.isArray(items) ? items[0] : null;
                    const url = String(first?.url || first?.pageUrl || first?.page_url || '');
-                   if (url.includes('cardapioweb.com') && !OPENAI_API_KEY) {
+                   if (url.includes('cardapioweb.com') && !GEMINI_API_KEY) {
                      return new Response(
                        JSON.stringify({
                          success: false,
                          status: 'failed',
-                         error: 'Para importar CardapioWeb é necessário configurar OPENAI_API_KEY na Edge Function scrape-menu.',
+                         error: 'Para importar CardapioWeb é necessário configurar GEMINI_API_KEY na Edge Function scrape-menu.',
                          debug: { runId: String(runId || ''), actId, datasetId: String(datasetId || '') }
                        }),
                        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                      );
                    }
-                   if (OPENAI_API_KEY) {
+                   if (GEMINI_API_KEY) {
                      let aiStructured: any[] = [];
                      try {
                        const rawForAi =
                          `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
                          `${imageUrls.slice(0, 200).join('\n')}\n\n` +
                          `TEXTO EXTRAÍDO:\n${text}`;
-                       aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                       aiStructured = await aiStructurize(rawForAi, GEMINI_API_KEY, GEMINI_MODEL);
                      } catch (e) {
                        console.warn('[Check] IA estruturadora (crawler conteúdo) falhou.', e);
                      }
@@ -609,7 +611,7 @@ Deno.serve(async (req: Request) => {
                    const totalItemsHeuristic = consolidated.reduce((acc: number, c: any) => acc + (Array.isArray(c.items) ? c.items.length : 0), 0);
                    if (consolidated.length === 1 || totalItemsHeuristic >= 30) {
                      const rawText = JSON.stringify(menuItems).slice(0, 150000);
-                     aiStructured = await aiStructurize(rawText, OPENAI_API_KEY);
+                     aiStructured = await aiStructurize(rawText, GEMINI_API_KEY, GEMINI_MODEL);
                    }
                  } catch (e) {
                    console.warn('[Check] IA estruturadora falhou, usando consolidação heurística.', e);
@@ -623,7 +625,7 @@ Deno.serve(async (req: Request) => {
                  
                  if (!(descOk && imgOk)) {
                    const jsonContent = JSON.stringify(menuItems.slice(0, 120));
-                   const aiResult = await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                   const aiResult = await processWithAI(jsonContent, GEMINI_API_KEY, false, true, GEMINI_MODEL);
                    return aiResult;
                  }
                  
@@ -697,18 +699,18 @@ Deno.serve(async (req: Request) => {
                  
                  console.log('[Check] Mapeamento falhou, usando IA...');
                  const jsonContent = JSON.stringify(menuItems.slice(0, 60)); 
-                 return await processWithAI(jsonContent, OPENAI_API_KEY, false, true);
+                return await processWithAI(jsonContent, GEMINI_API_KEY, false, true, GEMINI_MODEL);
             }
             
             // Fallback final (universal): tenta estruturar a partir do JSON bruto do dataset
             try {
               const { text, imageUrls } = extractTextAndImagesFromApifyItems(items);
-              if (OPENAI_API_KEY) {
+              if (GEMINI_API_KEY) {
                 const rawForAi =
                   `IMAGENS ENCONTRADAS (pode usar como image_url quando fizer sentido):\n` +
                   `${imageUrls.slice(0, 200).join('\n')}\n\n` +
                   `DADOS EXTRAÍDOS (texto/markdown/html/JSON):\n${text || JSON.stringify(items).slice(0, 120000)}`;
-                const aiStructured = await aiStructurize(rawForAi, OPENAI_API_KEY);
+                const aiStructured = await aiStructurize(rawForAi, GEMINI_API_KEY, GEMINI_MODEL);
                 if (Array.isArray(aiStructured) && aiStructured.length > 0) {
                   return new Response(
                     JSON.stringify({ success: true, status: 'completed', categories: aiStructured }),
@@ -1015,8 +1017,8 @@ function mapApifyItemsToCategories(items: any[]): any[] {
     return Object.entries(categoriesMap).map(([name, items]) => ({ name, items }));
 }
 
-async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false) {
-    if (!apiKey) throw new Error('Chave OpenAI não configurada.');
+async function processWithAI(content: string, apiKey: string | undefined, isImage = false, isJson = false, model = 'gemini-1.5-flash') {
+    if (!apiKey) throw new Error('Chave Gemini não configurada.');
     const systemPrompt = `Você é um especialista em estruturar cardápios de restaurantes. Sempre responda em json.
 Extraia produtos com nome, descrição, imagem (se houver) e preço base.
 Extraia VARIANTES DE PREÇO (tamanhos com preços finais) e VARIAÇÕES/ADICIONAIS em grupos.
@@ -1050,20 +1052,46 @@ Saída json:
     }
   ]
 }`;
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: isImage ? [{ type: "text", text: "Extraia o cardápio e retorne um json." }, { type: "image_url", image_url: { url: content, detail: "high" } }] : `Extraia o cardápio a partir do HTML e retorne um json válido:\n\n${content.slice(0, 50000)}` }
-    ];
     try {
-      const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-4o-mini', messages: messages, temperature: 0.1, max_tokens: 4000, response_format: { type: "json_object" } })
+      let contents: any[] = [];
+      if (isImage) {
+        const imgResp = await fetch(String(content));
+        if (!imgResp.ok) throw new Error('Não foi possível baixar a imagem.');
+        const buf = await imgResp.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const b64 = btoa(binary);
+        const mimeType = imgResp.headers.get('content-type') || 'image/jpeg';
+        contents = [
+          {
+            role: 'user',
+            parts: [
+              { text: 'Extraia o cardápio a partir da imagem e retorne um JSON válido.' },
+              { inlineData: { mimeType, data: b64 } }
+            ]
+          }
+        ];
+      } else {
+        const inputText = isJson
+          ? `Extraia o cardápio a partir do JSON e retorne um JSON válido:\n\n${String(content).slice(0, 50000)}`
+          : `Extraia o cardápio a partir do HTML/texto e retorne um JSON válido:\n\n${String(content).slice(0, 50000)}`;
+        contents = [{ role: 'user', parts: [{ text: inputText }] }];
+      }
+
+      const ai = await geminiGenerateContent({
+        apiKey,
+        model,
+        system: systemPrompt,
+        user: '',
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+        contents
       });
-      if (!aiResp.ok) { const err = await aiResp.text(); throw new Error(`Erro IA: ${err}`); }
-      const aiData = await aiResp.json();
-      const parsed = JSON.parse(aiData.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim());
-      return new Response(JSON.stringify({ success: true, status: 'completed', categories: parsed.categories || parsed.menu || [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+
+      const parsed: any = safeParseJson(ai.text) || {};
+      const categories = parsed.categories || parsed.menu || [];
+      return new Response(JSON.stringify({ success: true, status: 'completed', categories }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     } catch (e: any) {
       return new Response(JSON.stringify({ success: false, status: 'failed', error: e?.message || String(e) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
@@ -1330,28 +1358,20 @@ function heuristicStructurizeFromText(rawText: string, imageUrls: string[]): any
   return categories.filter(c => Array.isArray(c.items) && c.items.length > 0);
 }
 
-async function aiStructurize(raw: string, apiKey: string | undefined): Promise<any[]> {
-  if (!apiKey) throw new Error('Chave OpenAI não configurada.');
+async function aiStructurize(raw: string, apiKey: string | undefined, model = 'gemini-1.5-flash'): Promise<any[]> {
+  if (!apiKey) throw new Error('Chave Gemini não configurada.');
   const systemPrompt = `Você é um parser de cardápios. Você recebe texto bruto (ou JSON) extraído de sites/cardápios e deve devolver um JSON estruturado. Responda APENAS JSON, sem explicações.`;
   const userPrompt = `ENTRADA (texto bruto / json / html / markdown):\n\n${raw.slice(0, 60000)}\n\nOBJETIVO: gerar JSON com categorias, itens e seus detalhes.\n\nFORMATO OBRIGATÓRIO:\n{\n  "categorias": [\n    {\n      "nome": "Categoria",\n      "itens": [\n        {\n          "nome": "Produto",\n          "descricao": "Descrição",\n          "preco": 0.00,\n          "variacoes": [\n            {\"nome\":\"P\",\"preco\":10.00},\n            {\"nome\":\"25cm\",\"preco\":15.99}\n          ],\n          \"complementos\": [\n            {\"nome\":\"Bacon\",\"preco\":5.00}\n          ],\n          \"imagens\": [\"https://...\"]\n        }\n      ]\n    }\n  ]\n}\n\nREGRAS IMPORTANTES:\n- NÃO INVENTE produtos/categorias: só use o que existir na entrada.\n- PREÇOS: sempre número (0.00). Converta vírgula para ponto.\n- Se um item tiver tamanhos com preços diferentes (P/M/G, 25cm/35cm, 300ml/500ml etc), coloque em \"variacoes\" com nome do tamanho e preço final.\n- Se houver adicionais/complementos com preço (ex.: \"+R$ 2,00\", \"Adicionar bacon 5\"), coloque em \"complementos\".\n- IMAGENS: só use URLs presentes na entrada. Se não der para associar uma imagem a um produto específico, deixe \"imagens\": [] para esse produto.\n- DESCRIÇÃO: se não existir, use string vazia.\n\nResponda somente com o JSON.`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    signal: controller.signal,
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      temperature: 0.1,
-      max_tokens: 2500,
-      response_format: { type: 'json_object' }
-    })
+  const ai = await geminiGenerateContent({
+    apiKey,
+    model,
+    system: systemPrompt,
+    user: userPrompt,
+    temperature: 0.1,
+    responseMimeType: 'application/json'
   });
-  clearTimeout(timeoutId);
-  if (!resp.ok) { const err = await resp.text(); throw new Error(`Erro IA: ${err}`); }
-  const data = await resp.json();
-  const parsed = JSON.parse(String(data?.choices?.[0]?.message?.content || '{}').trim());
+
+  const parsed: any = safeParseJson(ai.text) || {};
   const categorias = Array.isArray(parsed?.categorias) ? parsed.categorias : [];
   const sizeRegex = /^(P|M|G|GG|Pequeno|Médio|Grande|Gigante|\d{2,3}\s?(?:cm|ml))$/i;
   const toInternal = categorias.map((c: any) => {
