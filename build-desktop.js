@@ -37,36 +37,22 @@ async function buildDesktop() {
     console.log('🖥️ Building desktop application...');
     await runCommand('npm', ['run', 'build'], electronDir);
     
-    // Step 5: Create public dist folder for downloads
-    console.log('📁 Creating public download directory...');
-    const publicDistDir = path.join(process.cwd(), 'public', 'electron-dist');
-    
-    if (!fs.existsSync(publicDistDir)) {
-      fs.mkdirSync(publicDistDir, { recursive: true });
+    // Step 5: Export installers to a local release folder (avoid bundling into the app build)
+    console.log('📁 Exporting installers to local release directory...');
+    const releaseDir = path.join(process.cwd(), 'release', 'electron-dist');
+    if (!fs.existsSync(releaseDir)) {
+      fs.mkdirSync(releaseDir, { recursive: true });
     }
     
-    // Copy built files to public directory
-    const builtFilesDir = path.join(process.cwd(), 'dist-electron');
+    const builtFilesDir = path.join(electronDir, 'dist-electron');
     if (fs.existsSync(builtFilesDir)) {
-      console.log('📋 Copying built files to public directory...');
-      await copyDirectory(builtFilesDir, publicDistDir);
-      const files = fs.readdirSync(publicDistDir);
-      const installer = files.find(f => /\.exe$/i.test(f) && /setup|installer/i.test(f));
-      const portable = files.find(f => /\.exe$/i.test(f) && /portable/i.test(f));
-      const firstExe = files.find(f => /\.exe$/i.test(f));
-      if (installer) {
-        fs.renameSync(path.join(publicDistDir, installer), path.join(publicDistDir, 'windows-installer.exe'));
-      } else if (firstExe) {
-        fs.renameSync(path.join(publicDistDir, firstExe), path.join(publicDistDir, 'windows-installer.exe'));
-      }
-      if (portable && portable !== installer) {
-        fs.renameSync(path.join(publicDistDir, portable), path.join(publicDistDir, 'windows-portable.exe'));
-      }
+      console.log('📋 Copying built files to release directory...');
+      await copyDirectory(builtFilesDir, releaseDir);
     }
     
     console.log('✅ Desktop application built successfully!');
     console.log('📂 Output directory: dist-electron/');
-    console.log('🌐 Public downloads: public/electron-dist/');
+    console.log('📦 Release directory: release/electron-dist/');
     console.log('💡 Tip: Use the portable version if you encounter installation issues');
     
     // List built files

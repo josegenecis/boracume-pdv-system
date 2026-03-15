@@ -28,8 +28,10 @@ function run(command, cwd) {
 async function main() {
   const root = path.resolve(__dirname, '..')
   const distSrc = path.join(root, 'dist')
+  const distElectronDist = path.join(distSrc, 'electron-dist')
   const electronDir = path.join(root, 'electron')
   const electronDist = path.join(electronDir, 'dist')
+  const electronOutDir = path.join(electronDir, 'dist-electron')
   const electronNodeModules = path.join(electronDir, 'node_modules')
   const electronExpress = path.join(electronNodeModules, 'express')
   const electronPkgPath = path.join(electronDir, 'package.json')
@@ -41,6 +43,7 @@ async function main() {
     throw new Error('Pasta dist não encontrada. Rode "npm run build" antes.')
   }
 
+  await rm(distElectronDist)
   await copyDir(distSrc, electronDist)
 
   if (!fs.existsSync(electronExpress)) {
@@ -48,6 +51,7 @@ async function main() {
   }
 
   await rm(electronOut)
+  await rm(electronOutDir)
 
   run('npm run build-win', electronDir)
 }
