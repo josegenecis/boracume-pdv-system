@@ -1139,8 +1139,8 @@ Regras:
   } catch (error: any) {
     console.error('[AI Agent] Erro:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ success: false, error: error?.message || 'Erro no agente.' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   }
 })

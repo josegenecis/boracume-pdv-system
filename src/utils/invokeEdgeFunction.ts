@@ -46,7 +46,18 @@ export const invokeEdgeFunction = async (
           throw error;
        }
        
-       const errorData = { error: typeof error === 'string' ? error : (error.message || 'Erro desconhecido') };
+       let detailed = typeof error === 'string' ? error : (error.message || 'Erro desconhecido');
+       const ctx: any = (error as any)?.context;
+       const bodyText: string | undefined = typeof ctx?.body === 'string' ? ctx.body : undefined;
+       if (bodyText) {
+         try {
+           const parsed = JSON.parse(bodyText);
+           detailed = String(parsed?.error || parsed?.message || detailed);
+         } catch {
+           detailed = bodyText;
+         }
+       }
+       const errorData = { error: detailed };
        return { data: errorData, status: 500 };
     }
 
