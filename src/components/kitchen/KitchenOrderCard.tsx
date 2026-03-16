@@ -13,12 +13,8 @@ interface OrderItem {
   quantity: number;
   notes?: string;
   observation?: string;
-  options?: string[];
-  variations?: {
-    name: string;
-    selectedOptions: string[];
-    price: number;
-  }[];
+  options?: any[];
+  variations?: any[];
 }
 
 interface KitchenOrder {
@@ -42,6 +38,43 @@ interface KitchenOrderCardProps {
 }
 
 const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChange, onRecall }) => {
+  const safeJsonArray = (value: any) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const extractOptionNames = (raw: any) => {
+    const out: string[] = [];
+    if (!raw) return out;
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (!item) continue;
+        if (typeof item === 'string') {
+          const v = item.trim();
+          if (v) out.push(v);
+          continue;
+        }
+        const name = String((item as any).name || (item as any).label || '').trim();
+        if (name) out.push(name);
+      }
+    } else if (typeof raw === 'string') {
+      const v = raw.trim();
+      if (v) out.push(v);
+    }
+    return out;
+  };
+
+  const items = safeJsonArray((order as any)?.items);
+  const orderNumber = String((order as any)?.order_number || '').trim();
+  const orderNumberShort = orderNumber ? orderNumber.slice(-4) : String((order as any)?.id || '').slice(-4);
 
   const getItemName = (item: any) => {
     return item.name || item.product_name || item.title || "Item sem nome";
@@ -67,7 +100,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   const timePassed = getTimePassed(order.created_at);
-  const isHighPriority = order.priority === 'high' || (order.items.length > 5);
+  const isHighPriority = order.priority === 'high' || (items.length > 5);
 
   const getHeaderColor = (status: string) => {
     switch (status) {
@@ -107,13 +140,14 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
   };
 
   const getDisplayName = (name: string, type?: string) => {
+      const safeName = String(name || '').trim();
       // Se for mesa ou tipo dine_in
-      if (type === 'dine_in' || name.toLowerCase().includes('mesa')) {
-          const mesaMatch = name.match(/mesa\s*(\d+)/i);
+      if (type === 'dine_in' || safeName.toLowerCase().includes('mesa')) {
+          const mesaMatch = safeName.match(/mesa\s*(\d+)/i);
           if (mesaMatch) return `MESA ${mesaMatch[1]}`;
-          if (name.length > 15 && name.toLowerCase().includes('mesa')) return "MESA";
+          if (safeName.length > 15 && safeName.toLowerCase().includes('mesa')) return "MESA";
       }
-      return name;
+      return safeName || 'Cliente';
   };
 
   const getPaymentStatus = (order: KitchenOrder) => {
@@ -132,7 +166,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
     <Card className={`w-full max-w-[400px] shrink-0 border-0 ${isHighPriority ? 'ring-4 ring-red-500 shadow-2xl' : 'ring-1 ring-gray-200'} shadow-lg transition-all hover:scale-[1.01] hover:shadow-xl rounded-2xl overflow-hidden`}>
       <div className={`px-5 py-4 text-white ${getHeaderColor(order.status)} bg-gradient-to-r from-transparent via-white/5 to-transparent`}>
         <div className="flex items-center justify-between gap-2">
-          <div className="font-black text-3xl tracking-tight">#{order.order_number.slice(-4)}</div>
+          <div className="font-black text-3xl tracking-tight">#{orderNumberShort}</div>
           <div className="flex items-center gap-2">
             {isHighPriority && (
               <Badge className="bg-white text-red-600 font-bold animate-pulse">
@@ -165,7 +199,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
             <div className="flex items-center gap-3 mb-1">
               <User size={18} className="text-gray-500" />
-              <span className="font-bold text-2xl text-gray-800 truncate">{getDisplayName(order.customer_name, order.order_type)}</span>
+              <span className="font-bold text-2xl text-gray-800 truncate">{getDisplayName((order as any)?.customer_name, order.order_type)}</span>
             </div>
              {order.customer_phone && (
               <div className="flex items-center gap-3 text-sm text-gray-600 pl-1">
@@ -178,7 +212,24 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
         <Separator />
 
         <div className="space-y-2">
-            {order.items.map((item, idx) => (
+            {items.map((item: any, idx: number) => {
+              const optionLines: string[] = [];
+              const variationsRaw = Array.isArray(item?.variations) ? item.variations : [];
+              if (variationsRaw.length > 0 && typeof variationsRaw[0] === 'string') {
+                optionLines.push(...variationsRaw.map((v: any) => String(v || '').trim()).filter(Boolean));
+              } else if (variationsRaw.length > 0) {
+                for (const v of variationsRaw) {
+                  const name = String(v?.name || '').trim();
+                  const selected = Array.isArray(v?.selectedOptions) ? v.selectedOptions.map((x: any) => String(x || '').trim()).filter(Boolean) : [];
+                  if (!name || selected.length === 0) continue;
+                  optionLines.push(`${name}: ${selected.join(', ')}`);
+                }
+              }
+              optionLines.push(...extractOptionNames(item?.options));
+
+              const itemNotes = String(item?.notes || item?.observation || '').trim();
+
+              return (
               <div key={idx} className="flex flex-col gap-1 py-1 border-b border-gray-100 last:border-0">
                 <div className="flex justify-between items-start">
                    <div className="flex gap-2">
@@ -188,21 +239,36 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                 </div>
 
                 {/* Variações e Opcionais */}
-                {item.variations?.map((v, i) => (
-                   <div key={i} className="pl-8 text-sm text-gray-600">
-                      <span className="font-medium text-blue-600">{v.name}:</span> {v.selectedOptions.join(', ')}
-                   </div>
-                ))}
+                {optionLines.map((line, i) => {
+                  const raw = String(line || '').trim();
+                  if (!raw) return null;
+                  const idxColon = raw.indexOf(':');
+                  if (idxColon > 0) {
+                    const label = raw.slice(0, idxColon).trim();
+                    const value = raw.slice(idxColon + 1).trim();
+                    return (
+                      <div key={i} className="pl-8 text-sm text-gray-600">
+                        <span className="font-bold text-blue-600">{label}:</span> {value}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={i} className="pl-8 text-sm text-gray-600">
+                      {raw}
+                    </div>
+                  );
+                })}
                 
                 {/* Observações em DESTAQUE */}
-                {getItemNotes(item) && (
+                {itemNotes && (
                   <div className="mt-1 ml-8 text-sm font-bold text-red-600 bg-red-50 p-2 rounded border border-red-100 flex items-start gap-2">
                     <span className="uppercase text-[10px] bg-red-100 px-1 rounded text-red-700 mt-0.5">Obs</span>
-                    {getItemNotes(item)}
+                    {itemNotes}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
         </div>
       </CardContent>
       

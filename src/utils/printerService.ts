@@ -131,6 +131,159 @@ function sortReceiptVariations(variations: any[], orderMap?: Map<string, number>
     .map((x) => x.line);
 }
 
+function extractOptionNames(raw: any): string[] {
+  const out: string[] = [];
+  if (!raw) return out;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item) continue;
+      if (typeof item === 'string') {
+        const v = item.trim();
+        if (v) out.push(v);
+        continue;
+      }
+      const name = String((item as any).name || (item as any).label || '').trim();
+      if (name) out.push(name);
+    }
+  } else if (typeof raw === 'string') {
+    const v = raw.trim();
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+function parseGroupOptions(raw: any): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((o: any) => String(o?.name || '').trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+type VariationGroupMeta = {
+  order: number;
+  receiptLabel: string;
+  optionKeySet: Set<string>;
+};
+
+async function fetchVariationGroups(productIds: string[]) {
+  const ids = Array.from(new Set((productIds || []).map((x) => String(x || '').trim()).filter(Boolean)));
+  const result = new Map<string, VariationGroupMeta[]>();
+  if (ids.length === 0) return result;
+
+  const [{ data: linkRows }, { data: productVarRows }] = await Promise.all([
+    supabase
+      .from('product_global_variation_links')
+      .select('product_id,global_variation_id,display_order')
+      .in('product_id', ids as any) as any,
+    supabase
+      .from('product_variations')
+      .select('product_id,name,receipt_label,options,display_order,created_at')
+      .in('product_id', ids as any) as any
+  ]);
+
+  const links = Array.isArray(linkRows) ? linkRows : [];
+  const globalIds = Array.from(new Set(links.map((l: any) => String(l.global_variation_id || '').trim()).filter(Boolean)));
+  let globals: any[] = [];
+  if (globalIds.length > 0) {
+    const { data } = await supabase.from('global_variations').select('id,name,receipt_label,options').in('id', globalIds as any) as any;
+    globals = Array.isArray(data) ? data : [];
+  }
+  const globalById = new Map(globals.map((g: any) => [String(g.id), g]));
+
+  for (const pid of ids) result.set(pid, []);
+
+  for (const link of links) {
+    const pid = String(link.product_id || '').trim();
+    const gv = globalById.get(String(link.global_variation_id || ''));
+    if (!pid || !gv) continue;
+    const order = link.display_order !== undefined && link.display_order !== null ? Math.max(0, Math.floor(Number(link.display_order) || 0)) : 10000;
+    const label = String(gv.receipt_label || gv.name || '').trim();
+    const opts = parseGroupOptions(gv.options);
+    const set = new Set(opts.map((o) => o.toLowerCase()));
+    result.get(pid)?.push({ order, receiptLabel: label, optionKeySet: set });
+  }
+
+  const prodVars = Array.isArray(productVarRows) ? productVarRows : [];
+  const byProduct = new Map<string, any[]>();
+  for (const row of prodVars) {
+    const pid = String(row.product_id || '').trim();
+    if (!pid) continue;
+    const list = byProduct.get(pid) || [];
+    list.push(row);
+    byProduct.set(pid, list);
+  }
+  for (const [pid, list] of byProduct.entries()) {
+    const sorted = [...list].sort((a, b) => {
+      const ao = a.display_order !== undefined && a.display_order !== null ? Number(a.display_order) : 10_000;
+      const bo = b.display_order !== undefined && b.display_order !== null ? Number(b.display_order) : 10_000;
+      if (ao !== bo) return ao - bo;
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+    });
+    for (let i = 0; i < sorted.length; i++) {
+      const row = sorted[i];
+      const order = row.display_order !== undefined && row.display_order !== null ? Math.max(0, Math.floor(Number(row.display_order) || 0)) : 20000 + i;
+      const label = String(row.receipt_label || row.name || '').trim();
+      const opts = parseGroupOptions(row.options);
+      const set = new Set(opts.map((o) => o.toLowerCase()));
+      result.get(pid)?.push({ order, receiptLabel: label, optionKeySet: set });
+    }
+  }
+
+  for (const [pid, groups] of result.entries()) {
+    result.set(
+      pid,
+      [...groups].sort((a, b) => a.order - b.order || a.receiptLabel.localeCompare(b.receiptLabel, 'pt-BR'))
+    );
+  }
+
+  return result;
+}
+
+function optionsToReceiptLines(optionNames: string[], groups?: VariationGroupMeta[]) {
+  const names = (optionNames || []).map((s) => String(s || '').trim()).filter(Boolean);
+  if (!groups || groups.length === 0) return names;
+
+  const selectedByLabel = new Map<string, string[]>();
+  const used = new Set<number>();
+
+  for (let idx = 0; idx < names.length; idx++) {
+    const name = names[idx];
+    const key = name.toLowerCase();
+    let matchedIndex = -1;
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i].optionKeySet.has(key)) {
+        matchedIndex = i;
+        break;
+      }
+    }
+    if (matchedIndex === -1) continue;
+    used.add(idx);
+    const label = groups[matchedIndex].receiptLabel || 'Complementos';
+    const list = selectedByLabel.get(label) || [];
+    list.push(name);
+    selectedByLabel.set(label, list);
+  }
+
+  const lines: string[] = [];
+  for (const g of groups) {
+    const label = g.receiptLabel || 'Complementos';
+    const selected = selectedByLabel.get(label);
+    if (!selected || selected.length === 0) continue;
+    lines.push(`${label}: ${selected.join(', ')}`);
+  }
+
+  const leftovers = names.filter((_, idx) => !used.has(idx));
+  lines.push(...leftovers);
+
+  return lines;
+}
+
 function safeJsonParse<T>(value: string | null): T | null {
   if (!value) return null;
   try {
@@ -506,12 +659,27 @@ export const PrinterService = {
     const productIds = Array.isArray(enrichedOrder.items)
       ? enrichedOrder.items.map((it: any) => String(it?.product_id || '').trim()).filter(Boolean)
       : [];
-    const orderMaps = await fetchVariationOrderMaps(productIds);
+
+    const [groupsByProduct, orderMaps] = await Promise.all([fetchVariationGroups(productIds), fetchVariationOrderMaps(productIds)]);
+
     const itemsSorted = (Array.isArray(enrichedOrder.items) ? enrichedOrder.items : []).map((it: any) => {
       const pid = String(it?.product_id || '').trim();
-      const map = pid ? orderMaps.get(pid) : undefined;
-      const sortedVars = sortReceiptVariations(it?.variations, map);
-      return { ...it, variations: sortedVars };
+      const groups = pid ? groupsByProduct.get(pid) : undefined;
+      const orderMap = pid ? orderMaps.get(pid) : undefined;
+
+      const rawVarLines = Array.isArray(it?.variations) ? it.variations.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
+      const labeled = rawVarLines.filter((l) => l.includes(':'));
+      const unlabeled = rawVarLines.filter((l) => !l.includes(':'));
+      const optionNames = [...extractOptionNames(it?.options), ...unlabeled];
+
+      let finalLines: string[] = [];
+      if (labeled.length > 0) {
+        finalLines = sortReceiptVariations(labeled, orderMap);
+      } else if (optionNames.length > 0) {
+        finalLines = optionsToReceiptLines(optionNames, groups);
+      }
+
+      return { ...it, variations: finalLines };
     });
     (enrichedOrder as any).items = itemsSorted;
 
