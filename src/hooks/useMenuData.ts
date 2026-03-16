@@ -178,6 +178,9 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     queryFn: () => fetchMenuData(userId),
     staleTime: 30_000,
     gcTime: 15 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: true,
     retry: 3,
     retryDelay: (attempt) => Math.min(2000, 250 * Math.pow(2, attempt)),
     initialData: initialData || undefined

@@ -97,6 +97,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
+  const createdProductIdRef = useRef<string | null>(product?.id || null);
+  const autoSaveInFlightRef = useRef(false);
   const [stockSchemaSupported, setStockSchemaSupported] = useState(true);
   const [stockSchemaError, setStockSchemaError] = useState<string | null>(null);
   const [unsupportedColumns, setUnsupportedColumns] = useState<string[]>([]);
@@ -676,15 +678,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         baseData.price = minPrice > 0 ? minPrice : 0;
       }
 
-      let productId = product?.id;
+      let productId = product?.id || createdProductId;
 
-      if (product?.id) {
+      if (productId) {
         const productData = {
           ...baseData,
           updated_at: new Date().toISOString()
         } as const;
-        console.log('Atualizando produto:', product.id, productData);
-        await updateProductWithFallback(product.id, productData);
+        console.log('Atualizando produto:', productId, productData);
+        await updateProductWithFallback(productId, productData);
       } else {
         // Tentativa mínima: apenas campos essenciais
         const minimalData = {
@@ -726,6 +728,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         if (insertResultId) {
           productId = insertResultId;
+          setCreatedProductId(insertResultId);
         }
       }
       
@@ -781,14 +784,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   // Autosave: salva automaticamente ao alterar campos essenciais
   useEffect(() => {
+    createdProductIdRef.current = createdProductId;
+  }, [createdProductId]);
+
+  useEffect(() => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     const timer = setTimeout(async () => {
       // requisitos mínimos
+      if (loading) return;
+      if (autoSaveInFlightRef.current) return;
       const canCreate = !!user?.id && !!formData.name.trim() && !!formData.category_id && formData.price > 0;
       if (canCreate) {
         try {
           // se não há product.id, cria mín e atualiza
-      if (!createdProductId) {
+      autoSaveInFlightRef.current = true;
+      const currentId = createdProductIdRef.current;
+      if (!currentId) {
         const minimalData = {
           user_id: user!.id,
           name: formData.name.trim(),
@@ -808,6 +819,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           .single();
         if (!insertErr && insertData?.id) {
             setCreatedProductId(insertData.id);
+            createdProductIdRef.current = insertData.id;
             // atualiza com campos adicionais
             const additional: any = {
               ...buildBaseData(),
@@ -820,7 +832,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           ...buildBaseData(),
           updated_at: new Date().toISOString()
         };
-        await updateProductWithFallback(createdProductId, updateData);
+        await updateProductWithFallback(currentId, updateData);
       }
         } catch (err) {
           const rawMsg = String((err as any)?.message || (err as any)?.details || '');
@@ -833,12 +845,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             }
           }
           console.warn('Autosave produto falhou', err);
+        } finally {
+          autoSaveInFlightRef.current = false;
         }
       }
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
