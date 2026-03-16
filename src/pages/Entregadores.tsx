@@ -203,13 +203,26 @@ const Entregadores: React.FC = () => {
       const end = new Date(start);
       end.setDate(end.getDate() + 1);
 
-      const { data, error } = await supabase
+      const primary = await supabase
         .from('orders' as any)
-        .select('id,delivery_personnel_id,delivery_payout_amount,delivery_fee,created_at,status,delivery_settled')
+        .select('id,delivery_personnel_id,delivery_payout_amount,delivery_fee,created_at,delivery_assigned_at,status,delivery_settled')
         .eq('user_id', user.id)
         .in('status', ['in_delivery', 'delivered', 'completed'])
-        .gte('created_at', start.toISOString())
-        .lt('created_at', end.toISOString());
+        .gte('delivery_assigned_at', start.toISOString())
+        .lt('delivery_assigned_at', end.toISOString());
+
+      const fallback = primary.error || ((primary.data as any[]) || []).length === 0
+        ? await supabase
+            .from('orders' as any)
+            .select('id,delivery_personnel_id,delivery_payout_amount,delivery_fee,created_at,delivery_assigned_at,status,delivery_settled')
+            .eq('user_id', user.id)
+            .in('status', ['in_delivery', 'delivered', 'completed'])
+            .gte('created_at', start.toISOString())
+            .lt('created_at', end.toISOString())
+        : null;
+
+      const data = (fallback ? (fallback as any).data : primary.data) as any[];
+      const error = fallback ? (fallback as any).error : primary.error;
 
       if (error) throw error;
 
@@ -221,6 +234,7 @@ const Entregadores: React.FC = () => {
         const driverId = String(o?.delivery_personnel_id || '');
         if (!driverId) return;
         const driverName = nameById.get(driverId) || 'Motoboy';
+        const status = String(o?.status || '');
         const payout =
           o?.delivery_payout_amount !== null && o?.delivery_payout_amount !== undefined
             ? Math.max(0, Number(o.delivery_payout_amount) || 0)
@@ -231,7 +245,9 @@ const Entregadores: React.FC = () => {
         const current = rowsByDriver.get(driverId) || { driverId, driverName, orderCount: 0, total: 0, orderIds: [] };
         current.orderCount += 1;
         current.total += payout;
-        current.orderIds.push(String(o.id));
+        if (status === 'delivered' || status === 'completed') {
+          current.orderIds.push(String(o.id));
+        }
         rowsByDriver.set(driverId, current);
       });
 
@@ -259,7 +275,7 @@ const Entregadores: React.FC = () => {
     if (!row || row.orderIds.length === 0) return;
     const ok = await confirm({
       title: 'Marcar como pago',
-      description: `Marcar ${row.orderCount} entrega(s) de ${row.driverName} como paga(s)?`,
+      description: `Marcar ${row.orderIds.length} entrega(s) de ${row.driverName} como paga(s)?`,
       confirmText: 'Marcar',
       cancelText: 'Cancelar'
     });
