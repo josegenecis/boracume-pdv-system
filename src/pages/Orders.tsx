@@ -419,7 +419,7 @@ const Orders = () => {
 
       const ef = await supabase.functions.invoke('orders-update-status', {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-        body: { orderId, newStatus }
+        body: { orderId, newStatus, id: orderId, status: newStatus }
       }) as any;
 
       if (ef?.error) {
