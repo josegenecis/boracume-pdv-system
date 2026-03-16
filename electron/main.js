@@ -228,7 +228,7 @@ async function runAutoUpdateFlow() {
 
 function createTray() {
   try {
-    const iconPath = path.join(__dirname, '../public/favicon.ico'); // Ajustar caminho se necessário
+    const iconPath = path.join(__dirname, '../public/icon-512x512.png');
     tray = new Tray(iconPath);
     
     const contextMenu = Menu.buildFromTemplate([

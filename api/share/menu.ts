@@ -43,7 +43,7 @@ export default async function handler(req: any, res: any) {
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
-    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/icon-512x512.png');
+    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-app-site.png');
     const pageUrl = `https://boracume.com/share/menu/${encodeURIComponent(id)}`;
     const redirectUrl = `/menu/${encodeURIComponent(id)}`;
 
@@ -81,4 +81,3 @@ export default async function handler(req: any, res: any) {
     res.end(e?.message || 'internal error');
   }
 }
-
