@@ -145,7 +145,7 @@ const Dashboard = () => {
       .from('orders')
       .select('id')
       .eq('user_id', user?.id)
-      .or('status.in.(pending,accepted,preparing,ready,in_delivery),acceptance_status.in.(pending_acceptance,awaiting_pix_payment)');
+      .in('status', ['pending', 'accepted', 'preparing', 'ready', 'in_delivery']);
 
     if (pendingError) throw pendingError;
 
