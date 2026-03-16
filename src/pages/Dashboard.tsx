@@ -40,6 +40,19 @@ interface Order {
   created_at: string;
 }
 
+const normalizeItems = (value: any) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,
@@ -104,27 +117,35 @@ const Dashboard = () => {
     // Vendas de hoje
     const { data: todayOrders, error: todayError } = await supabase
       .from('orders')
-      .select('total, items')
+      .select('total, items, status, acceptance_status')
       .eq('user_id', user?.id)
       .gte('created_at', todayISO);
 
     if (todayError) throw todayError;
 
-    const todaySales = todayOrders?.reduce((sum, order) => sum + Number(order.total), 0) || 0;
-    const todayOrdersCount = todayOrders?.length || 0;
+    const todayOrdersSafe = (todayOrders || []).filter((o: any) => {
+      const status = String(o?.status || '');
+      const acceptance = String(o?.acceptance_status || '');
+      if (status === 'cancelled') return false;
+      if (acceptance === 'awaiting_pix_payment') return false;
+      return true;
+    });
+
+    const todaySales = todayOrdersSafe.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
+    const todayOrdersCount = todayOrdersSafe.length;
 
     // Produtos vendidos hoje
-    const productsSold = todayOrders?.reduce((sum, order) => {
-      const items = Array.isArray(order.items) ? order.items as any[] : [];
-      return sum + items.reduce((itemSum: number, item: any) => itemSum + (item.quantity || 0), 0);
-    }, 0) || 0;
+    const productsSold = todayOrdersSafe.reduce((sum: number, order: any) => {
+      const items = normalizeItems(order.items) as any[];
+      return sum + items.reduce((itemSum: number, item: any) => itemSum + (Number(item?.quantity) || 0), 0);
+    }, 0);
 
     // Pedidos pendentes
     const { data: pendingOrders, error: pendingError } = await supabase
       .from('orders')
       .select('id')
       .eq('user_id', user?.id)
-      .in('status', ['new', 'confirmed', 'preparing']);
+      .or('status.in.(pending,accepted,preparing,ready,in_delivery),acceptance_status.in.(pending_acceptance,awaiting_pix_payment)');
 
     if (pendingError) throw pendingError;
 
@@ -138,7 +159,8 @@ const Dashboard = () => {
 
     const customerFirstOrders = new Map();
     allOrders?.forEach(order => {
-      const customerName = order.customer_name;
+      const customerName = String(order.customer_name || '').trim();
+      if (!customerName) return;
       if (!customerFirstOrders.has(customerName) || 
           new Date(order.created_at) < new Date(customerFirstOrders.get(customerName))) {
         customerFirstOrders.set(customerName, order.created_at);
@@ -173,14 +195,21 @@ const Dashboard = () => {
       
       const { data: dayOrders, error } = await supabase
         .from('orders')
-        .select('total')
+        .select('total, status, acceptance_status')
         .eq('user_id', user?.id)
         .gte('created_at', date.toISOString())
         .lt('created_at', nextDay.toISOString());
 
       if (error) throw error;
 
-      const revenue = dayOrders?.reduce((sum, order) => sum + Number(order.total), 0) || 0;
+      const safe = (dayOrders || []).filter((o: any) => {
+        const status = String(o?.status || '');
+        const acceptance = String(o?.acceptance_status || '');
+        if (status === 'cancelled') return false;
+        if (acceptance === 'awaiting_pix_payment') return false;
+        return true;
+      });
+      const revenue = safe.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
       
       last7Days.push({
         name: days[date.getDay()],

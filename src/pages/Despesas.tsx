@@ -29,6 +29,11 @@ interface Expense {
   reversed_by?: string | null;
 }
 
+const getExpenseDateKey = (exp: any) => {
+  const raw = exp?.expense_date ?? exp?.date ?? exp?.created_at ?? '';
+  return String(raw || '').slice(0, 10);
+};
+
 const EXPENSE_CATEGORIES = [
   'alimentação',
   'transporte',
@@ -80,11 +85,11 @@ export default function Despesas() {
     try {
       if (!user?.id) return;
       setLoading(true);
-      const base = supabase.from('expenses').select('*').eq('user_id', user.id);
-      const first = await base.order('expense_date', { ascending: false });
+      const base = () => supabase.from('expenses').select('*').eq('user_id', user.id);
+      const first = await base().order('expense_date', { ascending: false });
       if (first.error) {
         const msg = String(first.error.message || '');
-        const fallback = msg.includes('expense_date') || msg.includes('column') ? await base.order('created_at', { ascending: false }) : first;
+        const fallback = msg.includes('expense_date') || msg.includes('column') ? await base().order('created_at', { ascending: false }) : first;
         if (fallback.error) throw fallback.error;
         setExpenses((fallback.data as any[]) || []);
       } else {
@@ -119,11 +124,11 @@ export default function Despesas() {
     }
 
     if (dateFrom) {
-      filtered = filtered.filter(exp => exp.expense_date >= dateFrom);
+      filtered = filtered.filter(exp => getExpenseDateKey(exp) >= dateFrom);
     }
 
     if (dateTo) {
-      filtered = filtered.filter(exp => exp.expense_date <= dateTo);
+      filtered = filtered.filter(exp => getExpenseDateKey(exp) <= dateTo);
     }
 
     setFilteredExpenses(filtered);
@@ -229,18 +234,30 @@ export default function Despesas() {
       }
 
       // Create expense
-      const { error } = await supabase
-        .from('expenses')
-        .insert({
-          description: description.trim(),
-          amount: amountValue,
-          category,
-          expense_date: expenseDate,
-          receipt_url: receiptUrl,
-          user_id: user.id
-        });
+      const payloadBase: any = {
+        description: description.trim(),
+        amount: amountValue,
+        category,
+        receipt_url: receiptUrl,
+        user_id: user.id
+      };
 
-      if (error) throw error;
+      const firstInsert = await supabase
+        .from('expenses')
+        .insert({ ...payloadBase, expense_date: expenseDate } as any);
+
+      if (firstInsert.error) {
+        const msg = String(firstInsert.error.message || '').toLowerCase();
+        const mentionsExpenseDate = msg.includes('expense_date') || (msg.includes('column') && msg.includes('expense'));
+        if (mentionsExpenseDate) {
+          const retry = await supabase
+            .from('expenses')
+            .insert({ ...payloadBase, date: expenseDate } as any);
+          if (retry.error) throw retry.error;
+        } else {
+          throw firstInsert.error;
+        }
+      }
 
       toast({
         title: 'Sucesso',
@@ -305,7 +322,9 @@ export default function Despesas() {
   };
 
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'dd/MM/yyyy', { locale: ptBR });
+    const raw = String(dateString || '');
+    const d = raw ? new Date(raw) : new Date();
+    return format(d, 'dd/MM/yyyy', { locale: ptBR });
   };
 
   const getTotalExpenses = () => {
