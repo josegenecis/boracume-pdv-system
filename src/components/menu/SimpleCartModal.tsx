@@ -56,6 +56,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const [customerName, setCustomerName] = React.useState('');
   const [customerPhone, setCustomerPhone] = React.useState('');
+  const [customerNeighborhood, setCustomerNeighborhood] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
   const [isExistingCustomer, setIsExistingCustomer] = React.useState(false);
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
@@ -378,11 +379,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     
     try {
       const phoneDigits = String(customerPhone || '').replace(/\D/g, '');
+      const neighborhood = String(customerNeighborhood || '').trim() || String(selectedZone?.name || '').trim() || String(quoteZone?.name || '').trim() || '';
       const orderData = {
         user_id: userId,
         customer_name: customerName,
         customer_phone: phoneDigits,
         customer_address: customerAddress,
+        customer_neighborhood: neighborhood,
         delivery_zone_id: deliveryZoneId || null,
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
@@ -562,6 +565,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       if (customer) {
                         setCustomerName((prev) => prev.trim() ? prev : customer.name);
                         setCustomerAddress((prev) => prev.trim() ? prev : customer.address);
+                        setCustomerNeighborhood((prev) => prev.trim() ? prev : String((customer as any)?.neighborhood || ''));
+                        const zoneId = String((customer as any)?.deliveryZoneId || '');
+                        if (zoneId && (!deliveryZoneId || zoneWasAutoRef.current)) {
+                          zoneWasAutoRef.current = true;
+                          setDeliveryZoneId(zoneId);
+                        }
                         setIsExistingCustomer(true);
                       } else {
                         setIsExistingCustomer(false);
@@ -597,6 +606,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   className="pl-10"
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="neighborhood">Bairro</Label>
+              <Input
+                id="neighborhood"
+                value={customerNeighborhood}
+                onChange={(e) => setCustomerNeighborhood(e.target.value)}
+                placeholder="Ex: Centro"
+              />
             </div>
 
             <div>

@@ -6,6 +6,7 @@ interface Customer {
   phone: string;
   address: string;
   neighborhood: string;
+  deliveryZoneId?: string | null;
 }
 
 export const useCustomerLookup = (userId: string) => {
@@ -74,7 +75,7 @@ export const useCustomerLookup = (userId: string) => {
       // Fallback para buscar nos pedidos
       const { data, error } = await supabase
         .from('orders')
-        .select('customer_name, customer_phone, customer_address')
+        .select('customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id')
         .eq('user_id', userId)
         .in('customer_phone', candidates as any)
         .order('created_at', { ascending: false })
@@ -91,7 +92,8 @@ export const useCustomerLookup = (userId: string) => {
           name: customer.customer_name || '',
           phone: customer.customer_phone || '',
           address: customer.customer_address || '',
-          neighborhood: ''
+          neighborhood: customer.customer_neighborhood || '',
+          deliveryZoneId: customer.delivery_zone_id || null
         };
       }
 
