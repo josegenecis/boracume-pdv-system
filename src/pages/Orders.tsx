@@ -640,13 +640,26 @@ const Orders = () => {
       }
     } catch (e: any) {
       const code = String(e?.code || '');
-      if (code === '42703') {
-        await updateOrderStatus(orderId, 'in_delivery');
-        return;
+      const msg = String(e?.message || '');
+      const isMissingColumn =
+        code === '42703' ||
+        code === 'PGRST204' ||
+        msg.toLowerCase().includes('schema cache') ||
+        msg.toLowerCase().includes('could not find the') ||
+        msg.toLowerCase().includes('column') && msg.toLowerCase().includes('does not exist');
+
+      if (isMissingColumn) {
+        toast({
+          title: 'Banco ainda não reconheceu as colunas',
+          description: 'No Supabase, recarregue o Schema Cache (Database → API → Reload schema cache) e tente novamente.',
+          variant: 'destructive'
+        });
+        throw e;
       }
+
       toast({
         title: 'Erro ao atribuir motoboy',
-        description: String(e?.message || 'Não foi possível atualizar o pedido.'),
+        description: msg || 'Não foi possível atualizar o pedido.',
         variant: 'destructive'
       });
       throw e;
@@ -1537,8 +1550,6 @@ const Orders = () => {
                       setAssignOrderIds([]);
                       setSelectedDriverId('');
                       toast({ title: 'Saiu para entrega', description: 'Motoboy atribuído com sucesso.' });
-                    } catch {
-                      toast({ title: 'Erro', description: 'Não foi possível atribuir o motoboy. Verifique o console.', variant: 'destructive' });
                     } finally {
                       setAssigningDriver(false);
                     }
