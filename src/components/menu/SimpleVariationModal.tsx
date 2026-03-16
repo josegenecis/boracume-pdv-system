@@ -41,7 +41,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const { toast } = useToast();
   const [loadingVariations, setLoadingVariations] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText } = useSimpleVariations();
+  const { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsTextWithReceiptLabels } = useSimpleVariations();
 
   useEffect(() => {
     if (product && isOpen) {
@@ -124,7 +124,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     }
     
     const variationPrice = calculateVariationPrice(selectedVariations, variations);
-    const variationTexts = getSelectedVariationsText(selectedVariations);
+    const variationTexts = getSelectedVariationsTextWithReceiptLabels(selectedVariations, variations);
     
     setSubmitting(true);
     onAddToCart(product, quantity, variationTexts, notes, variationPrice);

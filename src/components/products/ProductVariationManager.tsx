@@ -22,6 +22,9 @@ interface ProductVariation {
   max_selections: number;
   options: VariationOption[];
   product_id?: string;
+  customer_label?: string;
+  receipt_label?: string;
+  display_order?: number;
 }
 
 interface ProductVariationManagerProps {
@@ -52,7 +55,7 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
         .from('product_variations')
         .select('*')
         .eq('product_id', productId)
-        .order('name');
+        .order('display_order', { ascending: true });
 
       if (error) throw error;
       
@@ -75,7 +78,10 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
           required: item.required,
           max_selections: item.max_selections,
           options: Array.isArray(parsedOptions) ? parsedOptions : [],
-          product_id: item.product_id
+          product_id: item.product_id,
+          customer_label: item.customer_label || '',
+          receipt_label: item.receipt_label || '',
+          display_order: item.display_order ?? null
         };
       });
       
@@ -112,16 +118,25 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
           required: variationData.required,
           max_selections: variationData.max_selections,
           options: JSON.stringify(variationData.options),
+          customer_label: (variationData as any).customer_label || '',
+          receipt_label: (variationData as any).receipt_label || '',
           price: 0,
           updated_at: new Date().toISOString()
         };
 
-        const { error } = await supabase
-          .from('product_variations')
-          .update(updateData)
-          .eq('id', editingVariation.id);
-
-        if (error) throw error;
+        const first = await supabase.from('product_variations').update(updateData as any).eq('id', editingVariation.id);
+        if ((first as any).error) {
+          const msg = String((first as any).error?.message || '');
+          if (msg.includes('customer_label') || msg.includes('receipt_label')) {
+            const fallback = await supabase
+              .from('product_variations')
+              .update({ name: variationData.name, required: variationData.required, max_selections: variationData.max_selections, options: JSON.stringify(variationData.options), price: 0, updated_at: new Date().toISOString() } as any)
+              .eq('id', editingVariation.id);
+            if ((fallback as any).error) throw (fallback as any).error;
+          } else {
+            throw (first as any).error;
+          }
+        }
       } else {
         const insertData = {
           product_id: productId,
@@ -130,14 +145,23 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
           required: variationData.required,
           max_selections: variationData.max_selections,
           options: JSON.stringify(variationData.options),
+          customer_label: (variationData as any).customer_label || '',
+          receipt_label: (variationData as any).receipt_label || '',
           price: 0
         };
 
-        const { error } = await supabase
-          .from('product_variations')
-          .insert(insertData);
-
-        if (error) throw error;
+        const first = await supabase.from('product_variations').insert(insertData as any);
+        if ((first as any).error) {
+          const msg = String((first as any).error?.message || '');
+          if (msg.includes('customer_label') || msg.includes('receipt_label')) {
+            const fallback = await supabase
+              .from('product_variations')
+              .insert({ product_id: productId, user_id: user?.id, name: variationData.name, required: variationData.required, max_selections: variationData.max_selections, options: JSON.stringify(variationData.options), price: 0 } as any);
+            if ((fallback as any).error) throw (fallback as any).error;
+          } else {
+            throw (first as any).error;
+          }
+        }
       }
 
       const successMessage = `Variação ${editingVariation ? 'atualizada' : 'criada'} com sucesso.`;

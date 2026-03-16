@@ -8,6 +8,9 @@ type VariationOption = { name: string; price: number };
 export type Variation = {
   id: string;
   name: string;
+  customer_label?: string;
+  receipt_label?: string;
+  display_order?: number;
   required: boolean;
   min_selections: number;
   max_selections: number;
@@ -15,7 +18,7 @@ export type Variation = {
 };
 
 const TTL_MS = 10 * 60 * 1000;
-const LS_PREFIX = 'boracume_variations_v1:';
+const LS_PREFIX = 'boracume_variations_v2:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 
@@ -56,6 +59,10 @@ function normalizeVariation(item: any): Variation | null {
   if (!item || !item.id) return null;
   const name = String(item.name || '').trim();
   if (!name) return null;
+  const customerLabel = String(item.customer_label || '').trim();
+  const receiptLabel = String(item.receipt_label || '').trim();
+  const displayOrderRaw = item.display_order !== undefined && item.display_order !== null ? Number(item.display_order) : undefined;
+  const displayOrder = displayOrderRaw !== undefined && Number.isFinite(displayOrderRaw) ? Math.max(0, Math.floor(displayOrderRaw)) : undefined;
   const maxSelections = item.max_selections !== undefined && item.max_selections !== null ? Math.max(1, Number(item.max_selections) || 1) : 1;
   const minSelectionsRaw = item.min_selections !== undefined && item.min_selections !== null ? Math.max(0, Number(item.min_selections) || 0) : 0;
   const processedOptions = parseOptions(item.options);
@@ -73,6 +80,9 @@ function normalizeVariation(item: any): Variation | null {
   return {
     id: String(item.id),
     name,
+    customer_label: customerLabel || undefined,
+    receipt_label: receiptLabel || undefined,
+    display_order: displayOrder,
     required,
     min_selections: Math.min(minSelections, maxSelections),
     max_selections: maxSelections,
@@ -118,7 +128,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     } catch {}
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
-      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,options').eq('product_id', productId) as any, 2),
+      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
       withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,display_order').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
@@ -129,24 +139,38 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     const linkIds = linkRows.map((l: any) => l.global_variation_id).filter(Boolean);
     let globalVariations: any[] = [];
     if (linkIds.length > 0) {
-      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,options').in('id', linkIds as any) as any, 2);
+      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,options,customer_label,receipt_label').in('id', linkIds as any) as any, 2);
       if (globalVarError) throw globalVarError;
       const base = Array.isArray(globalVars) ? globalVars : [];
       const byId = new Map(linkRows.map((l: any) => [String(l.global_variation_id), l]));
-      globalVariations = base.map((gv: any) => {
-        const link = byId.get(String(gv.id));
-        if (!link) return gv;
-        return {
-          ...gv,
-          required: link.required !== undefined && link.required !== null ? Boolean(link.required) : gv.required,
-          min_selections: link.min_selections ?? 0,
-          max_selections: link.max_selections ?? gv.max_selections
-        };
-      });
+      const baseById = new Map(base.map((gv: any) => [String(gv.id), gv]));
+      globalVariations = linkRows
+        .map((link: any) => {
+          const gv = baseById.get(String(link.global_variation_id));
+          if (!gv) return null;
+          return {
+            ...gv,
+            required: link.required !== undefined && link.required !== null ? Boolean(link.required) : gv.required,
+            min_selections: link.min_selections ?? 0,
+            max_selections: link.max_selections ?? gv.max_selections,
+            display_order: link.display_order
+          };
+        })
+        .filter(Boolean) as any[];
     }
 
-    const combined = [...(Array.isArray(productVariations) ? productVariations : []), ...globalVariations];
-    return combined.map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
+    const normalized = [...(Array.isArray(productVariations) ? productVariations : []), ...globalVariations]
+      .map((item: any) => normalizeVariation(item))
+      .filter(Boolean) as Variation[];
+
+    const sorted = normalized.sort((a, b) => {
+      const ao = a.display_order !== undefined ? a.display_order : 10_000;
+      const bo = b.display_order !== undefined ? b.display_order : 10_000;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name, 'pt-BR');
+    });
+
+    return sorted;
   } catch {
     return [];
   } finally {
@@ -234,6 +258,18 @@ export function useSimpleVariations() {
     return Array.from(new Set(texts));
   };
 
-  return { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText };
+  const getSelectedVariationsTextWithReceiptLabels = (selectedVariations: Record<string, string[]>, variations: Variation[]) => {
+    const texts: string[] = [];
+    for (const variation of variations) {
+      const selected = selectedVariations[variation.id] || [];
+      if (selected.length === 0) continue;
+      const label = String(variation.receipt_label || variation.name || '').trim();
+      if (!label) continue;
+      texts.push(`${label}: ${selected.join(', ')}`);
+    }
+    return texts;
+  };
+
+  return { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText, getSelectedVariationsTextWithReceiptLabels };
 }
 

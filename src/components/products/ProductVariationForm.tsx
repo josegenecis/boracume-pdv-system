@@ -17,6 +17,9 @@ interface VariationOption {
 interface ProductVariation {
   id?: string;
   name: string;
+  customer_label?: string;
+  receipt_label?: string;
+  description?: string;
 
 
   options: VariationOption[];
@@ -35,6 +38,9 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<ProductVariation>({
     name: variation?.name || '',
+    customer_label: (variation as any)?.customer_label || '',
+    receipt_label: (variation as any)?.receipt_label || '',
+    description: (variation as any)?.description || '',
 
 
     options: variation?.options || [{ name: '', price: 0 }],
@@ -111,6 +117,36 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
               placeholder="Ex: Tamanho, Adicionais, etc."
               required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="customer_label">Texto para o cliente</Label>
+            <Input
+              id="customer_label"
+              value={formData.customer_label || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, customer_label: e.target.value }))}
+              placeholder="Ex: SELECIONE O SABOR"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="receipt_label">Texto para o cupom</Label>
+            <Input
+              id="receipt_label"
+              value={formData.receipt_label || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, receipt_label: e.target.value }))}
+              placeholder="Ex: SABOR"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="description">Descrição</Label>
+            <Input
+              id="description"
+              value={formData.description || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Opcional"
             />
           </div>
 

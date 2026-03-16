@@ -20,6 +20,8 @@ interface GlobalVariation {
   name: string;
   options: VariationOption[];
   description?: string;
+  customer_label?: string;
+  receipt_label?: string;
 }
 
 const GlobalVariationManager: React.FC = () => {
@@ -64,24 +66,44 @@ const GlobalVariationManager: React.FC = () => {
           name: variationData.name,
           options: JSON.stringify(variationData.options),
           description: variationData.description || '',
+          customer_label: variationData.customer_label || '',
+          receipt_label: variationData.receipt_label || '',
           updated_at: new Date().toISOString()
         };
-        const { error } = await supabase
-          .from('global_variations')
-          .update(updateData)
-          .eq('id', editingVariation.id);
-        if (error) throw error;
+        const first = await supabase.from('global_variations').update(updateData as any).eq('id', editingVariation.id);
+        if ((first as any).error) {
+          const msg = String((first as any).error?.message || '');
+          if (msg.includes('customer_label') || msg.includes('receipt_label')) {
+            const fallback = await supabase
+              .from('global_variations')
+              .update({ name: variationData.name, options: JSON.stringify(variationData.options), description: variationData.description || '', updated_at: new Date().toISOString() } as any)
+              .eq('id', editingVariation.id);
+            if ((fallback as any).error) throw (fallback as any).error;
+          } else {
+            throw (first as any).error;
+          }
+        }
       } else {
         const insertData = {
           user_id: user?.id,
           name: variationData.name,
           options: JSON.stringify(variationData.options),
-          description: variationData.description || ''
+          description: variationData.description || '',
+          customer_label: variationData.customer_label || '',
+          receipt_label: variationData.receipt_label || ''
         };
-        const { error } = await supabase
-          .from('global_variations')
-          .insert(insertData);
-        if (error) throw error;
+        const first = await supabase.from('global_variations').insert(insertData as any);
+        if ((first as any).error) {
+          const msg = String((first as any).error?.message || '');
+          if (msg.includes('customer_label') || msg.includes('receipt_label')) {
+            const fallback = await supabase
+              .from('global_variations')
+              .insert({ user_id: user?.id, name: variationData.name, options: JSON.stringify(variationData.options), description: variationData.description || '' } as any);
+            if ((fallback as any).error) throw (fallback as any).error;
+          } else {
+            throw (first as any).error;
+          }
+        }
       }
       toast({ title: 'Sucesso', description: `Complemento ${editingVariation ? 'atualizado' : 'criado'} com sucesso!` });
       setShowForm(false);

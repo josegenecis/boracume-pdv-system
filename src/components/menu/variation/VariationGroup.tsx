@@ -11,6 +11,7 @@ interface VariationOption {
 interface ProductVariation {
   id: string;
   name: string;
+  customer_label?: string;
   required: boolean;
   min_selections: number;
   max_selections: number;
@@ -49,7 +50,7 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <Label className="font-semibold text-gray-900">
-          {variation.name} {variation.required && <span className="text-red-500">*</span>}
+          {variation.customer_label || variation.name} {variation.required && <span className="text-red-500">*</span>}
           </Label>
           <div className="text-xs text-muted-foreground mt-0.5">
             {subtitle}
