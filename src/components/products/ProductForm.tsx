@@ -15,6 +15,7 @@ import { toast } from '@/hooks/use-toast';
 import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 import ProductImageUpload from './ProductImageUpload';
@@ -191,11 +192,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const uploadEnhancedToStorage = async (dataUrl: string): Promise<string> => {
     const blob = await (await fetch(dataUrl)).blob();
-    const fileName = `ai-enhanced-${Date.now()}.png`;
-    const filePath = `products/${fileName}`;
+    const rawFile = new File([blob], `ai-enhanced-${Date.now()}.png`, { type: blob.type || 'image/png', lastModified: Date.now() });
+    const prepared = await compressImageFileToMaxBytes(rawFile, { maxBytes: 100 * 1024, maxDimension: 1600, preferMimeType: 'image/webp' });
+    const filePath = `products/${prepared.name}`;
     const { error: uploadError } = await supabase.storage
       .from('product-images')
-      .upload(filePath, blob, { contentType: 'image/png', upsert: true } as any);
+      .upload(filePath, prepared, { contentType: prepared.type, upsert: true } as any);
     if (uploadError) throw uploadError;
     const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
     return data.publicUrl;

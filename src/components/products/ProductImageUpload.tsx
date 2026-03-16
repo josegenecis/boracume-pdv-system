@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ensureStorageSetup } from '@/utils/storageSetup';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 
 
 interface ProductImageUploadProps {
@@ -91,7 +92,12 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
       
       setUploadProgress(50);
       
-      const fileExt = file.name.split('.').pop();
+      const prepared =
+        file.size > 100 * 1024
+          ? await compressImageFileToMaxBytes(file, { maxBytes: 100 * 1024, maxDimension: 1600, preferMimeType: 'image/webp' })
+          : file;
+
+      const fileExt = String(prepared.name.split('.').pop() || 'webp');
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `products/${fileName}`;
 
@@ -100,7 +106,7 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
 
       const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(filePath, file);
+        .upload(filePath, prepared);
 
       if (uploadError) {
 
@@ -185,12 +191,11 @@ const ProductImageUpload: React.FC<ProductImageUploadProps> = ({
         return;
       }
       
-      // Validar tamanho do arquivo
-      if (file.size > 5 * 1024 * 1024) {
+      const maxRawBytes = 30 * 1024 * 1024;
+      if (file.size > maxRawBytes) {
         toast({
           title: "Arquivo muito grande",
-          description: "O arquivo deve ter no máximo 5MB.",
-
+          description: "O arquivo é grande demais para processar no navegador. Tente uma imagem menor.",
           variant: "destructive"
         });
         return;
