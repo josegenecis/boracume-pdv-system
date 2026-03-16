@@ -159,8 +159,8 @@ function buildOrderHtml(order: any, config: any, store?: any) {
                 <span style="width: 65%;">${item.product_name || item.name}</span>
                 <span style="width: 25%; text-align: right;">${(item.total || item.subtotal || item.price * item.quantity).toFixed(2)}</span>
               </div>
-              ${item.variations && item.variations.length ? `<div class="notes">+ ${item.variations.join(', ')}</div>` : ''}
-              ${item.notes ? `<div class="notes">Obs: ${item.notes}</div>` : ''}
+              ${item.variations && item.variations.length ? item.variations.map((v: any) => `<div class="notes">${escapeHtml(v)}</div>`).join('') : ''}
+              ${item.notes ? `<div class="notes">Obs: ${escapeHtml(item.notes)}</div>` : ''}
             </div>
           `).join('')}
           
@@ -482,7 +482,12 @@ export const PrinterService = {
       commands += text(`${item.quantity}x ${item.product_name || item.name}`);
       // Preço e total alinhar à direita é chato em ESC/POS puro sem tabelas, vou deixar simples
       commands += text(`   R$ ${(item.total || item.price * item.quantity).toFixed(2)}`);
-      if (item.variations && item.variations.length) commands += text(`   + ${item.variations.join(', ')}`);
+      if (item.variations && item.variations.length) {
+        for (const v of item.variations) {
+          if (!v) continue;
+          commands += text(`   ${String(v)}`);
+        }
+      }
       if (item.notes) commands += text(`   Obs: ${item.notes}`);
       commands += '\n';
     });

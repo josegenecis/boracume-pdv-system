@@ -287,6 +287,13 @@ class PrinterService extends EventEmitter {
       if (item.notes || item.observations) {
         printer.println(`Obs: ${item.notes || item.observations}`);
       }
+
+      if (Array.isArray(item.variations) && item.variations.length > 0) {
+        for (const v of item.variations) {
+          if (!v) continue;
+          printer.println(`  ${String(v)}`);
+        }
+      }
       
       printer.newLine();
     }
