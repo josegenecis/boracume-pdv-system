@@ -31,10 +31,6 @@ const Downloads = () => {
     window.location.href = '/api/desktop/latest';
   };
 
-  const openReleasePage = () => {
-    window.open('https://github.com/josegenecis/boracume-pdv-system/releases/latest', '_blank');
-  };
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -60,15 +56,10 @@ const Downloads = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={downloadWindowsInstaller} className="bg-orange-600 hover:bg-orange-700">
-              <Download className="w-4 h-4 mr-1" />
-              Baixar instalador
-            </Button>
-            <Button onClick={openReleasePage} variant="outline">
-              Abrir página do download
-            </Button>
-          </div>
+          <Button onClick={downloadWindowsInstaller} className="bg-orange-600 hover:bg-orange-700 w-full sm:w-auto">
+            <Download className="w-4 h-4 mr-1" />
+            Baixar instalador
+          </Button>
 
           <Alert>
             <AlertCircle className="h-4 w-4" />

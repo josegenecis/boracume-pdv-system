@@ -27,6 +27,7 @@ function run(command, cwd) {
 
 async function main() {
   const root = path.resolve(__dirname, '..')
+  run('npm.cmd run build:prod', root)
   const distSrc = path.join(root, 'dist')
   const distElectronDist = path.join(distSrc, 'electron-dist')
   const electronDir = path.join(root, 'electron')
