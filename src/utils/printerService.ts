@@ -24,6 +24,15 @@ type ElectronTarget =
   | { type: 'system'; printerName: string }
   | { type: 'device'; deviceId: string; protocol: string };
 
+function escapeHtml(value: any) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function safeJsonParse<T>(value: string | null): T | null {
   if (!value) return null;
   try {
@@ -79,10 +88,14 @@ function resolveElectronTarget(): ElectronTarget | null {
   }
 }
 
-function buildOrderHtml(order: any, config: any) {
+function buildOrderHtml(order: any, config: any, store?: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
   const bodyWidth = config.paper_width === '58mm' ? '210px' : '280px';
   const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
+  const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
+  const storeDesc = escapeHtml(store?.description || '');
+  const storeLogo = String(store?.logo_url || '').trim();
+  const storeLogoHtml = storeLogo ? `<img src="${escapeHtml(storeLogo)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
 
   return `
       <!DOCTYPE html>
@@ -112,11 +125,16 @@ function buildOrderHtml(order: any, config: any) {
           .item-row { margin-bottom: 4px; }
           .notes { font-size: 0.9em; font-style: italic; margin-left: 10px; }
           .total-row { font-size: 1.2em; margin-top: 10px; }
+          .muted { color: #333; font-size: 0.95em; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="center bold" style="font-size: 1.2em;">${config.print_header || 'RESTAURANTE'}</div>
+          <div class="center">
+            ${storeLogoHtml}
+          </div>
+          <div class="center bold" style="font-size: 1.2em;">${storeName}</div>
+          ${storeDesc ? `<div class="center muted" style="margin-top: 2px;">${storeDesc}</div>` : ''}
           <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
           <div class="divider"></div>
           
@@ -237,7 +255,7 @@ async function printElectron(order: any, config: any) {
   const copies = Math.max(1, Number(config.copies || 1) || 1);
 
   if (target.type === 'system') {
-    const html = buildOrderHtml(order, config);
+    const html = buildOrderHtml(order, config, order.store);
     for (let i = 0; i < copies; i++) {
       const resp = await api.printSystem(target.printerName, html, true);
       if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
@@ -249,6 +267,7 @@ async function printElectron(order: any, config: any) {
   const protocol = target.protocol || 'epson';
 
   const normalized = {
+    store: order.store || null,
     order_number: order.order_number,
     customer_name: order.customer_name || 'Balcão',
     customer_phone: order.customer_phone || '',
@@ -335,8 +354,28 @@ export const PrinterService = {
       copies: 1
     };
 
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('restaurant_name,description,logo_url,phone,address,website')
+      .eq('id', order.user_id)
+      .maybeSingle();
+
+    const store = profile
+      ? {
+          name: profile.restaurant_name || '',
+          restaurant_name: profile.restaurant_name || '',
+          description: profile.description || '',
+          logo_url: profile.logo_url || '',
+          phone: profile.phone || '',
+          address: profile.address || '',
+          website: profile.website || ''
+        }
+      : null;
+
+    const enrichedOrder = { ...order, store };
+
     if (isElectron) {
-      const resp = await printElectron(order, config);
+      const resp = await printElectron(enrichedOrder, config);
       if (!resp.success) {
         toast.error(resp.error || 'Falha ao imprimir');
       }
@@ -346,7 +385,7 @@ export const PrinterService = {
     // 2. Tentar impressão via USB (Silenciosa)
     if (usbDevice && usbDevice.opened) {
       try {
-        await this.printUsb(order, config);
+        await this.printUsb(enrichedOrder, config);
         return; // Sucesso, não abre janela
       } catch (e) {
         console.error('Falha na impressão USB, tentando fallback HTML:', e);
@@ -355,7 +394,7 @@ export const PrinterService = {
     }
 
     // 3. Fallback: Janela de Impressão HTML (Navegador)
-    this.printHtml(order, config);
+    this.printHtml(enrichedOrder, config);
   },
 
   async printOrderOnAccept(order: any) {
@@ -409,8 +448,11 @@ export const PrinterService = {
     // Cabeçalho
     center();
     bold(true);
-    commands += text(config.print_header || 'RESTAURANTE');
+    const storeName = String(order?.store?.restaurant_name || order?.store?.name || config.print_header || 'RESTAURANTE').trim();
+    commands += text(storeName || (config.print_header || 'RESTAURANTE'));
     bold(false);
+    const storeDesc = String(order?.store?.description || '').trim();
+    if (storeDesc) commands += text(storeDesc);
     commands += text(new Date(order.created_at).toLocaleString('pt-BR'));
     line();
 
@@ -477,7 +519,7 @@ export const PrinterService = {
 
   // Impressão HTML (Fallback)
   printHtml(order: any, config: any) {
-    const htmlContent = buildOrderHtml(order, config).replace(
+    const htmlContent = buildOrderHtml(order, config, order.store).replace(
       '</body>',
       `<script>window.onload=function(){window.print();}</script></body>`
     );

@@ -215,6 +215,12 @@ class PrinterService extends EventEmitter {
     const storeName = data.store?.name || 'BORA CUME HUB';
     printer.println(storeName);
     
+    if (data.store?.description) {
+      printer.bold(false);
+      printer.setTextNormal();
+      printer.println(String(data.store.description));
+    }
+    
     if (data.store?.address) {
       printer.bold(false);
       printer.setTextNormal();
