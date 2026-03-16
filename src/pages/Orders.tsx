@@ -417,64 +417,37 @@ const Orders = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token || '';
 
-      const ef = await supabase.functions.invoke('orders-update-status', {
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-        body: { orderId, newStatus, id: orderId, status: newStatus }
-      }) as any;
-
-      const shouldFallbackToDirectUpdate = (errObj: any) => {
-        const msg = String(errObj?.message || '').toLowerCase();
-        return (
-          msg.includes('failed to send a request') ||
-          msg.includes('failed to fetch') ||
-          msg.includes('network') ||
-          msg.includes('fetch') ||
-          msg.includes('timeout')
-        );
-      };
-
-      if (ef?.error) {
-        if (shouldFallbackToDirectUpdate(ef.error)) {
-          const res = await supabase
-            .from('orders')
-            .update(updateData)
-            .eq('id', orderId)
-            .eq('user_id', user?.id)
-            .select()
-            .single();
-          data = (res as any).data;
-          error = (res as any).error;
-        } else {
-          error = ef.error;
-        }
-      } else if (ef?.data?.ok && ef?.data?.order) {
-        data = ef.data.order;
-      } else if (ef?.data?.ok === false) {
-        const detailsMsg = ef.data?.details?.message ? `: ${ef.data.details.message}` : '';
-        const edgeErr = { message: `${ef.data.error || 'edge_function_error'}${detailsMsg}`, code: 'EDGE_FN', details: ef.data };
-        if (shouldFallbackToDirectUpdate(edgeErr)) {
-          const res = await supabase
-            .from('orders')
-            .update(updateData)
-            .eq('id', orderId)
-            .eq('user_id', user?.id)
-            .select()
-            .single();
-          data = (res as any).data;
-          error = (res as any).error;
-        } else {
-          error = edgeErr;
-        }
-      } else {
-        const res = await supabase
+      const directUpdate = async () => {
+        return await supabase
           .from('orders')
           .update(updateData)
           .eq('id', orderId)
           .eq('user_id', user?.id)
           .select()
           .single();
+      };
+
+      const ef = await supabase.functions
+        .invoke('orders-update-status', {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+          body: { orderId, newStatus, id: orderId, status: newStatus }
+        })
+        .catch((e: any) => ({ data: null, error: e })) as any;
+
+      if (ef?.data?.ok && ef?.data?.order) {
+        data = ef.data.order;
+      } else {
+        const res = await directUpdate();
         data = (res as any).data;
         error = (res as any).error;
+        if (!data && !error) {
+          if (ef?.error) {
+            error = ef.error;
+          } else if (ef?.data?.ok === false) {
+            const detailsMsg = ef.data?.details?.message ? `: ${ef.data.details.message}` : '';
+            error = { message: `${ef.data.error || 'edge_function_error'}${detailsMsg}`, code: 'EDGE_FN', details: ef.data };
+          }
+        }
       }
 
       if (error) {
