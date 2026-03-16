@@ -9,6 +9,7 @@
     "start": "electron .",
     "build": "electron-builder --publish=never",
     "build-win": "electron-builder --win --publish=never",
+    "build-win:publish": "electron-builder --win --publish=always",
     "build-mac": "electron-builder --mac --publish=never",
     "build-linux": "electron-builder --linux --publish=never",
     "rebuild": "electron-rebuild -f -w serialport",
@@ -21,6 +22,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "electron-updater": "^6.3.9",
     "express": "^5.2.1",
     "serialport": "^12.0.0",
     "node-thermal-printer": "^4.5.0",
@@ -80,6 +82,13 @@
       "requestExecutionLevel": "user",
       "artifactName": "${productName}-Portable-${version}.${ext}"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "josegenecis",
+        "repo": "boracume-pdv-system"
+      }
+    ],
     "nodeGypRebuild": false,
     "npmRebuild": false,
     "buildDependenciesFromSource": false

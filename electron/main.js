@@ -2,6 +2,10 @@ const { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu } = requir
 const path = require('path');
 const fs = require('fs');
 const isDev = !app.isPackaged;
+let autoUpdater = null;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch {}
 const { SerialPort } = require('serialport');
 const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
@@ -17,6 +21,7 @@ let deviceManager;
 let printerService;
 let scaleService;
 let printAgentServer;
+let updateWindow;
 
 // Verificar se deve rodar em modo "Agente" (sem janela principal, apenas Tray)
 // Pode ser passado via linha de comando: --agent-mode
@@ -77,6 +82,150 @@ function createWindow() {
   initializeServices();
 }
 
+function createUpdateWindow() {
+  updateWindow = new BrowserWindow({
+    width: 520,
+    height: 240,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    show: true,
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    icon: path.join(__dirname, '../public/icon-512x512.png'),
+    title: 'BoraCume'
+  });
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>BoraCume</title>
+        <style>
+          body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:18px;background:#fff;color:#111}
+          .title{font-weight:700;font-size:16px;margin-bottom:10px}
+          .desc{font-size:13px;color:#444;margin-bottom:14px}
+          .bar{height:10px;background:#f2f2f2;border-radius:999px;overflow:hidden}
+          .fill{height:100%;width:0%;background:#f97316;border-radius:999px;transition:width .15s ease}
+          .meta{margin-top:10px;font-size:12px;color:#666;display:flex;justify-content:space-between;gap:10px}
+          .status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+        </style>
+      </head>
+      <body>
+        <div class="title">Atualizando BoraCume</div>
+        <div class="desc">Verificando atualizações...</div>
+        <div class="bar"><div id="fill" class="fill"></div></div>
+        <div class="meta">
+          <div id="status" class="status">Aguarde</div>
+          <div id="pct">0%</div>
+        </div>
+        <script>
+          function setProgress(p){document.getElementById('fill').style.width = Math.max(0,Math.min(100,p))+'%';document.getElementById('pct').textContent = Math.round(p)+'%';}
+          function setStatus(t){document.getElementById('status').textContent=t||'';}
+          window.__setProgress=setProgress;
+          window.__setStatus=setStatus;
+        </script>
+      </body>
+    </html>
+  `;
+  updateWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  updateWindow.on('closed', () => {
+    updateWindow = null;
+  });
+}
+
+async function runAutoUpdateFlow() {
+  if (isDev) return true;
+  if (!autoUpdater) return true;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+  const showUi = !isAgentMode;
+
+  return await new Promise((resolve) => {
+    let decided = false;
+    const done = (result) => {
+      if (decided) return;
+      decided = true;
+      try {
+        autoUpdater.removeAllListeners();
+      } catch {}
+      if (updateWindow) {
+        try {
+          updateWindow.close();
+        } catch {}
+      }
+      resolve(result);
+    };
+
+    const setStatus = (text) => {
+      if (!updateWindow) return;
+      try {
+        updateWindow.webContents.executeJavaScript(`window.__setStatus(${JSON.stringify(String(text || ''))})`, true);
+      } catch {}
+    };
+    const setProgress = (pct) => {
+      if (!updateWindow) return;
+      try {
+        updateWindow.webContents.executeJavaScript(`window.__setProgress(${Number(pct) || 0})`, true);
+      } catch {}
+    };
+
+    if (showUi) {
+      createUpdateWindow();
+      setStatus('Verificando atualizações...');
+      setProgress(10);
+    }
+
+    autoUpdater.on('checking-for-update', () => {
+      setStatus('Verificando atualizações...');
+      setProgress(15);
+    });
+    autoUpdater.on('update-available', () => {
+      setStatus('Baixando atualização...');
+      setProgress(20);
+    });
+    autoUpdater.on('update-not-available', () => {
+      setStatus('Aplicativo atualizado.');
+      setProgress(100);
+      setTimeout(() => done(true), 400);
+    });
+    autoUpdater.on('download-progress', (p) => {
+      const percent = Number(p?.percent || 0);
+      setStatus(`Baixando atualização... ${Math.round(percent)}%`);
+      setProgress(20 + (percent * 0.8));
+    });
+    autoUpdater.on('update-downloaded', () => {
+      setStatus('Instalando atualização...');
+      setProgress(100);
+      setTimeout(() => {
+        try {
+          autoUpdater.quitAndInstall(true, true);
+        } catch {
+          done(true);
+        }
+      }, 500);
+    });
+    autoUpdater.on('error', (e) => {
+      console.error('Auto-update error:', e);
+      done(true);
+    });
+
+    autoUpdater.checkForUpdates().catch((e) => {
+      console.error('Auto-update check failed:', e);
+      done(true);
+    });
+
+    setTimeout(() => done(true), 12000);
+  });
+}
+
 function createTray() {
   try {
     const iconPath = path.join(__dirname, '../public/favicon.ico'); // Ajustar caminho se necessário
@@ -122,9 +271,10 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
-  createWindow();
-  // Iniciar servidor local
-  startPrintServer();
+  runAutoUpdateFlow().then(() => {
+    createWindow();
+    startPrintServer();
+  });
 });
 
 app.on('window-all-closed', () => {
