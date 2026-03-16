@@ -207,7 +207,7 @@ const Entregadores: React.FC = () => {
         .from('orders' as any)
         .select('id,delivery_personnel_id,delivery_payout_amount,delivery_fee,created_at,status,delivery_settled')
         .eq('user_id', user.id)
-        .eq('status', 'delivered')
+        .in('status', ['in_delivery', 'delivered', 'completed'])
         .gte('created_at', start.toISOString())
         .lt('created_at', end.toISOString());
 
