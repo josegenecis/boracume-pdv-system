@@ -14,9 +14,9 @@ const sizeMap = {
 };
 
 const imgSizeMap = {
-  sm: 'h-7',
-  md: 'h-9',
-  lg: 'h-12'
+  sm: 'h-6',
+  md: 'h-8',
+  lg: 'h-10'
 };
 
 const Logo: React.FC<LogoProps> = ({ size = 'md', className = '' }) => {
