@@ -33,6 +33,104 @@ function escapeHtml(value: any) {
     .replace(/'/g, '&#39;');
 }
 
+function splitLabelValue(line: string): { label: string; value: string } | null {
+  const raw = String(line || '').trim();
+  if (!raw) return null;
+  const idx = raw.indexOf(':');
+  if (idx <= 0) return null;
+  const label = raw.slice(0, idx).trim();
+  const value = raw.slice(idx + 1).trim();
+  if (!label) return null;
+  return { label, value };
+}
+
+async function fetchVariationOrderMaps(productIds: string[]) {
+  const ids = Array.from(new Set((productIds || []).map((x) => String(x || '').trim()).filter(Boolean)));
+  const result = new Map<string, Map<string, number>>();
+  if (ids.length === 0) return result;
+
+  const [{ data: linkRows }, { data: productVarRows }] = await Promise.all([
+    supabase
+      .from('product_global_variation_links')
+      .select('product_id,global_variation_id,display_order')
+      .in('product_id', ids as any)
+      .order('product_id', { ascending: true })
+      .order('display_order', { ascending: true }) as any,
+    supabase
+      .from('product_variations')
+      .select('product_id,name,receipt_label,display_order,created_at')
+      .in('product_id', ids as any) as any
+  ]);
+
+  const links = Array.isArray(linkRows) ? linkRows : [];
+  const globalIds = Array.from(new Set(links.map((l: any) => String(l.global_variation_id || '').trim()).filter(Boolean)));
+  let globals: any[] = [];
+  if (globalIds.length > 0) {
+    const { data } = await supabase.from('global_variations').select('id,name,receipt_label').in('id', globalIds as any) as any;
+    globals = Array.isArray(data) ? data : [];
+  }
+  const globalById = new Map(globals.map((g: any) => [String(g.id), g]));
+
+  for (const pid of ids) result.set(pid, new Map<string, number>());
+
+  for (const link of links) {
+    const pid = String(link.product_id || '').trim();
+    const gv = globalById.get(String(link.global_variation_id || ''));
+    if (!pid || !gv) continue;
+    const order = link.display_order !== undefined && link.display_order !== null ? Math.max(0, Math.floor(Number(link.display_order) || 0)) : 10000;
+    const map = result.get(pid);
+    if (!map) continue;
+    const keys = [gv.receipt_label, gv.name].map((v: any) => String(v || '').trim().toLowerCase()).filter(Boolean);
+    for (const k of keys) {
+      if (!map.has(k) || (map.get(k) as number) > order) map.set(k, order);
+    }
+  }
+
+  const prodVars = Array.isArray(productVarRows) ? productVarRows : [];
+  const byProduct = new Map<string, any[]>();
+  for (const row of prodVars) {
+    const pid = String(row.product_id || '').trim();
+    if (!pid) continue;
+    const list = byProduct.get(pid) || [];
+    list.push(row);
+    byProduct.set(pid, list);
+  }
+  for (const [pid, list] of byProduct.entries()) {
+    const map = result.get(pid);
+    if (!map) continue;
+    const sorted = [...list].sort((a, b) => {
+      const ao = a.display_order !== undefined && a.display_order !== null ? Number(a.display_order) : 10_000;
+      const bo = b.display_order !== undefined && b.display_order !== null ? Number(b.display_order) : 10_000;
+      if (ao !== bo) return ao - bo;
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+    });
+    for (let i = 0; i < sorted.length; i++) {
+      const row = sorted[i];
+      const order = row.display_order !== undefined && row.display_order !== null ? Math.max(0, Math.floor(Number(row.display_order) || 0)) : 20000 + i;
+      const keys = [row.receipt_label, row.name].map((v: any) => String(v || '').trim().toLowerCase()).filter(Boolean);
+      for (const k of keys) {
+        if (!map.has(k) || (map.get(k) as number) > order) map.set(k, order);
+      }
+    }
+  }
+
+  return result;
+}
+
+function sortReceiptVariations(variations: any[], orderMap?: Map<string, number>) {
+  const arr = Array.isArray(variations) ? variations.map((v) => String(v || '').trim()).filter(Boolean) : [];
+  if (!orderMap || orderMap.size === 0) return arr;
+  return arr
+    .map((line, idx) => {
+      const parsed = splitLabelValue(line);
+      const key = String(parsed?.label || '').trim().toLowerCase();
+      const order = orderMap.get(key);
+      return { line, idx, order: order !== undefined ? order : 99999 };
+    })
+    .sort((a, b) => (a.order !== b.order ? a.order - b.order : a.idx - b.idx))
+    .map((x) => x.line);
+}
+
 function safeJsonParse<T>(value: string | null): T | null {
   if (!value) return null;
   try {
@@ -96,6 +194,9 @@ function buildOrderHtml(order: any, config: any, store?: any) {
   const storeDesc = escapeHtml(store?.description || '');
   const storeLogo = String(store?.logo_url || '').trim();
   const storeLogoHtml = storeLogo ? `<img src="${escapeHtml(storeLogo)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
+  const storeAddress = escapeHtml(store?.address || '');
+  const storePhone = escapeHtml(store?.phone || '');
+  const storeCnpj = escapeHtml(store?.cnpj || '');
 
   return `
       <!DOCTYPE html>
@@ -135,6 +236,9 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           </div>
           <div class="center bold" style="font-size: 1.2em;">${storeName}</div>
           ${storeDesc ? `<div class="center muted" style="margin-top: 2px;">${storeDesc}</div>` : ''}
+          ${storeAddress ? `<div class="center muted" style="margin-top: 2px;">${storeAddress}</div>` : ''}
+          ${storePhone ? `<div class="center muted">Tel: ${storePhone}</div>` : ''}
+          ${storeCnpj ? `<div class="center muted">CNPJ: ${storeCnpj}</div>` : ''}
           <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
           <div class="divider"></div>
           
@@ -159,8 +263,12 @@ function buildOrderHtml(order: any, config: any, store?: any) {
                 <span style="width: 65%;">${item.product_name || item.name}</span>
                 <span style="width: 25%; text-align: right;">${(item.total || item.subtotal || item.price * item.quantity).toFixed(2)}</span>
               </div>
-              ${item.variations && item.variations.length ? item.variations.map((v: any) => `<div class="notes">${escapeHtml(v)}</div>`).join('') : ''}
-              ${item.notes ? `<div class="notes">Obs: ${escapeHtml(item.notes)}</div>` : ''}
+              ${item.variations && item.variations.length ? item.variations.map((v: any) => {
+                const parsed = splitLabelValue(String(v || ''));
+                if (!parsed) return `<div class="notes">${escapeHtml(v)}</div>`;
+                return `<div class="notes"><span class="bold">${escapeHtml(parsed.label)}:</span> ${escapeHtml(parsed.value)}</div>`;
+              }).join('') : ''}
+              ${item.notes ? `<div class="notes"><span class="bold">Obs:</span> ${escapeHtml(item.notes)}</div>` : ''}
             </div>
           `).join('')}
           
@@ -279,7 +387,8 @@ async function printElectron(order: any, config: any) {
       quantity: Number(it.quantity || 1),
       price: Number(it.price || it.unit_price || 0),
       subtotal: Number(it.subtotal || it.total || (Number(it.price || 0) * Number(it.quantity || 1)) || 0),
-      notes: it.notes || it.observations || ''
+      notes: it.notes || it.observations || '',
+      variations: Array.isArray(it.variations) ? it.variations : []
     })),
     total: Number(order.total || 0),
     subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
@@ -360,6 +469,25 @@ export const PrinterService = {
       .eq('id', order.user_id)
       .maybeSingle();
 
+    const { data: fiscal } = await supabase
+      .from('fiscal_settings')
+      .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
+      .eq('user_id', order.user_id)
+      .maybeSingle();
+
+    const fiscalAddressParts = [
+      fiscal?.endereco_logradouro,
+      fiscal?.endereco_numero,
+      fiscal?.endereco_complemento,
+      fiscal?.endereco_bairro,
+      fiscal?.endereco_municipio,
+      fiscal?.endereco_uf,
+      fiscal?.endereco_cep
+    ]
+      .map((v: any) => String(v || '').trim())
+      .filter(Boolean);
+    const fiscalAddress = fiscalAddressParts.length > 0 ? fiscalAddressParts.join(', ') : '';
+
     const store = profile
       ? {
           name: profile.restaurant_name || '',
@@ -367,12 +495,25 @@ export const PrinterService = {
           description: profile.description || '',
           logo_url: profile.logo_url || '',
           phone: profile.phone || '',
-          address: profile.address || '',
-          website: profile.website || ''
+          address: fiscalAddress || profile.address || '',
+          website: profile.website || '',
+          cnpj: String(fiscal?.cnpj || '').trim() || ''
         }
       : null;
 
     const enrichedOrder = { ...order, store };
+
+    const productIds = Array.isArray(enrichedOrder.items)
+      ? enrichedOrder.items.map((it: any) => String(it?.product_id || '').trim()).filter(Boolean)
+      : [];
+    const orderMaps = await fetchVariationOrderMaps(productIds);
+    const itemsSorted = (Array.isArray(enrichedOrder.items) ? enrichedOrder.items : []).map((it: any) => {
+      const pid = String(it?.product_id || '').trim();
+      const map = pid ? orderMaps.get(pid) : undefined;
+      const sortedVars = sortReceiptVariations(it?.variations, map);
+      return { ...it, variations: sortedVars };
+    });
+    (enrichedOrder as any).items = itemsSorted;
 
     if (isElectron) {
       const resp = await printElectron(enrichedOrder, config);
@@ -453,6 +594,12 @@ export const PrinterService = {
     bold(false);
     const storeDesc = String(order?.store?.description || '').trim();
     if (storeDesc) commands += text(storeDesc);
+    const storeAddress = String(order?.store?.address || '').trim();
+    if (storeAddress) commands += text(storeAddress);
+    const storePhone = String(order?.store?.phone || '').trim();
+    if (storePhone) commands += text(`Tel: ${storePhone}`);
+    const storeCnpj = String(order?.store?.cnpj || '').trim();
+    if (storeCnpj) commands += text(`CNPJ: ${storeCnpj}`);
     commands += text(new Date(order.created_at).toLocaleString('pt-BR'));
     line();
 
@@ -485,10 +632,17 @@ export const PrinterService = {
       if (item.variations && item.variations.length) {
         for (const v of item.variations) {
           if (!v) continue;
-          commands += text(`   ${String(v)}`);
+          const parsed = splitLabelValue(String(v));
+          if (!parsed) {
+            commands += text(`   ${String(v)}`);
+            continue;
+          }
+          const label = String(parsed.label || '').trim();
+          const value = String(parsed.value || '').trim();
+          commands += `   ${BOLD_ON}${label}:${BOLD_OFF}${value ? ` ${value}` : ''}\n`;
         }
       }
-      if (item.notes) commands += text(`   Obs: ${item.notes}`);
+      if (item.notes) commands += `   ${BOLD_ON}Obs:${BOLD_OFF} ${String(item.notes)}\n`;
       commands += '\n';
     });
     line();

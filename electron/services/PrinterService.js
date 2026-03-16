@@ -230,6 +230,10 @@ class PrinterService extends EventEmitter {
     if (data.store?.phone) {
       printer.println(`Tel: ${data.store.phone}`);
     }
+
+    if (data.store?.cnpj) {
+      printer.println(`CNPJ: ${data.store.cnpj}`);
+    }
     
     printer.drawLine();
     printer.newLine();
@@ -283,16 +287,25 @@ class PrinterService extends EventEmitter {
       printer.println(`${unitPrice.toFixed(2)} = R$ ${subtotal.toFixed(2)}`);
       printer.alignLeft();
       
-      // Observações
-      if (item.notes || item.observations) {
-        printer.println(`Obs: ${item.notes || item.observations}`);
-      }
-
       if (Array.isArray(item.variations) && item.variations.length > 0) {
         for (const v of item.variations) {
           if (!v) continue;
-          printer.println(`  ${String(v)}`);
+          const raw = String(v);
+          const idx = raw.indexOf(':');
+          if (idx > 0) {
+            printer.bold(true);
+            printer.println(`  ${raw.slice(0, idx).trim()}: ${raw.slice(idx + 1).trim()}`);
+            printer.bold(false);
+          } else {
+            printer.println(`  ${raw}`);
+          }
         }
+      }
+
+      if (item.notes || item.observations) {
+        printer.bold(true);
+        printer.println(`Obs: ${item.notes || item.observations}`);
+        printer.bold(false);
       }
       
       printer.newLine();
