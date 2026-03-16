@@ -54,7 +54,7 @@ function createWindow() {
     if (!fs.existsSync(indexPath)) {
       dialog.showErrorBox('Erro ao iniciar', `Arquivo não encontrado:\n${indexPath}`);
     } else {
-      mainWindow.loadFile(indexPath, { hash: 'dashboard' });
+      mainWindow.loadFile(indexPath, { hash: '/dashboard' });
     }
   }
 
