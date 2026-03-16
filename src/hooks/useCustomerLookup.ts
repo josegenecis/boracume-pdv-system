@@ -12,18 +12,52 @@ export const useCustomerLookup = (userId: string) => {
   const [isLoading, setIsLoading] = useState(false);
   
   const lookupCustomer = useCallback(async (phone: string): Promise<Customer | null> => {
-    if (!phone || phone.length < 10) {
+    const raw = String(phone || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits || digits.length < 10) {
       return null;
     }
 
     setIsLoading(true);
     try {
+      const candidates = (() => {
+        const set = new Set<string>();
+        const add = (v: string) => {
+          const t = String(v || '').trim();
+          if (t) set.add(t);
+        };
+        add(raw);
+        add(digits);
+        if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) add(`55${digits}`);
+        if (digits.length === 11) {
+          const ddd = digits.slice(0, 2);
+          const a = digits.slice(2, 7);
+          const b = digits.slice(7);
+          add(`(${ddd}) ${a}-${b}`);
+          add(`(${ddd})${a}-${b}`);
+          add(`(${ddd}) ${a}${b}`);
+          add(`${ddd} ${a}-${b}`);
+          add(`${ddd}${a}${b}`);
+        }
+        if (digits.length === 10) {
+          const ddd = digits.slice(0, 2);
+          const a = digits.slice(2, 6);
+          const b = digits.slice(6);
+          add(`(${ddd}) ${a}-${b}`);
+          add(`(${ddd})${a}-${b}`);
+          add(`(${ddd}) ${a}${b}`);
+          add(`${ddd} ${a}-${b}`);
+          add(`${ddd}${a}${b}`);
+        }
+        return Array.from(set).slice(0, 12);
+      })();
+
       // Primeiro tentar buscar na tabela customers
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
         .select('name, phone, address, neighborhood')
         .eq('user_id', userId)
-        .eq('phone', phone)
+        .in('phone', candidates as any)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -42,7 +76,7 @@ export const useCustomerLookup = (userId: string) => {
         .from('orders')
         .select('customer_name, customer_phone, customer_address')
         .eq('user_id', userId)
-        .eq('customer_phone', phone)
+        .in('customer_phone', candidates as any)
         .order('created_at', { ascending: false })
         .limit(1);
 

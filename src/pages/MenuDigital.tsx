@@ -310,6 +310,11 @@ const MenuDigital = () => {
         }
       }
 
+      const phoneDigits = String(orderData.customer_phone || '').replace(/\D/g, '');
+      if (phoneDigits.length >= 10) {
+        orderData.customer_phone = phoneDigits;
+      }
+
       // Primeiro, verificar se o cliente já existe
       let customerId = null;
       try {

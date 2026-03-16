@@ -89,6 +89,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
+  const phoneLookupTimerRef = useRef<number | null>(null);
+  const lastLookupDigitsRef = useRef<string>('');
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
@@ -139,6 +142,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   useEffect(() => {
     if (isOpen) setStep('bag');
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (step !== 'checkout') return;
+    window.setTimeout(() => {
+      try {
+        phoneInputRef.current?.focus();
+      } catch {}
+    }, 0);
+  }, [isOpen, step]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -364,10 +377,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     setIsLoading(true);
     
     try {
+      const phoneDigits = String(customerPhone || '').replace(/\D/g, '');
       const orderData = {
         user_id: userId,
         customer_name: customerName,
-        customer_phone: customerPhone,
+        customer_phone: phoneDigits,
         customer_address: customerAddress,
         delivery_zone_id: deliveryZoneId || null,
         payment_method: paymentMethod,
@@ -519,43 +533,40 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <h3 className="font-bold text-gray-900">Dados para entrega:</h3>
             
             <div>
-              <Label htmlFor="name">Nome completo *</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Seu nome completo"
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <div>
               <Label htmlFor="phone">WhatsApp *</Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="phone"
+                  ref={phoneInputRef}
                   value={customerPhone}
                   onChange={async (e) => {
                     const phone = e.target.value;
                     setCustomerPhone(phone);
                     
                     // Auto-lookup customer if phone has enough digits
-                    if (phone.replace(/\D/g, '').length >= 10) {
-                      const customer = await lookupCustomer(phone);
+                    const digits = phone.replace(/\D/g, '');
+                    if (digits.length < 10) {
+                      setIsExistingCustomer(false);
+                      lastLookupDigitsRef.current = '';
+                      if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
+                      phoneLookupTimerRef.current = null;
+                      return;
+                    }
+
+                    if (digits === lastLookupDigitsRef.current) return;
+                    lastLookupDigitsRef.current = digits;
+                    if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
+                    phoneLookupTimerRef.current = window.setTimeout(async () => {
+                      const customer = await lookupCustomer(digits);
                       if (customer) {
-                        setCustomerName(customer.name);
-                        setCustomerAddress(customer.address);
+                        setCustomerName((prev) => prev.trim() ? prev : customer.name);
+                        setCustomerAddress((prev) => prev.trim() ? prev : customer.address);
                         setIsExistingCustomer(true);
                       } else {
                         setIsExistingCustomer(false);
                       }
-                    } else {
-                      setIsExistingCustomer(false);
-                    }
+                    }, 350);
                   }}
                   placeholder="(11) 99999-9999"
                   className="pl-10"
@@ -572,6 +583,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   Cliente encontrado! Dados preenchidos automaticamente.
                 </div>
               )}
+            </div>
+
+            <div>
+              <Label htmlFor="name">Nome completo *</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  className="pl-10"
+                />
+              </div>
             </div>
 
             <div>
