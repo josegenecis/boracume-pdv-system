@@ -629,14 +629,27 @@ const Orders = () => {
         delivery_assigned_at: new Date().toISOString(),
         delivery_payout_amount: payoutAmount
       };
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('orders' as any)
         .update(payload as any)
         .eq('id', orderId)
         .eq('user_id', user.id);
       if (error) throw error;
-    } catch {
-      await updateOrderStatus(orderId, 'in_delivery');
+      if (data) {
+        setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, ...(payload as any) } : o)));
+      }
+    } catch (e: any) {
+      const code = String(e?.code || '');
+      if (code === '42703') {
+        await updateOrderStatus(orderId, 'in_delivery');
+        return;
+      }
+      toast({
+        title: 'Erro ao atribuir motoboy',
+        description: String(e?.message || 'Não foi possível atualizar o pedido.'),
+        variant: 'destructive'
+      });
+      throw e;
     }
   };
 
@@ -1523,6 +1536,9 @@ const Orders = () => {
                       setAssignDialogOpen(false);
                       setAssignOrderIds([]);
                       setSelectedDriverId('');
+                      toast({ title: 'Saiu para entrega', description: 'Motoboy atribuído com sucesso.' });
+                    } catch {
+                      toast({ title: 'Erro', description: 'Não foi possível atribuir o motoboy. Verifique o console.', variant: 'destructive' });
                     } finally {
                       setAssigningDriver(false);
                     }
