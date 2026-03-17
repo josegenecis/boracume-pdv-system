@@ -180,7 +180,13 @@ export default function Totem() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 pb-28">
         <div className="mb-6">
-          <MarketingBanners restaurantId={finalUserId} />
+          <MarketingBanners
+            restaurantId={finalUserId}
+            onSelectProductId={(productId) => {
+              const p = (products as any[]).find((x: any) => String(x?.id) === String(productId));
+              if (p) void handleProductClick(p as any);
+            }}
+          />
         </div>
         {menuLoading ? (
           <div className="text-muted-foreground">Carregando cardápio...</div>

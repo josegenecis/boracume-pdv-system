@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +12,7 @@ interface Banner {
   description?: string;
   link?: string;
   bannerType?: 'wide' | 'tile';
+  productId?: string | null;
 }
 
 interface PromotionalBannerProps {
@@ -19,13 +20,15 @@ interface PromotionalBannerProps {
   interval?: number;
   restaurantId?: string;
   variant?: 'wide' | 'tile';
+  onSelectProductId?: (productId: string) => void;
 }
 
 const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ 
   autoPlay = true, 
   interval = 5000,
   restaurantId,
-  variant = 'wide'
+  variant = 'wide',
+  onSelectProductId
 }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -33,6 +36,27 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   const { user } = useAuth();
   
   const userId = restaurantId || user?.id;
+
+  const openLink = (href: string) => {
+    const url = String(href || '').trim();
+    if (!url) return;
+    const isInternal = url.startsWith('/') || url.startsWith('#');
+    if (isInternal) {
+      window.location.href = url;
+      return;
+    }
+    window.open(url, '_blank', 'noreferrer');
+  };
+
+  const handleBannerClick = (b: Banner) => {
+    const pid = String(b.productId || '').trim();
+    if (pid && typeof onSelectProductId === 'function') {
+      onSelectProductId(pid);
+      return;
+    }
+    const href = String(b.link || '').trim();
+    if (href) openLink(href);
+  };
   
   useEffect(() => {
     const fetchBanners = async () => {
@@ -50,7 +74,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
 
         const res1 = await supabase
           .from('promotional_banners')
-          .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,banner_type')
+          .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,banner_type,product_id')
           .eq('user_id', userId)
           .eq('active', true)
           .eq('banner_type', variant)
@@ -61,7 +85,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         if (promoError && String(promoError.message || '').includes('banner_type')) {
           const res2 = await supabase
             .from('promotional_banners')
-            .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date')
+            .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,product_id')
             .eq('user_id', userId)
             .eq('active', true)
             .order('display_order') as any;
@@ -78,7 +102,8 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             title: banner.title,
             description: banner.description,
             link: banner.link_url,
-            bannerType: banner.banner_type
+            bannerType: banner.banner_type,
+            productId: banner.product_id
           }));
           setBanners(convertedBanners);
         } else {
@@ -146,6 +171,10 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
       }
     ];
   };
+
+  const clickables = useMemo(() => {
+    return banners.filter((b) => String(b.imageUrl || '').trim());
+  }, [banners]);
   
   useEffect(() => {
     if (!autoPlay || banners.length <= 1) return;
@@ -165,7 +194,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     );
   }
   
-  if (banners.length === 0) {
+  if (clickables.length === 0) {
     return null;
   }
   
@@ -177,30 +206,23 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
   };
   
-  const currentBanner = banners[currentIndex];
+  const currentBanner = clickables[currentIndex % clickables.length];
 
   if (variant === 'tile') {
     return (
       <div className="w-full overflow-x-auto">
         <div className="flex gap-3 min-w-max">
-          {banners.map((b) => (
-            <a
+          {clickables.map((b) => (
+            <button
               key={b.id}
-              href={b.link || undefined}
-              onClick={(e) => {
-                if (!b.link) e.preventDefault();
-              }}
+              type="button"
+              onClick={() => handleBannerClick(b)}
               className="block w-40 sm:w-44 rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-white"
             >
               <div className="aspect-[2/3] w-full bg-gray-100 relative">
                 <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
-                  <div className="text-sm font-extrabold leading-tight line-clamp-2">{b.title}</div>
-                  {b.description ? <div className="text-[11px] opacity-90 line-clamp-2 mt-1">{b.description}</div> : null}
-                </div>
               </div>
-            </a>
+            </button>
           ))}
         </div>
       </div>
@@ -212,27 +234,25 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
       <div
         className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
         style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
-      >
-        <div className="absolute inset-0 bg-black/35" />
-      </div>
+      />
 
-      <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
-        <h2 className="text-lg sm:text-xl font-extrabold mb-1 leading-tight">{currentBanner.title}</h2>
-        {currentBanner.description ? <p className="text-xs sm:text-sm mb-2 line-clamp-2">{currentBanner.description}</p> : null}
-        {currentBanner.link ? (
-          <Button variant="secondary" size="sm" className="self-start">
-            Ver oferta
-          </Button>
-        ) : null}
-      </div>
+      <button
+        type="button"
+        className="absolute inset-0"
+        onClick={() => handleBannerClick(currentBanner)}
+        aria-label="Banner promocional"
+      />
 
-      {banners.length > 1 ? (
+      {clickables.length > 1 ? (
         <>
           <Button
             variant="ghost"
             size="icon"
             className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-8 w-8"
-            onClick={handlePrevious}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrevious();
+            }}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -240,28 +260,30 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             variant="ghost"
             size="icon"
             className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-8 w-8"
-            onClick={handleNext}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </>
       ) : null}
 
-      {banners.length > 1 ? (
+      {clickables.length > 1 ? (
         <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-1">
-          {banners.map((_, index) => (
+          {clickables.map((_, index) => (
             <button
               key={index}
               className={`w-2 h-2 rounded-full ${currentIndex === index ? 'bg-white' : 'bg-white/50'}`}
-              onClick={() => setCurrentIndex(index)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentIndex(index);
+              }}
             />
           ))}
         </div>
       ) : null}
-
-      <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded">
-        {variant === 'wide' ? '800x260 recomendado' : '600x900 recomendado'}
-      </div>
     </div>
   );
 };

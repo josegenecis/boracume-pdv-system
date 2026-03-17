@@ -596,7 +596,13 @@ const MenuDigital = () => {
 
       <div className="max-w-4xl mx-auto px-4">
         <div className="mt-4">
-          <MarketingBanners restaurantId={finalUserId} />
+          <MarketingBanners
+            restaurantId={finalUserId}
+            onSelectProductId={(productId) => {
+              const p = (products as any[]).find((x: any) => String(x?.id) === String(productId));
+              if (p) void handleProductClick(p as any);
+            }}
+          />
         </div>
 
         <div className="h-4" />

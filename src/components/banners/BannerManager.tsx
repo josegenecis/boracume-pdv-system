@@ -20,6 +20,7 @@ interface Banner {
   description?: string;
   image_url?: string;
   link_url?: string;
+  product_id?: string | null;
   start_date?: string;
   end_date?: string;
   active: boolean;
@@ -29,6 +30,7 @@ interface Banner {
 
 const BannerManager = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [products, setProducts] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
@@ -40,6 +42,7 @@ const BannerManager = () => {
     title: '',
     description: '',
     link_url: '',
+    product_id: '__none__',
     start_date: '',
     end_date: '',
     display_order: 0,
@@ -53,8 +56,24 @@ const BannerManager = () => {
   useEffect(() => {
     if (user) {
       fetchBanners();
+      fetchProducts();
     }
   }, [user]);
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await (supabase.from('products') as any)
+        .select('id,name,price')
+        .eq('user_id', user?.id)
+        .eq('is_available', true)
+        .eq('show_in_delivery', true)
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setProducts((data || []) as any);
+    } catch {
+      setProducts([]);
+    }
+  };
 
   const fetchBanners = async () => {
     try {
@@ -181,6 +200,7 @@ const BannerManager = () => {
             description: formData.description || null,
             image_url: imageUrl || null,
             link_url: formData.link_url || null,
+            product_id: formData.product_id === '__none__' ? null : formData.product_id,
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
             display_order: formData.display_order,
@@ -204,6 +224,7 @@ const BannerManager = () => {
             description: formData.description || null,
             image_url: imageUrl || null,
             link_url: formData.link_url || null,
+            product_id: formData.product_id === '__none__' ? null : formData.product_id,
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
             display_order: formData.display_order,
@@ -239,6 +260,7 @@ const BannerManager = () => {
       title: banner.title,
       description: banner.description || '',
       link_url: banner.link_url || '',
+      product_id: banner.product_id ? String(banner.product_id) : '__none__',
       start_date: banner.start_date ? banner.start_date.split('T')[0] : '',
       end_date: banner.end_date ? banner.end_date.split('T')[0] : '',
       display_order: banner.display_order,
@@ -291,6 +313,7 @@ const BannerManager = () => {
       title: '',
       description: '',
       link_url: '',
+      product_id: '__none__',
       start_date: '',
       end_date: '',
       display_order: 0,
@@ -344,6 +367,25 @@ const BannerManager = () => {
                       </Select>
                       <div className="text-xs text-muted-foreground mt-1">
                         Horizontal recomendado: 800x260 • 10x15 recomendado: 600x900
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Vincular a um produto (opcional)</Label>
+                      <Select value={formData.product_id} onValueChange={(v) => setFormData(prev => ({ ...prev, product_id: v }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Nenhum produto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhum</SelectItem>
+                          {products.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} • R$ {Number(p.price || 0).toFixed(2)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Se vincular um produto, o banner abre a tela do produto no cardápio.
                       </div>
                     </div>
                     <div>
