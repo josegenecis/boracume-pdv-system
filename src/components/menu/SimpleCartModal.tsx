@@ -14,6 +14,7 @@ import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Bankn
 import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
+import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 
 interface CartItem {
   product: {
@@ -77,6 +78,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+  const [pixCheckout, setPixCheckout] = React.useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string }>(null);
   const [upsellOpen, setUpsellOpen] = React.useState(false);
   const [upsellOffers, setUpsellOffers] = React.useState<UpsellOffer[]>([]);
   const [pendingOrderData, setPendingOrderData] = React.useState<any | null>(null);
@@ -388,6 +390,38 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     await onPlaceOrder(data);
   };
 
+  const startPixCheckout = async (orderData: any) => {
+    const { data, status } = await invokeEdgeFunction('pix-start-checkout', {
+      restaurantUserId: userId,
+      orderPayload: orderData,
+      preferredMethod: 'pix'
+    }, { timeoutMs: 60000 });
+
+    if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
+    if (!data.ok) throw new Error(data.error || data.message || `Não foi possível iniciar pagamento (HTTP ${status})`);
+
+    if (data.initPoint) {
+      window.location.href = String(data.initPoint);
+      return;
+    }
+
+    setPixCheckout({
+      correlationID: String(data.correlationID),
+      brCode: String(data.brCode || ''),
+      qrCodeImage: data.qrCodeImage ? String(data.qrCodeImage) : undefined,
+      paymentLinkUrl: data.paymentLinkUrl ? String(data.paymentLinkUrl) : undefined
+    });
+  };
+
+  const finalizeOrder = async (orderData: any) => {
+    if (String(orderData?.payment_method || '') === 'pix') {
+      await startPixCheckout(orderData);
+      onClose();
+      return;
+    }
+    await placeOrderNow(orderData);
+  };
+
   const hasProductVariations = async (productId: string) => {
     try {
       const [{ count: c1 }, { count: c2 }] = await Promise.all([
@@ -430,7 +464,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     setPendingOrderData(null);
     setUpsellSelectedProduct(null);
     setUpsellVariationOpen(false);
-    await placeOrderNow(next);
+    await finalizeOrder(next);
   };
 
   const skipUpsellAndPlace = async () => {
@@ -442,7 +476,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setUpsellOpen(false);
       setUpsellOffers([]);
       setPendingOrderData(null);
-      await placeOrderNow(base);
+      await finalizeOrder(base);
     } finally {
       setUpsellBusy(false);
     }
@@ -557,7 +591,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       })();
 
       if (offers.length === 0) {
-        await placeOrderNow(baseOrderData);
+        await finalizeOrder(baseOrderData);
         return;
       }
 
@@ -592,6 +626,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   return (
     <>
+      {pixCheckout ? (
+        <PixCheckoutModal
+          isOpen={!!pixCheckout}
+          onClose={() => setPixCheckout(null)}
+          correlationID={pixCheckout.correlationID}
+          brCode={pixCheckout.brCode}
+          qrCodeImage={pixCheckout.qrCodeImage}
+          paymentLinkUrl={pixCheckout.paymentLinkUrl}
+        />
+      ) : null}
       <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
