@@ -398,7 +398,17 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     }, { timeoutMs: 60000 });
 
     if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
-    if (!data.ok) throw new Error(data.error || data.message || `Não foi possível iniciar pagamento (HTTP ${status})`);
+    if (!data.ok) {
+      const providerMessage =
+        data?.details?.message ||
+        data?.details?.error ||
+        data?.details?.cause?.[0]?.description ||
+        data?.details?.cause?.[0]?.message ||
+        '';
+      const cid = data?.correlationID ? ` (cid: ${String(data.correlationID)})` : '';
+      const msg = providerMessage ? `Mercado Pago: ${String(providerMessage)}${cid}` : `${String(data.error || data.message || 'Não foi possível iniciar pagamento')}${cid}`;
+      throw new Error(msg);
+    }
 
     if (data.initPoint) {
       window.location.href = String(data.initPoint);
@@ -942,7 +952,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
                   <div className="text-sm font-medium text-gray-900">PIX</div>
                   <div className="text-sm text-gray-700">
-                    Pagamento via PIX será realizado na entrega (maquininha do motoboy).
+                    Pagamento via PIX será exibido com QR Code e copia e cola para pagamento online.
                   </div>
                 </div>
               )}

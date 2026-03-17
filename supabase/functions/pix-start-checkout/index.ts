@@ -196,6 +196,7 @@ Deno.serve(async (req: Request) => {
       console.log("Calling Mercado Pago API...")
       
       if (preferredMethod === 'pix') {
+        const payerEmail = `${correlationID}@example.com`
         const callPayment = async (token: string) =>
           fetch('https://api.mercadopago.com/v1/payments', {
           method: 'POST',
@@ -210,7 +211,7 @@ Deno.serve(async (req: Request) => {
             external_reference: correlationID,
             notification_url: notificationUrl,
             payer: {
-              email: `${correlationID}@boracume.local`, // Fake email para MP aceitar
+              email: payerEmail,
               first_name: customerName.split(' ')[0] || 'Cliente',
               last_name: customerName.split(' ').slice(1).join(' ') || 'BoraCume',
               phone: customerPhone ? { area_code: "11", number: customerPhone.replace(/\D/g, '') } : undefined
@@ -240,7 +241,7 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString()
             })
             .eq('correlation_id', correlationID)
-          return ok({ ok: false, error: 'provider_error', details: mpJson })
+          return ok({ ok: false, error: 'provider_error', details: mpJson, correlationID })
         }
 
         await supabase
@@ -266,6 +267,7 @@ Deno.serve(async (req: Request) => {
         return ok({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago' })
       }
 
+      const payerEmail = `${correlationID}@example.com`
       const preferenceBody = {
         items: [
           {
@@ -278,7 +280,7 @@ Deno.serve(async (req: Request) => {
         external_reference: correlationID,
         notification_url: notificationUrl,
         payer: {
-          email: `${correlationID}@boracume.local`,
+          email: payerEmail,
           name: customerName,
           phone: customerPhone ? { area_code: "11", number: customerPhone.replace(/\D/g, '') } : undefined,
         },
@@ -324,7 +326,7 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString()
           })
           .eq('correlation_id', correlationID)
-        return ok({ ok: false, error: 'provider_error', details: prefJson })
+        return ok({ ok: false, error: 'provider_error', details: prefJson, correlationID })
       }
 
       await supabase
