@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import IfoodSettings from '@/components/settings/IfoodSettings';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
-import PixIntegrationSettings from '@/components/payment/PixIntegrationSettings';
+import PixSetup from '@/pages/PixSetup';
 import HardwareSettings from '@/components/settings/HardwareSettings';
 import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
@@ -266,7 +266,7 @@ const Configuracoes: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="pix">
-          <PixIntegrationSettings />
+          <PixSetup />
         </TabsContent>
 
         <TabsContent value="ifood">
