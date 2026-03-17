@@ -202,7 +202,8 @@ Deno.serve(async (req: Request) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'X-Idempotency-Key': correlationID,
           },
           body: JSON.stringify({
             transaction_amount: Number((value / 100).toFixed(2)),
