@@ -41,14 +41,6 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
   onAddToCart,
   onClose
 }) => {
-
-  console.log('🎯 ProductVariationSelector - Recebendo variações:', {
-    produto: product.name,
-    totalVariacoes: variations.length,
-    variacoes: variations
-  });
-
-
   const [quantity, setQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, any>>({});
   const [notes, setNotes] = useState('');
@@ -114,6 +106,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
 
     // Transformar selectedVariations em um array plano de nomes de opções
     const selectedOptions: string[] = [];
+    const variationLines: string[] = [];
     Object.values(selectedVariations).forEach((options: any) => {
       if (Array.isArray(options)) {
         options.forEach((option: any) => {
@@ -125,8 +118,22 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
     });
     onAddToCart(product, quantity, selectedOptions, notes);
 
+    for (const variation of variations) {
+      const options = selectedVariations[variation.id];
+      if (!Array.isArray(options) || options.length === 0) continue;
+      const names = options.map((o: any) => String(o?.name || '').trim()).filter(Boolean);
+      if (names.length === 0) continue;
+      variationLines.push(`${variation.name}: ${names.join(', ')}`);
+    }
+
+    const payload = {
+      options: selectedOptions,
+      variationLines
+    };
+    onAddToCart(product, quantity, payload as any, notes);
     onClose();
   };
+
 
   return (
     <div className="space-y-6">

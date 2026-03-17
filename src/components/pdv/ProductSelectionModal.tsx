@@ -101,11 +101,24 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
 
   const fetchProductVariations = async (productId: string) => {
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+      const res1 = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId)
-        .order('name');
+        .order('display_order', { ascending: true });
+      data = res1.data as any;
+      error = res1.error as any;
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('product_variations')
+          .select('*')
+          .eq('product_id', productId)
+          .order('name', { ascending: true });
+        data = res2.data as any;
+        error = res2.error as any;
+      }
 
       if (error) throw error;
       

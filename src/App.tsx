@@ -40,7 +40,6 @@ import Garcons from '@/pages/Garcons';
 import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
 import Despesas from '@/pages/Despesas';
-import { ErrorBoundary } from '@/components/utils/ErrorBoundary';
 import SecurityDashboard from '@/pages/SecurityDashboard';
 import WhatsAppBot from '@/pages/WhatsAppBot';
 import Downloads from '@/pages/Downloads';
@@ -173,10 +172,12 @@ function App() {
             <ThemeProvider defaultTheme="light" storageKey="boracume-ui-theme">
               <ConfirmDialogProvider>
                 <Router>
-                  <AppContent />
-                  <GlobalNotificationSystem />
-                  <SonnerToaster />
-                  <ShadcnToaster />
+                  <ErrorBoundary>
+                    <AppContent />
+                    <GlobalNotificationSystem />
+                    <SonnerToaster />
+                    <ShadcnToaster />
+                  </ErrorBoundary>
                 </Router>
               </ConfirmDialogProvider>
             </ThemeProvider>

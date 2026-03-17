@@ -45,10 +45,17 @@ interface ProductVariation {
   options: Array<{name: string; price: number}>;
 }
 
+type SelectedVariationsPayload =
+  | string[]
+  | {
+      options?: string[];
+      variationLines?: string[];
+    };
+
 interface CartItem extends Product {
   cartItemId: string;
   quantity: number;
-  selectedVariations?: any[];
+  selectedVariations?: SelectedVariationsPayload;
   notes?: string;
 }
 
@@ -485,21 +492,36 @@ const PDV = () => {
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
       // Buscar variações específicas do produto
-      const { data: productVariations, error: productError } = await supabase
+      let productVariations: any[] | null = null;
+      let productError: any = null;
+      const res1 = await supabase
         .from('product_variations')
         .select('*')
-        .eq('product_id', productId);
+        .eq('product_id', productId)
+        .order('display_order', { ascending: true });
+      productVariations = res1.data as any;
+      productError = res1.error as any;
+      if (productError && String(productError.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('product_variations')
+          .select('*')
+          .eq('product_id', productId)
+          .order('name', { ascending: true });
+        productVariations = res2.data as any;
+        productError = res2.error as any;
+      }
 
       // Buscar variações globais associadas ao produto
       const { data: globalVariationLinks, error: globalError } = await supabase
         .from('product_global_variation_links')
-        .select('global_variation_id')
-        .eq('product_id', productId);
+        .select('global_variation_id,required,min_selections,max_selections,display_order')
+        .eq('product_id', productId)
+        .order('display_order', { ascending: true });
 
       // Buscar as variações globais pelos IDs
       let globalVariations: any[] = [];
       if (globalVariationLinks && globalVariationLinks.length > 0) {
-        const globalVariationIds = globalVariationLinks.map(link => link.global_variation_id);
+        const globalVariationIds = (globalVariationLinks as any[]).map((link: any) => link.global_variation_id);
         
         const { data: globalVars, error: globalVarError } = await supabase
           .from('global_variations')
@@ -507,22 +529,24 @@ const PDV = () => {
           .in('id', globalVariationIds);
 
         if (globalVars) {
-          globalVariations = globalVars.map(globalVar => ({
-            ...globalVar,
-            required: !!globalVar.required,
-            min_selections: 0,
-            max_selections: globalVar.max_selections ?? 1
-          }));
+          const linkById = new Map((globalVariationLinks as any[]).map((l: any) => [String(l.global_variation_id), l]));
+          globalVariations = globalVars.map((globalVar: any) => {
+            const link = linkById.get(String(globalVar.id));
+            return {
+              ...globalVar,
+              required: link?.required !== undefined && link?.required !== null ? Boolean(link.required) : Boolean(globalVar.required),
+              min_selections: link?.min_selections ?? 0,
+              max_selections: link?.max_selections ?? (globalVar.max_selections ?? 1),
+              display_order: link?.display_order
+            };
+          });
         }
       }
 
       // Combinar todas as variações
-      const allVariations = [
-        ...(productVariations || []),
-        ...globalVariations
-      ];
+      const allVariations = [...(productVariations || []), ...globalVariations];
       
-      const formattedVariations: ProductVariation[] = allVariations
+      const formattedVariations: (ProductVariation & { display_order?: number })[] = allVariations
         .map(item => {
           try {
             let options: Array<{ name: string; price: number; }> = [];
@@ -554,15 +578,23 @@ const PDV = () => {
               name: item.name || '',
               options,
               max_selections: Math.max(1, Number(item.max_selections) || 1),
-              required: Boolean(item.required)
+              required: Boolean(item.required),
+              display_order: item.display_order
             };
           } catch (itemError) {
             return null;
           }
         })
         .filter((variation): variation is ProductVariation => variation !== null);
+
+      const sorted = [...formattedVariations].sort((a: any, b: any) => {
+        const ao = a.display_order !== undefined && a.display_order !== null ? Number(a.display_order) : 10_000;
+        const bo = b.display_order !== undefined && b.display_order !== null ? Number(b.display_order) : 10_000;
+        if (ao !== bo) return ao - bo;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+      });
       
-      return formattedVariations;
+      return sorted as ProductVariation[];
     } catch (error) {
       console.error('Erro geral ao carregar variações:', error);
       return [];
@@ -626,7 +658,15 @@ const PDV = () => {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
 
-  const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
+  const unpackSelectedVariations = (value: SelectedVariationsPayload | undefined) => {
+    if (!value) return { options: [] as string[], variationLines: [] as string[] };
+    if (Array.isArray(value)) return { options: value.map((v) => String(v || '').trim()).filter(Boolean), variationLines: [] as string[] };
+    const options = Array.isArray(value.options) ? value.options.map((v) => String(v || '').trim()).filter(Boolean) : [];
+    const variationLines = Array.isArray(value.variationLines) ? value.variationLines.map((v) => String(v || '').trim()).filter(Boolean) : [];
+    return { options, variationLines };
+  };
+
+  const addToCart = (product: Product, quantity: number = 1, selectedVariations: SelectedVariationsPayload = [], notes: string = '') => {
     setCart(prev => {
       const variationKey = JSON.stringify(selectedVariations) + notes;
       const existing = prev.find(item => 
@@ -647,7 +687,12 @@ const PDV = () => {
         ...product, 
         cartItemId: makeCartItemId(),
         quantity, 
-        selectedVariations: selectedVariations.length > 0 ? selectedVariations : undefined,
+        selectedVariations: (() => {
+          if (Array.isArray(selectedVariations)) return selectedVariations.length > 0 ? selectedVariations : undefined;
+          const { options, variationLines } = unpackSelectedVariations(selectedVariations);
+          if (options.length === 0 && variationLines.length === 0) return undefined;
+          return { options, variationLines };
+        })(),
         notes: notes || undefined
       }];
     });
@@ -660,27 +705,13 @@ const PDV = () => {
   };
 
   // Helper function to format selected variations for display
-  const formatSelectedVariations = (selectedVariations?: any[]) => {
-    if (!selectedVariations || selectedVariations.length === 0) return [];
+  const formatSelectedVariations = (selectedVariations?: SelectedVariationsPayload) => {
+    const { options, variationLines } = unpackSelectedVariations(selectedVariations);
+    if (variationLines.length > 0) return variationLines;
+    if (options.length === 0) return [];
     
     try {
-      return selectedVariations.flatMap(variation => {
-        if (variation && variation.options && Array.isArray(variation.options)) {
-          return variation.options.map((option: any) => {
-            if (typeof option === 'object' && option.name) {
-              return option.name;
-            }
-            return String(option);
-          });
-        }
-        if (typeof variation === 'string') {
-          return [variation];
-        }
-        if (variation && variation.options && Array.isArray(variation.options)) {
-          return variation.options.map((option: any) => option.name || String(option));
-        }
-        return [];
-      });
+      return options;
     } catch (error) {
       console.error('Error formatting variations:', error);
       return [];
@@ -750,15 +781,19 @@ const PDV = () => {
     try {
       setProcessing(true);
 
-      const orderItems = cart.map(item => ({
+      const orderItems = cart.map(item => {
+        const { options, variationLines } = unpackSelectedVariations(item.selectedVariations);
+        return {
         product_id: item.id,
         product_name: item.name,
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
-        options: item.selectedVariations || [],
+        options,
+        variations: variationLines,
         notes: item.notes || ''
-      }));
+        };
+      });
 
       const { data: existingAccount } = await supabase
         .from('table_accounts')
@@ -912,15 +947,19 @@ const PDV = () => {
 
       const orderNumber = generateOrderNumber();
       
-      const orderItems = cart.map(item => ({
+        const orderItems = cart.map(item => {
+          const { options, variationLines } = unpackSelectedVariations(item.selectedVariations);
+          return {
         product_id: item.id,
         product_name: item.name,
         price: item.price,
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
-        options: item.selectedVariations || [],
+        options,
+        variations: variationLines,
         notes: item.notes || ''
-      }));
+          };
+        });
 
       const operatorSession = (() => {
         return getOperatorSession();

@@ -28,6 +28,7 @@ interface Product {
 interface CartItem extends Product {
   quantity: number;
   options?: string[];
+  variations?: string[];
   notes?: string;
 }
 
@@ -105,11 +106,24 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 
   const fetchProductVariations = async (productId: string) => {
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+      const res1 = await supabase
         .from('product_variations')
         .select('*')
         .eq('product_id', productId)
-        .order('name');
+        .order('display_order', { ascending: true });
+      data = res1.data as any;
+      error = res1.error as any;
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('product_variations')
+          .select('*')
+          .eq('product_id', productId)
+          .order('name', { ascending: true });
+        data = res2.data as any;
+        error = res2.error as any;
+      }
 
       if (error) throw error;
       
@@ -152,7 +166,16 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     }
   };
 
-  const addToCart = (product: Product, quantity: number = 1, options: string[] = [], notes: string = '') => {
+  const unpackSelectedVariations = (value: any) => {
+    if (!value) return { options: [] as string[], variationLines: [] as string[] };
+    if (Array.isArray(value)) return { options: value.map((v) => String(v || '').trim()).filter(Boolean), variationLines: [] as string[] };
+    const options = Array.isArray(value.options) ? value.options.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
+    const variationLines = Array.isArray(value.variationLines) ? value.variationLines.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
+    return { options, variationLines };
+  };
+
+  const addToCart = (product: Product, quantity: number = 1, selected: any = [], notes: string = '') => {
+    const { options, variationLines } = unpackSelectedVariations(selected);
     setCartItems(prev => {
       const existing = prev.find(item => 
         item.id === product.id && 
@@ -172,6 +195,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         ...product, 
         quantity, 
         options: options.length > 0 ? options : undefined,
+        variations: variationLines.length > 0 ? variationLines : undefined,
         notes: notes || undefined
       }];
     });
@@ -239,6 +263,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         quantity: item.quantity,
         subtotal: item.price * item.quantity,
         options: item.options || [],
+        variations: item.variations || [],
         notes: item.notes || ''
       }));
 
