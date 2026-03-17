@@ -17,7 +17,7 @@ import { buildPublicTrackShareUrl } from '@/utils/publicUrl';
 import HighlightsSection from '@/components/menu/HighlightsSection';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import ProductCard from '@/components/menu/ProductCard';
-import PromotionalBanner from '@/components/marketing/PromotionalBanner';
+import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 // import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
@@ -596,7 +596,7 @@ const MenuDigital = () => {
 
       <div className="max-w-4xl mx-auto px-4">
         <div className="mt-4">
-          <PromotionalBanner restaurantId={finalUserId} />
+          <MarketingBanners restaurantId={finalUserId} />
         </div>
 
         <div className="h-4" />

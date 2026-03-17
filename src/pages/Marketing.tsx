@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import BannerManager from '@/components/banners/BannerManager';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
-import PromotionalBanner from '@/components/marketing/PromotionalBanner';
+import MarketingBanners from '@/components/marketing/MarketingBanners';
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager';
 import HighlightsManager from '@/components/marketing/HighlightsManager';
 import UpsellManager from '@/components/marketing/UpsellManager';
@@ -55,7 +55,7 @@ export default function Marketing() {
 
         <TabsContent value="banners">
           <div className="space-y-4">
-            <PromotionalBanner autoPlay={false} />
+            <MarketingBanners />
             <BannerManager />
           </div>
         </TabsContent>

@@ -40,7 +40,7 @@ export default function UpsellManager() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UpsellRule | null>(null);
   const [form, setForm] = useState({
-    trigger_product_id: '',
+    trigger_product_id: '__any__',
     suggested_product_id: '',
     message: '',
     active: true,
@@ -77,7 +77,7 @@ export default function UpsellManager() {
 
   const resetForm = () => {
     setEditing(null);
-    setForm({ trigger_product_id: '', suggested_product_id: '', message: '', active: true, display_order: 0 });
+    setForm({ trigger_product_id: '__any__', suggested_product_id: '', message: '', active: true, display_order: 0 });
   };
 
   const openCreate = () => {
@@ -88,7 +88,7 @@ export default function UpsellManager() {
   const openEdit = (rule: UpsellRule) => {
     setEditing(rule);
     setForm({
-      trigger_product_id: rule.trigger_product_id || '',
+      trigger_product_id: rule.trigger_product_id || '__any__',
       suggested_product_id: rule.suggested_product_id || '',
       message: rule.message || '',
       active: Boolean(rule.active),
@@ -107,7 +107,7 @@ export default function UpsellManager() {
       setLoading(true);
       const payload: any = {
         user_id: user.id,
-        trigger_product_id: form.trigger_product_id || null,
+        trigger_product_id: form.trigger_product_id === '__any__' ? null : (form.trigger_product_id || null),
         suggested_product_id: form.suggested_product_id || null,
         message: form.message || null,
         active: Boolean(form.active),
@@ -252,7 +252,7 @@ export default function UpsellManager() {
                   <SelectValue placeholder="Qualquer produto" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Qualquer produto</SelectItem>
+                  <SelectItem value="__any__">Qualquer produto</SelectItem>
                   {products.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
@@ -312,4 +312,3 @@ export default function UpsellManager() {
     </div>
   );
 }
-

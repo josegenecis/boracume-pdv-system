@@ -15,7 +15,7 @@ import TotemCheckoutModal from '@/components/totem/TotemCheckoutModal';
 import TotemProductCard from '@/components/totem/TotemProductCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { PrinterService } from '@/utils/printerService';
-import PromotionalBanner from '@/components/marketing/PromotionalBanner';
+import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 
 interface Product {
@@ -180,7 +180,7 @@ export default function Totem() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 pb-28">
         <div className="mb-6">
-          <PromotionalBanner restaurantId={finalUserId} />
+          <MarketingBanners restaurantId={finalUserId} />
         </div>
         {menuLoading ? (
           <div className="text-muted-foreground">Carregando cardápio...</div>

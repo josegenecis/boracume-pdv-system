@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Banner {
   id: string;
@@ -23,6 +24,7 @@ interface Banner {
   end_date?: string;
   active: boolean;
   display_order: number;
+  banner_type?: 'wide' | 'tile';
 }
 
 const BannerManager = () => {
@@ -40,7 +42,8 @@ const BannerManager = () => {
     start_date: '',
     end_date: '',
     display_order: 0,
-    active: true
+    active: true,
+    banner_type: 'wide' as 'wide' | 'tile'
   });
   const { toast } = useToast();
   const { user } = useAuth();
@@ -120,7 +123,7 @@ const BannerManager = () => {
         .from('promotional-banners')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true
         });
 
       if (uploadError) {
@@ -133,10 +136,17 @@ const BannerManager = () => {
       
       return urlData.publicUrl;
     } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      const hint =
+        msg.toLowerCase().includes('bucket') || msg.toLowerCase().includes('not found')
+          ? 'Bucket promotional-banners não encontrado. Rode o SQL do Marketing no Supabase.'
+          : msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('permission')
+            ? 'Sem permissão para upload. Confira as policies do bucket promotional-banners no SQL do Marketing.'
+            : '';
       console.error('Erro ao fazer upload da imagem:', error);
       toast({
         title: "Erro no upload",
-        description: error.message || "Não foi possível fazer upload da imagem.",
+        description: hint || error.message || "Não foi possível fazer upload da imagem.",
         variant: "destructive"
       });
       return null;
@@ -173,7 +183,8 @@ const BannerManager = () => {
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
             display_order: formData.display_order,
-            active: formData.active
+            active: formData.active,
+            banner_type: formData.banner_type
           })
           .eq('id', editingBanner.id);
         
@@ -195,7 +206,8 @@ const BannerManager = () => {
             start_date: formData.start_date || null,
             end_date: formData.end_date || null,
             display_order: formData.display_order,
-            active: formData.active
+            active: formData.active,
+            banner_type: formData.banner_type
           });
         
         if (error) throw error;
@@ -229,7 +241,8 @@ const BannerManager = () => {
       start_date: banner.start_date ? banner.start_date.split('T')[0] : '',
       end_date: banner.end_date ? banner.end_date.split('T')[0] : '',
       display_order: banner.display_order,
-      active: banner.active
+      active: banner.active,
+      banner_type: (banner.banner_type || 'wide') as any
     });
     setImagePreview(banner.image_url || '');
     setIsDialogOpen(true);
@@ -280,7 +293,8 @@ const BannerManager = () => {
       start_date: '',
       end_date: '',
       display_order: 0,
-      active: true
+      active: true,
+      banner_type: 'wide'
     });
     setEditingBanner(null);
     setImageFile(null);
@@ -316,6 +330,21 @@ const BannerManager = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-4">
+                    <div>
+                      <Label>Tipo de banner</Label>
+                      <Select value={formData.banner_type} onValueChange={(v: any) => setFormData(prev => ({ ...prev, banner_type: v }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="wide">Horizontal (menor)</SelectItem>
+                          <SelectItem value="tile">10x15 (vertical)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Horizontal recomendado: 800x260 • 10x15 recomendado: 600x900
+                      </div>
+                    </div>
                     <div>
                       <Label htmlFor="title">Título *</Label>
                       <Input

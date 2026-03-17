@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
+import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 
 interface CartItem {
   product: {
@@ -27,6 +28,13 @@ interface CartItem {
   totalPrice: number;
   uniqueId: string;
 }
+
+type UpsellOffer = {
+  ruleId: string;
+  triggerProductId: string | null;
+  message: string | null;
+  product: { id: string; name: string; price: number; description?: string; image_url?: string };
+};
 
 interface SimpleCartModalProps {
   isOpen: boolean;
@@ -69,6 +77,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
+  const [upsellOpen, setUpsellOpen] = React.useState(false);
+  const [upsellOffers, setUpsellOffers] = React.useState<UpsellOffer[]>([]);
+  const [pendingOrderData, setPendingOrderData] = React.useState<any | null>(null);
+  const [upsellSelectedProduct, setUpsellSelectedProduct] = React.useState<any | null>(null);
+  const [upsellVariationOpen, setUpsellVariationOpen] = React.useState(false);
+  const [upsellBusy, setUpsellBusy] = React.useState(false);
   
   // Coupon State
   const [couponCode, setCouponCode] = React.useState('');
@@ -370,17 +384,96 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     return valid;
   };
 
-  const handlePlaceOrder = async () => {
-    if (!isFormValid()) {
-      return;
-    }
+  const placeOrderNow = async (data: any) => {
+    await onPlaceOrder(data);
+  };
 
+  const hasProductVariations = async (productId: string) => {
+    try {
+      const [{ count: c1 }, { count: c2 }] = await Promise.all([
+        (supabase.from('product_variations') as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('product_id', productId),
+        (supabase.from('product_global_variation_links') as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('product_id', productId)
+      ]);
+      return Number(c1 || 0) > 0 || Number(c2 || 0) > 0;
+    } catch {
+      return false;
+    }
+  };
+
+  const applyUpsellAndPlace = async (product: any, quantity: number, variations: string[], itemNotes: string, variationPrice: number) => {
+    const base = pendingOrderData;
+    if (!base) return;
+    const unitPrice = Number(product?.price || 0) + Number(variationPrice || 0);
+    const lineTotal = unitPrice * Math.max(1, Number(quantity || 1));
+    const next = {
+      ...base,
+      items: [
+        ...(Array.isArray(base.items) ? base.items : []),
+        {
+          product_id: String(product.id),
+          product_name: String(product.name || ''),
+          quantity: Math.max(1, Number(quantity || 1)),
+          price: Number(product.price || 0),
+          variations: Array.isArray(variations) ? variations : [],
+          notes: String(itemNotes || ''),
+          total: Number(lineTotal || 0)
+        }
+      ],
+      total: Number(base.total || 0) + Number(lineTotal || 0)
+    };
+    setUpsellOpen(false);
+    setUpsellOffers([]);
+    setPendingOrderData(null);
+    setUpsellSelectedProduct(null);
+    setUpsellVariationOpen(false);
+    await placeOrderNow(next);
+  };
+
+  const skipUpsellAndPlace = async () => {
+    const base = pendingOrderData;
+    if (!base) return;
+    if (upsellBusy) return;
+    setUpsellBusy(true);
+    try {
+      setUpsellOpen(false);
+      setUpsellOffers([]);
+      setPendingOrderData(null);
+      await placeOrderNow(base);
+    } finally {
+      setUpsellBusy(false);
+    }
+  };
+
+  const chooseUpsellOffer = async (offer: UpsellOffer) => {
+    if (!offer?.product?.id) return;
+    if (upsellBusy) return;
+    setUpsellBusy(true);
+    try {
+      const hasVars = await hasProductVariations(String(offer.product.id));
+      if (!hasVars) {
+        await applyUpsellAndPlace(offer.product, 1, [], '', 0);
+        return;
+      }
+      setUpsellSelectedProduct(offer.product);
+      setUpsellVariationOpen(true);
+      setUpsellOpen(false);
+    } finally {
+      setUpsellBusy(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!isFormValid()) return;
     setIsLoading(true);
-    
+
     try {
       const phoneDigits = String(customerPhone || '').replace(/\D/g, '');
       const neighborhood = String(customerNeighborhood || '').trim() || String(selectedZone?.name || '').trim() || String(quoteZone?.name || '').trim() || '';
-      const orderData = {
+      const baseOrderData = {
         user_id: userId,
         customer_name: customerName,
         customer_phone: phoneDigits,
@@ -393,8 +486,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_latitude: location.latitude,
         customer_longitude: location.longitude,
         customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
-        google_maps_link: location.latitude && location.longitude ? 
-          generateGoogleMapsLink(location.latitude, location.longitude) : null,
+        google_maps_link: location.latitude && location.longitude ? generateGoogleMapsLink(location.latitude, location.longitude) : null,
         items: cart.map(item => ({
           product_id: item.product.id,
           product_name: item.product.name,
@@ -405,14 +497,71 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           total: item.totalPrice
         })),
         delivery_fee: deliveryFee,
-        discount: discount, // Add Discount
-        coupon_code: appliedCoupon?.code, // Add Coupon Code
+        discount: discount,
+        coupon_code: appliedCoupon?.code,
         total: finalTotal,
         status: 'pending',
         order_type: 'delivery',
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
-      await onPlaceOrder(orderData);
+
+      const offers = await (async (): Promise<UpsellOffer[]> => {
+        try {
+          const rulesRes = await supabase
+            .from('upsell_rules')
+            .select('id,trigger_product_id,suggested_product_id,message,active,display_order')
+            .eq('user_id', userId)
+            .eq('active', true)
+            .order('display_order', { ascending: true }) as any;
+          if (rulesRes.error) {
+            if (String(rulesRes.error.code || '') === '42P01') return [];
+            return [];
+          }
+          const rules = Array.isArray(rulesRes.data) ? rulesRes.data : [];
+          const cartProductIds = new Set(cart.map((i) => String(i.product.id)));
+          const applicable = rules.filter((r: any) => !r.trigger_product_id || cartProductIds.has(String(r.trigger_product_id)));
+          const suggestedIds = Array.from(new Set(applicable.map((r: any) => String(r.suggested_product_id || '')).filter(Boolean)));
+          if (suggestedIds.length === 0) return [];
+
+          const productsRes = await (supabase.from('products') as any)
+            .select('id,name,description,price,image_url')
+            .eq('user_id', userId)
+            .in('id', suggestedIds);
+          if (productsRes.error) return [];
+          const byId = new Map((productsRes.data || []).map((p: any) => [String(p.id), p]));
+
+          const out: UpsellOffer[] = [];
+          for (const r of applicable) {
+            const pid = String(r.suggested_product_id || '');
+            const p = byId.get(pid);
+            if (!p) continue;
+            out.push({
+              ruleId: String(r.id),
+              triggerProductId: r.trigger_product_id ? String(r.trigger_product_id) : null,
+              message: r.message ? String(r.message) : null,
+              product: {
+                id: String(p.id),
+                name: String(p.name || ''),
+                description: p.description ? String(p.description) : '',
+                price: Number(p.price || 0),
+                image_url: p.image_url ? String(p.image_url) : ''
+              }
+            });
+          }
+          return out.slice(0, 3);
+        } catch {
+          return [];
+        }
+      })();
+
+      if (offers.length === 0) {
+        await placeOrderNow(baseOrderData);
+        return;
+      }
+
+      setPendingOrderData(baseOrderData);
+      setUpsellOffers(offers);
+      setUpsellOpen(true);
     } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
       alert(`Erro ao finalizar pedido: ${error.message || error}. Se for pagamento online, verifique se o PIX/checkout está configurado para o restaurante.`);
@@ -440,7 +589,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
@@ -880,6 +1030,68 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           )}
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Antes de finalizar…</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Quer aproveitar alguma oferta?
+            </div>
+            <div className="space-y-3">
+              {upsellOffers.map((offer) => (
+                <Card key={offer.ruleId} className="p-3 border border-gray-100">
+                  <div className="flex gap-3 items-start">
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                      {offer.product.image_url ? (
+                        <img src={offer.product.image_url} alt={offer.product.name} className="w-full h-full object-cover" />
+                      ) : null}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-gray-900 truncate">{offer.product.name}</div>
+                      {offer.message ? (
+                        <div className="text-xs text-muted-foreground mt-1">{offer.message}</div>
+                      ) : offer.product.description ? (
+                        <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{offer.product.description}</div>
+                      ) : null}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="font-extrabold text-boracume-orange">R$ {Number(offer.product.price || 0).toFixed(2)}</div>
+                        <Button onClick={() => chooseUpsellOffer(offer)} disabled={upsellBusy}>
+                          Add oferta
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+              {upsellOffers.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nenhuma oferta disponível.</div>
+              ) : null}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={skipUpsellAndPlace} disabled={upsellBusy}>
+                Pular
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <SimpleVariationModal
+        isOpen={upsellVariationOpen}
+        onClose={() => {
+          setUpsellVariationOpen(false);
+          setUpsellSelectedProduct(null);
+          setUpsellOpen(true);
+        }}
+        product={upsellSelectedProduct}
+        onAddToCart={(product, quantity, variations, notes, variationPrice) =>
+          applyUpsellAndPlace(product, quantity, variations, notes, variationPrice)
+        }
+      />
+    </>
   );
 };

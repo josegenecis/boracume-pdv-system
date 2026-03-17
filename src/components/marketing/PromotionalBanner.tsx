@@ -11,18 +11,21 @@ interface Banner {
   title: string;
   description?: string;
   link?: string;
+  bannerType?: 'wide' | 'tile';
 }
 
 interface PromotionalBannerProps {
   autoPlay?: boolean;
   interval?: number;
   restaurantId?: string;
+  variant?: 'wide' | 'tile';
 }
 
 const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ 
   autoPlay = true, 
   interval = 5000,
-  restaurantId 
+  restaurantId,
+  variant = 'wide'
 }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -41,17 +44,32 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
       
       try {
         setIsLoading(true);
-        
-        const { data: promoBanners, error: promoError } = await supabase
+
+        let promoBanners: any[] | null = null;
+        let promoError: any = null;
+
+        const res1 = await supabase
           .from('promotional_banners')
-          .select('*')
+          .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,banner_type')
           .eq('user_id', userId)
           .eq('active', true)
-          .order('display_order');
+          .eq('banner_type', variant)
+          .order('display_order') as any;
+        promoBanners = res1.data as any;
+        promoError = res1.error as any;
 
-        if (promoError) {
-          console.error('Erro ao buscar banners promocionais:', promoError);
+        if (promoError && String(promoError.message || '').includes('banner_type')) {
+          const res2 = await supabase
+            .from('promotional_banners')
+            .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date')
+            .eq('user_id', userId)
+            .eq('active', true)
+            .order('display_order') as any;
+          promoBanners = res2.data as any;
+          promoError = res2.error as any;
         }
+
+        if (promoError) console.error('Erro ao buscar banners promocionais:', promoError);
 
         if (promoBanners && promoBanners.length > 0) {
           const convertedBanners: Banner[] = promoBanners.map(banner => ({
@@ -59,7 +77,8 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             imageUrl: banner.image_url || '',
             title: banner.title,
             description: banner.description,
-            link: banner.link_url
+            link: banner.link_url,
+            bannerType: banner.banner_type
           }));
           setBanners(convertedBanners);
         } else {
@@ -116,12 +135,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=300&fit=crop',
         title: 'Promoção Especial',
         description: 'Peça agora e ganhe 10% de desconto!',
+        bannerType: 'wide'
       },
       {
         id: '2',
         imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=300&fit=crop',
         title: 'Prato do Dia',
         description: 'Experimente nossa nova especialidade da casa',
+        bannerType: 'wide'
       }
     ];
   };
@@ -158,28 +179,54 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   
   const currentBanner = banners[currentIndex];
 
+  if (variant === 'tile') {
+    return (
+      <div className="w-full overflow-x-auto">
+        <div className="flex gap-3 min-w-max">
+          {banners.map((b) => (
+            <a
+              key={b.id}
+              href={b.link || undefined}
+              onClick={(e) => {
+                if (!b.link) e.preventDefault();
+              }}
+              className="block w-40 sm:w-44 rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-white"
+            >
+              <div className="aspect-[2/3] w-full bg-gray-100 relative">
+                <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
+                  <div className="text-sm font-extrabold leading-tight line-clamp-2">{b.title}</div>
+                  {b.description ? <div className="text-[11px] opacity-90 line-clamp-2 mt-1">{b.description}</div> : null}
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative w-full h-48 overflow-hidden rounded-lg shadow-lg">
-      <div 
+    <div className="relative w-full h-32 sm:h-36 overflow-hidden rounded-xl shadow-sm border border-gray-100">
+      <div
         className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
         style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
       >
-        <div className="absolute inset-0 bg-black bg-opacity-40" />
+        <div className="absolute inset-0 bg-black/35" />
       </div>
-      
+
       <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
-        <h2 className="text-xl font-bold mb-1">{currentBanner.title}</h2>
-        {currentBanner.description && (
-          <p className="text-sm mb-2">{currentBanner.description}</p>
-        )}
-        {currentBanner.link && (
+        <h2 className="text-lg sm:text-xl font-extrabold mb-1 leading-tight">{currentBanner.title}</h2>
+        {currentBanner.description ? <p className="text-xs sm:text-sm mb-2 line-clamp-2">{currentBanner.description}</p> : null}
+        {currentBanner.link ? (
           <Button variant="secondary" size="sm" className="self-start">
-            Saiba mais
+            Ver oferta
           </Button>
-        )}
+        ) : null}
       </div>
-      
-      {banners.length > 1 && (
+
+      {banners.length > 1 ? (
         <>
           <Button
             variant="ghost"
@@ -198,24 +245,22 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </>
-      )}
-      
-      {banners.length > 1 && (
+      ) : null}
+
+      {banners.length > 1 ? (
         <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-1">
           {banners.map((_, index) => (
             <button
               key={index}
-              className={`w-2 h-2 rounded-full ${
-                currentIndex === index ? 'bg-white' : 'bg-white/50'
-              }`}
+              className={`w-2 h-2 rounded-full ${currentIndex === index ? 'bg-white' : 'bg-white/50'}`}
               onClick={() => setCurrentIndex(index)}
             />
           ))}
         </div>
-      )}
-      
-      <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-        800x300px recomendado
+      ) : null}
+
+      <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded">
+        {variant === 'wide' ? '800x260 recomendado' : '600x900 recomendado'}
       </div>
     </div>
   );
