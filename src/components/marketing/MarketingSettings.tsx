@@ -46,9 +46,7 @@ const MarketingSettings: React.FC = () => {
           .from('marketing_settings')
           .select('*')
           .eq('user_id', user.id)
-          .single();
-        
-        if (error) throw error;
+          .maybeSingle();
         
         // Update form with fetched data
         if (data) {
@@ -84,13 +82,13 @@ const MarketingSettings: React.FC = () => {
       
       const { error } = await supabase
         .from('marketing_settings')
-        .update({
+        .upsert({
+          user_id: user.id,
           google_tag_id: values.googleTagId,
           facebook_pixel_id: values.facebookPixelId,
           banner_images: values.bannerImages || [],
           updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.id);
+        }, { onConflict: 'user_id' });
       
       if (error) throw error;
       

@@ -10,7 +10,6 @@ import {
   MapPin, 
   CreditCard,
   BarChart3,
-  MessageCircle,
   ChefHat,
   Utensils,
   Crown,
@@ -18,7 +17,8 @@ import {
   Tag,
   QrCode,
   Bot,
-  Bug
+  Bug,
+  Megaphone
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -36,10 +36,9 @@ const SidebarLinks = () => {
     { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },
     { to: '/entregadores', icon: Users, label: 'Entregadores' },
     { to: '/bairros-entrega', icon: MapPin, label: 'Bairros de Entrega' },
-    { to: '/loyalty', icon: Crown, label: 'Programa de Fidelidade' },
+    { to: '/marketing', icon: Megaphone, label: 'Marketing' },
     { to: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { to: '/financeiro', icon: CreditCard, label: 'Financeiro' },
-    { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/configuracoes', icon: Settings, label: 'Configurações' },
     { to: '/subscription', icon: Crown, label: 'Planos' },

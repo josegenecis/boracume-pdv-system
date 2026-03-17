@@ -14,6 +14,7 @@ interface Product {
   is_available: boolean;
   show_in_delivery: boolean;
   is_highlight: boolean;
+  highlight_order?: number;
   order_count: number;
   category_id: string;
   track_stock?: boolean;
@@ -105,35 +106,51 @@ function writeCache(userId: string, data: MenuPayload) {
 async function fetchMenuData(userId: string): Promise<MenuPayload> {
   const span = perfStart('menu.data.fetch', { userId });
   try {
-    const [
-      { data: profileArr, error: profileError },
-      { data: categoriesData, error: categoriesError },
-      { data: productsData, error: productsError },
-      { data: deliveryZonesData, error: deliveryZonesError }
-    ] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id, restaurant_name, description, logo_url, banner_url, phone, address, opening_hours')
-        .eq('id', userId)
-        .limit(1) as any,
-      supabase
-        .from('product_categories')
-        .select('id, name, description, display_order')
-        .eq('user_id', userId)
-        .order('display_order', { ascending: true }) as any,
-      (supabase.from('products') as any)
-        .select('id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, order_count, category_id, track_stock, stock_quantity, low_stock_threshold')
+    const [{ data: profileArr, error: profileError }, { data: categoriesData, error: categoriesError }, { data: deliveryZonesData, error: deliveryZonesError }] =
+      await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, restaurant_name, description, logo_url, banner_url, phone, address, opening_hours')
+          .eq('id', userId)
+          .limit(1) as any,
+        supabase
+          .from('product_categories')
+          .select('id, name, description, display_order')
+          .eq('user_id', userId)
+          .order('display_order', { ascending: true }) as any,
+        supabase
+          .from('delivery_zones')
+          .select('id, name, delivery_fee, minimum_order, delivery_time, active')
+          .eq('user_id', userId)
+          .eq('active', true)
+          .order('name', { ascending: true }) as any
+      ]);
+
+    let productsData: any[] | null = null;
+    let productsError: any = null;
+    const res1 = await (supabase.from('products') as any)
+      .select(
+        'id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, highlight_order, order_count, category_id, track_stock, stock_quantity, low_stock_threshold'
+      )
+      .eq('user_id', userId)
+      .eq('is_available', true)
+      .eq('show_in_delivery', true)
+      .order('name', { ascending: true });
+    productsData = res1.data as any;
+    productsError = res1.error as any;
+
+    if (productsError && String(productsError.message || '').includes('highlight_order')) {
+      const res2 = await (supabase.from('products') as any)
+        .select(
+          'id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, order_count, category_id, track_stock, stock_quantity, low_stock_threshold'
+        )
         .eq('user_id', userId)
         .eq('is_available', true)
         .eq('show_in_delivery', true)
-        .order('name', { ascending: true }),
-      supabase
-        .from('delivery_zones')
-        .select('id, name, delivery_fee, minimum_order, delivery_time, active')
-        .eq('user_id', userId)
-        .eq('active', true)
-        .order('name', { ascending: true }) as any
-    ]);
+        .order('name', { ascending: true });
+      productsData = res2.data as any;
+      productsError = res2.error as any;
+    }
 
     if (profileError && (profileError as any)?.code !== 'PGRST116') {
       throw profileError;
@@ -310,7 +327,12 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
   const highlights = useMemo(() => {
     return (payload.products || [])
       .filter((p: any) => p.is_highlight)
-      .sort((a: any, b: any) => (Number(b.order_count || 0) - Number(a.order_count || 0)))
+      .sort((a: any, b: any) => {
+        const ao = a.highlight_order !== undefined && a.highlight_order !== null ? Number(a.highlight_order) : 10_000;
+        const bo = b.highlight_order !== undefined && b.highlight_order !== null ? Number(b.highlight_order) : 10_000;
+        if (ao !== bo) return ao - bo;
+        return Number(b.order_count || 0) - Number(a.order_count || 0);
+      })
       .slice(0, 6);
   }, [payload.products]);
 

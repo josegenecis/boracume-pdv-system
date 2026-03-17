@@ -59,6 +59,7 @@ import KDSView from '@/pages/KDSView';
 import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import Marketing from '@/pages/Marketing';
 import './App.css';
 import './styles/responsive.css';
 
@@ -141,7 +142,7 @@ function AppContent() {
           <Route path="/nfce" element={<NFCe />} />
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
-          <Route path="/despesas" element={<ErrorBoundary><Despesas /></ErrorBoundary>} />
+          <Route path="/despesas" element={<Despesas />} />
           <Route path="/security" element={<SecurityDashboard />} />
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
@@ -149,6 +150,8 @@ function AppContent() {
           {/* <Route path="/debug-pix" element={<DebugPix />} /> MOVIDO PARA PÚBLICO */}
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />
+          <Route path="/marketing" element={<Marketing />} />
+          <Route path="/loyalty" element={<Navigate to="/marketing?tab=loyalty" replace />} />
 
           <Route path="/system-check" element={<SystemCheck />} />
           <Route path="/test" element={<TestPage />} />

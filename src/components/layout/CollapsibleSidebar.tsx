@@ -31,6 +31,7 @@ import {
   LogOut,
 
   Download,
+  Megaphone,
   X
 } from 'lucide-react';
 
@@ -141,7 +142,20 @@ const CollapsibleSidebar = () => {
       label: 'Relatórios',
       items: [
         { to: '/relatorios', label: 'Relatórios' },
-        { to: '/loyalty', label: 'Fidelização' },
+      ]
+    },
+    {
+      id: 'marketing',
+      icon: Megaphone,
+      label: 'Marketing',
+      items: [
+        { to: '/marketing?tab=banners', label: 'Banners' },
+        { to: '/marketing?tab=coupons', label: 'Cupons' },
+        { to: '/marketing?tab=highlights', label: 'Destaques' },
+        { to: '/marketing?tab=upsells', label: 'Upsells' },
+        { to: '/marketing?tab=loyalty', label: 'Fidelidade' },
+        { to: '/marketing?tab=pixels', label: 'Pixels' },
+        { to: '/whatsapp-bot', label: 'WhatsApp Bot' },
       ]
     },
     {
@@ -168,7 +182,6 @@ const CollapsibleSidebar = () => {
 
   const standaloneLinks = [
     { to: '/agente', icon: Bot, label: 'Assistente' },
-    { to: '/whatsapp-bot', icon: MessageCircle, label: 'WhatsApp Bot' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos' },
   ];

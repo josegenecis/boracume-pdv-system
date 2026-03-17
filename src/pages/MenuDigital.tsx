@@ -17,6 +17,8 @@ import { buildPublicTrackShareUrl } from '@/utils/publicUrl';
 import HighlightsSection from '@/components/menu/HighlightsSection';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import ProductCard from '@/components/menu/ProductCard';
+import PromotionalBanner from '@/components/marketing/PromotionalBanner';
+import MarketingPixels from '@/components/marketing/MarketingPixels';
 // import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
@@ -517,6 +519,7 @@ const MenuDigital = () => {
 
   return (
     <div className="min-h-screen bg-white pb-24">
+      <MarketingPixels userId={finalUserId} />
       <div className="relative">
         <div className="relative h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
           {(profile as any)?.banner_url ? (
@@ -592,6 +595,11 @@ const MenuDigital = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4">
+        <div className="mt-4">
+          <PromotionalBanner restaurantId={finalUserId} />
+        </div>
+
+        <div className="h-4" />
         {/* Seção de Destaques */}
         {highlights.length > 0 && (
           <HighlightsSection
