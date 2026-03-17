@@ -24,12 +24,8 @@ export default function PixSetup() {
   const [merchantName, setMerchantName] = useState<string>('');
   const [merchantCity, setMerchantCity] = useState<string>('');
   const [loading, setLoading] = useState(false);
-
-  // Variáveis para OAuth (Substitua pelo seu APP ID real do Mercado Pago)
-  // Você deve criar um App em: https://www.mercadopago.com.br/developers/panel
-  const MP_APP_ID = '3554043640723875'; // Exemplo, troque pelo seu
-  const redirectUri = window.location.origin + '/mp/callback';
-  const authUrl = `https://auth.mercadopago.com.br/authorization?client_id=${MP_APP_ID}&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const [mpConnected, setMpConnected] = useState(false);
+  const [mpExpiresAt, setMpExpiresAt] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -56,11 +52,13 @@ export default function PixSetup() {
 
         if (data) {
           setEnabled(!!data.enabled);
-          setAccessToken(data.client_id || '');
+          setAccessToken(data.mp_access_token || data.client_id || '');
           setWebhookSecret(data.webhook_secret || '');
-          setPixKey(data.pix_key || '');
+          setPixKey(data.mp_public_key || data.pix_key || '');
           setMerchantName(data.merchant_name || '');
           setMerchantCity(data.merchant_city || '');
+          setMpConnected(Boolean(data.mp_access_token || data.client_id));
+          setMpExpiresAt(data.mp_expires_at || '');
         }
       } catch (e) {
         console.error('Exceção ao carregar:', e);
@@ -68,6 +66,25 @@ export default function PixSetup() {
     };
     load();
   }, [activeUserId]);
+
+  const connectMercadoPago = async () => {
+    if (!activeUserId) {
+      toast({ title: 'Faça login', description: 'Entre no sistema para conectar o Mercado Pago.', variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, status } = await invokeEdgeFunction<any>('mp-oauth-start', {}, { timeoutMs: 60000 });
+      if (!data || !data.ok || !data.url) {
+        throw new Error(data?.message || data?.error || `Falha ao iniciar OAuth (HTTP ${status})`);
+      }
+      window.location.href = String(data.url);
+    } catch (e: any) {
+      toast({ title: 'Erro ao conectar', description: e.message || 'Falha ao iniciar conexão.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generateWebhookSecret = () => {
     try {
@@ -200,13 +217,19 @@ export default function PixSetup() {
               </p>
               <Button 
                 className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700" 
-                onClick={() => window.location.href = authUrl}
+                onClick={connectMercadoPago}
+                disabled={loading}
               >
-                Conectar com Mercado Pago
+                {mpConnected ? 'Reconectar Mercado Pago' : 'Conectar com Mercado Pago'}
               </Button>
               <p className="text-xs text-blue-500 mt-2">
                 Você será redirecionado para autorizar o BoraCumê.
               </p>
+              {mpConnected ? (
+                <p className="text-xs text-blue-700 mt-2">
+                  Conectado. {mpExpiresAt ? `Token expira em: ${new Date(mpExpiresAt).toLocaleString('pt-BR')}` : ''}
+                </p>
+              ) : null}
             </div>
 
             <div className="md:col-span-3">

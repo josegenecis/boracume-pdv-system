@@ -32,6 +32,16 @@ const getRequestOrigin = (req: Request) => {
   return ''
 }
 
+const randomSecret = () => {
+  try {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  } catch {
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -73,7 +83,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: pix, error: pixErr } = await supabase
       .from('pix_settings')
-      .select('enabled, bank, pix_key, merchant_name, merchant_city, client_id, endpoint_base, webhook_secret')
+      .select('enabled, bank, pix_key, merchant_name, merchant_city, client_id, endpoint_base, webhook_secret, mp_access_token, mp_refresh_token, mp_expires_at')
       .eq('user_id', restaurantUserId)
       .maybeSingle()
 
@@ -98,9 +108,13 @@ Deno.serve(async (req: Request) => {
     const origin = getRequestOrigin(req) || 'http://localhost:5173'
 
     const provider = String(pix.bank || 'mercadopago').toLowerCase()
-    const webhookSecret = getEnv('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
+    let webhookSecret = getEnv('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
     if (!webhookSecret) {
-      return ok({ ok: false, error: 'missing_webhook_secret' })
+      webhookSecret = randomSecret()
+      await supabase
+        .from('pix_settings')
+        .update({ webhook_secret: webhookSecret, updated_at: new Date().toISOString() })
+        .eq('user_id', restaurantUserId)
     }
     const webhookBase = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/pix-webhook`
     const notificationUrl = `${webhookBase}?secret=${encodeURIComponent(webhookSecret)}&cid=${encodeURIComponent(correlationID)}`
@@ -124,17 +138,70 @@ Deno.serve(async (req: Request) => {
     }
 
     if (provider === 'mercadopago') {
-      const accessToken = String(pix.client_id || '')
+      const mpClientId = getEnv('MP_PLATFORM_CLIENT_ID')
+      const mpClientSecret = getEnv('MP_PLATFORM_CLIENT_SECRET')
+
+      const refreshAccessToken = async () => {
+        const refreshToken = String((pix as any)?.mp_refresh_token || '')
+        if (!refreshToken || !mpClientId || !mpClientSecret) return ''
+        const resp = await fetch('https://api.mercadopago.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: mpClientId,
+            client_secret: mpClientSecret,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+          })
+        })
+        const json: any = await resp.json().catch(() => ({}))
+        if (!resp.ok) return ''
+        const nextToken = String(json?.access_token || '')
+        const nextRefresh = String(json?.refresh_token || '') || refreshToken
+        const expiresIn = json?.expires_in ? Number(json.expires_in) : 0
+        const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+        await supabase
+          .from('pix_settings')
+          .update({
+            mp_access_token: nextToken || null,
+            mp_refresh_token: nextRefresh || null,
+            mp_expires_at: expiresAt,
+            client_id: nextToken || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', restaurantUserId)
+        ;(pix as any).mp_access_token = nextToken
+        ;(pix as any).client_id = nextToken
+        ;(pix as any).mp_refresh_token = nextRefresh
+        ;(pix as any).mp_expires_at = expiresAt
+        return nextToken
+      }
+
+      const getAccessToken = async () => {
+        const token = String((pix as any)?.mp_access_token || (pix as any)?.client_id || '')
+        const expiresAtRaw = String((pix as any)?.mp_expires_at || '')
+        if (expiresAtRaw) {
+          const t = new Date(expiresAtRaw).getTime()
+          if (Number.isFinite(t) && Date.now() > t - 60_000) {
+            const refreshed = await refreshAccessToken()
+            if (refreshed) return refreshed
+          }
+        }
+        return token
+      }
+
+      let accessToken = await getAccessToken()
       if (!accessToken) return ok({ ok: false, error: 'missing_provider_credentials' })
 
       console.log("Calling Mercado Pago API...")
       
       if (preferredMethod === 'pix') {
-        const mpResp = await fetch('https://api.mercadopago.com/v1/payments', {
+        const callPayment = async (token: string) =>
+          fetch('https://api.mercadopago.com/v1/payments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             transaction_amount: Number((value / 100).toFixed(2)),
@@ -150,6 +217,15 @@ Deno.serve(async (req: Request) => {
             }
           })
         })
+
+        let mpResp = await callPayment(accessToken)
+        if (mpResp.status === 401) {
+          const refreshed = await refreshAccessToken()
+          if (refreshed) {
+            accessToken = refreshed
+            mpResp = await callPayment(accessToken)
+          }
+        }
 
         const mpJson: any = await mpResp.json().catch(() => ({}))
         console.log("MP Response status:", mpResp.status)
@@ -219,14 +295,24 @@ Deno.serve(async (req: Request) => {
         },
       }
 
-      const prefResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      const callPreference = async (token: string) =>
+        fetch('https://api.mercadopago.com/checkout/preferences', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(preferenceBody),
       })
+
+      let prefResp = await callPreference(accessToken)
+      if (prefResp.status === 401) {
+        const refreshed = await refreshAccessToken()
+        if (refreshed) {
+          accessToken = refreshed
+          prefResp = await callPreference(accessToken)
+        }
+      }
 
       const prefJson: any = await prefResp.json().catch(() => ({}))
       if (!prefResp.ok) {

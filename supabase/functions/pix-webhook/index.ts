@@ -106,21 +106,91 @@ serve(async (req) => {
         // ... busca credenciais ...
         const { data: mp, error: mpErr } = await supabase
           .from('pix_settings')
-          .select('enabled, bank, client_id')
+          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_expires_at')
           .eq('user_id', checkout.restaurant_user_id)
           .maybeSingle()
         
-        if (!mp || !mp.client_id) {
+        if (!mp || !(mp.mp_access_token || mp.client_id)) {
             console.error(`[PixWebhook] MP settings not found for user ${checkout.restaurant_user_id}`);
             return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 });
         }
 
-        const accessToken = String(mp.client_id || '')
+        const getEnv = (...keys: string[]) => {
+          for (const key of keys) {
+            const value = Deno.env.get(key)
+            if (value) return value
+          }
+          return ''
+        }
+
+        const mpClientId = getEnv('MP_PLATFORM_CLIENT_ID')
+        const mpClientSecret = getEnv('MP_PLATFORM_CLIENT_SECRET')
+
+        const refreshAccessToken = async () => {
+          const refreshToken = String((mp as any)?.mp_refresh_token || '')
+          if (!refreshToken || !mpClientId || !mpClientSecret) return ''
+          const resp = await fetch('https://api.mercadopago.com/oauth/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              client_id: mpClientId,
+              client_secret: mpClientSecret,
+              grant_type: 'refresh_token',
+              refresh_token: refreshToken,
+            })
+          })
+          const json: any = await resp.json().catch(() => ({}))
+          if (!resp.ok) return ''
+          const nextToken = String(json?.access_token || '')
+          const nextRefresh = String(json?.refresh_token || '') || refreshToken
+          const expiresIn = json?.expires_in ? Number(json.expires_in) : 0
+          const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
+          await supabase
+            .from('pix_settings')
+            .update({
+              mp_access_token: nextToken || null,
+              mp_refresh_token: nextRefresh || null,
+              mp_expires_at: expiresAt,
+              client_id: nextToken || null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', checkout.restaurant_user_id)
+          ;(mp as any).mp_access_token = nextToken
+          ;(mp as any).client_id = nextToken
+          ;(mp as any).mp_refresh_token = nextRefresh
+          ;(mp as any).mp_expires_at = expiresAt
+          return nextToken
+        }
+
+        const getAccessToken = async () => {
+          const token = String((mp as any)?.mp_access_token || (mp as any)?.client_id || '')
+          const expiresAtRaw = String((mp as any)?.mp_expires_at || '')
+          if (expiresAtRaw) {
+            const t = new Date(expiresAtRaw).getTime()
+            if (Number.isFinite(t) && Date.now() > t - 60_000) {
+              const refreshed = await refreshAccessToken()
+              if (refreshed) return refreshed
+            }
+          }
+          return token
+        }
+
+        let accessToken = await getAccessToken()
         
         console.log(`[PixWebhook] Fetching payment status from MP API...`);
-        const paymentResp = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(paymentId))}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        })
+        const callPayment = async (token: string) =>
+          fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(paymentId))}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+
+        let paymentResp = await callPayment(accessToken)
+        if (paymentResp.status === 401) {
+          const refreshed = await refreshAccessToken()
+          if (refreshed) {
+            accessToken = refreshed
+            paymentResp = await callPayment(accessToken)
+          }
+        }
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
         
         if (!paymentResp.ok) {
