@@ -58,6 +58,8 @@ export default function UpsellManager() {
         (supabase.from('products') as any)
           .select('id,name,price')
           .eq('user_id', user.id)
+          .eq('is_available', true)
+          .eq('show_in_delivery', true)
           .order('name', { ascending: true })
       ]);
       if (rulesRes.error) throw rulesRes.error;

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,7 @@ const BannerManager = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -437,13 +438,18 @@ const BannerManager = () => {
                             className="hidden"
                             id="banner-upload"
                             disabled={uploading}
+                            ref={fileInputRef}
                           />
-                          <Label htmlFor="banner-upload" asChild>
-                            <Button variant="outline" size="sm" type="button" disabled={uploading}>
-                              <Upload className="w-4 h-4 mr-2" />
-                              {uploading ? 'Enviando...' : 'Selecionar Imagem'}
-                            </Button>
-                          </Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            disabled={uploading}
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            {uploading ? 'Enviando...' : 'Selecionar Imagem'}
+                          </Button>
                         </>
                       )}
                     </div>

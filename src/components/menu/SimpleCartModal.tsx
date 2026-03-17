@@ -526,6 +526,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           const productsRes = await (supabase.from('products') as any)
             .select('id,name,description,price,image_url')
             .eq('user_id', userId)
+            .eq('is_available', true)
+            .eq('show_in_delivery', true)
             .in('id', suggestedIds);
           if (productsRes.error) return [];
           const byId = new Map((productsRes.data || []).map((p: any) => [String(p.id), p]));
