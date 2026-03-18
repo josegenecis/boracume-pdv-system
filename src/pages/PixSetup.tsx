@@ -7,16 +7,14 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import { CreditCard, Copy, RefreshCw } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 
 export default function PixSetup() {
   const { user } = useAuth();
   const activeUserId = user?.id || '';
 
   const { toast } = useToast();
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const [enabled, setEnabled] = useState<boolean>(false);
-  const [webhookSecret, setWebhookSecret] = useState<string>('');
   const [mpPdvEnabled, setMpPdvEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [mpConnected, setMpConnected] = useState(false);
@@ -29,7 +27,7 @@ export default function PixSetup() {
         console.log('Carregando configurações Pix para usuário:', activeUserId);
         const { data, error } = await (supabase as any)
           .from('pix_settings')
-          .select('*')
+          .select('enabled, mp_pdv_enabled, mp_access_token, client_id, mp_expires_at')
           .eq('user_id', activeUserId)
           .maybeSingle();
 
@@ -47,7 +45,6 @@ export default function PixSetup() {
 
         if (data) {
           setEnabled(!!data.enabled);
-          setWebhookSecret(data.webhook_secret || '');
           setMpPdvEnabled(Boolean((data as any)?.mp_pdv_enabled));
           setMpConnected(Boolean(data.mp_access_token || data.client_id));
           setMpExpiresAt(data.mp_expires_at || '');
@@ -78,29 +75,6 @@ export default function PixSetup() {
     }
   };
 
-  const generateWebhookSecret = () => {
-    try {
-      const bytes = new Uint8Array(32);
-      crypto.getRandomValues(bytes);
-      const secret = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      setWebhookSecret(secret);
-      toast({ title: 'Segredo gerado', description: 'Copie e cadastre no seu banco/provedor' });
-    } catch {
-      toast({ title: 'Erro', description: 'Não foi possível gerar o segredo', variant: 'destructive' });
-    }
-  };
-
-  const webhookEndpoint = supabaseUrl ? `${supabaseUrl}/functions/v1/pix-webhook?secret=${encodeURIComponent(webhookSecret || '')}` : '';
-
-  const copy = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copiado', description: label });
-    } catch {
-      toast({ title: 'Erro', description: 'Não foi possível copiar', variant: 'destructive' });
-    }
-  };
-
   const save = async () => {
     if (!activeUserId) {
       toast({ title: 'Faça login', description: 'Entre no sistema para salvar a chave PIX.', variant: 'destructive' });
@@ -114,7 +88,6 @@ export default function PixSetup() {
         user_id: activeUserId,
         enabled: !!enabled,
         bank: 'mercadopago',
-        webhook_secret: webhookSecret || null,
         mp_pdv_enabled: !!mpPdvEnabled,
         updated_at: new Date().toISOString(),
       };
@@ -136,47 +109,6 @@ export default function PixSetup() {
         description: `Erro: ${e.message || 'Desconhecido'} ${e.details ? `(${e.details})` : ''} ${e.hint ? `- Dica: ${e.hint}` : ''}`, 
         variant: 'destructive' 
       });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testPix = async () => {
-    if (!activeUserId) return alert('Faça login para testar.');
-    if (!enabled || !mpConnected) return alert('Conecte o Mercado Pago e ative o PIX antes de testar.');
-    
-    setLoading(true);
-    try {
-      console.log('Iniciando teste Pix...');
-      const { data, status } = await invokeEdgeFunction<any>('pix-start-checkout', {
-        restaurantUserId: activeUserId,
-        orderPayload: { total: 1.0, customer_name: 'Teste Admin', payment_method: 'pix' },
-        preferredMethod: 'pix'
-      })
-
-      console.log('Resposta do teste:', data);
-
-      if (!data) {
-        throw new Error(`Sem resposta JSON (HTTP ${status})`)
-      }
-
-      if (!data.ok) {
-        throw new Error(data.error || `Erro desconhecido na resposta (HTTP ${status})`)
-      }
-
-      toast({ 
-        title: 'Teste com Sucesso!', 
-        description: 'QR Code gerado corretamente. Integração OK.' 
-      });
-      
-      if (data.brCode) {
-        console.log('Copia e Cola:', data.brCode);
-        alert(`Sucesso! Copia e Cola gerado (veja console). Link: ${data.paymentLinkUrl}`);
-      }
-
-    } catch (e: any) {
-      console.error('Erro no teste:', e);
-      alert(`Erro no teste: ${e.message}. Verifique o console.`);
     } finally {
       setLoading(false);
     }
@@ -244,45 +176,10 @@ export default function PixSetup() {
                 </p>
               ) : null}
             </div>
-            <div className="md:col-span-3">
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label>Segredo do Webhook</Label>
-                  <Input value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} placeholder="Gere um segredo para validar o webhook" />
-                </div>
-                <Button variant="outline" onClick={generateWebhookSecret}>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Gerar
-                </Button>
-                <Button variant="outline" onClick={() => copy(webhookSecret, 'Segredo do webhook')}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copiar
-                </Button>
-              </div>
-            </div>
-            <div className="md:col-span-3">
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label>URL do Webhook (copiar e cadastrar no Mercado Pago)</Label>
-                  <Input value={webhookEndpoint} readOnly placeholder="Configure VITE_SUPABASE_URL para gerar a URL" />
-                </div>
-                <Button variant="outline" onClick={() => copy(webhookEndpoint, 'URL do webhook')} disabled={!webhookEndpoint}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copiar
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                No Mercado Pago, configure a notificação/webhook para esta URL. O sistema cria o pedido automaticamente quando o pagamento ficar aprovado.
-              </p>
-            </div>
           </div>
           <div className="flex gap-4">
             <Button onClick={save} disabled={loading}>
               {loading ? 'Processando...' : 'Salvar Configurações'}
-            </Button>
-            
-            <Button variant="secondary" onClick={testPix} disabled={loading || !enabled || !mpConnected}>
-              Testar Integração (R$ 1,00)
             </Button>
           </div>
         </CardContent>
