@@ -27,8 +27,8 @@ serve(async (req) => {
     const cidFromQuery = url.searchParams.get('cid') ?? ''
     const providedSecret =
       (req.headers.get('x-pix-secret') ?? '') ||
-      (req.headers.get('authorization') ?? '') ||
-      (url.searchParams.get('secret') ?? '')
+      (url.searchParams.get('secret') ?? '') ||
+      (req.headers.get('authorization') ?? '')
 
     let body: any = {}
     try {
@@ -122,6 +122,10 @@ serve(async (req) => {
 
     const effectiveCid = String(cidFromQuery || checkoutPrefetched?.correlation_id || '')
     console.log(`[PixWebhook] Received request. CID: ${effectiveCid}, Secret provided: ${!!providedSecret}`);
+
+    if (!effectiveCid && paymentId) {
+      return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
     // ... (rest of the code)
 
