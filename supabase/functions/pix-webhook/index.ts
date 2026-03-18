@@ -277,6 +277,20 @@ serve(async (req) => {
         }
 
         // CREATE ORDER
+        const locked = (await supabase
+          .from('pix_checkouts')
+          .update({ status: 'PROCESSING', updated_at: new Date().toISOString() })
+          .eq('id', checkout.id)
+          .is('order_id', null)
+          .neq('status', 'PAID')
+          .neq('status', 'PROCESSING')
+          .select('id')
+          .maybeSingle()).data
+
+        if (!locked) {
+          return new Response(JSON.stringify({ ok: true, idempotent: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
         console.log(`[PixWebhook] Creating Order...`);
         const payload = checkout.order_payload || {}
         // ... (rest of order creation)
@@ -309,6 +323,10 @@ serve(async (req) => {
 
         if (createErr) {
             console.error(`[PixWebhook] Order Creation Error:`, createErr);
+            await supabase
+              .from('pix_checkouts')
+              .update({ status: 'PENDING', updated_at: new Date().toISOString() })
+              .eq('id', checkout.id)
             return new Response(JSON.stringify({ error: 'order_create_failed' }), { status: 500 });
         }
 
