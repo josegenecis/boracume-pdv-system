@@ -98,9 +98,8 @@ serve(async (req) => {
       try {
         const { data: pix, error: pixErr } = await supabase
           .from('pix_settings')
-          .select('user_id, webhook_secret, enabled')
+          .select('user_id, webhook_secret')
           .eq('webhook_secret', providedSecret)
-          .eq('enabled', true)
           .maybeSingle()
         if (!pixErr && pix) {
           userIdFromSecret = pix.user_id as string
