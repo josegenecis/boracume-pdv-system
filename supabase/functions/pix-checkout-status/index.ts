@@ -9,10 +9,6 @@ const corsHeaders = {
   'Content-Type': 'application/json'
 }
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY')!
-const supabase = createClient(supabaseUrl, serviceKey)
-
 const getEnv = (...keys: string[]) => {
   for (const key of keys) {
     const value = Deno.env.get(key)
@@ -25,6 +21,13 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
+    const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
+    const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY', 'BORACUME_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY')
+    if (!supabaseUrl || !serviceKey) {
+      return new Response(JSON.stringify({ ok: false, error: 'missing_env' }), { status: 200, headers: corsHeaders })
+    }
+    const supabase = createClient(supabaseUrl, serviceKey)
+
     const body = await req.json().catch(() => ({}))
     const correlationID = String(body?.correlationID || '')
     if (!correlationID) return new Response(JSON.stringify({ ok: false, error: 'missing_correlationID' }), { status: 200, headers: corsHeaders })
