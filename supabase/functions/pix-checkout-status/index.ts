@@ -128,12 +128,13 @@ export default async function handler(req: Request): Promise<Response> {
         }
 
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
+        const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
         const externalRef = String(paymentJson?.external_reference || '')
         if (externalRef && externalRef !== correlationID) {
           return new Response(JSON.stringify({ ok: true, status: data.status, orderId: existingOrderId }), { status: 200, headers: corsHeaders })
         }
 
-        if (mpStatus === 'approved' && Boolean(paymentJson?.date_approved)) {
+        if (mpStatus === 'approved' && (Boolean(paymentJson?.date_approved) || mpDetail === 'accredited')) {
           const payload = (data as any).order_payload || {}
           const orderNumber = payload?.order_number || `MP-${correlationID.slice(0, 8)}`
 

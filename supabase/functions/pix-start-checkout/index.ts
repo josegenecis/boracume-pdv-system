@@ -245,15 +245,22 @@ Deno.serve(async (req: Request) => {
           return ok({ ok: false, error: 'provider_error', details: mpJson, correlationID })
         }
 
+        const mpStatus = String(mpJson?.status || '').toLowerCase()
+        const mpDetail = String(mpJson?.status_detail || '').toLowerCase()
+        const isActuallyPaid = mpStatus === 'approved' && (Boolean(mpJson?.date_approved) || mpDetail === 'accredited')
+        const safeStatus = isActuallyPaid ? 'PAID' : (mpStatus ? mpStatus.toUpperCase() : 'CREATED')
+
         await supabase
           .from('pix_checkouts')
           .update({
-            status: String(mpJson?.status || 'PENDING').toUpperCase(),
+            status: safeStatus,
             transaction_id: String(mpJson?.id || ''),
             metadata: {
               provider: 'mercadopago',
               payment_id: mpJson?.id ?? null,
-              status: mpJson?.status ?? null,
+              mp_status: mpJson?.status ?? null,
+              mp_status_detail: mpJson?.status_detail ?? null,
+              date_approved: mpJson?.date_approved ?? null,
               ticket_url: mpJson?.point_of_interaction?.transaction_data?.ticket_url ?? null
             },
             updated_at: new Date().toISOString()

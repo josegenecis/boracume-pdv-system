@@ -224,9 +224,10 @@ serve(async (req) => {
         }
 
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
+        const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
         console.log(`[PixWebhook] Payment Status: ${mpStatus}`);
         
-        const isApproved = mpStatus === 'approved' && Boolean(paymentJson?.date_approved)
+        const isApproved = mpStatus === 'approved' && (Boolean(paymentJson?.date_approved) || mpDetail === 'accredited')
         if (!isApproved) {
           await supabase
             .from('pix_checkouts')
