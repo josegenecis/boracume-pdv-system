@@ -124,14 +124,40 @@ export default async function handler(req: Request): Promise<Response> {
         }
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
         if (!paymentResp.ok) {
-          return new Response(JSON.stringify({ ok: true, status: data.status, orderId: existingOrderId }), { status: 200, headers: corsHeaders })
+          return new Response(JSON.stringify({
+            ok: true,
+            status: data.status,
+            orderId: existingOrderId,
+            mp: {
+              ok: false,
+              id: paymentId,
+              status: paymentJson?.status ?? null,
+              status_detail: paymentJson?.status_detail ?? null,
+              message: paymentJson?.message ?? null,
+              error: paymentJson?.error ?? null,
+              cause: paymentJson?.cause ?? null
+            }
+          }), { status: 200, headers: corsHeaders })
         }
 
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
         const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
         const externalRef = String(paymentJson?.external_reference || '')
         if (externalRef && externalRef !== correlationID) {
-          return new Response(JSON.stringify({ ok: true, status: data.status, orderId: existingOrderId }), { status: 200, headers: corsHeaders })
+          return new Response(JSON.stringify({
+            ok: true,
+            status: data.status,
+            orderId: existingOrderId,
+            mp: {
+              ok: true,
+              id: paymentJson?.id ?? paymentId,
+              status: paymentJson?.status ?? null,
+              status_detail: paymentJson?.status_detail ?? null,
+              date_approved: paymentJson?.date_approved ?? null,
+              external_reference: paymentJson?.external_reference ?? null,
+              note: 'external_reference_mismatch'
+            }
+          }), { status: 200, headers: corsHeaders })
         }
 
         if (mpStatus === 'approved' && (Boolean(paymentJson?.date_approved) || mpDetail === 'accredited')) {
@@ -175,14 +201,52 @@ export default async function handler(req: Request): Promise<Response> {
               .from('pix_checkouts')
               .update({ status: 'PAID', order_id: created.id, updated_at: new Date().toISOString() })
               .eq('id', (data as any).id)
-            return new Response(JSON.stringify({ ok: true, status: 'PAID', orderId: created.id }), { status: 200, headers: corsHeaders })
+            return new Response(JSON.stringify({
+              ok: true,
+              status: 'PAID',
+              orderId: created.id,
+              mp: {
+                ok: true,
+                id: paymentJson?.id ?? paymentId,
+                status: paymentJson?.status ?? null,
+                status_detail: paymentJson?.status_detail ?? null,
+                date_approved: paymentJson?.date_approved ?? null,
+                external_reference: paymentJson?.external_reference ?? null,
+              }
+            }), { status: 200, headers: corsHeaders })
           }
+          return new Response(JSON.stringify({
+            ok: true,
+            status: data.status,
+            orderId: existingOrderId,
+            mp: {
+              ok: true,
+              id: paymentJson?.id ?? paymentId,
+              status: paymentJson?.status ?? null,
+              status_detail: paymentJson?.status_detail ?? null,
+              date_approved: paymentJson?.date_approved ?? null,
+              external_reference: paymentJson?.external_reference ?? null,
+              note: 'order_create_failed'
+            }
+          }), { status: 200, headers: corsHeaders })
         } else if (mpStatus) {
           await supabase
             .from('pix_checkouts')
             .update({ status: String(mpStatus).toUpperCase(), updated_at: new Date().toISOString() })
             .eq('id', (data as any).id)
-          return new Response(JSON.stringify({ ok: true, status: String(mpStatus).toUpperCase(), orderId: existingOrderId }), { status: 200, headers: corsHeaders })
+          return new Response(JSON.stringify({
+            ok: true,
+            status: String(mpStatus).toUpperCase(),
+            orderId: existingOrderId,
+            mp: {
+              ok: true,
+              id: paymentJson?.id ?? paymentId,
+              status: paymentJson?.status ?? null,
+              status_detail: paymentJson?.status_detail ?? null,
+              date_approved: paymentJson?.date_approved ?? null,
+              external_reference: paymentJson?.external_reference ?? null,
+            }
+          }), { status: 200, headers: corsHeaders })
         }
       }
     }

@@ -20,6 +20,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
+  const [details, setDetails] = useState<{ mpStatus?: string; mpDetail?: string; mpDateApproved?: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen || !correlationID) return;
@@ -33,6 +34,12 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             setStatus('PAID');
             window.location.href = `/track/${data.orderId}`;
             return;
+          }
+          const mpStatus = data?.mp?.status ? String(data.mp.status) : '';
+          const mpDetail = data?.mp?.status_detail ? String(data.mp.status_detail) : '';
+          const mpDateApproved = data?.mp?.date_approved ? String(data.mp.date_approved) : '';
+          if (mpStatus || mpDetail || mpDateApproved) {
+            setDetails({ mpStatus, mpDetail, mpDateApproved });
           }
           setStatus(data.status || 'CREATED');
         }
@@ -91,6 +98,11 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
               Aguardando confirmação do pagamento...
             </div>
           )}
+          {details?.mpStatus || details?.mpDetail ? (
+            <div className="text-[11px] text-muted-foreground text-center">
+              Mercado Pago: {details?.mpStatus || '-'}{details?.mpDetail ? ` • ${details.mpDetail}` : ''}
+            </div>
+          ) : null}
           {status === 'ERROR' && (
             <div className="text-xs text-red-600">
               Erro ao verificar pagamento. Tente novamente em instantes.
