@@ -23,6 +23,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
   const [details, setDetails] = useState<{ mpStatus?: string; mpDetail?: string; mpDateApproved?: string; note?: string } | null>(null);
   const [remoteStatus, setRemoteStatus] = useState<string>('CREATED');
+  const [errorText, setErrorText] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen || !correlationID) return;
@@ -33,6 +34,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
         if (!active) return;
         if (error) {
           setStatus('ERROR');
+          setErrorText(String(error?.message || 'Falha ao consultar status do pagamento.'));
           return;
         }
         if (data?.ok) {
@@ -53,6 +55,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           setStatus('CREATED');
         } else {
           setStatus('ERROR');
+          setErrorText(String(data?.error || data?.message || 'Falha ao consultar status do pagamento.'));
         }
       } catch {
         if (active) setStatus('ERROR');
@@ -120,7 +123,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           </div>
           {status === 'ERROR' && (
             <div className="text-xs text-red-600">
-              Erro ao verificar pagamento. Tente novamente em instantes.
+              Erro ao verificar pagamento. {errorText ? String(errorText) : 'Tente novamente em instantes.'}
             </div>
           )}
         </div>
