@@ -29,35 +29,52 @@ serve(async (req) => {
       (req.headers.get('x-pix-secret') ?? '') ||
       (req.headers.get('authorization') ?? '') ||
       (url.searchParams.get('secret') ?? '')
-  if (!providedSecret) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-  }
+    let checkoutPrefetched: any | null = null
+    if (!providedSecret) {
+      if (!cid) {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      const { data: checkout, error: chkErr } = await supabase
+        .from('pix_checkouts')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id')
+        .eq('correlation_id', cid)
+        .maybeSingle()
+      if (chkErr || !checkout) {
+        return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      if (String(checkout.provider).toLowerCase() !== 'mercadopago') {
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+      checkoutPrefetched = checkout
+    }
 
     let userIdFromSecret: string | null = null
     let secretValidated = false
 
-    // Try multi-tenant secret from DB first
-    try {
-      const { data: pix, error: pixErr } = await supabase
-        .from('pix_settings')
-        .select('user_id, webhook_secret, enabled')
-        .eq('webhook_secret', providedSecret)
-        .eq('enabled', true)
-        .maybeSingle()
-      if (!pixErr && pix) {
-        userIdFromSecret = pix.user_id as string
+    if (providedSecret) {
+      // Try multi-tenant secret from DB first
+      try {
+        const { data: pix, error: pixErr } = await supabase
+          .from('pix_settings')
+          .select('user_id, webhook_secret, enabled')
+          .eq('webhook_secret', providedSecret)
+          .eq('enabled', true)
+          .maybeSingle()
+        if (!pixErr && pix) {
+          userIdFromSecret = pix.user_id as string
+          secretValidated = true
+        }
+      } catch (_) {
+        // Table may not exist yet; ignore and fallback to env secret
+      }
+
+      if (!secretValidated) {
+        const expectedSecret = Deno.env.get('PIX_WEBHOOK_SECRET') ?? ''
+        if (!expectedSecret || providedSecret !== expectedSecret) {
+          return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
         secretValidated = true
       }
-    } catch (_) {
-      // Table may not exist yet; ignore and fallback to env secret
-    }
-
-    if (!secretValidated) {
-      const expectedSecret = Deno.env.get('PIX_WEBHOOK_SECRET') ?? ''
-      if (!expectedSecret || providedSecret !== expectedSecret) {
-        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-      }
-      secretValidated = true
     }
 
     const body = await req.json()
@@ -71,14 +88,16 @@ serve(async (req) => {
 
     if (cid) {
       console.log(`[PixWebhook] Processing correlation ID: ${cid}`);
-      const { data: checkout, error: chkErr } = await supabase
-        .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id')
-        .eq('correlation_id', cid)
-        .maybeSingle()
+      const checkout = checkoutPrefetched
+        ? checkoutPrefetched
+        : (await supabase
+            .from('pix_checkouts')
+            .select('id, restaurant_user_id, status, provider, order_payload, order_id')
+            .eq('correlation_id', cid)
+            .maybeSingle()).data
 
-      if (chkErr || !checkout) {
-        console.error(`[PixWebhook] Checkout not found for CID: ${cid}`, chkErr);
+      if (!checkout) {
+        console.error(`[PixWebhook] Checkout not found for CID: ${cid}`);
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
@@ -192,6 +211,12 @@ serve(async (req) => {
           }
         }
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
+
+        const externalRef = String(paymentJson?.external_reference || '')
+        if (cid && externalRef && externalRef !== String(cid)) {
+          console.error('[PixWebhook] external_reference mismatch', { cid, externalRef })
+          return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
         
         if (!paymentResp.ok) {
           console.error(`[PixWebhook] MP API Error:`, paymentJson);
