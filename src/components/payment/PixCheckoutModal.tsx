@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Copy, Check, RefreshCw, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 
 interface PixCheckoutModalProps {
   isOpen: boolean;
@@ -28,9 +29,28 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
   useEffect(() => {
     if (!isOpen || !correlationID) return;
     let active = true;
+    const supabaseUrl = String((supabase as any).supabaseUrl || '');
+    const supabaseKey = String((supabase as any).supabaseKey || '');
+    const publicSupabase =
+      supabaseUrl && supabaseKey
+        ? createClient(supabaseUrl, supabaseKey, {
+            auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+            global: { headers: { 'x-pix-correlation': correlationID } }
+          })
+        : null;
     const poll = async () => {
       try {
-        const { data, error }: any = await supabase.functions.invoke('pix-checkout-status', { body: { correlationID } as any });
+        if (!publicSupabase) {
+          setStatus('ERROR');
+          setErrorText('Configuração do Supabase indisponível no navegador.');
+          return;
+        }
+
+        const { data, error }: any = await publicSupabase
+          .from('pix_checkouts')
+          .select('status,order_id')
+          .eq('correlation_id', correlationID)
+          .maybeSingle();
         if (!active) return;
         if (error) {
           setStatus('ERROR');
@@ -43,19 +63,21 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             window.location.href = `/track/${data.orderId}`;
             return;
           }
-          const mpStatus = data?.mp?.status ? String(data.mp.status) : '';
-          const mpDetail = data?.mp?.status_detail ? String(data.mp.status_detail) : '';
-          const mpDateApproved = data?.mp?.date_approved ? String(data.mp.date_approved) : '';
-          const note = data?.mp?.note ? String(data.mp.note) : '';
           const rs = data?.status ? String(data.status) : '';
           if (rs) setRemoteStatus(rs);
-          if (mpStatus || mpDetail || mpDateApproved) {
-            setDetails({ mpStatus, mpDetail, mpDateApproved, note });
+          setStatus('CREATED');
+        } else if (data) {
+          const st = String(data.status || '').toUpperCase();
+          setRemoteStatus(st || 'CREATED');
+          if (st === 'PAID' && data.order_id) {
+            setStatus('PAID');
+            window.location.href = `/track/${String(data.order_id)}`;
+            return;
           }
           setStatus('CREATED');
         } else {
           setStatus('ERROR');
-          setErrorText(String(data?.error || data?.message || 'Falha ao consultar status do pagamento.'));
+          setErrorText('Checkout não encontrado.');
         }
       } catch {
         if (active) setStatus('ERROR');
