@@ -24,28 +24,71 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRole)
 
     const url = new URL(req.url)
-    const cid = url.searchParams.get('cid') ?? ''
+    const cidFromQuery = url.searchParams.get('cid') ?? ''
     const providedSecret =
       (req.headers.get('x-pix-secret') ?? '') ||
       (req.headers.get('authorization') ?? '') ||
       (url.searchParams.get('secret') ?? '')
+
+    let body: any = {}
+    try {
+      body = await req.json()
+    } catch {
+      body = {}
+    }
+
+    const status = body?.status ?? body?.payment_status ?? body?.charge?.status ?? ''
+    const orderId = body?.order_id ?? body?.metadata?.order_id ?? body?.orderId ?? ''
+    const correlationID = body?.charge?.correlationID ?? body?.pix?.charge?.correlationID ?? ''
+
+    const paymentIdFromQuery =
+      url.searchParams.get('data.id') ||
+      url.searchParams.get('id') ||
+      ''
+
+    const paymentIdFromBody =
+      body?.data?.id ??
+      body?.id ??
+      ''
+
+    const paymentId = String(paymentIdFromBody || paymentIdFromQuery || '')
+
     let checkoutPrefetched: any | null = null
+    const prefetchCheckoutByCorrelation = async (cid: string) =>
+      (await supabase
+        .from('pix_checkouts')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id')
+        .eq('correlation_id', cid)
+        .maybeSingle()).data
+
+    const prefetchCheckoutByPaymentId = async (pid: string) =>
+      (await supabase
+        .from('pix_checkouts')
+        .select('id, restaurant_user_id, status, provider, order_payload, order_id, correlation_id')
+        .or(`transaction_id.eq.${pid},metadata->>payment_id.eq.${pid}`)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()).data
+
     if (!providedSecret) {
-      if (!cid) {
+      if (!cidFromQuery && !paymentId) {
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
-      const { data: checkout, error: chkErr } = await supabase
-        .from('pix_checkouts')
-        .select('id, restaurant_user_id, status, provider, order_payload, order_id')
-        .eq('correlation_id', cid)
-        .maybeSingle()
-      if (chkErr || !checkout) {
+      const checkout = cidFromQuery
+        ? await prefetchCheckoutByCorrelation(cidFromQuery)
+        : await prefetchCheckoutByPaymentId(paymentId)
+      if (!checkout) {
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       if (String(checkout.provider).toLowerCase() !== 'mercadopago') {
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       checkoutPrefetched = checkout
+    } else if (!cidFromQuery && paymentId) {
+      const checkout = await prefetchCheckoutByPaymentId(paymentId)
+      if (checkout && String(checkout.provider).toLowerCase() === 'mercadopago') {
+        checkoutPrefetched = checkout
+      }
     }
 
     let userIdFromSecret: string | null = null
@@ -77,39 +120,19 @@ serve(async (req) => {
       }
     }
 
-    let body: any = {}
-    try {
-      body = await req.json()
-    } catch {
-      body = {}
-    }
-
-    const status = body?.status ?? body?.payment_status ?? body?.charge?.status ?? ''
-    const orderId = body?.order_id ?? body?.metadata?.order_id ?? body?.orderId ?? ''
-    const correlationID = body?.charge?.correlationID ?? body?.pix?.charge?.correlationID ?? ''
-
-    const paymentIdFromQuery =
-      url.searchParams.get('data.id') ||
-      url.searchParams.get('id') ||
-      ''
-
-    const paymentIdFromBody =
-      body?.data?.id ??
-      body?.id ??
-      ''
-
-    console.log(`[PixWebhook] Received request. CID: ${cid}, Secret provided: ${!!providedSecret}`);
+    const effectiveCid = String(cidFromQuery || checkoutPrefetched?.correlation_id || '')
+    console.log(`[PixWebhook] Received request. CID: ${effectiveCid}, Secret provided: ${!!providedSecret}`);
 
     // ... (rest of the code)
 
-    if (cid) {
-      console.log(`[PixWebhook] Processing correlation ID: ${cid}`);
+    if (effectiveCid) {
+      console.log(`[PixWebhook] Processing correlation ID: ${effectiveCid}`);
       const checkout = checkoutPrefetched
         ? checkoutPrefetched
         : (await supabase
             .from('pix_checkouts')
             .select('id, restaurant_user_id, status, provider, order_payload, order_id')
-            .eq('correlation_id', cid)
+            .eq('correlation_id', effectiveCid)
             .maybeSingle()).data
 
       if (!checkout) {
@@ -125,7 +148,6 @@ serve(async (req) => {
       }
 
       if (String(checkout.provider).toLowerCase() === 'mercadopago') {
-        const paymentId = String(paymentIdFromBody || paymentIdFromQuery || '')
         console.log(`[PixWebhook] MP Payment ID: ${paymentId}`);
         
         if (!paymentId) {
@@ -229,8 +251,8 @@ serve(async (req) => {
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
 
         const externalRef = String(paymentJson?.external_reference || '')
-        if (cid && externalRef && externalRef !== String(cid)) {
-          console.error('[PixWebhook] external_reference mismatch', { cid, externalRef })
+        if (effectiveCid && externalRef && externalRef !== String(effectiveCid)) {
+          console.error('[PixWebhook] external_reference mismatch', { cid: effectiveCid, externalRef })
           return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
         
@@ -256,7 +278,7 @@ serve(async (req) => {
         console.log(`[PixWebhook] Creating Order...`);
         const payload = checkout.order_payload || {}
         // ... (rest of order creation)
-        const orderNumber = payload?.order_number || `MP-${cid.slice(0, 8)}`
+        const orderNumber = payload?.order_number || `MP-${effectiveCid.slice(0, 8)}`
         const insertData: any = {
           user_id: checkout.restaurant_user_id,
           order_number: orderNumber,
