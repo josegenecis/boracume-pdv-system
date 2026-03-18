@@ -29,8 +29,12 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
     let active = true;
     const poll = async () => {
       try {
-        const { data }: any = await supabase.functions.invoke('pix-checkout-status', { body: { correlationID } as any });
+        const { data, error }: any = await supabase.functions.invoke('pix-checkout-status', { body: { correlationID } as any });
         if (!active) return;
+        if (error) {
+          setStatus('ERROR');
+          return;
+        }
         if (data?.ok) {
           if ((data.status === 'PAID' || data.status === 'APPROVED') && data.orderId) {
             setStatus('PAID');
@@ -47,6 +51,8 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             setDetails({ mpStatus, mpDetail, mpDateApproved, note });
           }
           setStatus('CREATED');
+        } else {
+          setStatus('ERROR');
         }
       } catch {
         if (active) setStatus('ERROR');
