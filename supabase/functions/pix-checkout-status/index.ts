@@ -144,6 +144,19 @@ export default async function handler(req: Request): Promise<Response> {
         const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
         const externalRef = String(paymentJson?.external_reference || '')
         if (externalRef && externalRef !== correlationID) {
+          await supabase
+            .from('pix_checkouts')
+            .update({
+              metadata: {
+                ...(data as any).metadata,
+                mp_status: paymentJson?.status ?? null,
+                mp_status_detail: paymentJson?.status_detail ?? null,
+                date_approved: paymentJson?.date_approved ?? null,
+                external_reference: paymentJson?.external_reference ?? null,
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', (data as any).id)
           return new Response(JSON.stringify({
             ok: true,
             status: data.status,
@@ -215,6 +228,19 @@ export default async function handler(req: Request): Promise<Response> {
               }
             }), { status: 200, headers: corsHeaders })
           }
+
+          await supabase
+            .from('pix_checkouts')
+            .update({
+              metadata: {
+                ...(data as any).metadata,
+                mp_status: paymentJson?.status ?? null,
+                mp_status_detail: paymentJson?.status_detail ?? null,
+                date_approved: paymentJson?.date_approved ?? null,
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', (data as any).id)
           return new Response(JSON.stringify({
             ok: true,
             status: data.status,
@@ -232,7 +258,16 @@ export default async function handler(req: Request): Promise<Response> {
         } else if (mpStatus) {
           await supabase
             .from('pix_checkouts')
-            .update({ status: String(mpStatus).toUpperCase(), updated_at: new Date().toISOString() })
+            .update({
+              status: String(mpStatus).toUpperCase(),
+              metadata: {
+                ...(data as any).metadata,
+                mp_status: paymentJson?.status ?? null,
+                mp_status_detail: paymentJson?.status_detail ?? null,
+                date_approved: paymentJson?.date_approved ?? null,
+              },
+              updated_at: new Date().toISOString()
+            })
             .eq('id', (data as any).id)
           return new Response(JSON.stringify({
             ok: true,

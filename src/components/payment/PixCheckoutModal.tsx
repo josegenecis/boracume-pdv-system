@@ -20,7 +20,8 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
-  const [details, setDetails] = useState<{ mpStatus?: string; mpDetail?: string; mpDateApproved?: string } | null>(null);
+  const [details, setDetails] = useState<{ mpStatus?: string; mpDetail?: string; mpDateApproved?: string; note?: string } | null>(null);
+  const [remoteStatus, setRemoteStatus] = useState<string>('CREATED');
 
   useEffect(() => {
     if (!isOpen || !correlationID) return;
@@ -38,10 +39,13 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           const mpStatus = data?.mp?.status ? String(data.mp.status) : '';
           const mpDetail = data?.mp?.status_detail ? String(data.mp.status_detail) : '';
           const mpDateApproved = data?.mp?.date_approved ? String(data.mp.date_approved) : '';
+          const note = data?.mp?.note ? String(data.mp.note) : '';
+          const rs = data?.status ? String(data.status) : '';
+          if (rs) setRemoteStatus(rs);
           if (mpStatus || mpDetail || mpDateApproved) {
-            setDetails({ mpStatus, mpDetail, mpDateApproved });
+            setDetails({ mpStatus, mpDetail, mpDateApproved, note });
           }
-          setStatus(data.status || 'CREATED');
+          setStatus('CREATED');
         }
       } catch {
         if (active) setStatus('ERROR');
@@ -95,12 +99,13 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           {status === 'CREATED' && (
             <div className="text-xs text-muted-foreground flex items-center gap-2">
               <RefreshCw className="h-3 w-3 animate-spin" />
-              Aguardando confirmação do pagamento...
+              Aguardando confirmação do pagamento... ({remoteStatus})
             </div>
           )}
           {details?.mpStatus || details?.mpDetail ? (
             <div className="text-[11px] text-muted-foreground text-center">
               Mercado Pago: {details?.mpStatus || '-'}{details?.mpDetail ? ` • ${details.mpDetail}` : ''}
+              {details?.note ? ` • ${details.note}` : ''}
             </div>
           ) : null}
           {status === 'ERROR' && (
