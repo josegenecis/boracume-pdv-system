@@ -133,7 +133,7 @@ export default async function handler(req: Request): Promise<Response> {
           return new Response(JSON.stringify({ ok: true, status: data.status, orderId: existingOrderId }), { status: 200, headers: corsHeaders })
         }
 
-        if (mpStatus === 'approved') {
+        if (mpStatus === 'approved' && Boolean(paymentJson?.date_approved)) {
           const payload = (data as any).order_payload || {}
           const orderNumber = payload?.order_number || `MP-${correlationID.slice(0, 8)}`
 

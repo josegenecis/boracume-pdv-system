@@ -29,7 +29,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
         const { data }: any = await supabase.functions.invoke('pix-checkout-status', { body: { correlationID } as any });
         if (!active) return;
         if (data?.ok) {
-          if (data.status === 'PAID' && data.orderId) {
+          if ((data.status === 'PAID' || data.status === 'APPROVED') && data.orderId) {
             setStatus('PAID');
             window.location.href = `/track/${data.orderId}`;
             return;
