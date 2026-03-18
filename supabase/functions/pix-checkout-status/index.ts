@@ -29,6 +29,8 @@ export default async function handler(req: Request): Promise<Response> {
     const correlationID = String(body?.correlationID || '')
     if (!correlationID) return new Response(JSON.stringify({ ok: false, error: 'missing_correlationID' }), { status: 200, headers: corsHeaders })
 
+    console.log('[PixCheckoutStatus] Request', { correlationID })
+
     const { data, error } = await supabase
       .from('pix_checkouts')
       .select('id,status,order_id,provider,restaurant_user_id,transaction_id,metadata,order_payload')
@@ -50,6 +52,7 @@ export default async function handler(req: Request): Promise<Response> {
         String((data as any)?.transaction_id || '')
 
       if (paymentId) {
+        console.log('[PixCheckoutStatus] MP lookup', { correlationID, paymentId })
         const mpClientId = getEnv('MP_PLATFORM_CLIENT_ID')
         const mpClientSecret = getEnv('MP_PLATFORM_CLIENT_SECRET')
 
@@ -124,6 +127,7 @@ export default async function handler(req: Request): Promise<Response> {
         }
         const paymentJson: any = await paymentResp.json().catch(() => ({}))
         if (!paymentResp.ok) {
+          console.log('[PixCheckoutStatus] MP response not ok', { correlationID, paymentId, status: paymentResp.status })
           return new Response(JSON.stringify({
             ok: true,
             status: data.status,
@@ -142,6 +146,13 @@ export default async function handler(req: Request): Promise<Response> {
 
         const mpStatus = String(paymentJson?.status || '').toLowerCase()
         const mpDetail = String(paymentJson?.status_detail || '').toLowerCase()
+        console.log('[PixCheckoutStatus] MP response', {
+          correlationID,
+          paymentId,
+          mpStatus,
+          mpDetail,
+          date_approved: paymentJson?.date_approved ?? null,
+        })
         const externalRef = String(paymentJson?.external_reference || '')
         if (externalRef && externalRef !== correlationID) {
           await supabase
@@ -174,6 +185,7 @@ export default async function handler(req: Request): Promise<Response> {
         }
 
         if (mpStatus === 'approved' && (Boolean(paymentJson?.date_approved) || mpDetail === 'accredited')) {
+          console.log('[PixCheckoutStatus] MP paid detected', { correlationID, paymentId })
           const payload = (data as any).order_payload || {}
           const orderNumber = payload?.order_number || `MP-${correlationID.slice(0, 8)}`
 
@@ -210,6 +222,7 @@ export default async function handler(req: Request): Promise<Response> {
             .single()
 
           if (!createErr && created?.id) {
+            console.log('[PixCheckoutStatus] Order created', { correlationID, orderId: created.id })
             await supabase
               .from('pix_checkouts')
               .update({ status: 'PAID', order_id: created.id, updated_at: new Date().toISOString() })
@@ -229,6 +242,7 @@ export default async function handler(req: Request): Promise<Response> {
             }), { status: 200, headers: corsHeaders })
           }
 
+          console.log('[PixCheckoutStatus] Order create failed', { correlationID })
           await supabase
             .from('pix_checkouts')
             .update({
