@@ -13,10 +13,11 @@ interface PixCheckoutModalProps {
   brCode: string;
   qrCodeImage?: string;
   paymentLinkUrl?: string;
+  paymentId?: string;
 }
 
 export default function PixCheckoutModal(props: PixCheckoutModalProps) {
-  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl } = props;
+  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl, paymentId } = props;
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
@@ -108,6 +109,9 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
               {details?.note ? ` • ${details.note}` : ''}
             </div>
           ) : null}
+          <div className="text-[11px] text-muted-foreground text-center">
+            Checkout: {correlationID}{paymentId ? ` • Pagamento: ${paymentId}` : ''}
+          </div>
           {status === 'ERROR' && (
             <div className="text-xs text-red-600">
               Erro ao verificar pagamento. Tente novamente em instantes.

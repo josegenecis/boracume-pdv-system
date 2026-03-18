@@ -78,7 +78,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [changeAmount, setChangeAmount] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
-  const [pixCheckout, setPixCheckout] = React.useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string }>(null);
+  const [pixCheckout, setPixCheckout] = React.useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
   const [upsellOpen, setUpsellOpen] = React.useState(false);
   const [upsellOffers, setUpsellOffers] = React.useState<UpsellOffer[]>([]);
   const [pendingOrderData, setPendingOrderData] = React.useState<any | null>(null);
@@ -419,7 +419,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       correlationID: String(data.correlationID),
       brCode: String(data.brCode || ''),
       qrCodeImage: data.qrCodeImage ? String(data.qrCodeImage) : undefined,
-      paymentLinkUrl: data.paymentLinkUrl ? String(data.paymentLinkUrl) : undefined
+      paymentLinkUrl: data.paymentLinkUrl ? String(data.paymentLinkUrl) : undefined,
+      paymentId: data.paymentId ? String(data.paymentId) : undefined
     });
   };
 
@@ -644,6 +645,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           brCode={pixCheckout.brCode}
           qrCodeImage={pixCheckout.qrCodeImage}
           paymentLinkUrl={pixCheckout.paymentLinkUrl}
+          paymentId={pixCheckout.paymentId}
         />
       ) : null}
       <Dialog open={isOpen} onOpenChange={onClose}>

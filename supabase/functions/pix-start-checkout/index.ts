@@ -272,7 +272,7 @@ Deno.serve(async (req: Request) => {
         const ticketUrl = mpJson?.point_of_interaction?.transaction_data?.ticket_url || ''
         const qrCodeImage = qrBase64 ? `data:image/png;base64,${qrBase64}` : ''
 
-        return ok({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago' })
+        return ok({ ok: true, correlationID, brCode, qrCodeImage, paymentLinkUrl: ticketUrl, provider: 'mercadopago', paymentId: mpJson?.id ?? null })
       }
 
       const payerEmail = `${correlationID}@example.com`
