@@ -27,8 +27,7 @@ serve(async (req) => {
     const cidFromQuery = url.searchParams.get('cid') ?? ''
     const providedSecret =
       (req.headers.get('x-pix-secret') ?? '') ||
-      (url.searchParams.get('secret') ?? '') ||
-      (req.headers.get('authorization') ?? '')
+      (url.searchParams.get('secret') ?? '')
 
     let body: any = {}
     try {
