@@ -77,10 +77,26 @@ serve(async (req) => {
       }
     }
 
-    const body = await req.json()
+    let body: any = {}
+    try {
+      body = await req.json()
+    } catch {
+      body = {}
+    }
+
     const status = body?.status ?? body?.payment_status ?? body?.charge?.status ?? ''
     const orderId = body?.order_id ?? body?.metadata?.order_id ?? body?.orderId ?? ''
     const correlationID = body?.charge?.correlationID ?? body?.pix?.charge?.correlationID ?? ''
+
+    const paymentIdFromQuery =
+      url.searchParams.get('data.id') ||
+      url.searchParams.get('id') ||
+      ''
+
+    const paymentIdFromBody =
+      body?.data?.id ??
+      body?.id ??
+      ''
 
     console.log(`[PixWebhook] Received request. CID: ${cid}, Secret provided: ${!!providedSecret}`);
 
@@ -109,7 +125,7 @@ serve(async (req) => {
       }
 
       if (String(checkout.provider).toLowerCase() === 'mercadopago') {
-        const paymentId = body?.data?.id ?? body?.id ?? ''
+        const paymentId = String(paymentIdFromBody || paymentIdFromQuery || '')
         console.log(`[PixWebhook] MP Payment ID: ${paymentId}`);
         
         if (!paymentId) {
