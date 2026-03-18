@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
@@ -16,13 +15,9 @@ export default function PixSetup() {
 
   const { toast } = useToast();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const bank = 'mercadopago';
   const [enabled, setEnabled] = useState<boolean>(false);
-  const [accessToken, setAccessToken] = useState<string>('');
   const [webhookSecret, setWebhookSecret] = useState<string>('');
-  const [pixKey, setPixKey] = useState<string>('');
-  const [merchantName, setMerchantName] = useState<string>('');
-  const [merchantCity, setMerchantCity] = useState<string>('');
+  const [mpPdvEnabled, setMpPdvEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [mpConnected, setMpConnected] = useState(false);
   const [mpExpiresAt, setMpExpiresAt] = useState<string>('');
@@ -52,11 +47,8 @@ export default function PixSetup() {
 
         if (data) {
           setEnabled(!!data.enabled);
-          setAccessToken(data.mp_access_token || data.client_id || '');
           setWebhookSecret(data.webhook_secret || '');
-          setPixKey(data.mp_public_key || data.pix_key || '');
-          setMerchantName(data.merchant_name || '');
-          setMerchantCity(data.merchant_city || '');
+          setMpPdvEnabled(Boolean((data as any)?.mp_pdv_enabled));
           setMpConnected(Boolean(data.mp_access_token || data.client_id));
           setMpExpiresAt(data.mp_expires_at || '');
         }
@@ -122,11 +114,8 @@ export default function PixSetup() {
         user_id: activeUserId,
         enabled: !!enabled,
         bank: 'mercadopago',
-        client_id: accessToken || null,
         webhook_secret: webhookSecret || null,
-        pix_key: pixKey || null,
-        merchant_name: merchantName || null,
-        merchant_city: merchantCity || null,
+        mp_pdv_enabled: !!mpPdvEnabled,
         updated_at: new Date().toISOString(),
       };
 
@@ -154,7 +143,7 @@ export default function PixSetup() {
 
   const testPix = async () => {
     if (!activeUserId) return alert('Faça login para testar.');
-    if (!enabled || !accessToken) return alert('Ative e salve o token antes de testar.');
+    if (!enabled || !mpConnected) return alert('Conecte o Mercado Pago e ative o PIX antes de testar.');
     
     setLoading(true);
     try {
@@ -206,7 +195,7 @@ export default function PixSetup() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-3">
               <p className="text-sm text-muted-foreground">
-                Configure PIX para o Cardápio Digital. Você pode usar chave PIX (manual) e/ou Mercado Pago.
+                Configure PIX do Mercado Pago para o Cardápio Digital e PDV.
               </p>
             </div>
             <div className="md:col-span-3 bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
@@ -233,50 +222,27 @@ export default function PixSetup() {
             </div>
 
             <div className="md:col-span-3">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Ou configure manualmente</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <Label>Ativar PIX</Label>
-                <div className="mt-2 flex items-center gap-2">
-                  <Switch checked={enabled} onCheckedChange={setEnabled} />
-                  <span className="text-sm text-muted-foreground">{enabled ? 'Ativo' : 'Inativo'}</span>
-                </div>
-              </div>
-            </div>
-            <div className="md:col-span-3">
-              <div className="p-4 rounded-lg border bg-gray-50">
-                <div className="font-semibold mb-2">PIX manual (chave para copiar)</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-3">
-                    <Label>Chave PIX</Label>
-                    <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex-1">
+                  <Label>Ativar PIX (Mercado Pago)</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!mpConnected} />
+                    <span className="text-sm text-muted-foreground">{enabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
-                  <div>
-                    <Label>Nome do recebedor</Label>
-                    <Input value={merchantName} onChange={e => setMerchantName(e.target.value)} placeholder="Nome" />
-                  </div>
-                  <div>
-                    <Label>Cidade</Label>
-                    <Input value={merchantCity} onChange={e => setMerchantCity(e.target.value)} placeholder="Cidade" />
-                  </div>
-                  <div className="md:col-span-3 text-xs text-muted-foreground">
-                    Se Mercado Pago não estiver configurado, o cliente paga copiando o código PIX e o pedido fica aguardando confirmação.
+                </div>
+                <div className="flex-1">
+                  <Label>Ativar Mercado Pago no PDV</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Switch checked={mpPdvEnabled} onCheckedChange={setMpPdvEnabled} disabled={!mpConnected || !enabled} />
+                    <span className="text-sm text-muted-foreground">{mpPdvEnabled ? 'Ativo' : 'Inativo'}</span>
                   </div>
                 </div>
               </div>
-            </div>
-            <div>
-              <Label>Access Token (Mercado Pago)</Label>
-              <Input type="password" value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="Cole o Access Token da conta do restaurante" />
+              {!mpConnected ? (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Conecte o Mercado Pago para habilitar o PIX.
+                </p>
+              ) : null}
             </div>
             <div className="md:col-span-3">
               <div className="flex items-end gap-3">
@@ -315,7 +281,7 @@ export default function PixSetup() {
               {loading ? 'Processando...' : 'Salvar Configurações'}
             </Button>
             
-            <Button variant="secondary" onClick={testPix} disabled={loading || !enabled}>
+            <Button variant="secondary" onClick={testPix} disabled={loading || !enabled || !mpConnected}>
               Testar Integração (R$ 1,00)
             </Button>
           </div>
