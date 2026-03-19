@@ -281,7 +281,6 @@ serve(async (req) => {
           .from('pix_checkouts')
           .update({ status: 'PROCESSING', updated_at: new Date().toISOString() })
           .eq('id', checkout.id)
-          .is('order_id', null)
           .neq('status', 'PAID')
           .neq('status', 'PROCESSING')
           .select('id')
@@ -291,27 +290,55 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true, idempotent: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
+        if (checkout.order_id) {
+          const targetOrderId = String(checkout.order_id)
+          const { error: updErr } = await supabase
+            .from('orders')
+            .update({ status: 'paid', acceptance_status: 'pending_acceptance', payment_method: 'pix' } as any)
+            .eq('id', targetOrderId)
+          if (updErr) {
+            await supabase
+              .from('pix_checkouts')
+              .update({ status: 'PENDING', updated_at: new Date().toISOString() })
+              .eq('id', checkout.id)
+            return new Response(JSON.stringify({ error: 'order_update_failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          }
+
+          await supabase
+            .from('pix_checkouts')
+            .update({ status: 'PAID', order_id: targetOrderId, updated_at: new Date().toISOString() })
+            .eq('id', checkout.id)
+
+          return new Response(JSON.stringify({ ok: true, orderId: targetOrderId }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
         console.log(`[PixWebhook] Creating Order...`);
         const payload = checkout.order_payload || {}
+        const payloadSource = String(payload?.variations?.source || payload?.source || '')
+        const isPdv = payloadSource.toUpperCase() === 'PDV'
         // ... (rest of order creation)
         const orderNumber = payload?.order_number || `MP-${effectiveCid.slice(0, 8)}`
         const insertData: any = {
           user_id: checkout.restaurant_user_id,
           order_number: orderNumber,
-          customer_name: payload?.customer_name || 'Cliente', // Fallback
+          customer_name: payload?.customer_name || (isPdv ? 'Venda PDV' : 'Cliente'),
           customer_phone: payload?.customer_phone || null,
           customer_address: payload?.customer_address || null,
           customer_neighborhood: payload?.customer_neighborhood || null,
           delivery_zone_id: payload?.delivery_zone_id || null,
+          table_id: payload?.table_id || null,
           items: payload?.items || [],
           total: payload?.total || 0,
           delivery_fee: payload?.delivery_fee || 0,
           payment_method: 'pix', // Force PIX
-          status: 'pending', // Status inicial para o painel
-          acceptance_status: 'pending_acceptance',
+          status: payload?.status || (isPdv ? 'preparing' : 'pending'),
+          acceptance_status: payload?.acceptance_status || (isPdv ? 'accepted' : 'pending_acceptance'),
           change_amount: payload?.change_amount ?? null,
           order_type: payload?.order_type || 'delivery',
           delivery_instructions: payload?.delivery_instructions || null,
+          waiter_id: payload?.waiter_id || null,
+          cash_register_session_id: payload?.cash_register_session_id || null,
+          variations: payload?.variations || null,
           // ...
         }
 

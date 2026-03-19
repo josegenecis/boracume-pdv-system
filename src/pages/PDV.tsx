@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
+import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import TableAccountManager from '@/components/pdv/TableAccountManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -24,6 +25,7 @@ import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAut
 import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 
 interface Product {
   id: string;
@@ -102,6 +104,7 @@ const PDV = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
   const [pixAmount, setPixAmount] = useState(0);
+  const [mpPixCheckout, setMpPixCheckout] = useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
   const [createdOrderForNfce, setCreatedOrderForNfce] = useState<any>(null);
   const [nfceModalOpen, setNfceModalOpen] = useState(false);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
@@ -1010,6 +1013,50 @@ const PDV = () => {
           tef: paymentMethod === 'cartao' && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
       };
+
+      if (paymentMethod === 'pix') {
+        const { data: pixCfg } = await supabase
+          .from('pix_settings')
+          .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
+          .eq('user_id', user?.id)
+          .maybeSingle()
+
+        const useMpPixPdv =
+          Boolean((pixCfg as any)?.enabled) &&
+          String((pixCfg as any)?.bank || '').toLowerCase() === 'mercadopago' &&
+          Boolean((pixCfg as any)?.mp_pdv_enabled) &&
+          Boolean((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token)
+
+        if (useMpPixPdv) {
+          const mpPayload = {
+            ...orderData,
+            payment_method: 'pix',
+            status: 'preparing',
+            acceptance_status: 'accepted',
+          }
+
+          const { data: checkout } = await invokeEdgeFunction<any>('pix-start-checkout', {
+            restaurantUserId: user?.id,
+            orderPayload: mpPayload,
+            preferredMethod: 'pix',
+          }, { timeoutMs: 60000 })
+
+          if (!checkout?.ok || !checkout?.brCode || !checkout?.correlationID) {
+            throw new Error(checkout?.error || checkout?.message || 'Falha ao gerar QR do Mercado Pago')
+          }
+
+          setMpPixCheckout({
+            correlationID: String(checkout.correlationID),
+            brCode: String(checkout.brCode),
+            qrCodeImage: checkout.qrCodeImage ? String(checkout.qrCodeImage) : undefined,
+            paymentLinkUrl: checkout.paymentLinkUrl ? String(checkout.paymentLinkUrl) : undefined,
+            paymentId: checkout.paymentId ? String(checkout.paymentId) : undefined,
+          })
+          setPixAmount(getFinalTotal())
+          toast({ title: 'Aguardando pagamento', description: 'Escaneie o QR Code para concluir a venda.' })
+          return
+        }
+      }
 
       console.log('Criando pedido:', orderData);
 
@@ -1920,6 +1967,68 @@ const PDV = () => {
           }}
         />
       )}
+
+      {mpPixCheckout ? (
+        <PixCheckoutModal
+          isOpen={!!mpPixCheckout}
+          onClose={() => setMpPixCheckout(null)}
+          correlationID={mpPixCheckout.correlationID}
+          brCode={mpPixCheckout.brCode}
+          qrCodeImage={mpPixCheckout.qrCodeImage}
+          paymentLinkUrl={mpPixCheckout.paymentLinkUrl}
+          paymentId={mpPixCheckout.paymentId}
+          onPaid={(orderId) => {
+            void (async () => {
+              setMpPixCheckout(null);
+              try {
+                const { data: order } = await supabase
+                  .from('orders')
+                  .select('*')
+                  .eq('id', orderId)
+                  .maybeSingle();
+
+                const resolvedOrder =
+                  order ||
+                  ({
+                    id: orderId,
+                    user_id: user?.id,
+                    order_number: 'PIX',
+                    created_at: new Date().toISOString(),
+                    items: cart,
+                    total: pixAmount,
+                    delivery_fee: getDeliveryFee(),
+                    payment_method: 'pix',
+                    customer_name: customerName,
+                  } as any);
+
+                setCreatedOrderForNfce(resolvedOrder);
+                try {
+                  await PrinterService.printOrder(resolvedOrder);
+                } catch (e) {
+                  console.warn('Falha ao imprimir automaticamente (PIX):', e);
+                }
+                toast({
+                  title: "Pagamento confirmado!",
+                  description: "Pedido entrou em preparo e foi enviado para impressão.",
+                });
+                setNfceModalOpen(true);
+                setCart([]);
+                setCustomerName('');
+                setCustomerPhone('');
+                setCustomerAddress('');
+                setSelectedDeliveryZone('');
+                setSelectedTable('');
+                setChangeAmount('');
+                setPaymentMethod('pix');
+                setOrderType('delivery');
+              } catch (e: any) {
+                console.error(e);
+                toast({ title: 'Erro', description: e?.message || 'Não foi possível concluir a venda.', variant: 'destructive' });
+              }
+            })();
+          }}
+        />
+      ) : null}
 
       <PixPaymentModal
         isOpen={isPixModalOpen}

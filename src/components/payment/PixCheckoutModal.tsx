@@ -15,10 +15,11 @@ interface PixCheckoutModalProps {
   qrCodeImage?: string;
   paymentLinkUrl?: string;
   paymentId?: string;
+  onPaid?: (orderId: string) => void;
 }
 
 export default function PixCheckoutModal(props: PixCheckoutModalProps) {
-  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl, paymentId } = props;
+  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl, paymentId, onPaid } = props;
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
@@ -57,21 +58,19 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           setErrorText(String(error?.message || 'Falha ao consultar status do pagamento.'));
           return;
         }
-        if (data?.ok) {
-          if ((data.status === 'PAID' || data.status === 'APPROVED') && data.orderId) {
-            setStatus('PAID');
-            window.location.href = `/track/${data.orderId}`;
-            return;
-          }
-          const rs = data?.status ? String(data.status) : '';
-          if (rs) setRemoteStatus(rs);
-          setStatus('CREATED');
-        } else if (data) {
+        if (data) {
           const st = String(data.status || '').toUpperCase();
           setRemoteStatus(st || 'CREATED');
           if (st === 'PAID' && data.order_id) {
             setStatus('PAID');
-            window.location.href = `/track/${String(data.order_id)}`;
+            const oid = String(data.order_id);
+            if (onPaid) {
+              active = false;
+              onPaid(oid);
+              onClose();
+              return;
+            }
+            window.location.href = `/track/${oid}`;
             return;
           }
           setStatus('CREATED');
