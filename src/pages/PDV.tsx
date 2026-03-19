@@ -1015,17 +1015,29 @@ const PDV = () => {
       };
 
       if (paymentMethod === 'pix') {
-        const { data: pixCfg } = await supabase
+        const { data: pixCfg, error: pixCfgErr } = await supabase
           .from('pix_settings')
           .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
           .eq('user_id', user?.id)
           .maybeSingle()
+
+        if (pixCfgErr) {
+          toast({ title: 'PIX', description: pixCfgErr.message || 'Falha ao carregar configuração do PIX.', variant: 'destructive' });
+        }
 
         const useMpPixPdv =
           Boolean((pixCfg as any)?.enabled) &&
           String((pixCfg as any)?.bank || '').toLowerCase() === 'mercadopago' &&
           Boolean((pixCfg as any)?.mp_pdv_enabled) &&
           Boolean((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token)
+
+        if (!useMpPixPdv && (pixCfg as any)?.enabled && String((pixCfg as any)?.bank || '').toLowerCase() === 'mercadopago') {
+          if (!(pixCfg as any)?.mp_pdv_enabled) {
+            toast({ title: 'PIX', description: 'Mercado Pago no PDV está desativado em Configurações → PIX.', variant: 'destructive' });
+          } else if (!((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token)) {
+            toast({ title: 'PIX', description: 'Mercado Pago não está conectado. Conecte em Configurações → PIX.', variant: 'destructive' });
+          }
+        }
 
         if (useMpPixPdv) {
           const mpPayload = {

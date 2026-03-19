@@ -46,11 +46,15 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                 .maybeSingle();
             if (orderErr || !order) throw new Error('Não foi possível carregar o pedido');
 
-            const { data: pixDb } = await supabase
+            const { data: pixDb, error: pixDbErr } = await supabase
                 .from('pix_settings')
                 .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
                 .eq('user_id', order.user_id)
                 .maybeSingle();
+
+            if (pixDbErr) {
+                throw new Error(pixDbErr.message || 'Falha ao carregar configuração do PIX.');
+            }
 
             const canUseMercadoPago =
                 Boolean((pixDb as any)?.enabled) &&
