@@ -16,6 +16,7 @@ export default function PixSetup() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState<boolean>(false);
   const [mpPdvEnabled, setMpPdvEnabled] = useState<boolean>(false);
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mpConnected, setMpConnected] = useState(false);
   const [mpExpiresAt, setMpExpiresAt] = useState<string>('');
@@ -51,6 +52,8 @@ export default function PixSetup() {
         }
       } catch (e) {
         console.error('Exceção ao carregar:', e);
+      } finally {
+        setLoaded(true);
       }
     };
     load();
@@ -113,6 +116,38 @@ export default function PixSetup() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!loaded || !activeUserId) return;
+    if (!mpConnected) return;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const payload = {
+            user_id: activeUserId,
+            enabled: !!enabled,
+            bank: 'mercadopago',
+            mp_pdv_enabled: !!mpPdvEnabled,
+            updated_at: new Date().toISOString(),
+          };
+
+          const result = await (supabase as any)
+            .from('pix_settings')
+            .upsert(payload, { onConflict: 'user_id' })
+            .select();
+
+          if (result.error) throw result.error;
+        } catch (e: any) {
+          toast({
+            title: 'Erro ao salvar',
+            description: e?.message || 'Não foi possível salvar as configurações.',
+            variant: 'destructive',
+          });
+        }
+      })();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [loaded, activeUserId, mpConnected, enabled, mpPdvEnabled]);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
