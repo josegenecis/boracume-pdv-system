@@ -39,10 +39,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
     return (
       <div
         onClick={() => onProductClick(product)}
-        className="bg-white rounded-[26px] shadow-sm border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
       >
         <div className="relative">
-          <div className="aspect-[4/3] w-full bg-gray-100">
+          <div className="aspect-square w-full bg-gray-100">
             {imageUrl && !imageError ? (
               <img
                 src={imageUrl}
@@ -58,18 +58,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             )}
           </div>
 
-          <div className="absolute bottom-3 left-3">
-            {product.name.toLowerCase().includes('fartureia') ? (
-              <div className="rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-boracume-orange shadow-sm">
-                Pré-venda
-              </div>
-            ) : (
-              <div className="rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-gray-900 shadow-sm">
-                R$ {product.price.toFixed(2)}
-              </div>
-            )}
-          </div>
-
           <Button
             type="button"
             size="icon"
@@ -81,19 +69,34 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
           </Button>
         </div>
 
-        <div className="p-4">
-          <h3 className="font-extrabold text-gray-900 text-sm leading-snug line-clamp-2">
+        <div className="p-3">
+          <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">
             {product.name}
           </h3>
 
-          {product.original_price && product.discount_percentage ? (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
-              <span className="text-[11px] font-bold text-green-700 bg-green-100 rounded-full px-2 py-0.5">
-                -{Math.round(Number(product.discount_percentage))}%
-              </span>
-            </div>
-          ) : null}
+          {product.description && (
+            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+              {product.description}
+            </p>
+          )}
+
+          <div className="mt-2">
+            {product.name.toLowerCase().includes('fartureia') ? (
+              <span className="font-bold text-boracume-orange">Pré-venda</span>
+            ) : product.original_price && product.discount_percentage ? (
+              <div className="space-y-1">
+                <div className="flex items-end gap-2">
+                  <span className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</span>
+                  <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
+                </div>
+                <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
+                  -{Math.round(Number(product.discount_percentage))}%
+                </div>
+              </div>
+            ) : (
+              <span className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</span>
+            )}
+          </div>
         </div>
       </div>
     );
