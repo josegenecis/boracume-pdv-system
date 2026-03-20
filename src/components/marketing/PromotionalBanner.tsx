@@ -188,8 +188,8 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   
   if (isLoading) {
     return (
-      <div className="w-full h-48 bg-gray-200 animate-pulse rounded-lg flex items-center justify-center">
-        <span className="text-gray-400">Carregando banners...</span>
+      <div className="w-full h-28 bg-gray-200 animate-pulse rounded-lg flex items-center justify-center">
+        <span className="text-xs text-gray-400">Carregando banners...</span>
       </div>
     );
   }
@@ -217,7 +217,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               key={b.id}
               type="button"
               onClick={() => handleBannerClick(b)}
-              className="block w-40 sm:w-44 rounded-xl overflow-hidden shadow-sm border border-gray-100 bg-white"
+              className="block w-32 sm:w-36 rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
             >
               <div className="aspect-[2/3] w-full bg-gray-100 relative">
                 <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
@@ -230,7 +230,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   }
 
   return (
-    <div className="relative w-full h-32 sm:h-36 overflow-hidden rounded-xl shadow-sm border border-gray-100">
+    <div className="relative w-full h-24 sm:h-28 overflow-hidden rounded-lg shadow-sm border border-gray-100">
       <div
         className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
         style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
@@ -248,24 +248,24 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-8 w-8"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-7 w-7"
             onClick={(e) => {
               e.stopPropagation();
               handlePrevious();
             }}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-8 w-8"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-7 w-7"
             onClick={(e) => {
               e.stopPropagation();
               handleNext();
             }}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </>
       ) : null}
@@ -275,7 +275,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           {clickables.map((_, index) => (
             <button
               key={index}
-              className={`w-2 h-2 rounded-full ${currentIndex === index ? 'bg-white' : 'bg-white/50'}`}
+              className={`w-1.5 h-1.5 rounded-full ${currentIndex === index ? 'bg-white' : 'bg-white/50'}`}
               onClick={(e) => {
                 e.stopPropagation();
                 setCurrentIndex(index);

@@ -105,36 +105,36 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
   return (
     <div
       onClick={() => onProductClick(product)}
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 cursor-pointer hover:shadow-md transition-shadow"
+      className="bg-white rounded-xl shadow-sm border border-gray-100 px-3 py-3 cursor-pointer hover:shadow-md transition-shadow"
     >
       <div className="flex gap-4 items-start">
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-gray-900 mb-2 text-lg">
+          <h3 className="font-semibold text-gray-900 mb-1.5 text-base leading-snug">
             {product.name}
           </h3>
 
           {product.description && (
-            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+            <p className="text-xs text-gray-600 mb-2 line-clamp-2">
               {product.description}
             </p>
           )}
 
           {product.name.toLowerCase().includes('fartureia') ? (
-            <span className="font-bold text-boracume-orange text-lg">
+            <span className="font-semibold text-boracume-orange text-base">
               Pré-venda
             </span>
           ) : product.original_price && product.discount_percentage ? (
             <div className="space-y-1">
               <div className="flex items-end gap-2">
-                <span className="font-bold text-gray-900 text-lg">R$ {product.price.toFixed(2)}</span>
-                <span className="text-sm text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
+                <span className="font-semibold text-gray-900 text-base">R$ {product.price.toFixed(2)}</span>
+                <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
               </div>
               <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
                 -{Math.round(Number(product.discount_percentage))}%
               </div>
             </div>
           ) : (
-            <span className="font-bold text-black text-lg">
+            <span className="font-semibold text-black text-base">
               R$ {product.price.toFixed(2)}
             </span>
           )}
@@ -145,12 +145,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             size="icon"
             onClick={handleAddClick}
             disabled={!!isAdding}
-            className="h-12 w-12 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
+            className="h-10 w-10 rounded-full bg-boracume-orange hover:bg-boracume-orange/90 shadow-lg"
           >
-            {isAdding ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-6 w-6" />}
+            {isAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
           </Button>
 
-          <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gray-100">
+          <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100">
             {imageUrl && !imageError ? (
               <img
                 src={imageUrl}

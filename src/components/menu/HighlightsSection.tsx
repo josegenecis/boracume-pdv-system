@@ -23,10 +23,10 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
 
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-2 mb-4">
-        <Star className="h-5 w-5 text-yellow-500" />
-        <h2 className="text-xl font-bold text-gray-900">Destaques</h2>
-        <span className="text-sm text-gray-500">Mais pedidos</span>
+      <div className="flex items-center gap-2 mb-3">
+        <Star className="h-4 w-4 text-yellow-500" />
+        <h2 className="text-lg font-semibold text-gray-900">Destaques</h2>
+        <span className="text-xs text-gray-500">Mais pedidos</span>
       </div>
       
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
@@ -34,7 +34,7 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
           <div
             key={product.id}
             onClick={() => onProductClick(product)}
-            className="min-w-[180px] max-w-[180px] bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+            className="min-w-[160px] max-w-[160px] bg-white rounded-lg shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
           >
             <div className="relative">
               <div className="aspect-square w-full bg-gray-100">
@@ -47,7 +47,7 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    <span className="text-sm">Sem imagem</span>
+                    <span className="text-xs">Sem imagem</span>
                   </div>
                 )}
               </div>
@@ -65,15 +65,15 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
                 {product.original_price && product.discount_percentage ? (
                   <div className="space-y-1">
                     <div className="flex items-end gap-2">
-                      <span className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</span>
-                      <span className="text-xs text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
+                      <span className="font-semibold text-gray-900">R$ {product.price.toFixed(2)}</span>
+                      <span className="text-[11px] text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
                     </div>
                     <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
                       -{Math.round(Number(product.discount_percentage))}%
                     </div>
                   </div>
                 ) : (
-                  <div className="font-bold text-gray-900">R$ {product.price.toFixed(2)}</div>
+                  <div className="font-semibold text-gray-900">R$ {product.price.toFixed(2)}</div>
                 )}
               </div>
             </div>

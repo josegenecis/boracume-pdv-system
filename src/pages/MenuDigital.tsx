@@ -521,7 +521,7 @@ const MenuDigital = () => {
     <div className="min-h-screen bg-white pb-24">
       <MarketingPixels userId={finalUserId} />
       <div className="relative">
-        <div className="relative h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
+        <div className="relative h-40 sm:h-48 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
           {(profile as any)?.banner_url ? (
             <img
               src={String((profile as any).banner_url)}
@@ -538,10 +538,10 @@ const MenuDigital = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/0 to-white/0" />
         </div>
 
-        <div className="max-w-4xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
-          <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 sm:p-5">
+        <div className="max-w-4xl mx-auto px-4 -mt-14 sm:-mt-16 relative z-10">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
             <div className="flex items-start gap-3">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-10 sm:-mt-12">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-9 sm:-mt-10">
                 {(profile as any)?.logo_url ? (
                   <img src={String((profile as any).logo_url)} alt={profile.restaurant_name || 'Logo'} className="w-full h-full object-cover" />
                 ) : (
@@ -551,18 +551,18 @@ const MenuDigital = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">
                   {profile?.restaurant_name || 'Cardápio'}
                 </h1>
                 {((profile as any)?.address || (profile as any)?.phone) && (
-                  <div className="text-xs sm:text-sm text-gray-600 mt-1">
+                  <div className="text-xs text-gray-600 mt-1">
                     {(profile as any)?.address ? String((profile as any).address) : ''}
                     {(profile as any)?.address && (profile as any)?.phone ? ' • ' : ''}
                     {(profile as any)?.phone ? String((profile as any).phone) : ''}
                   </div>
                 )}
                 {(profile as any)?.description && (
-                  <div className="text-xs sm:text-sm text-gray-600 mt-2 line-clamp-2">
+                  <div className="text-xs text-gray-600 mt-2 line-clamp-2">
                     {String((profile as any).description)}
                   </div>
                 )}
@@ -576,7 +576,7 @@ const MenuDigital = () => {
                   placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
+                  className="pl-10 pr-4 h-10 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600 text-sm"
                 />
               </div>
             </div>
@@ -605,7 +605,7 @@ const MenuDigital = () => {
           />
         </div>
 
-        <div className="h-4" />
+        <div className="h-3" />
         {/* Seção de Destaques */}
         {highlights.length > 0 && (
           <HighlightsSection
@@ -627,7 +627,7 @@ const MenuDigital = () => {
               }}
               className="scroll-mt-32"
             >
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">
                 {category.name}
               </h2>
               <div className="space-y-3">

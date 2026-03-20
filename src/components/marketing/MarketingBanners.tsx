@@ -9,7 +9,7 @@ export default function MarketingBanners({
   onSelectProductId?: (productId: string) => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PromotionalBanner restaurantId={restaurantId} variant="wide" onSelectProductId={onSelectProductId} />
       <PromotionalBanner restaurantId={restaurantId} variant="tile" autoPlay={false} onSelectProductId={onSelectProductId} />
     </div>

@@ -22,15 +22,15 @@ const CartBottomBar: React.FC<CartBottomBarProps> = ({
       <div className="max-w-4xl mx-auto">
         <Button 
           onClick={onOpenCart}
-          className="w-full flex items-center justify-between h-14 text-lg bg-boracume-orange hover:bg-boracume-orange/90 text-white"
+          className="w-full flex items-center justify-between h-12 text-base bg-boracume-orange hover:bg-boracume-orange/90 text-white"
           size="lg"
         >
           <div className="flex items-center gap-2">
             <div className="relative">
-              <ShoppingCart className="h-6 w-6" />
+              <ShoppingCart className="h-5 w-5" />
               <Badge 
                 variant="secondary" 
-                className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs bg-white text-orange-600"
+                className="absolute -top-2 -right-2 h-4 w-4 flex items-center justify-center p-0 text-[10px] bg-white text-orange-600"
               >
                 {itemCount}
               </Badge>
