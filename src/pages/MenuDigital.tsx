@@ -8,9 +8,9 @@ import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
-import CartBottomBar from '@/components/menu/CartBottomBar';
+import MenuBottomNav from '@/components/menu/MenuBottomNav';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Bell, Search, ShoppingCart, UserRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildPublicTrackShareUrl } from '@/utils/publicUrl';
@@ -471,6 +471,11 @@ const MenuDigital = () => {
     products: filteredProducts.filter(product => product.category_id === category.id)
   })).filter(category => category.products.length > 0);
 
+  const recommendProducts = (() => {
+    const sorted = [...filteredProducts].sort((a: any, b: any) => (Number(b?.order_count) || 0) - (Number(a?.order_count) || 0));
+    return sorted.slice(0, 6);
+  })();
+
   if (menuLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -518,84 +523,55 @@ const MenuDigital = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-[#FFF6EE] pb-28">
       <MarketingPixels userId={finalUserId} />
-      <div className="relative">
-        <div className="relative h-44 sm:h-56 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
-          {(profile as any)?.banner_url ? (
-            <img
-              src={String((profile as any).banner_url)}
-              alt={profile.restaurant_name || 'Banner'}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (profile as any)?.logo_url ? (
-            <img
-              src={String((profile as any).logo_url)}
-              alt={profile.restaurant_name || 'Logo'}
-              className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-110"
-            />
-          ) : null}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/0 to-white/0" />
-        </div>
-
-        <div className="max-w-4xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10">
-          <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 sm:p-5">
-            <div className="flex items-start gap-3">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-10 sm:-mt-12">
-                {(profile as any)?.logo_url ? (
-                  <img src={String((profile as any).logo_url)} alt={profile.restaurant_name || 'Logo'} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-xs font-bold text-gray-600">
-                    {(profile?.restaurant_name || 'BC').slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
-                  {profile?.restaurant_name || 'Cardápio'}
-                </h1>
-                {((profile as any)?.address || (profile as any)?.phone) && (
-                  <div className="text-xs sm:text-sm text-gray-600 mt-1">
-                    {(profile as any)?.address ? String((profile as any).address) : ''}
-                    {(profile as any)?.address && (profile as any)?.phone ? ' • ' : ''}
-                    {(profile as any)?.phone ? String((profile as any).phone) : ''}
-                  </div>
-                )}
-                {(profile as any)?.description && (
-                  <div className="text-xs sm:text-sm text-gray-600 mt-2 line-clamp-2">
-                    {String((profile as any).description)}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white sticky top-0 z-40 mt-3 pb-2">
-            {categories.length > 0 && (
-              <CategoryTabs
-                categories={categories}
-                activeCategory={activeCategory}
-                onCategoryChange={setActiveCategory}
+      <div className="bg-[#F6C84B]">
+        <div className="max-w-4xl mx-auto px-4 pt-4 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
+              <Input
+                placeholder="Buscar"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4 h-10 rounded-full bg-white/90 border-white/40 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-            )}
+            </div>
+            <button type="button" className="h-10 w-10 rounded-full bg-white/90 border border-white/40 flex items-center justify-center" onClick={() => setShowCartModal(true)}>
+              <ShoppingCart className="h-5 w-5 text-boracume-orange" />
+            </button>
+            <button type="button" className="h-10 w-10 rounded-full bg-white/90 border border-white/40 flex items-center justify-center">
+              <Bell className="h-5 w-5 text-boracume-orange" />
+            </button>
+            <button type="button" className="h-10 w-10 rounded-full bg-white/90 border border-white/40 flex items-center justify-center">
+              <UserRound className="h-5 w-5 text-boracume-orange" />
+            </button>
           </div>
+
+          <div className="mt-5">
+            <div className="text-2xl sm:text-3xl font-extrabold text-white drop-shadow-sm">
+              {(() => {
+                const h = new Date().getHours();
+                if (h < 12) return 'Bom dia';
+                if (h < 18) return 'Boa tarde';
+                return 'Boa noite';
+              })()}
+            </div>
+            <div className="text-sm text-white/90 mt-1">
+              {profile?.restaurant_name || 'Cardápio'} • Hora de pedir
+            </div>
+          </div>
+
+          {categories.length > 0 ? (
+            <div className="mt-5 bg-white rounded-[26px] px-3 py-3 shadow-sm border border-white/40">
+              <CategoryTabs categories={categories} activeCategory={activeCategory} onCategoryChange={setActiveCategory} />
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="mt-4">
+      <div className="max-w-4xl mx-auto px-4 pt-5">
+        <div className="mb-4">
           <MarketingBanners
             restaurantId={finalUserId}
             onSelectProductId={(productId) => {
@@ -605,19 +581,30 @@ const MenuDigital = () => {
           />
         </div>
 
-        <div className="h-4" />
-        {/* Seção de Destaques */}
-        {highlights.length > 0 && (
-          <HighlightsSection
-            products={highlights}
-            onProductClick={handleProductClick}
-          />
-        )}
+        {highlights.length > 0 ? (
+          <HighlightsSection products={highlights} onProductClick={handleProductClick} />
+        ) : null}
 
-        <div className="h-3" />
+        {recommendProducts.length > 0 ? (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-extrabold text-gray-900">Recomendados</h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {recommendProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product as any}
+                  onProductClick={handleProductClick}
+                  isAdding={openingProductId === product.id}
+                  layout="grid"
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
 
-        {/* Produtos por Categoria */}
-        <div className="space-y-8">
+        <div className="mt-8 space-y-8">
           {productsByCategory.map((category) => (
             <section
               key={category.id}
@@ -625,19 +612,19 @@ const MenuDigital = () => {
               ref={(el) => {
                 if (el) registerSection(`category-${category.id}`, el);
               }}
-              className="scroll-mt-32"
+              className="scroll-mt-24"
             >
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
+              <h2 className="text-lg font-extrabold text-gray-900 mb-3">
                 {category.name}
               </h2>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {category.products.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                     onProductClick={handleProductClick}
                     isAdding={openingProductId === product.id}
-                    layout="list"
+                    layout="grid"
                   />
                 ))}
               </div>
@@ -680,10 +667,16 @@ const MenuDigital = () => {
       {/* Clube de Vantagens removido conforme solicitação */}
 
       {/* Carrinho Fixo */}
-      <CartBottomBar
+      <MenuBottomNav
         itemCount={getCartItemCount()}
-        total={getCartTotal()}
         onOpenCart={() => setShowCartModal(true)}
+        onHome={() => {
+          try {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } catch {
+            window.scrollTo(0, 0);
+          }
+        }}
       />
     </div>
   );
