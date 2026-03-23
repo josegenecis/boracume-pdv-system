@@ -461,7 +461,18 @@ function buildOrderHtml(order: any, config: any, store?: any) {
     `;
 }
 
-function buildReportHtml(title: string, lines: string[]) {
+function buildReportHtml(title: string, lines: string[], store?: any) {
+  const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
+  const storeHeader = store ? `
+    ${storeLogoHtml}
+    <div class="center bold" style="font-size: 14px; margin-bottom: 4px;">${escapeHtml(store.restaurant_name || store.name || 'RESTAURANTE')}</div>
+    ${store.address ? `<div class="center" style="font-size: 11px;">${escapeHtml(store.address)}</div>` : ''}
+    ${store.phone ? `<div class="center" style="font-size: 11px;">Tel: ${escapeHtml(store.phone)}</div>` : ''}
+    ${store.cnpj ? `<div class="center" style="font-size: 11px;">CNPJ: ${escapeHtml(store.cnpj)}</div>` : ''}
+    <div class="divider"></div>
+  ` : '';
+
   return `
       <!DOCTYPE html>
       <html>
@@ -485,11 +496,12 @@ function buildReportHtml(title: string, lines: string[]) {
         </style>
       </head>
       <body>
-        <div class="center bold">${title}</div>
+        ${storeHeader}
+        <div class="center bold" style="font-size: 13px; margin: 6px 0;">${title}</div>
         <div class="divider"></div>
         ${lines.map((l) => `<div class="line">${String(l).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')}
         <div class="divider"></div>
-        <div class="center" style="font-size: 0.8em;">Sistema BoraCumê</div>
+        <div class="center" style="font-size: 0.8em; margin-top: 10px;">Sistema BoraCumê</div>
       </body>
       </html>
     `;
@@ -712,10 +724,55 @@ export const PrinterService = {
     return this.printOrder(order, { onlyIfAuto: !isElectron });
   },
 
-  async printCashReport(report: { title: string; lines: string[] }) {
+  async printCashReport(report: { title: string; lines: string[]; userId?: string }) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem);
-    const htmlContent = buildReportHtml(report.title, report.lines).replace(
+    let store: any = null;
+    const userId = String(report.userId || '').trim();
+    if (userId) {
+      try {
+        const [{ data: profile }, { data: fiscal }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('restaurant_name,description,logo_url,phone,address,website')
+            .eq('id', userId)
+            .maybeSingle(),
+          supabase
+            .from('fiscal_settings')
+            .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
+            .eq('user_id', userId)
+            .maybeSingle()
+        ]);
+
+        const fiscalAddressParts = [
+          (fiscal as any)?.endereco_logradouro,
+          (fiscal as any)?.endereco_numero,
+          (fiscal as any)?.endereco_complemento,
+          (fiscal as any)?.endereco_bairro,
+          (fiscal as any)?.endereco_municipio,
+          (fiscal as any)?.endereco_uf,
+          (fiscal as any)?.endereco_cep
+        ]
+          .map((v: any) => String(v || '').trim())
+          .filter(Boolean);
+        const fiscalAddress = fiscalAddressParts.length > 0 ? fiscalAddressParts.join(', ') : '';
+
+        store = profile
+          ? {
+              name: (profile as any).restaurant_name || '',
+              restaurant_name: (profile as any).restaurant_name || '',
+              description: (profile as any).description || '',
+              logo_url: (profile as any).logo_url || '',
+              phone: (profile as any).phone || '',
+              address: fiscalAddress || (profile as any).address || '',
+              website: (profile as any).website || '',
+              cnpj: String((fiscal as any)?.cnpj || '').trim() || ''
+            }
+          : null;
+      } catch {}
+    }
+
+    const htmlContent = buildReportHtml(report.title, report.lines, store).replace(
       '</body>',
       `<script>window.onload=function(){window.print();}</script></body>`
     );

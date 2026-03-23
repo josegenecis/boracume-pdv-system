@@ -269,6 +269,7 @@ const PDV = () => {
         toast({ title: 'Caixa aberto' });
         await PrinterService.printCashReport({
           title: 'Abertura de Caixa',
+          userId: user.id,
           lines: [
             `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
             `Valor inicial: R$ ${amount.toFixed(2)}`,
@@ -313,6 +314,7 @@ const PDV = () => {
         toast({ title: 'Caixa fechado' });
         await PrinterService.printCashReport({
           title: 'Fechamento de Caixa',
+          userId: user.id,
           lines: [
             `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
             `Valor informado: R$ ${amount.toFixed(2)}`,
@@ -367,6 +369,7 @@ const PDV = () => {
       toast({ title: cashMoveType === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
       await PrinterService.printCashReport({
         title: cashMoveType === 'in' ? 'Suprimento' : 'Sangria',
+        userId: user.id,
         lines: [
           `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
           `Valor: R$ ${amount.toFixed(2)}`,
@@ -1278,7 +1281,7 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2">
                     {filteredProducts.map((product) => (
                       (() => {
                         const track = !!(product as any)?.track_stock;
@@ -1291,7 +1294,7 @@ const PDV = () => {
                         className={`hover:shadow-lg transition-all cursor-pointer group active:scale-95 duration-100 flex flex-col overflow-hidden border-gray-200 ${isLowStock ? 'animate-stock-pulse border-red-500' : ''}`}
                         onClick={(e) => handleProductClick(product, e)}
                       >
-                        <div className="aspect-square relative overflow-hidden bg-gray-100">
+                        <div className="aspect-[4/3] relative overflow-hidden bg-gray-100">
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
@@ -1308,21 +1311,21 @@ const PDV = () => {
                               <Store className="text-gray-300 w-8 h-8" />
                             </div>
                           )}
-                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 text-xs font-bold shadow-sm border border-gray-100">
+                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[11px] font-bold shadow-sm border border-gray-100">
                             {formatCurrency(product.price)}
                           </div>
                           {isLowStock && (
-                            <div className="absolute top-2 left-2 bg-red-600 text-white rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm">
+                            <div className="absolute top-2 left-2 bg-red-600 text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold shadow-sm">
                               Estoque baixo
                             </div>
                           )}
                         </div>
-                        <CardContent className="p-2 flex-1 flex flex-col justify-between bg-white">
-                          <h3 className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight mb-2" title={product.name}>
+                        <CardContent className="p-1.5 flex-1 flex flex-col justify-between bg-white">
+                          <h3 className="font-medium text-[11px] sm:text-xs line-clamp-2 leading-tight mb-1.5" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white h-7 text-xs font-medium"
+                            className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white h-6 text-[10px] font-medium"
                             size="sm"
                             variant="ghost"
                           >
