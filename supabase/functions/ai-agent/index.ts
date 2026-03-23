@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     // @ts-ignore
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
     // @ts-ignore
-    const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-flash';
+    const GEMINI_MODEL = 'gemini-1.5-flash-latest';
     // @ts-ignore
     const PEXELS_API_KEY = Deno.env.get('PEXELS_API_KEY');
     // @ts-ignore
