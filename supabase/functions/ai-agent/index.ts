@@ -39,10 +39,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { command, userId, conversationHistory = [], supportMode = false } = body;
+    const { command, userId, conversationHistory = [], supportMode = false, imageBase64 } = body;
 
-    if (!command || !userId) {
-        throw new Error('Comando e UserId são obrigatórios.');
+    if (!command && !imageBase64) {
+        throw new Error('Comando ou imagem são obrigatórios.');
+    }
+    if (!userId) {
+        throw new Error('UserId é obrigatório.');
     }
 
     // @ts-ignore
@@ -445,6 +448,7 @@ Regras:
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
+- Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
 - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
 - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
@@ -472,9 +476,37 @@ Regras:
       .filter(Boolean) as any[];
 
     let currentContents: any[] = [
-      ...historyContents,
-      { role: 'user', parts: [{ text: String(command || '') }] }
+      ...historyContents
     ];
+
+    const userParts: any[] = [];
+    if (command) {
+        userParts.push({ text: String(command) });
+    } else if (imageBase64) {
+        userParts.push({ text: "Analise esta imagem." });
+    }
+
+    if (imageBase64) {
+        // Remove data:image/jpeg;base64, prefix if present
+        let cleanBase64 = imageBase64;
+        let mimeType = 'image/jpeg';
+        
+        if (imageBase64.includes(';base64,')) {
+            const parts = imageBase64.split(';base64,');
+            mimeType = parts[0].split(':')[1] || 'image/jpeg';
+            cleanBase64 = parts[1];
+        }
+        
+        userParts.push({
+            inlineData: {
+                mimeType: mimeType,
+                data: cleanBase64
+            }
+        });
+    }
+
+    currentContents.push({ role: 'user', parts: userParts });
+
     const allToolResults: any[] = [];
     let finalMessageText: string | null = null;
 

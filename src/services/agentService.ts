@@ -50,23 +50,29 @@ const EXPENSE_CATEGORIES = [
 /**
  * Process natural language commands and execute deterministic tasks
  */
-export async function processAgentCommand(command: string, userId: string): Promise<AgentCommandResult> {
+export async function processAgentCommand(command: string, userId: string, imageBase64?: string): Promise<AgentCommandResult> {
   try {
     if (!String(userId || '').trim()) {
       return { success: false, message: 'Faça login para usar o assistente.' };
     }
 
     // Log the command for tracking
-    await logAgentActivity(userId, 'command_received', command);
+    await logAgentActivity(userId, 'command_received', imageBase64 ? `${command} [Imagem Anexada]` : command);
 
     // 1. Tentar processar via Edge Function (AI Agent)
     let edgeFailureMsg: string | null = null;
     try {
         console.log('[AgentService] Enviando para Edge Function ai-agent...');
-        const { data, status } = await invokeEdgeFunction('ai-agent', {
+        const payload: any = {
             command: command,
             userId: userId
-        });
+        };
+        
+        if (imageBase64) {
+            payload.imageBase64 = imageBase64;
+        }
+
+        const { data, status } = await invokeEdgeFunction('ai-agent', payload);
 
         if (status === 200 && data && data.success) {
             await logAgentActivity(userId, 'ai_command_success', `IA: ${data.message.substring(0, 50)}...`);

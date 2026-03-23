@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Loader2, Send, Bot, User, CheckCircle, AlertCircle, Clock, Paperclip, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { processAgentCommand } from '@/services/agentService';
@@ -16,6 +16,7 @@ interface ConsoleMessage {
   timestamp: Date;
   status?: 'processing' | 'success' | 'error' | 'warning';
   metadata?: any;
+  imageUrl?: string;
 }
 
 interface AgentConsoleProps {
@@ -26,6 +27,8 @@ export function AgentConsole({ className }: AgentConsoleProps) {
   const [messages, setMessages] = useState<ConsoleMessage[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [suggestedCommands] = useState([
     'Desativar carne de sol de todos os produtos',
     'Lançar despesa de R$ 150,00 para alimentação',
@@ -63,10 +66,35 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     return newMessage;
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Por favor, selecione uma imagem.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSelectedImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!input.trim() || isProcessing) return;
+    if ((!input.trim() && !selectedImage) || isProcessing) return;
     if (!user?.id) {
       toast({
         title: 'Faça login',
@@ -79,12 +107,15 @@ export function AgentConsole({ className }: AgentConsoleProps) {
     // Add user message
     addMessage({
       type: 'user',
-      content: input,
-      status: 'success'
+      content: input || 'Analise esta imagem.',
+      status: 'success',
+      imageUrl: selectedImage || undefined
     });
 
     const userInput = input;
+    const userImage = selectedImage;
     setInput('');
+    setSelectedImage(null);
     setIsProcessing(true);
 
     // Add processing message
@@ -108,7 +139,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
 
     try {
       // Process the command through the agent service
-      const result = await processAgentCommand(userInput, user.id);
+      const result = await processAgentCommand(userInput, user.id, userImage || undefined);
       
       clearInterval(thinkingInterval);
       
@@ -243,9 +274,18 @@ export function AgentConsole({ className }: AgentConsoleProps) {
                           : 'bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(message.status)}
-                        <span className="text-sm">{message.content}</span>
+                      <div className="flex flex-col gap-2">
+                        {message.imageUrl && (
+                          <img 
+                            src={message.imageUrl} 
+                            alt="Upload" 
+                            className="max-w-[200px] rounded-md object-contain"
+                          />
+                        )}
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(message.status)}
+                          <span className="text-sm">{message.content}</span>
+                        </div>
                       </div>
                     </div>
                     
@@ -267,22 +307,52 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         </ScrollArea>
 
         {/* Input Form */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Digite seu comando..."
-            disabled={isProcessing}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isProcessing || !input.trim()}>
-            {isProcessing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+          {selectedImage && (
+            <div className="relative inline-block w-max">
+              <img src={selectedImage} alt="Selected" className="h-20 rounded-md object-contain border" />
+              <button 
+                type="button" 
+                onClick={() => setSelectedImage(null)}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleImageUpload}
+            />
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="icon" 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isProcessing}
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            <Input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Digite seu comando..."
+              disabled={isProcessing}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={isProcessing || (!input.trim() && !selectedImage)}>
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
