@@ -514,12 +514,12 @@ export default function Despesas() {
 
             <div className="space-y-2">
               <Label htmlFor="filterCategory">Categoria</Label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <Select value={selectedCategory || 'all'} onValueChange={(val) => setSelectedCategory(val === 'all' ? '' : val)}>
                 <SelectTrigger id="filterCategory">
                   <SelectValue placeholder="Todas categorias" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas categorias</SelectItem>
+                  <SelectItem value="all">Todas categorias</SelectItem>
                   {EXPENSE_CATEGORIES.map(cat => (
                     <SelectItem key={cat} value={cat}>
                       {cat.charAt(0).toUpperCase() + cat.slice(1)}
