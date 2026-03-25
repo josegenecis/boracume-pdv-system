@@ -64,11 +64,15 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				// BoraCumê specific colors
-				"boracume-orange": "#FF5722",
-				"boracume-green": "#4CAF50",
-				"boracume-blue": "#1A237E",
-				"boracume-light": "#FFF8E1",
-				"boracume-gray": "#607D8B"
+				"boracume-orange": "#F26522",
+				"boracume-green": "#8DC63F",
+				"boracume-dark-green": "#003A2B",
+				"boracume-light": "#FDF8F0",
+				"boracume-gray": "#607D8B",
+				"brand-primary": "#8DC63F",
+				"brand-secondary": "#003A2B",
+				"brand-accent": "#F26522",
+				"brand-background": "#FDF8F0"
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -124,6 +128,7 @@ export default {
 				'stock-pulse': 'stock-pulse 4s ease-in-out infinite'
 			},
 			fontFamily: {
+				'sora': ['Sora', 'sans-serif'],
 				'montserrat': ['Montserrat', 'sans-serif'],
 				'roboto': ['Roboto', 'sans-serif']
 			}

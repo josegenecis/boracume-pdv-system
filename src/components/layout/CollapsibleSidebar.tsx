@@ -244,9 +244,9 @@ const CollapsibleSidebar = () => {
       <div className={`p-2 border-b flex items-center ${isOpen ? 'justify-between px-3' : 'justify-center'}`}>
         {isOpen && (
            <div className="flex items-center gap-2 overflow-hidden mr-2 animate-in fade-in duration-300">
-             <Avatar className="h-8 w-8 border-2 border-orange-100 flex-shrink-0">
+             <Avatar className="h-8 w-8 border-2 border-boracume-orange/20 flex-shrink-0">
                <AvatarImage src={profile?.logo_url} />
-               <AvatarFallback className="bg-orange-50 text-orange-700 font-bold text-xs">
+               <AvatarFallback className="bg-boracume-orange/10 text-boracume-orange font-bold text-xs">
                  {profile?.restaurant_name?.substring(0, 2).toUpperCase() || 'BC'}
                </AvatarFallback>
              </Avatar>
@@ -272,7 +272,7 @@ const CollapsibleSidebar = () => {
           variant="ghost"
           size="sm"
           onClick={toggleSidebar}
-          className={`${isOpen ? '' : 'w-full'} flex justify-center hover:bg-orange-50 text-gray-400 hover:text-orange-600 transition-colors`}
+          className={`${isOpen ? '' : 'w-full'} flex justify-center hover:bg-boracume-orange/10 text-gray-400 hover:text-boracume-orange transition-colors`}
         >
           {isMobile ? (
             <X size={16} />
@@ -294,10 +294,10 @@ const CollapsibleSidebar = () => {
                   <Link
                     to={link.to}
                     onClick={handleLinkClick}
-                    className={`flex items-center justify-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                    className={`flex items-center justify-center px-3 py-2 text-sm rounded-xl transition-colors ${
                       isActive
-                        ? 'bg-orange-100 text-orange-900'
-                        : 'text-gray-700 hover:bg-orange-50'
+                        ? 'bg-boracume-orange/10 text-boracume-orange'
+                        : 'text-gray-700 hover:bg-boracume-orange/5'
                     }`}
                     title={typeof link.label === 'string' ? link.label : ''}
                   >
@@ -318,10 +318,10 @@ const CollapsibleSidebar = () => {
                     <Link
                       to={link.to}
                       onClick={handleLinkClick}
-                      className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                      className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
-                          : 'text-gray-700 hover:bg-orange-50'
+                          ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
+                          : 'text-gray-700 hover:bg-boracume-orange/5'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -338,7 +338,7 @@ const CollapsibleSidebar = () => {
                 return (
                   <AccordionItem key={group.id} value={group.id} className="border-none">
                     <AccordionTrigger
-                      className="px-3 py-2 rounded-lg text-sm hover:no-underline data-[state=open]:bg-orange-600 data-[state=open]:text-white text-gray-700 hover:bg-orange-50"
+                      className="px-3 py-2 rounded-xl text-sm hover:no-underline data-[state=open]:bg-boracume-dark-green data-[state=open]:text-white text-gray-700 hover:bg-boracume-orange/5"
                     >
                       <div className="flex items-center gap-3">
                         <Icon size={18} className="flex-shrink-0" />
@@ -346,7 +346,7 @@ const CollapsibleSidebar = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="pb-0">
-                      <div className="rounded-lg bg-orange-50 border border-orange-100 p-2 space-y-1">
+                      <div className="rounded-xl bg-boracume-light border border-boracume-orange/10 p-2 space-y-1 mt-1">
                         {group.items.map((item) => {
                           const isActive = isActivePath(item.to);
                           return (
@@ -354,10 +354,10 @@ const CollapsibleSidebar = () => {
                               key={item.to}
                               to={item.to}
                               onClick={handleLinkClick}
-                              className={`flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                              className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                                 isActive
-                                  ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
-                                  : 'text-gray-700 hover:bg-orange-100'
+                                  ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
+                                  : 'text-gray-700 hover:bg-boracume-orange/5'
                               }`}
                             >
                               <span className="truncate flex items-center">{item.label}</span>
@@ -380,10 +380,10 @@ const CollapsibleSidebar = () => {
                     <Link
                       to={link.to}
                       onClick={handleLinkClick}
-                      className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                      className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'bg-orange-100 text-orange-900 font-medium border border-orange-200'
-                          : 'text-gray-700 hover:bg-orange-50'
+                          ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
+                          : 'text-gray-700 hover:bg-boracume-orange/5'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -400,8 +400,8 @@ const CollapsibleSidebar = () => {
         <div className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2' : 'px-0'}`}>
           {isOpen ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-semibold">
+              <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-boracume-orange/10 text-boracume-orange font-semibold">
                   {user?.email?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
