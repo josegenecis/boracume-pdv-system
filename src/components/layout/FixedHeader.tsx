@@ -1,11 +1,13 @@
 
 import React from 'react';
 
-import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, Search } from 'lucide-react';
+import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, Lock, Unlock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useCashRegister } from '@/contexts/CashRegisterContext';
+import { useState, useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 import Logo from '@/components/Logo';
@@ -21,10 +23,22 @@ import {
 
 const FixedHeader = () => {
   const { signOut, user } = useAuth();
-
   const { isMobile, toggleSidebar } = useSidebar();
-
   const navigate = useNavigate();
+  
+  // Custom hook ou lógica para pegar o estado do caixa globalmente (se não existir um contexto, podemos usar fetch direto, mas o ideal é mover a lógica do PDV para um context)
+  // Como não sabemos se existe um CashRegisterContext, vamos usar um estado local com fetch inicial por enquanto para o header.
+  const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
+  const [cashSessionId, setCashSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Escutar eventos de abertura/fechamento de caixa se disparados via evento customizado
+    const handleCashChange = () => {
+      // Refresh logic here if needed
+    };
+    window.addEventListener('cash-session-changed', handleCashChange);
+    return () => window.removeEventListener('cash-session-changed', handleCashChange);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -33,7 +47,6 @@ const FixedHeader = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b">
-
       <div className="flex items-center justify-between px-3 sm:px-6 py-3">
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
@@ -47,14 +60,8 @@ const FixedHeader = () => {
           <Logo size="sm" />
         </div>
 
-        <div className="hidden md:flex flex-1 px-4 max-w-xl">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar (Nome, Telefone ou Código)"
-              className="pl-9 h-9 bg-white"
-            />
-          </div>
+        <div className="hidden md:flex flex-1 px-4 justify-center items-center gap-4">
+          {/* Espaço reservado para o título da página ou ações globais no futuro */}
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <div className="hidden lg:block">

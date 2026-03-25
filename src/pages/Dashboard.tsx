@@ -298,7 +298,7 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Painel Inicial</h1>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard 
           title="Faturamento Hoje" 
           value={formatCurrency(stats.todaySales)} 
@@ -317,13 +317,6 @@ const Dashboard = () => {
           value={formatCurrency(stats.monthlyExpenses)} 
           description="Total de custos"
           icon={<DollarSign className="text-red-500" />}
-        />
-        <StatsCard 
-          title="Pedidos Pendentes" 
-          value={stats.pendingOrders.toString()} 
-          description="Aguardando preparo"
-          icon={<ShoppingCart className="text-blue-500" />}
-          trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
         />
         <StatsCard 
           title="Novos Clientes" 

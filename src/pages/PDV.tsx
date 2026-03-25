@@ -1237,20 +1237,6 @@ const PDV = () => {
               </Button>
               
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar w-full md:w-auto">
-                <Badge 
-                  variant="outline" 
-                  className={`px-3 py-1.5 rounded-lg border-0 font-semibold whitespace-nowrap ${cashSession?.id ? 'bg-boracume-green/10 text-boracume-dark-green' : 'bg-red-50 text-red-600'}`}
-                >
-                  {cashSession?.id ? 'Caixa Aberto' : 'Caixa Fechado'}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
-                  onClick={() => openCashDialog(cashSession?.id ? 'close' : 'open')}
-                >
-                  {cashSession?.id ? 'Fechar Caixa' : 'Abrir Caixa'}
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1269,9 +1255,6 @@ const PDV = () => {
                 >
                   Sangria
                 </Button>
-                <div className="shrink-0 ml-1">
-                  <OperatorSwitcher />
-                </div>
               </div>
             </div>
           )}
