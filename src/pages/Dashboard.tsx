@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { CreditCard, ShoppingCart, Users, Package } from 'lucide-react';
+import { CreditCard, ShoppingCart, Users, Package, TrendingUp, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -17,6 +17,8 @@ interface DashboardStats {
   productsSold: number;
   newCustomers: number;
   totalCustomers: number;
+  averageTicket: number;
+  monthlyExpenses: number;
 }
 
 interface RevenueData {
@@ -61,6 +63,8 @@ const Dashboard = () => {
     productsSold: 0,
     newCustomers: 0,
     totalCustomers: 0,
+    averageTicket: 0,
+    monthlyExpenses: 0,
   });
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -172,6 +176,18 @@ const Dashboard = () => {
 
     const totalCustomers = customerFirstOrders.size;
 
+    const averageTicket = todayOrdersCount > 0 ? todaySales / todayOrdersCount : 0;
+
+    // Despesas do mês
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const { data: expenses } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('user_id', user?.id)
+      .gte('expense_date', firstDayOfMonth);
+
+    const monthlyExpenses = (expenses || []).reduce((sum: number, exp: any) => sum + Number(exp.amount || 0), 0);
+
     setStats({
       todaySales,
       todayOrders: todayOrdersCount,
@@ -179,6 +195,8 @@ const Dashboard = () => {
       productsSold,
       newCustomers,
       totalCustomers,
+      averageTicket,
+      monthlyExpenses,
     });
   };
 
@@ -280,33 +298,45 @@ const Dashboard = () => {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Painel Inicial</h1>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatsCard 
-          title="Vendas de Hoje" 
+          title="Faturamento Hoje" 
           value={formatCurrency(stats.todaySales)} 
           description={`${stats.todayOrders} pedidos realizados`}
-          icon={<CreditCard />}
+          icon={<CreditCard className="text-boracume-green" />}
           trend={getStatsTrend(stats.todaySales, 'sales')}
+        />
+        <StatsCard 
+          title="Ticket Médio" 
+          value={formatCurrency(stats.averageTicket)} 
+          description="Por pedido hoje"
+          icon={<TrendingUp className="text-boracume-orange" />}
+        />
+        <StatsCard 
+          title="Despesas Mês" 
+          value={formatCurrency(stats.monthlyExpenses)} 
+          description="Total de custos"
+          icon={<DollarSign className="text-red-500" />}
         />
         <StatsCard 
           title="Pedidos Pendentes" 
           value={stats.pendingOrders.toString()} 
-          description="Aguardando preparo/entrega"
-          icon={<ShoppingCart />}
+          description="Aguardando preparo"
+          icon={<ShoppingCart className="text-blue-500" />}
           trend={stats.pendingOrders > 5 ? { value: 2, positive: false } : undefined}
         />
         <StatsCard 
           title="Novos Clientes" 
           value={stats.newCustomers.toString()} 
           description={`Total: ${stats.totalCustomers} clientes`}
-          icon={<Users />}
+          icon={<Users className="text-purple-500" />}
           trend={getStatsTrend(stats.newCustomers, 'customers')}
         />
         <StatsCard 
           title="Produtos Vendidos" 
           value={stats.productsSold.toString()} 
-          description="Hoje"
-          icon={<Package />}
+          description="Unidades hoje"
+          icon={<Package className="text-amber-500" />}
         />
       </div>
       

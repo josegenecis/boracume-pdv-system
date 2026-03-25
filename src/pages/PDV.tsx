@@ -1215,56 +1215,64 @@ const PDV = () => {
       <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
-        <div className="flex flex-col sm:flex-row sm:items-center items-stretch justify-between px-4 py-2 bg-white border-b shrink-0 z-20 gap-2 sm:gap-4">
-          <TabsList className="grid w-48 sm:w-64 grid-cols-2">
-            <TabsTrigger value="products">Vendas</TabsTrigger>
-            <TabsTrigger value="accounts">Mesas</TabsTrigger>
+        <div className="flex flex-col md:flex-row md:items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-sm shrink-0 z-20 gap-3">
+          <TabsList className="grid w-full md:w-64 grid-cols-2 bg-gray-100/50 p-1 rounded-xl">
+            <TabsTrigger value="products" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-boracume-dark-green data-[state=active]:shadow-sm">Vendas</TabsTrigger>
+            <TabsTrigger value="accounts" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-boracume-dark-green data-[state=active]:shadow-sm">Mesas</TabsTrigger>
           </TabsList>
 
           {activeTab === 'products' && (
-            <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2 justify-end">
-              <div className="relative w-full sm:w-72 md:w-80 flex-1 min-w-[180px]">
+            <div className="flex-1 w-full flex flex-wrap md:flex-nowrap items-center gap-2 md:justify-end">
+              <div className="relative flex-1 md:flex-none md:w-80 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Buscar produtos..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors w-full"
+                  className="pl-9 h-10 bg-gray-50 border-gray-200 focus:bg-white transition-colors w-full rounded-xl text-sm"
                 />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-9 w-9">
-                <RefreshCw size={16} />
+              <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-10 w-10 rounded-xl hover:bg-gray-100">
+                <RefreshCw size={18} className="text-gray-600" />
               </Button>
-              <Badge variant={cashSession?.id ? 'default' : 'destructive'} className="rounded-md">
-                {cashSession?.id ? 'Caixa Aberto' : 'Caixa Fechado'}
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => openCashDialog(cashSession?.id ? 'close' : 'open')}
-              >
-                {cashSession?.id ? 'Fechar Caixa' : 'Abrir Caixa'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                disabled={!cashSession?.id}
-                onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
-              >
-                Suprimento
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                disabled={!cashSession?.id}
-                onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
-              >
-                Sangria
-              </Button>
-              <OperatorSwitcher />
+              
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar w-full md:w-auto">
+                <Badge 
+                  variant="outline" 
+                  className={`px-3 py-1.5 rounded-lg border-0 font-semibold whitespace-nowrap ${cashSession?.id ? 'bg-boracume-green/10 text-boracume-dark-green' : 'bg-red-50 text-red-600'}`}
+                >
+                  {cashSession?.id ? 'Caixa Aberto' : 'Caixa Fechado'}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
+                  onClick={() => openCashDialog(cashSession?.id ? 'close' : 'open')}
+                >
+                  {cashSession?.id ? 'Fechar Caixa' : 'Abrir Caixa'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
+                  disabled={!cashSession?.id}
+                  onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
+                >
+                  Suprimento
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
+                  disabled={!cashSession?.id}
+                  onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
+                >
+                  Sangria
+                </Button>
+                <div className="shrink-0 ml-1">
+                  <OperatorSwitcher />
+                </div>
+              </div>
             </div>
           )}
         </div>

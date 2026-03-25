@@ -635,12 +635,12 @@ const Financeiro = () => {
   
   return (
     <div className="space-y-6">
-      <Card className="border-0 bg-gradient-to-r from-violet-600 via-indigo-600 to-sky-600 text-white">
+      <Card className="border-0 bg-boracume-dark-green text-white">
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <div className="text-2xl font-bold tracking-tight">Financeiro</div>
-              <div className="text-white/90 text-sm">
+              <div className="text-white/90 text-sm mt-1">
                 Acompanhe receitas, despesas, lucro e DRE no período selecionado
               </div>
             </div>
@@ -703,7 +703,7 @@ const Financeiro = () => {
 
           <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-rose-600 hover:bg-rose-700 text-white">
+              <Button className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
                 <ArrowDown className="mr-2 h-4 w-4" />
                 Nova Despesa
               </Button>
@@ -746,46 +746,46 @@ const Financeiro = () => {
       </Card>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-emerald-500 bg-emerald-50/60">
+        <Card className="border-l-4 border-l-boracume-green bg-boracume-green/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowUp className="h-5 w-5 text-green-500" />
+              <ArrowUp className="h-5 w-5 text-boracume-green" />
               Receitas
             </CardTitle>
             <CardDescription>Total de vendas e entradas</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-boracume-dark-green">
               {formatCurrency(totalIncome)}
             </div>
           </CardContent>
         </Card>
         
-        <Card className="border-l-4 border-l-rose-500 bg-rose-50/60">
+        <Card className="border-l-4 border-l-boracume-orange bg-boracume-orange/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <ArrowDown className="h-5 w-5 text-red-500" />
+              <ArrowDown className="h-5 w-5 text-boracume-orange" />
               Despesas
             </CardTitle>
             <CardDescription>Total de custos e saídas</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-boracume-orange">
               {formatCurrency(totalExpenses)}
             </div>
           </CardContent>
         </Card>
         
-        <Card className="border-l-4 border-l-violet-600 bg-violet-50/60">
+        <Card className="border-l-4 border-l-boracume-dark-green bg-boracume-dark-green/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-boracume-green" />
+              <DollarSign className="h-5 w-5 text-boracume-dark-green" />
               Saldo
             </CardTitle>
             <CardDescription>Balanço atual</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-2xl font-bold ${balance >= 0 ? 'text-boracume-green' : 'text-boracume-orange'}`}>
               {formatCurrency(balance)}
             </div>
           </CardContent>
