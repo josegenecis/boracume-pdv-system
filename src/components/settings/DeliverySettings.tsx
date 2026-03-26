@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import PolygonAreasEditor, { PolygonAreaDraft } from '@/components/settings/delivery/PolygonAreasEditor';
+import PolygonAreasEditor, { PolygonAreaDraft, GooglePolygonMap } from '@/components/settings/delivery/PolygonAreasEditor';
 import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 interface DeliveryZone {
@@ -556,7 +556,6 @@ const DeliverySettings = () => {
       { id: 'fixed', title: 'Preço fixo', subtitle: 'O mesmo preço de envio se aplica a todos os pedidos' },
       { id: 'neighborhood', title: 'Bairro de destino', subtitle: 'O preço varia de acordo com o bairro' },
       { id: 'distance_km', title: 'Distância percorrida', subtitle: 'O cliente paga de acordo com os quilômetros' },
-      { id: 'distance_bands', title: 'Faixas personalizadas', subtitle: 'Calcule o frete por faixa de km' },
       { id: 'radius_km', title: 'Raio de entrega', subtitle: 'O preço varia pelo raio (km) do restaurante' },
       { id: 'polygon', title: 'Áreas personalizadas', subtitle: 'Defina áreas no mapa para cálculo do preço' },
     ] as const;
