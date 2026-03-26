@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import PolygonAreasEditor, { PolygonAreaDraft } from '@/components/settings/delivery/PolygonAreasEditor';
-import { Circle, CircleMarker, MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 interface DeliveryZone {
   id: string;
@@ -53,6 +53,16 @@ const LeafletAutoResize = () => {
   }, [map]);
   return null;
 };
+
+function MapClickAdder(props: { enabled: boolean; onAdd: (p: {lat: number, lng: number}) => void }) {
+  useMapEvents({
+    click: (e) => {
+      if (!props.enabled) return
+      props.onAdd({ lat: e.latlng.lat, lng: e.latlng.lng })
+    }
+  })
+  return null
+}
 
 const DeliverySettings = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
@@ -990,33 +1000,75 @@ const DeliverySettings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-3 border rounded-lg space-y-2">
-            <div className="text-sm font-medium">Endereço do restaurante</div>
-            <Input
-              value={storeAddress}
-              onChange={(e) => setStoreAddress(e.target.value)}
-              placeholder="Rua, número, bairro, cidade, UF"
-            />
-            <p className="text-xs text-muted-foreground">
-              Para frete por KM/raio, use um endereço completo.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between p-3 border rounded-lg">
-            <div className="min-w-0">
-              <div className="text-sm font-medium">Localização do restaurante</div>
-              {storeLocation ? (
-                <div className="text-sm text-muted-foreground truncate">
-                  {storeLocation.formattedAddress ? `${storeLocation.formattedAddress} • ` : ''}
-                  {storeLocation.lat.toFixed(6)}, {storeLocation.lng.toFixed(6)}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground truncate">Não definida</div>
-              )}
+          <div className="p-3 border rounded-lg space-y-4 bg-gray-50/50">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Endereço do restaurante</div>
+              <div className="flex gap-2">
+                <Input
+                  value={storeAddress}
+                  onChange={(e) => setStoreAddress(e.target.value)}
+                  placeholder="Rua, número, bairro, cidade, UF"
+                  className="bg-white"
+                />
+                <Button variant="outline" onClick={geocodeStoreAddress} disabled={storeLocLoading} className="shrink-0 bg-white">
+                  {storeLocLoading ? 'Buscando...' : 'Buscar'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Para frete por KM/raio, use um endereço completo e clique em Buscar.
+              </p>
             </div>
-            <Button variant="outline" size="sm" onClick={geocodeStoreAddress} disabled={storeLocLoading}>
-              {storeLocLoading ? 'Localizando...' : 'Definir pelo endereço'}
-            </Button>
+
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Localização exata (Pino no Mapa)</div>
+                {storeLocation && (
+                  <Badge variant="outline" className="bg-boracume-green/10 text-boracume-dark-green border-0">
+                    Definido
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="h-[300px] border rounded-lg overflow-hidden relative">
+                {!storeLocation && (
+                  <div className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+                    <MapPin className="text-gray-400 mb-2 h-8 w-8" />
+                    <p className="text-sm font-medium text-gray-700">Localização não definida</p>
+                    <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                      Busque um endereço acima ou clique no botão abaixo para definir manualmente no mapa.
+                    </p>
+                  </div>
+                )}
+                
+                <MapContainer
+                  center={storeLocation ? [storeLocation.lat, storeLocation.lng] : [-15.793889, -47.882778]}
+                  zoom={storeLocation ? 16 : 4}
+                  style={{ height: '100%', width: '100%' }}
+                  key={`store-map-${storeLocation?.lat || 0}-${storeLocation?.lng || 0}`}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <LeafletAutoResize />
+                  {storeLocation && (
+                    <CircleMarker 
+                      center={[storeLocation.lat, storeLocation.lng]} 
+                      radius={8} 
+                      pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 1, weight: 2 }} 
+                    />
+                  )}
+                  {/* Evento para mover o pino clicando no mapa */}
+                  <MapClickAdder 
+                    enabled={true} 
+                    onAdd={(p) => setStoreLocation({ lat: p.lat, lng: p.lng, formattedAddress: storeAddress })} 
+                  />
+                </MapContainer>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Você pode clicar em qualquer lugar do mapa acima para ajustar o pino exato do seu restaurante.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -438,11 +438,17 @@ export default function PolygonAreasEditor(props: {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">Taxa (R$)</Label>
-                          <Input className="h-8 text-sm rounded-lg bg-white" type="number" step="0.01" value={a.delivery_fee} onChange={(e) => updateSelected({ delivery_fee: e.target.value })} />
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                            <Input className="h-8 text-sm rounded-lg bg-white pl-8" type="number" step="0.01" value={a.delivery_fee} onChange={(e) => updateSelected({ delivery_fee: e.target.value })} />
+                          </div>
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs text-gray-600">Mínimo (R$)</Label>
-                          <Input className="h-8 text-sm rounded-lg bg-white" type="number" step="0.01" value={a.minimum_order} onChange={(e) => updateSelected({ minimum_order: e.target.value })} />
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                            <Input className="h-8 text-sm rounded-lg bg-white pl-8" type="number" step="0.01" value={a.minimum_order} onChange={(e) => updateSelected({ minimum_order: e.target.value })} />
+                          </div>
                         </div>
                       </div>
                       <div className="space-y-1.5">
