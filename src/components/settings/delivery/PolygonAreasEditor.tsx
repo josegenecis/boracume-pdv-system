@@ -229,10 +229,51 @@ function GooglePolygonMap(props: {
         new g.maps.Marker({
           position: { lat: p.lat, lng: p.lng },
           map: mapRef.current!,
-          clickable: false
+          clickable: false,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 5,
+            fillColor: '#f97316',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          }
         })
     )
   }, [props.points])
+
+  // Draw line to mouse
+  useEffect(() => {
+    if (!mapRef.current || !polygonRef.current || !props.enabled) return
+    const g = window.google
+    if (!g?.maps) return
+
+    let mouseMoveListener: google.maps.MapsEventListener | null = null;
+    let tempLine: google.maps.Polyline | null = null;
+
+    if (props.points.length > 0) {
+      tempLine = new g.maps.Polyline({
+        map: mapRef.current,
+        strokeColor: '#f97316',
+        strokeOpacity: 0.5,
+        strokeWeight: 2,
+        clickable: false,
+        path: [props.points[props.points.length - 1], props.points[props.points.length - 1]]
+      });
+
+      mouseMoveListener = mapRef.current.addListener('mousemove', (e: google.maps.MapMouseEvent) => {
+        if (e.latLng && tempLine) {
+          const lastPoint = props.points[props.points.length - 1];
+          tempLine.setPath([lastPoint, e.latLng]);
+        }
+      });
+    }
+
+    return () => {
+      if (mouseMoveListener) g.maps.event.removeListener(mouseMoveListener);
+      if (tempLine) tempLine.setMap(null);
+    }
+  }, [props.points, props.enabled])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

@@ -435,8 +435,8 @@ const DeliverySettings = () => {
             if (!data?.ok) {
               throw new Error(String(data?.error || `Falha ao geocodificar (HTTP ${status})`));
             }
-            const lat = Number(data?.location?.lat);
-            const lng = Number(data?.location?.lng);
+            const lat = nextStoreLocation?.lat || Number(data?.location?.lat);
+            const lng = nextStoreLocation?.lng || Number(data?.location?.lng);
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('Coordenadas inválidas retornadas pelo mapa');
             nextStoreLocation = { lat, lng, formattedAddress: String(data?.formattedAddress || '').trim() || undefined };
             setStoreLocation(nextStoreLocation);
@@ -1003,8 +1003,9 @@ const DeliverySettings = () => {
           <div className="p-3 border rounded-lg space-y-4 bg-gray-50/50">
             <div className="space-y-2">
               <div className="text-sm font-medium">Endereço do restaurante</div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 relative">
                 <Input
+                  id="store-address-autocomplete"
                   value={storeAddress}
                   onChange={(e) => setStoreAddress(e.target.value)}
                   placeholder="Rua, número, bairro, cidade, UF"
@@ -1040,30 +1041,43 @@ const DeliverySettings = () => {
                   </div>
                 )}
                 
-                <MapContainer
-                  center={storeLocation ? [storeLocation.lat, storeLocation.lng] : [-15.793889, -47.882778]}
-                  zoom={storeLocation ? 16 : 4}
-                  style={{ height: '100%', width: '100%' }}
-                  key={`store-map-${storeLocation?.lat || 0}-${storeLocation?.lng || 0}`}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  <LeafletAutoResize />
-                  {storeLocation && (
-                    <CircleMarker 
-                      center={[storeLocation.lat, storeLocation.lng]} 
-                      radius={8} 
-                      pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 1, weight: 2 }} 
+                {googleKey && window.google?.maps ? (
+                  <div className="h-full w-full">
+                    <GooglePolygonMap
+                      center={storeLocation ? { lat: storeLocation.lat, lng: storeLocation.lng } : { lat: -15.793889, lng: -47.882778 }}
+                      enabled={false}
+                      points={[]}
+                      onAddPoint={() => {}}
+                      storeLocation={storeLocation ? { lat: storeLocation.lat, lng: storeLocation.lng } : null}
+                      onStoreLocationChange={(loc) => setStoreLocation({ lat: loc.lat, lng: loc.lng, formattedAddress: storeAddress })}
                     />
-                  )}
-                  {/* Evento para mover o pino clicando no mapa */}
-                  <MapClickAdder 
-                    enabled={true} 
-                    onAdd={(p) => setStoreLocation({ lat: p.lat, lng: p.lng, formattedAddress: storeAddress })} 
-                  />
-                </MapContainer>
+                  </div>
+                ) : (
+                  <MapContainer
+                    center={storeLocation ? [storeLocation.lat, storeLocation.lng] : [-15.793889, -47.882778]}
+                    zoom={storeLocation ? 16 : 4}
+                    style={{ height: '100%', width: '100%' }}
+                    key={`store-map-${storeLocation?.lat || 0}-${storeLocation?.lng || 0}`}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <LeafletAutoResize />
+                    {storeLocation && (
+                      <CircleMarker 
+                        center={[storeLocation.lat, storeLocation.lng]} 
+                        radius={8} 
+                        pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 1, weight: 2 }} 
+                      />
+                    )}
+                    {/* Evento para mover o pino clicando no mapa */}
+                    <MapClickAdder 
+                      enabled={true} 
+                      onAdd={(p) => setStoreLocation({ lat: p.lat, lng: p.lng, formattedAddress: storeAddress })} 
+                    />
+                  </MapContainer>
+                )}
               </div>
               <p className="text-xs text-muted-foreground text-center">
                 Você pode clicar em qualquer lugar do mapa acima para ajustar o pino exato do seu restaurante.
