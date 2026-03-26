@@ -92,6 +92,8 @@ function GooglePolygonMap(props: {
   enabled: boolean
   points: PolygonPoint[]
   onAddPoint: (p: PolygonPoint) => void
+  storeLocation?: { lat: number; lng: number } | null
+  onStoreLocationChange?: (p: PolygonPoint) => void
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
@@ -177,6 +179,39 @@ function GooglePolygonMap(props: {
     onAddPointRef.current = props.onAddPoint;
   }, [props.onAddPoint]);
 
+  // Handle pin moving for store location
+  const storeMarkerRef = useRef<google.maps.Marker | null>(null)
+  
+  useEffect(() => {
+    if (!mapRef.current) return
+    const g = window.google
+    if (!g?.maps) return
+    
+    if ((props as any).onStoreLocationChange && (props as any).storeLocation) {
+      if (!storeMarkerRef.current) {
+        storeMarkerRef.current = new g.maps.Marker({
+          position: (props as any).storeLocation,
+          map: mapRef.current,
+          draggable: true,
+          title: 'Local do Restaurante',
+          icon: {
+            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+          }
+        })
+        
+        storeMarkerRef.current.addListener('dragend', (e: google.maps.MapMouseEvent) => {
+          const lat = e.latLng?.lat()
+          const lng = e.latLng?.lng()
+          if (lat && lng && (props as any).onStoreLocationChange) {
+            (props as any).onStoreLocationChange({ lat, lng })
+          }
+        })
+      } else {
+        storeMarkerRef.current.setPosition((props as any).storeLocation)
+      }
+    }
+  }, [(props as any).storeLocation, (props as any).onStoreLocationChange])
+
   useEffect(() => {
     if (!mapRef.current || !polygonRef.current) return
 
@@ -204,6 +239,7 @@ function GooglePolygonMap(props: {
 
 export default function PolygonAreasEditor(props: {
   storeLocation: { lat: number; lng: number } | null
+  onStoreLocationChange?: (loc: { lat: number; lng: number }) => void
   areas: PolygonAreaDraft[]
   setAreas: React.Dispatch<React.SetStateAction<PolygonAreaDraft[]>>
   selectedId: string | null
@@ -232,9 +268,9 @@ export default function PolygonAreasEditor(props: {
       ...prev,
       {
         id,
-        name: 'Nova área',
-        delivery_fee: '0',
-        minimum_order: '0',
+        name: `Nova Área ${prev.length + 1}`,
+        delivery_fee: '0.00',
+        minimum_order: '0.00',
         delivery_time: '30-45 min',
         active: true,
         points: []
@@ -312,6 +348,8 @@ export default function PolygonAreasEditor(props: {
               enabled={!!selected}
               points={selected?.points || []}
               onAddPoint={addPoint}
+              storeLocation={props.storeLocation}
+              onStoreLocationChange={props.onStoreLocationChange}
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground bg-gray-50">

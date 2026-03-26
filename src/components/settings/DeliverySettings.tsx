@@ -556,6 +556,10 @@ const DeliverySettings = () => {
     setEditorOpen(true);
   };
 
+  const handleStoreLocationChange = (loc: { lat: number; lng: number }) => {
+    setStoreLocation(loc)
+  }
+
   const renderEditorContent = () => {
     if (editorMode === 'free') {
       return (
@@ -832,6 +836,7 @@ const DeliverySettings = () => {
       return (
         <PolygonAreasEditor
           storeLocation={storeLocation ? { lat: storeLocation.lat, lng: storeLocation.lng } : null}
+          onStoreLocationChange={handleStoreLocationChange}
           areas={polygonAreas}
           setAreas={setPolygonAreas}
           selectedId={selectedPolygonAreaId}
