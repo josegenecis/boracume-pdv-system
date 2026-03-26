@@ -78,7 +78,7 @@ function loadGoogleMaps(key: string): Promise<void> {
     const s = document.createElement('script')
     s.async = true
     s.defer = true
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=geometry`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=geometry,places`
     s.onload = () => resolve()
     s.onerror = () => reject(new Error('Falha ao carregar Google Maps'))
     document.head.appendChild(s)
@@ -94,10 +94,12 @@ export function GooglePolygonMap(props: {
   onAddPoint: (p: PolygonPoint) => void
   storeLocation?: { lat: number; lng: number } | null
   onStoreLocationChange?: (p: PolygonPoint) => void
+  radiusMeters?: number
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const polygonRef = useRef<google.maps.Polygon | null>(null)
+  const radiusRef = useRef<google.maps.Circle | null>(null)
   const markersRef = useRef<google.maps.Marker[]>([])
   const enabledRef = useRef<boolean>(props.enabled)
   enabledRef.current = props.enabled
@@ -125,6 +127,21 @@ export function GooglePolygonMap(props: {
       clickable: false
     })
     polygonRef.current.setMap(mapRef.current)
+
+    // Setup radius circle if needed
+    if (props.radiusMeters !== undefined) {
+      radiusRef.current = new window.google.maps.Circle({
+        strokeColor: '#f97316',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: '#f97316',
+        fillOpacity: 0.15,
+        map: mapRef.current,
+        center: props.center,
+        radius: props.radiusMeters,
+        clickable: false
+      })
+    }
 
     // Using a ref for the latest onAddPoint function
     const localOnAddPointRef = { current: props.onAddPoint }
@@ -178,6 +195,12 @@ export function GooglePolygonMap(props: {
   useEffect(() => {
     onAddPointRef.current = props.onAddPoint;
   }, [props.onAddPoint]);
+
+  useEffect(() => {
+    if (!radiusRef.current || props.radiusMeters === undefined) return
+    radiusRef.current.setRadius(props.radiusMeters)
+    radiusRef.current.setCenter(props.center)
+  }, [props.radiusMeters, props.center])
 
   // Handle pin moving for store location
   const storeMarkerRef = useRef<google.maps.Marker | null>(null)

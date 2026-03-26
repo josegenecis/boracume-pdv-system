@@ -105,6 +105,63 @@ const DeliverySettings = () => {
     }
   }, [user]);
 
+  // Carregar biblioteca Places para o autocomplete
+  useEffect(() => {
+    if (!googleKey) return;
+    
+    // Aproveitar a função já existente no PolygonAreasEditor ou criar uma nova injeção
+    const loadGooglePlaces = async () => {
+      try {
+        if (!window.google?.maps?.places) {
+          // Se o script principal do google maps já foi carregado sem places, 
+          // precisamos avisar o usuário que ele precisa recarregar a página 
+          // pois a Vercel acabou de atualizar o script base.
+          console.log("Aguardando Google Places API...");
+        }
+      } catch (e) {
+        console.error("Erro ao verificar Places API:", e);
+      }
+    };
+    
+    loadGooglePlaces();
+  }, [googleKey]);
+
+  // Instanciar o Autocomplete
+  useEffect(() => {
+    if (!window.google?.maps?.places) return;
+    
+    const inputElement = document.getElementById('store-address-autocomplete') as HTMLInputElement;
+    if (!inputElement) return;
+
+    const autocomplete = new window.google.maps.places.Autocomplete(inputElement, {
+      types: ['address'],
+      componentRestrictions: { country: 'br' } // Restringir buscas ao Brasil
+    });
+
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const formattedAddress = place.formatted_address;
+        
+        setStoreAddress(formattedAddress || '');
+        setStoreLocation({
+          lat,
+          lng,
+          formattedAddress: formattedAddress || undefined
+        });
+      }
+    });
+
+    // Cleanup para não vazar instâncias
+    return () => {
+      if (listener) {
+        window.google.maps.event.removeListener(listener);
+      }
+    };
+  }, [googleKey, window.google?.maps?.places]);
+
   const loadProfile = async () => {
     try {
       const { data, error } = await supabase
@@ -784,21 +841,29 @@ const DeliverySettings = () => {
             </div>
             <div className="space-y-2">
               <Label>Taxa (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={radiusPricing.delivery_fee}
-                onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
-              />
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="pl-8"
+                  value={radiusPricing.delivery_fee}
+                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, delivery_fee: e.target.value }))}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Pedido mínimo (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={radiusPricing.minimum_order}
-                onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
-              />
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">R$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="pl-8"
+                  value={radiusPricing.minimum_order}
+                  onChange={(e) => setRadiusPricing(prev => ({ ...prev, minimum_order: e.target.value }))}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Tempo estimado</Label>
@@ -812,26 +877,37 @@ const DeliverySettings = () => {
           {storeLocation ? (
             <div className="border rounded-xl overflow-hidden mt-4 shadow-sm relative">
               <div className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border text-xs font-medium text-boracume-dark-green">
-                Prévia do raio (clique em “Definir pelo endereço” se estiver errado)
+                Prévia do raio
               </div>
               <div className="h-[500px] w-full">
-                <MapContainer
-                  center={[storeLocation.lat, storeLocation.lng]}
-                  zoom={radiusKm >= 8 ? 12 : radiusKm >= 4 ? 13 : 14}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                {googleKey && window.google?.maps ? (
+                  <GooglePolygonMap
+                    center={{ lat: storeLocation.lat, lng: storeLocation.lng }}
+                    enabled={false}
+                    points={[]}
+                    onAddPoint={() => {}}
+                    storeLocation={{ lat: storeLocation.lat, lng: storeLocation.lng }}
+                    radiusMeters={radiusMeters}
                   />
-                  <LeafletAutoResize />
-                  <Circle
+                ) : (
+                  <MapContainer
                     center={[storeLocation.lat, storeLocation.lng]}
-                    radius={radiusMeters || 0}
-                    pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 0.15, weight: 2 }}
-                  />
-                  <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#003A2B', fillColor: '#003A2B', fillOpacity: 1 }} />
-                </MapContainer>
+                    zoom={radiusKm >= 8 ? 12 : radiusKm >= 4 ? 13 : 14}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <LeafletAutoResize />
+                    <Circle
+                      center={[storeLocation.lat, storeLocation.lng]}
+                      radius={radiusMeters || 0}
+                      pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 0.15, weight: 2 }}
+                    />
+                    <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#003A2B', fillColor: '#003A2B', fillOpacity: 1 }} />
+                  </MapContainer>
+                )}
               </div>
             </div>
           ) : (
