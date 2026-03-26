@@ -795,11 +795,11 @@ const DeliverySettings = () => {
           </div>
 
           {storeLocation ? (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="px-3 py-2 border-b text-xs text-muted-foreground">
+            <div className="border rounded-xl overflow-hidden mt-4 shadow-sm relative">
+              <div className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border text-xs font-medium text-boracume-dark-green">
                 Prévia do raio (clique em “Definir pelo endereço” se estiver errado)
               </div>
-              <div className="h-[320px]">
+              <div className="h-[500px] w-full">
                 <MapContainer
                   center={[storeLocation.lat, storeLocation.lng]}
                   zoom={radiusKm >= 8 ? 12 : radiusKm >= 4 ? 13 : 14}
@@ -813,9 +813,9 @@ const DeliverySettings = () => {
                   <Circle
                     center={[storeLocation.lat, storeLocation.lng]}
                     radius={radiusMeters || 0}
-                    pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.2 }}
+                    pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 0.15, weight: 2 }}
                   />
-                  <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#ef4444' }} />
+                  <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#003A2B', fillColor: '#003A2B', fillOpacity: 1 }} />
                 </MapContainer>
               </div>
             </div>

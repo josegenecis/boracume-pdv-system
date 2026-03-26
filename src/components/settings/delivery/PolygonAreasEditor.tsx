@@ -287,22 +287,10 @@ export default function PolygonAreasEditor(props: {
   }, [googleKey])
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-3 border rounded-lg overflow-hidden">
-        <div className="px-3 py-2 border-b text-xs text-muted-foreground flex items-center justify-between gap-2">
-          <div className="min-w-0 truncate">
-            {googleKey ? (googleReady ? 'Mapa: Google Maps' : 'Mapa: carregando Google Maps') : 'Mapa: OpenStreetMap (fallback)'}
-          </div>
-          {!googleKey && (
-            <div className="shrink-0">
-              Defina VITE_GOOGLE_MAPS_BROWSER_API_KEY e faça redeploy
-            </div>
-          )}
-        {osmTileError && (
-          <div className="shrink-0 text-destructive">
-            Sem tiles do mapa (rede/bloqueio). Tente liberar tile.openstreetmap.org
-          </div>
-        )}
+    <div className="flex flex-col lg:flex-row h-[600px] border rounded-xl overflow-hidden bg-white shadow-sm">
+      <div className="lg:flex-1 relative border-b lg:border-b-0 lg:border-r">
+        <div className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-sm border text-xs font-medium text-boracume-dark-green max-w-[80%]">
+          {googleKey ? (googleReady ? 'Mapa: Google Maps' : 'Mapa: carregando Google Maps...') : 'Mapa: OpenStreetMap (fallback)'}
         </div>
         {googleKey ? (
           googleReady ? (
@@ -313,13 +301,13 @@ export default function PolygonAreasEditor(props: {
               onAddPoint={addPoint}
             />
           ) : (
-            <div className="h-[360px] w-full flex items-center justify-center text-sm text-muted-foreground">
-              {googleError ? googleError : 'Carregando Google Maps...'}
+            <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground bg-gray-50">
+              {googleError ? googleError : 'Carregando mapa...'}
             </div>
           )
         ) : (
-          <div className="h-[360px]">
-            <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%' }}>
+          <div className="h-full w-full relative">
+            <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0 }}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -331,87 +319,95 @@ export default function PolygonAreasEditor(props: {
               <LeafletAutoResize />
               <MapClickAdder enabled={!!selected} onAdd={addPoint} />
               {selected?.points?.map((p, idx) => (
-                <CircleMarker key={idx} center={[p.lat, p.lng]} radius={5} pathOptions={{ color: '#f97316' }} />
+                <CircleMarker key={idx} center={[p.lat, p.lng]} radius={5} pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 1 }} />
               ))}
-              {polygonPositions && <Polygon positions={polygonPositions} pathOptions={{ color: '#f97316' }} />}
+              {polygonPositions && <Polygon positions={polygonPositions} pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 0.15, weight: 2 }} />}
             </MapContainer>
           </div>
         )}
-        <div className="p-3 border-t flex gap-2 justify-end">
-          <Button type="button" variant="outline" onClick={undoPoint} disabled={!selected || selected.points.length === 0}>
-            <Undo2 size={16} className="mr-2" />
-            Desfazer ponto
-          </Button>
-          <Button type="button" variant="outline" onClick={clearPoints} disabled={!selected || selected.points.length === 0}>
-            Limpar
-          </Button>
-        </div>
-      </div>
-
-      <div className="lg:col-span-2 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-medium">Áreas</div>
-            <div className="text-xs text-muted-foreground">Clique no mapa para desenhar</div>
-          </div>
-          <Button type="button" variant="outline" onClick={addArea}>
-            <Plus size={16} className="mr-2" />
-            Adicionar área
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          {props.areas.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Nenhuma área cadastrada.</div>
-          ) : (
-            props.areas.map((a) => (
-              <div key={a.id} className={`p-3 border rounded-lg ${props.selectedId === a.id ? 'border-boracume-orange bg-boracume-orange/5' : ''}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <button type="button" className="text-left min-w-0" onClick={() => props.setSelectedId(a.id)}>
-                    <div className="font-medium truncate">{a.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {a.points.length} pontos • R$ {Number(a.delivery_fee || 0).toFixed(2)}
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={a.active ? 'default' : 'secondary'} className="cursor-pointer" onClick={() => props.setAreas((prev) => prev.map((x) => (x.id === a.id ? { ...x, active: !x.active } : x)))}>
-                      {a.active ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => removeArea(a.id)}>
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
+        
+        {/* Floating Controls Overlay */}
         {selected && (
-          <div className="p-3 border rounded-lg space-y-3">
-            <div className="space-y-2">
-              <Label>Nome da área</Label>
-              <Input value={selected.name} onChange={(e) => updateSelected({ name: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Taxa (R$)</Label>
-                <Input type="number" step="0.01" value={selected.delivery_fee} onChange={(e) => updateSelected({ delivery_fee: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Mínimo (R$)</Label>
-                <Input type="number" step="0.01" value={selected.minimum_order} onChange={(e) => updateSelected({ minimum_order: e.target.value })} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Tempo</Label>
-              <Input value={selected.delivery_time} onChange={(e) => updateSelected({ delivery_time: e.target.value })} />
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Área selecionada: clique no mapa para adicionar pontos (mínimo 3).
-            </div>
+          <div className="absolute bottom-4 left-4 right-4 lg:right-auto z-[400] bg-white/95 backdrop-blur p-2 rounded-xl shadow-lg border flex gap-2 justify-between lg:justify-start">
+            <Button type="button" variant="outline" size="sm" onClick={undoPoint} disabled={selected.points.length === 0} className="rounded-lg">
+              <Undo2 size={16} className="mr-2" />
+              Desfazer
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={clearPoints} disabled={selected.points.length === 0} className="rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50">
+              Limpar área
+            </Button>
           </div>
         )}
+      </div>
+
+      <div className="w-full lg:w-[350px] xl:w-[400px] flex flex-col bg-gray-50/50">
+        <div className="p-4 border-b bg-white flex items-center justify-between shrink-0">
+          <div>
+            <div className="font-semibold text-boracume-dark-green">Zonas de Entrega</div>
+            <div className="text-xs text-muted-foreground">Gerencie suas áreas</div>
+          </div>
+          <Button type="button" size="sm" onClick={addArea} className="rounded-xl bg-boracume-orange hover:bg-boracume-orange/90 text-white shadow-sm">
+            <Plus size={16} className="mr-1" />
+            Nova
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {props.areas.length === 0 ? (
+            <div className="text-sm text-center p-8 text-muted-foreground bg-white rounded-xl border border-dashed">
+              Nenhuma área desenhada. Clique em "Nova" para começar.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {props.areas.map((a) => (
+                <div key={a.id} className={`p-3 border rounded-xl transition-all ${props.selectedId === a.id ? 'border-boracume-orange bg-boracume-orange/5 shadow-sm' : 'bg-white hover:border-gray-300'}`}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <button type="button" className="text-left min-w-0 flex-1" onClick={() => props.setSelectedId(a.id)}>
+                      <div className="font-semibold text-sm truncate text-boracume-dark-green">{a.name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {a.points.length} pontos • R$ {Number(a.delivery_fee || 0).toFixed(2)}
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant={a.active ? 'default' : 'secondary'} className={`cursor-pointer rounded-md px-1.5 py-0 text-[10px] ${a.active ? 'bg-boracume-green hover:bg-boracume-green/90' : ''}`} onClick={() => props.setAreas((prev) => prev.map((x) => (x.id === a.id ? { ...x, active: !x.active } : x)))}>
+                        {a.active ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => removeArea(a.id)}>
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {props.selectedId === a.id && (
+                    <div className="pt-3 border-t border-boracume-orange/10 mt-2 space-y-3 animate-fade-in">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600">Nome da área</Label>
+                        <Input className="h-8 text-sm rounded-lg bg-white" value={a.name} onChange={(e) => updateSelected({ name: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-gray-600">Taxa (R$)</Label>
+                          <Input className="h-8 text-sm rounded-lg bg-white" type="number" step="0.01" value={a.delivery_fee} onChange={(e) => updateSelected({ delivery_fee: e.target.value })} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-gray-600">Mínimo (R$)</Label>
+                          <Input className="h-8 text-sm rounded-lg bg-white" type="number" step="0.01" value={a.minimum_order} onChange={(e) => updateSelected({ minimum_order: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-gray-600">Tempo estimado</Label>
+                        <Input className="h-8 text-sm rounded-lg bg-white" value={a.delivery_time} onChange={(e) => updateSelected({ delivery_time: e.target.value })} placeholder="Ex: 30-45 min" />
+                      </div>
+                      <div className="text-[11px] text-boracume-orange bg-boracume-orange/10 p-2 rounded-lg text-center font-medium">
+                        Clique no mapa para desenhar os limites (mín. 3 pontos)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
