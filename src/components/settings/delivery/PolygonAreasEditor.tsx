@@ -87,7 +87,7 @@ function loadGoogleMaps(key: string): Promise<void> {
   return window.__boracumeGoogleMapsPromise
 }
 
-function GooglePolygonMap(props: {
+export function GooglePolygonMap(props: {
   center: { lat: number; lng: number }
   enabled: boolean
   points: PolygonPoint[]
