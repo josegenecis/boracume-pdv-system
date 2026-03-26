@@ -1146,15 +1146,17 @@ const DeliverySettings = () => {
       </div>
 
       <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-auto">
+        <SheetContent side="right" className={`w-full ${editorMode === 'polygon' || editorMode === 'radius_km' ? 'sm:max-w-[100vw] md:max-w-[90vw] lg:max-w-[1200px] xl:max-w-[1400px]' : 'sm:max-w-xl'} overflow-auto`}>
           <SheetHeader className="mb-4">
             <SheetTitle>Editar: {pricingCards.find((c) => c.id === editorMode)?.title || 'Delivery'}</SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-6">
-            {renderEditorContent()}
+          <div className="space-y-6 h-[calc(100vh-120px)] flex flex-col">
+            <div className="flex-1 overflow-auto">
+              {renderEditorContent()}
+            </div>
 
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end pt-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => setEditorOpen(false)}>
                 Cancelar
               </Button>
