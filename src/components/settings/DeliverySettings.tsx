@@ -90,6 +90,8 @@ const DeliverySettings = () => {
     free_shipping_min_order: '',
     free_shipping_max_distance: ''
   });
+  
+  const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
