@@ -190,6 +190,23 @@ Deno.serve(async (req) => {
     const outsideDeliveryFee = Number(policies?.outside_delivery_fee || 0) || 0
 
     const needsValidation = mode === 'distance_km' || mode === 'distance_bands' || mode === 'radius_km' || mode === 'polygon'
+    
+    // Configurações de Frete Grátis Promocional
+    const freeShippingMinOrder = Number(policies?.free_shipping_min_order) || null;
+    const freeShippingMaxDistance = Number(policies?.free_shipping_max_distance) || null;
+    
+    // Função auxiliar para aplicar a regra de frete grátis
+    const applyFreeShippingRule = (fee: number, currentDistanceKm?: number) => {
+      if (!freeShippingMinOrder || typeof cartTotal !== 'number' || !Number.isFinite(cartTotal)) {
+        return fee;
+      }
+      
+      if (cartTotal >= freeShippingMinOrder) {
+        if (!freeShippingMaxDistance) return 0; // Frete grátis sem limite de distância
+        if (currentDistanceKm !== undefined && currentDistanceKm <= freeShippingMaxDistance) return 0; // Frete grátis dentro da distância
+      }
+      return fee;
+    };
     if (needsValidation && !validateWithGoogle) {
       if (acceptOutsideCoverage) {
         return new Response(
@@ -201,7 +218,7 @@ Deno.serve(async (req) => {
             city,
             state,
             formattedAddress,
-            zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+            zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, outsideDeliveryFee).toFixed(2))), minimum_order: 0, delivery_time: '30-45 min' }
           }),
           { headers: corsHeaders }
         )
@@ -240,7 +257,7 @@ Deno.serve(async (req) => {
             zone: {
               id: z.id,
               name: z.name,
-              delivery_fee: z.delivery_fee,
+              delivery_fee: applyFreeShippingRule(z.delivery_fee),
               minimum_order: z.minimum_order,
               delivery_time: z.delivery_time
             }
@@ -298,7 +315,7 @@ Deno.serve(async (req) => {
           city,
           state,
           formattedAddress,
-          zone: { id: null, name: null, delivery_fee, minimum_order, delivery_time }
+          zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(delivery_fee), minimum_order, delivery_time }
         }),
         { headers: corsHeaders }
       )
@@ -336,7 +353,7 @@ Deno.serve(async (req) => {
               formattedAddress,
               distanceKm,
               durationMin: Math.round(seconds / 60),
-              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+              zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, outsideDeliveryFee).toFixed(2)), distanceKm), minimum_order: 0, delivery_time: '30-45 min' }
             }),
             { headers: corsHeaders }
           )
@@ -383,7 +400,7 @@ Deno.serve(async (req) => {
           formattedAddress,
           distanceKm,
           durationMin: Math.round(seconds / 60),
-          zone: { id: null, name: null, delivery_fee: Number(delivery_fee.toFixed(2)), minimum_order, delivery_time }
+          zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(delivery_fee.toFixed(2)), distanceKm), minimum_order, delivery_time }
         }),
         { headers: corsHeaders }
       )
@@ -425,7 +442,7 @@ Deno.serve(async (req) => {
               formattedAddress,
               distanceKm,
               durationMin: Math.round(seconds / 60),
-              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+              zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, outsideDeliveryFee).toFixed(2)), distanceKm), minimum_order: 0, delivery_time: '30-45 min' }
             }),
             { headers: corsHeaders }
           )
@@ -474,7 +491,7 @@ Deno.serve(async (req) => {
           formattedAddress,
           distanceKm,
           durationMin: Math.round(seconds / 60),
-          zone: { id: null, name: null, delivery_fee: Number(Math.max(0, delivery_fee).toFixed(2)), minimum_order, delivery_time }
+          zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, delivery_fee).toFixed(2)), distanceKm), minimum_order, delivery_time }
         }),
         { headers: corsHeaders }
       )
@@ -511,7 +528,7 @@ Deno.serve(async (req) => {
               formattedAddress,
               distanceKm,
               durationMin: Math.round(seconds / 60),
-              zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+              zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, outsideDeliveryFee).toFixed(2)), distanceKm), minimum_order: 0, delivery_time: '30-45 min' }
             }),
             { headers: corsHeaders }
           )
@@ -556,7 +573,7 @@ Deno.serve(async (req) => {
           formattedAddress,
           distanceKm,
           durationMin: Math.round(seconds / 60),
-          zone: { id: null, name: null, delivery_fee: Number(Math.max(0, delivery_fee).toFixed(2)), minimum_order, delivery_time }
+          zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, delivery_fee).toFixed(2)), distanceKm), minimum_order, delivery_time }
         }),
         { headers: corsHeaders }
       )
@@ -608,7 +625,7 @@ Deno.serve(async (req) => {
             city,
             state,
             formattedAddress,
-            zone: { id: areaId, name: areaName, delivery_fee: Number(Math.max(0, delivery_fee).toFixed(2)), minimum_order, delivery_time }
+            zone: { id: areaId, name: areaName, delivery_fee: applyFreeShippingRule(Number(Math.max(0, delivery_fee).toFixed(2))), minimum_order, delivery_time }
           }),
           { headers: corsHeaders }
         )
@@ -624,7 +641,7 @@ Deno.serve(async (req) => {
             city,
             state,
             formattedAddress,
-            zone: { id: null, name: null, delivery_fee: Number(Math.max(0, outsideDeliveryFee).toFixed(2)), minimum_order: 0, delivery_time: '30-45 min' }
+            zone: { id: null, name: null, delivery_fee: applyFreeShippingRule(Number(Math.max(0, outsideDeliveryFee).toFixed(2))), minimum_order: 0, delivery_time: '30-45 min' }
           }),
           { headers: corsHeaders }
         )

@@ -73,7 +73,13 @@ const DeliverySettings = () => {
   const [polygonAreas, setPolygonAreas] = useState<PolygonAreaDraft[]>([]);
   const [selectedPolygonAreaId, setSelectedPolygonAreaId] = useState<string | null>(null);
   const [modalities, setModalities] = useState({ delivery: true, pickup: true });
-  const [policies, setPolicies] = useState({ validate_with_google: true, accept_outside_coverage: false, outside_delivery_fee: '0' });
+  const [policies, setPolicies] = useState({ 
+    validate_with_google: true, 
+    accept_outside_coverage: false, 
+    outside_delivery_fee: '0',
+    free_shipping_min_order: '',
+    free_shipping_max_distance: ''
+  });
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -180,6 +186,8 @@ const DeliverySettings = () => {
             validate_with_google: areas.policies.validate_with_google !== false,
             accept_outside_coverage: areas.policies.accept_outside_coverage === true,
             outside_delivery_fee: String(areas.policies.outside_delivery_fee ?? '0'),
+            free_shipping_min_order: areas.policies.free_shipping_min_order ? String(areas.policies.free_shipping_min_order) : '',
+            free_shipping_max_distance: areas.policies.free_shipping_max_distance ? String(areas.policies.free_shipping_max_distance) : ''
           });
         }
         if (areas?.modalities) {
@@ -474,7 +482,9 @@ const DeliverySettings = () => {
         policies: {
           validate_with_google: policies.validate_with_google !== false,
           accept_outside_coverage: policies.accept_outside_coverage === true,
-          outside_delivery_fee: parseFloat(policies.outside_delivery_fee || '0') || 0
+          outside_delivery_fee: parseFloat(policies.outside_delivery_fee || '0') || 0,
+          free_shipping_min_order: policies.free_shipping_min_order ? parseFloat(policies.free_shipping_min_order) : null,
+          free_shipping_max_distance: policies.free_shipping_max_distance ? parseFloat(policies.free_shipping_max_distance) : null
         },
         modalities: {
           delivery: !!modalities.delivery,
@@ -1038,6 +1048,40 @@ const DeliverySettings = () => {
               />
             </div>
           )}
+
+          <div className="p-4 border rounded-xl bg-boracume-light/30 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-boracume-dark-green">
+                <MapPin size={16} /> Promoção de Frete Grátis
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Ofereça frete grátis para pedidos acima de um valor específico, limitado a uma distância máxima.
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Valor mínimo do pedido (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Ex: 50.00 (vazio = desativado)"
+                  value={policies.free_shipping_min_order}
+                  onChange={(e) => setPolicies((prev) => ({ ...prev, free_shipping_min_order: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Distância máxima (km)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  placeholder="Ex: 5 (vazio = sem limite)"
+                  value={policies.free_shipping_max_distance}
+                  onChange={(e) => setPolicies((prev) => ({ ...prev, free_shipping_max_distance: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-2">
             <div className="text-sm font-medium">Selecione o preço e a cobertura de envio</div>
