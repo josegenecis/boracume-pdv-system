@@ -119,18 +119,28 @@ function GooglePolygonMap(props: {
       strokeOpacity: 1,
       strokeWeight: 2,
       fillColor: '#f97316',
-      fillOpacity: 0.15
+      fillOpacity: 0.15,
+      clickable: false
     })
     polygonRef.current.setMap(mapRef.current)
+
+    // Using a ref for the latest onAddPoint function
+    const localOnAddPointRef = { current: props.onAddPoint }
+    localOnAddPointRef.current = props.onAddPoint
 
     mapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
       if (!enabledRef.current) return
       const lat = e.latLng?.lat()
       const lng = e.latLng?.lng()
       if (typeof lat !== 'number' || typeof lng !== 'number') return
-      props.onAddPoint({ lat, lng })
+      onAddPointRef.current({ lat, lng })
     })
-  }, [props.center, props.enabled, props.onAddPoint])
+  }, [props.center])
+
+  // Update refs when props change without recreating the map/listeners
+  useEffect(() => {
+    enabledRef.current = props.enabled
+  }, [props.enabled])
 
   useEffect(() => {
     if (!mapRef.current) return
@@ -141,20 +151,17 @@ function GooglePolygonMap(props: {
     if (!mapRef.current) return
     const g = window.google
     if (!g?.maps) return
-    const t1 = window.setTimeout(() => {
-      g.maps.event.trigger(mapRef.current!, 'resize')
-      mapRef.current!.setCenter(props.center)
-    }, 50)
-    const t2 = window.setTimeout(() => {
-      g.maps.event.trigger(mapRef.current!, 'resize')
-      mapRef.current!.setCenter(props.center)
-    }, 250)
+    const triggerResize = () => {
+      if (!mapRef.current) return
+      g.maps.event.trigger(mapRef.current, 'resize')
+      mapRef.current.setCenter(props.center)
+    }
+    
+    const t1 = window.setTimeout(triggerResize, 50)
+    const t2 = window.setTimeout(triggerResize, 250)
     const ro =
       typeof ResizeObserver !== 'undefined' && containerRef.current
-        ? new ResizeObserver(() => {
-            g.maps.event.trigger(mapRef.current!, 'resize')
-            mapRef.current!.setCenter(props.center)
-          })
+        ? new ResizeObserver(triggerResize)
         : null
     if (ro && containerRef.current) ro.observe(containerRef.current)
     return () => {
@@ -163,6 +170,12 @@ function GooglePolygonMap(props: {
       ro?.disconnect()
     }
   }, [props.center, props.enabled])
+
+  // Need to use latest onAddPoint function in the map click listener
+  const onAddPointRef = useRef(props.onAddPoint);
+  useEffect(() => {
+    onAddPointRef.current = props.onAddPoint;
+  }, [props.onAddPoint]);
 
   useEffect(() => {
     if (!mapRef.current || !polygonRef.current) return
@@ -186,7 +199,7 @@ function GooglePolygonMap(props: {
     )
   }, [props.points])
 
-  return <div ref={containerRef} className="h-[360px] w-full" />
+  return <div ref={containerRef} className="h-full w-full" />
 }
 
 export default function PolygonAreasEditor(props: {
