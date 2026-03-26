@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Content-Type': 'application/json'
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
 function pickComponent(components: any[], types: string[]) {
@@ -54,7 +54,7 @@ async function geocodeGoogle(params: { address?: string; placeId?: string; lat?:
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders, status: 204 })
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     const lng = body?.lng !== undefined ? Number(body.lng) : undefined
 
     if (!address && !placeId && !(typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng))) {
-      return new Response(JSON.stringify({ ok: false, error: 'Informe address, placeId ou lat/lng' }), { status: 400, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: false, error: 'Informe address, placeId ou lat/lng' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     let apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') || ''
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       apiKey = String(data?.google_maps_api_key || '').trim()
     }
     if (!apiKey) {
-      return new Response(JSON.stringify({ ok: false, error: 'Chave do Google Maps não configurada' }), { status: 500, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: false, error: 'Chave do Google Maps não configurada' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const result = await withRetry(() => geocodeGoogle({ address, placeId, lat, lng }, apiKey), 2)
@@ -102,9 +102,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify(out), { headers: corsHeaders })
+    return new Response(JSON.stringify(out), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error: any) {
-    return new Response(JSON.stringify({ ok: false, error: error?.message || 'Erro ao geocodificar' }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ ok: false, error: error?.message || 'Erro ao geocodificar' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
 
