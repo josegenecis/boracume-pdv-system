@@ -129,16 +129,22 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       componentRestrictions: { country: 'br' } // Restringir buscas ao Brasil
     });
 
+    // Mudar de place_changed para pac-input-changed ou apenas pegar o valor diretamente do input
+    // se o usuário clicar na sugestão, o input é preenchido e o place_changed é disparado.
+    // O problema pode ser que o state do React não está atualizando quando o Google altera o valor do input diretamente.
     const listener = autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
-      if (place.geometry?.location) {
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
-        const formattedAddress = place.formatted_address;
+      
+      // Mesmo se não tiver geometria, queremos pegar o endereço que o usuário selecionou
+      const formattedAddress = place.formatted_address || inputElement.value;
+      
+      if (formattedAddress) {
+        setCustomerAddress(formattedAddress);
         
-        if (formattedAddress) {
-          setCustomerAddress(formattedAddress);
-          // Opcionalmente, podemos definir a localização GPS baseada no autocomplete
+        if (place.geometry?.location) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          
           setLocation({
             latitude: lat,
             longitude: lng,
@@ -150,10 +156,23 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
     });
 
+    // Listener adicional para garantir que o React pegue qualquer alteração manual 
+    // ou clique em sugestões que não disparem o place_changed
+    const handleInput = () => {
+      if (inputElement.value !== customerAddress) {
+        setCustomerAddress(inputElement.value);
+      }
+    };
+    
+    inputElement.addEventListener('input', handleInput);
+    inputElement.addEventListener('blur', handleInput);
+
     return () => {
       if (listener) {
         window.google.maps.event.removeListener(listener);
       }
+      inputElement.removeEventListener('input', handleInput);
+      inputElement.removeEventListener('blur', handleInput);
     };
   }, [isOpen, step, window.google?.maps?.places]);
 
