@@ -1103,19 +1103,19 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   return (
     <div>
-      <div className="flex items-center gap-2 justify-between px-4 py-3 border-b bg-white">
-        <div className="text-sm font-semibold">{product?.id ? 'Editar produto' : 'Novo produto'}</div>
+      <div className="flex items-center gap-2 justify-between py-2 px-4">
+        <div className="text-xl font-bold text-boracume-dark-green uppercase tracking-tight">{product?.id ? 'Editar produto' : 'Novo produto'}</div>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
-            <Star className="h-4 w-4" />
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-boracume-orange">
+            <Star className="h-5 w-5" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
-            <MoreVertical className="h-4 w-4" />
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+            <MoreVertical className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
+      <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6 mt-2">
         <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start bg-boracume-orange/5 p-4 rounded-2xl border border-boracume-orange/20">
           <ProductImageUpload
             compact
