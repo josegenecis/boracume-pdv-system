@@ -372,8 +372,9 @@ Deno.serve(async (req: Request) => {
                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                );
              }
+             console.log('[ScrapeMenu] Iniciando importacao de texto. Tamanho:', text.length);
              const structuredResult = await aiStructurize(text, GEMINI_API_KEY, GEMINI_MODEL);
-             console.log('[ScrapeMenu] aiStructurize result:', JSON.stringify(structuredResult).substring(0, 200));
+             console.log('[ScrapeMenu] aiStructurize result length:', Array.isArray(structuredResult) ? structuredResult.length : 'não é array');
              const categories = consolidateVariantsAndCategories(structuredResult);
              console.log('[ScrapeMenu] consolidated categories:', JSON.stringify(categories).substring(0, 200));
              if (!categories || categories.length === 0) {

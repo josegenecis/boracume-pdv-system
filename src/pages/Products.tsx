@@ -575,10 +575,12 @@ const Products = () => {
         
         if (!name || isNaN(price)) continue;
 
-        let catName = categoryIdx !== -1 ? values[categoryIdx]?.trim().replace(/^"|"$/g, '') : 'Geral';
-        if (!catName) catName = 'Geral';
+        let rawCat = categoryIdx !== -1 ? values[categoryIdx]?.trim().replace(/^"|"$/g, '') : 'Geral';
+        // Remove aspas e caracteres de interrogação estranhos
+        let catName = rawCat.replace(/[\uFFFD\u00A0]/g, '').trim();
+        if (!catName || catName.toLowerCase() === 'null') catName = 'Geral';
         
-        // Encontra ou cria categoria
+        // Encontra ou cria categoria (ignorando case)
         let catObj = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
         let catId = catObj?.id;
         
@@ -592,6 +594,8 @@ const Products = () => {
           if (newCat) {
             catId = newCat.id;
             setCategories(prev => [...prev, newCat]);
+            // Adiciona localmente para a próxima iteração do loop achar a mesma categoria
+            categories.push(newCat);
           }
         }
 
