@@ -375,7 +375,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     const isPaymentValid = paymentMethod !== '';
 
-    const hasDelivery = deliveryZoneId !== '' || (deliveryQuote && quoteMode && quoteMode !== 'neighborhood');
+    const hasDelivery = (showNeighborhoodSelect && deliveryZoneId !== '') || (!showNeighborhoodSelect && deliveryQuote?.ok);
     
     const valid = (
       customerName.trim() !== '' &&
