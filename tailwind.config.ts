@@ -63,16 +63,16 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				},
-				// BoraCumê specific colors
-				"boracume-orange": "#F26522",
-				"boracume-green": "#8DC63F",
-				"boracume-dark-green": "#003A2B",
-				"boracume-light": "#FDF8F0",
+				// Pomar / BoraCumê specific colors
+				"boracume-orange": "#EF6C20", // Laranja vibrante da logo Pomar
+				"boracume-green": "#85C441",  // Verde claro principal
+				"boracume-dark-green": "#063D2E", // Verde bem escuro (Agrointeligência)
+				"boracume-light": "#F7EEDF", // Bege clarinho do fundo do gráfico
 				"boracume-gray": "#607D8B",
-				"brand-primary": "#8DC63F",
-				"brand-secondary": "#003A2B",
-				"brand-accent": "#F26522",
-				"brand-background": "#FDF8F0"
+				"brand-primary": "#85C441",
+				"brand-secondary": "#063D2E",
+				"brand-accent": "#EF6C20",
+				"brand-background": "#F7EEDF"
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

@@ -7,33 +7,33 @@
 
 @layer base {
   :root {
-    --background: 40 50% 97%; /* FDF8F0 */
-    --foreground: 164 100% 11%; /* 003A2B */
+    --background: 38 61% 92%; /* F7EEDF - Pomar Light */
+    --foreground: 164 82% 13%; /* 063D2E - Pomar Dark Green */
 
     --card: 0 0% 100%;
-    --card-foreground: 164 100% 11%;
+    --card-foreground: 164 82% 13%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 164 100% 11%;
+    --popover-foreground: 164 82% 13%;
 
-    --primary: 85 55% 51%; /* 8DC63F */
-    --primary-foreground: 40 50% 97%;
+    --primary: 89 54% 51%; /* 85C441 - Pomar Green */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 164 100% 11%; /* 003A2B */
-    --secondary-foreground: 40 50% 97%;
+    --secondary: 164 82% 13%; /* 063D2E - Pomar Dark Green */
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 40 20% 90%;
     --muted-foreground: 164 20% 40%;
 
-    --accent: 19 90% 54%; /* F26522 */
-    --accent-foreground: 40 50% 97%;
+    --accent: 22 86% 53%; /* EF6C20 - Pomar Orange */
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 40 20% 85%;
     --input: 40 20% 85%;
-    --ring: 85 55% 51%;
+    --ring: 89 54% 51%;
 
     --radius: 0.75rem;
   }

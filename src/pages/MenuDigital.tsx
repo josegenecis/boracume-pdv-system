@@ -534,7 +534,7 @@ const MenuDigital = () => {
     <div className="min-h-screen bg-white pb-24">
       <MarketingPixels userId={finalUserId} />
       <div className="relative">
-        <div className="relative h-40 sm:h-48 w-full bg-gradient-to-br from-orange-500 via-orange-600 to-rose-500 overflow-hidden">
+        <div className="relative h-40 sm:h-48 w-full bg-boracume-dark-green overflow-hidden">
           {(profile as any)?.banner_url ? (
             <img
               src={String((profile as any).banner_url)}
@@ -586,11 +586,11 @@ const MenuDigital = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 h-10 w-full rounded-full border-gray-200 focus:ring-2 focus:ring-orange-600 focus:border-orange-600 text-sm"
-                />
+                    placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 h-11 w-full rounded-full border-gray-200 bg-boracume-light focus:ring-2 focus:ring-boracume-green focus:border-boracume-green text-sm transition-all"
+                  />
               </div>
             </div>
           </div>
