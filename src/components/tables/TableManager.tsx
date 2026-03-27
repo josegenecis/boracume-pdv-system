@@ -168,13 +168,26 @@ const TableManager: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
-        return 'bg-green-100 text-green-800';
+        return 'bg-boracume-green/10 text-boracume-green border-boracume-green/20';
       case 'occupied':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 border-red-200';
       case 'reserved':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-boracume-orange/10 text-boracume-orange border-boracume-orange/20';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getBorderColor = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'border-l-boracume-green';
+      case 'occupied':
+        return 'border-l-red-500';
+      case 'reserved':
+        return 'border-l-boracume-orange';
+      default:
+        return 'border-l-gray-300';
     }
   };
 
@@ -258,14 +271,14 @@ const TableManager: React.FC = () => {
         </Dialog>
       </div>
 
-      <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+      <div className="mb-4 p-4 bg-boracume-orange/5 rounded-xl border border-boracume-orange/20">
         <div className="flex items-center gap-2 mb-2">
-          <MousePointer size={16} className="text-blue-600" />
-          <span className="font-medium text-blue-800">Como usar as mesas:</span>
+          <MousePointer size={16} className="text-boracume-orange" />
+          <span className="font-semibold text-boracume-dark-green">Como usar as mesas:</span>
         </div>
-        <p className="text-sm text-blue-700">
+        <p className="text-sm text-gray-600">
           <strong>Clique na mesa</strong> para ver detalhes, transferir ou finalizar. 
-          <strong>Botão carrinho</strong> para adicionar produtos à mesa.
+          <strong className="ml-1">Botão carrinho</strong> para adicionar produtos à mesa.
         </p>
       </div>
 
@@ -273,13 +286,13 @@ const TableManager: React.FC = () => {
         {tables.map((table) => (
           <Card 
             key={table.id} 
-            className="hover:shadow-md transition-shadow cursor-pointer"
+            className={`hover:shadow-md transition-all duration-200 cursor-pointer border-l-4 ${getBorderColor(table.status)}`}
             onClick={() => handleTableClick(table)}
           >
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-lg">Mesa {table.table_number}</CardTitle>
-                <Badge className={getStatusColor(table.status)}>
+                <Badge variant="outline" className={getStatusColor(table.status)}>
                   {getStatusLabel(table.status)}
                 </Badge>
               </div>
@@ -291,25 +304,27 @@ const TableManager: React.FC = () => {
                   <span>{table.capacity} pessoas</span>
                 </div>
                 {table.location && (
-                  <div className="text-sm text-gray-600">
-                    📍 {table.location}
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <MousePointer size={14} className="opacity-0" />
+                    <span>📍 {table.location}</span>
                   </div>
                 )}
                 {table.status === 'occupied' && (
-                  <div className="text-xs text-blue-600 font-medium mt-2">
-                    👆 Clique para ver detalhes
+                  <div className="flex items-center gap-2 text-xs text-blue-600 font-medium mt-2">
+                    <MousePointer size={14} />
+                    <span>Clique para ver detalhes</span>
                   </div>
                 )}
               </div>
-              <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => handleAddProductsClick(table, e)}
-                  className="flex-1"
+                  className="flex-1 hover:bg-boracume-green/10 hover:text-boracume-green hover:border-boracume-green/50"
                   title="Adicionar produtos"
                 >
-                  <ShoppingCart size={14} />
+                  <ShoppingCart size={16} />
                 </Button>
                 <Button
                   variant="outline"
@@ -324,8 +339,9 @@ const TableManager: React.FC = () => {
                     });
                     setShowForm(true);
                   }}
+                  className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
                 >
-                  <Edit size={14} />
+                  <Edit size={16} />
                 </Button>
                 <Button
                   variant="outline"
@@ -334,8 +350,9 @@ const TableManager: React.FC = () => {
                     e.stopPropagation();
                     handleDelete(table.id);
                   }}
+                  className="hover:bg-red-50 hover:text-red-600 hover:border-red-200"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={16} />
                 </Button>
               </div>
             </CardContent>
