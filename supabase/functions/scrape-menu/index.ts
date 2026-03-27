@@ -194,13 +194,10 @@ Deno.serve(async (req: Request) => {
              }
 
             if (!APIFY_TOKEN) {
-              if (rawUrl.includes('ifood.com.br')) {
-                throw new Error('Importação por link do iFood requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
-              }
-              if (rawUrl.includes('cardapioweb.com')) {
-                throw new Error('Importação por link do CardapioWeb requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
-              }
-              throw new Error('Importação por link requer APIFY_TOKEN configurado na Edge Function scrape-menu.');
+              return new Response(
+                  JSON.stringify({ success: false, status: 'failed', error: 'Chave APIFY_TOKEN não configurada no servidor.' }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+              );
             }
 
             // 2. CardapioWeb / sites muito dinâmicos: crawler de conteúdo + IA (mais confiável que heurística DOM)
