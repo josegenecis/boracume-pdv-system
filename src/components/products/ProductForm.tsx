@@ -12,13 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
+import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
 
 import ProductImageUpload from './ProductImageUpload';
+import ProductRecipeManager from './ProductRecipeManager';
 
 // Defining the interface here to ensure consistency
 interface ProductItem {
@@ -1347,10 +1348,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
         <div className="flex gap-2 flex-wrap">
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
-          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Custo</Button>
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
         </div>
+
+        {/* Ficha Técnica (Receita) */}
+        {createdProductId && (
+          <ProductRecipeManager productId={createdProductId} />
+        )}
+        {!createdProductId && (
+          <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 flex items-center justify-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Salve o produto primeiro para cadastrar a Ficha Técnica.
+          </div>
+        )}
 
         <div className="space-y-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
           <div className="flex items-center justify-between">

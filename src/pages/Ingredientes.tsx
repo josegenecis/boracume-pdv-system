@@ -4,47 +4,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Edit, ToggleLeft, ToggleRight, Search, Package } from 'lucide-react';
+import { Plus, Edit, Search, Package } from 'lucide-react';
 
 interface Ingredient {
   id: string;
   name: string;
-  category: string;
   unit: string;
-  price: number;
-  is_active: boolean;
+  cost_price: number;
+  current_stock: number;
+  min_stock: number;
   user_id: string;
   created_at: string;
   updated_at: string;
 }
 
-const CATEGORIES = [
-  'Proteínas',
-  'Laticínios', 
-  'Verduras',
-  'Grãos',
-  'Temperos',
-  'Frutas',
-  'Bebidas',
-  'Outros'
-];
-
 const UNITS = [
-  'kg',
-  'g',
-  'l',
-  'ml',
-  'unidade',
-  'dúzia',
-  'caixa',
-  'pacote'
+  { value: 'kg', label: 'Quilograma (kg)' },
+  { value: 'g', label: 'Grama (g)' },
+  { value: 'l', label: 'Litro (L)' },
+  { value: 'ml', label: 'Mililitro (ml)' },
+  { value: 'un', label: 'Unidade (un)' }
 ];
 
 export default function Ingredientes() {
@@ -54,18 +39,17 @@ export default function Ingredientes() {
   const [filteredIngredients, setFilteredIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [filterStockStatus, setFilterStockStatus] = useState('all'); // all, low_stock
   
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
-    unit: '',
-    price: 0,
-    is_active: true
+    unit: 'un',
+    cost_price: 0,
+    current_stock: 0,
+    min_stock: 0
   });
 
   useEffect(() => {
@@ -73,33 +57,6 @@ export default function Ingredientes() {
       loadIngredients();
     }
   }, [user]);
-
-  useEffect(() => {
-    filterIngredients();
-  }, [ingredients, searchTerm, selectedCategory, showInactive]);
-
-  const loadIngredients = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('ingredients')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setIngredients(data || []);
-    } catch (error) {
-      console.error('Error loading ingredients:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar os ingredientes.',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterIngredients = () => {
     let filtered = ingredients;
@@ -110,90 +67,77 @@ export default function Ingredientes() {
       );
     }
 
-    if (selectedCategory) {
-      filtered = filtered.filter(ing => ing.category === selectedCategory);
-    }
-
-    if (!showInactive) {
-      filtered = filtered.filter(ing => ing.is_active);
+    if (filterStockStatus === 'low_stock') {
+      filtered = filtered.filter(ing => ing.current_stock <= ing.min_stock);
     }
 
     setFilteredIngredients(filtered);
   };
 
+  useEffect(() => {
+    filterIngredients();
+  }, [searchTerm, filterStockStatus, ingredients]);
+
+  const loadIngredients = async () => {
+    try {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('ingredients')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+        
+      if (error) throw error;
+      setIngredients(data || []);
+      setFilteredIngredients(data || []);
+    } catch (error) {
+      console.error('Error loading ingredients:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar os insumos.',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
+      if (!user) return;
+
+      const payload = {
+        name: formData.name,
+        unit: formData.unit,
+        current_stock: formData.current_stock,
+        min_stock: formData.min_stock,
+        cost_price: formData.cost_price,
+        user_id: user.id
+      };
+
       if (editingIngredient) {
-        // Update existing ingredient
         const { error } = await supabase
           .from('ingredients')
-          .update({
-            ...formData,
-            updated_at: new Date().toISOString()
-          })
+          .update({ ...payload, updated_at: new Date().toISOString() })
           .eq('id', editingIngredient.id);
-
         if (error) throw error;
-
-        toast({
-          title: 'Sucesso',
-          description: 'Ingrediente atualizado com sucesso.'
-        });
+        toast({ title: 'Sucesso', description: 'Insumo atualizado com sucesso.' });
       } else {
-        // Create new ingredient
         const { error } = await supabase
           .from('ingredients')
-          .insert({
-            ...formData,
-            user_id: user.id
-          });
-
+          .insert([payload]);
         if (error) throw error;
-
-        toast({
-          title: 'Sucesso',
-          description: 'Ingrediente cadastrado com sucesso.'
-        });
+        toast({ title: 'Sucesso', description: 'Insumo cadastrado com sucesso.' });
       }
 
       setIsFormOpen(false);
-      resetForm();
       loadIngredients();
     } catch (error) {
       console.error('Error saving ingredient:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível salvar o ingrediente.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleToggleStatus = async (ingredient: Ingredient) => {
-    try {
-      const { error } = await supabase
-        .from('ingredients')
-        .update({ 
-          is_active: !ingredient.is_active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', ingredient.id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Sucesso',
-        description: `Ingrediente ${!ingredient.is_active ? 'ativado' : 'desativado'} com sucesso.`
-      });
-
-      loadIngredients();
-    } catch (error) {
-      console.error('Error toggling ingredient status:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível alterar o status do ingrediente.',
+        description: 'Não foi possível salvar o insumo.',
         variant: 'destructive'
       });
     }
@@ -203,10 +147,10 @@ export default function Ingredientes() {
     setEditingIngredient(ingredient);
     setFormData({
       name: ingredient.name,
-      category: ingredient.category,
       unit: ingredient.unit,
-      price: ingredient.price,
-      is_active: ingredient.is_active
+      cost_price: ingredient.cost_price,
+      current_stock: ingredient.current_stock,
+      min_stock: ingredient.min_stock
     });
     setIsFormOpen(true);
   };
@@ -220,10 +164,10 @@ export default function Ingredientes() {
   const resetForm = () => {
     setFormData({
       name: '',
-      category: '',
-      unit: '',
-      price: 0,
-      is_active: true
+      unit: 'un',
+      cost_price: 0,
+      current_stock: 0,
+      min_stock: 0
     });
   };
 
@@ -284,31 +228,16 @@ export default function Ingredientes() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category">Categoria</Label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Todas categorias" />
+              <Label htmlFor="stock_status">Status do Estoque</Label>
+              <Select value={filterStockStatus} onValueChange={setFilterStockStatus}>
+                <SelectTrigger id="stock_status">
+                  <SelectValue placeholder="Todos os insumos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas categorias</SelectItem>
-                  {CATEGORIES.map(category => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Todos os insumos</SelectItem>
+                  <SelectItem value="low_stock">Estoque Baixo</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="flex items-end">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="show-inactive"
-                  checked={showInactive}
-                  onCheckedChange={setShowInactive}
-                />
-                <Label htmlFor="show-inactive">Mostrar inativos</Label>
-              </div>
             </div>
           </div>
         </CardContent>
@@ -335,31 +264,39 @@ export default function Ingredientes() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Categoria</TableHead>
                     <TableHead>Unidade</TableHead>
-                    <TableHead>Preço</TableHead>
+                    <TableHead>Estoque Atual</TableHead>
+                    <TableHead>Estoque Mínimo</TableHead>
+                    <TableHead>Preço de Custo</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Cadastro</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredIngredients.map((ingredient) => (
-                    <TableRow key={ingredient.id}>
-                      <TableCell className="font-medium">{ingredient.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{ingredient.category}</Badge>
-                      </TableCell>
-                      <TableCell>{ingredient.unit}</TableCell>
-                      <TableCell>{formatCurrency(ingredient.price)}</TableCell>
-                      <TableCell>
-                        <Badge variant={ingredient.is_active ? "default" : "secondary"}>
-                          {ingredient.is_active ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(ingredient.created_at)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                  {filteredIngredients.map((ingredient) => {
+                    const isLowStock = ingredient.current_stock <= ingredient.min_stock;
+                    return (
+                      <TableRow key={ingredient.id}>
+                        <TableCell className="font-medium">{ingredient.name}</TableCell>
+                        <TableCell>{UNITS.find(u => u.value === ingredient.unit)?.label || ingredient.unit}</TableCell>
+                        <TableCell>
+                          <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
+                            {ingredient.current_stock}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{ingredient.min_stock}</TableCell>
+                        <TableCell>{formatCurrency(ingredient.cost_price)}</TableCell>
+                        <TableCell>
+                          {isLowStock ? (
+                            <span className="text-red-500 font-semibold text-xs flex items-center gap-1">
+                              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                              Baixo
+                            </span>
+                          ) : (
+                            <span className="text-boracume-green font-semibold text-xs">Normal</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -367,21 +304,10 @@ export default function Ingredientes() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleStatus(ingredient)}
-                          >
-                            {ingredient.is_active ? (
-                              <ToggleLeft className="h-4 w-4 text-orange-500" />
-                            ) : (
-                              <ToggleRight className="h-4 w-4 text-green-500" />
-                            )}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -395,46 +321,26 @@ export default function Ingredientes() {
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>
-                {editingIngredient ? 'Editar Ingrediente' : 'Novo Ingrediente'}
+                {editingIngredient ? 'Editar Insumo' : 'Novo Insumo'}
               </DialogTitle>
               <DialogDescription>
                 {editingIngredient 
-                  ? 'Edite as informações do ingrediente abaixo.' 
-                  : 'Preencha as informações do novo ingrediente abaixo.'
+                  ? 'Edite as informações do insumo para a Ficha Técnica.' 
+                  : 'Cadastre um novo insumo para controle de estoque e custos.'
                 }
               </DialogDescription>
             </DialogHeader>
             
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Nome *</Label>
+                <Label htmlFor="name">Nome do Insumo *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Ex: Carne de Sol"
+                  placeholder="Ex: Queijo Muçarela, Tomate"
                   required
                 />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="category">Categoria *</Label>
-                <Select 
-                  value={formData.category} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-                  required
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="grid gap-2">
@@ -445,38 +351,56 @@ export default function Ingredientes() {
                   required
                 >
                   <SelectTrigger id="unit">
-                    <SelectValue placeholder="Selecione uma unidade" />
+                    <SelectValue placeholder="Selecione a unidade" />
                   </SelectTrigger>
                   <SelectContent>
                     {UNITS.map(unit => (
-                      <SelectItem key={unit} value={unit}>
-                        {unit}
+                      <SelectItem key={unit.value} value={unit.value}>
+                        {unit.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">Ex: Compre em KG, mas coloque em Gramas (g) se a receita usar gramas.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="current_stock">Estoque Atual</Label>
+                  <Input
+                    id="current_stock"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={formData.current_stock}
+                    onChange={(e) => setFormData(prev => ({ ...prev, current_stock: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="min_stock">Estoque Mínimo</Label>
+                  <Input
+                    id="min_stock"
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={formData.min_stock}
+                    onChange={(e) => setFormData(prev => ({ ...prev, min_stock: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="price">Preço Unitário (R$)</Label>
+                <Label htmlFor="cost_price">Preço de Custo (Por unidade escolhida acima) *</Label>
                 <Input
-                  id="price"
+                  id="cost_price"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                  value={formData.cost_price}
+                  onChange={(e) => setFormData(prev => ({ ...prev, cost_price: parseFloat(e.target.value) || 0 }))}
                   placeholder="0,00"
+                  required
                 />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
-                />
-                <Label htmlFor="is_active">Ativo</Label>
               </div>
             </div>
 
@@ -488,8 +412,8 @@ export default function Ingredientes() {
               >
                 Cancelar
               </Button>
-              <Button type="submit">
-                {editingIngredient ? 'Atualizar' : 'Cadastrar'}
+              <Button type="submit" className="bg-boracume-green hover:bg-boracume-green/90">
+                {editingIngredient ? 'Salvar Alterações' : 'Cadastrar Insumo'}
               </Button>
             </DialogFooter>
           </form>
