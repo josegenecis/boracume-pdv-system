@@ -178,6 +178,7 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=notifications', label: 'Notificações' },
         { to: '/configuracoes?tab=appearance', label: 'Aparência' },
         { to: '/configuracoes?tab=delivery', label: 'Delivery' },
+        { to: '/motoboys', label: 'Motoboys & Entregas' },
         { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp' },
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
