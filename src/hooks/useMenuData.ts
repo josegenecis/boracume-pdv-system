@@ -38,6 +38,7 @@ interface RestaurantProfile {
   phone?: string;
   address?: string;
   opening_hours?: string;
+  theme_config?: any;
 }
 
 interface DeliveryZone {
@@ -112,7 +113,7 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
       await Promise.all([
         supabase
           .from('profiles')
-          .select('id, restaurant_name, description, logo_url, banner_url, phone, address, opening_hours')
+          .select('id, restaurant_name, description, logo_url, banner_url, phone, address, opening_hours, theme_config')
           .eq('id', userId)
           .limit(1) as any,
         supabase

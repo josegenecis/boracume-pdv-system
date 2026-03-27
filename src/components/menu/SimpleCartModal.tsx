@@ -854,13 +854,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       lastLookupDigitsRef.current = digits;
                       if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
                       
-                      setIsLookingUp(true);
                       phoneLookupTimerRef.current = window.setTimeout(async () => {
                         const customer = await lookupCustomer(digits);
                         if (customer) {
-                          setCustomerName((prev) => prev.trim() ? prev : customer.name);
-                          setCustomerAddress((prev) => prev.trim() ? prev : customer.address);
-                          setCustomerNeighborhood((prev) => prev.trim() ? prev : String((customer as any)?.neighborhood || ''));
+                          setCustomerName(customer.name || '');
+                          setCustomerAddress(customer.address || '');
+                          setCustomerNeighborhood(String((customer as any)?.neighborhood || ''));
                           const zoneId = String((customer as any)?.deliveryZoneId || '');
                           if (zoneId && (!deliveryZoneId || zoneWasAutoRef.current)) {
                             zoneWasAutoRef.current = true;
