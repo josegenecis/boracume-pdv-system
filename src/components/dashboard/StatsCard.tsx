@@ -7,6 +7,7 @@ interface StatsCardProps {
   value: string | number;
   description?: string;
   icon: React.ReactNode;
+  className?: string;
   trend?: {
     value: number;
     positive: boolean;
@@ -19,9 +20,10 @@ const StatsCard: React.FC<StatsCardProps> = ({
   description,
   icon,
   trend,
+  className,
 }) => {
   return (
-    <Card className="w-full min-w-0">
+    <Card className={`w-full min-w-0 transition-all duration-200 hover:shadow-md border-l-4 ${className || 'border-l-boracume-orange'}`}>
       <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
         <CardTitle className="text-sm font-medium text-muted-foreground truncate pr-2">
           {title}

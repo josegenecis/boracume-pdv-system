@@ -92,9 +92,10 @@ const CollapsibleSidebar = () => {
     {
       id: 'caixa',
       icon: CreditCard,
-      label: 'Caixa',
+      label: 'Caixa & PDV',
       items: [
-        { to: '/pdv', label: 'PDV' },
+        { to: '/pdv', label: 'PDV / Frente de Caixa' },
+        { to: '/mesas', label: 'Gestão de Mesas' },
       ]
     },
     {
@@ -129,7 +130,6 @@ const CollapsibleSidebar = () => {
       items: [
         { to: '/pedidos', label: 'Gestor de pedidos' },
         { to: '/cozinha', label: 'Cozinha (KDS)' },
-        { to: '/mesas', label: 'Mesas' },
       ]
     },
     {

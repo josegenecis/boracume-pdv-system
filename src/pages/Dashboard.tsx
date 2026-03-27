@@ -304,25 +304,29 @@ const Dashboard = () => {
           value={formatCurrency(stats.todaySales)} 
           description={`${stats.todayOrders} pedidos realizados`}
           icon={<CreditCard className="text-boracume-green" />}
+          className="border-l-boracume-green"
           trend={getStatsTrend(stats.todaySales, 'sales')}
         />
         <StatsCard 
           title="Ticket Médio" 
           value={formatCurrency(stats.averageTicket)} 
           description="Por pedido hoje"
-          icon={<TrendingUp className="text-boracume-orange" />}
+          icon={<TrendingUp className="text-blue-500" />}
+          className="border-l-blue-500"
         />
         <StatsCard 
           title="Despesas Mês" 
           value={formatCurrency(stats.monthlyExpenses)} 
           description="Total de custos"
           icon={<DollarSign className="text-red-500" />}
+          className="border-l-red-500"
         />
         <StatsCard 
           title="Novos Clientes" 
           value={stats.newCustomers.toString()} 
           description={`Total: ${stats.totalCustomers} clientes`}
           icon={<Users className="text-purple-500" />}
+          className="border-l-purple-500"
           trend={getStatsTrend(stats.newCustomers, 'customers')}
         />
         <StatsCard 
@@ -330,6 +334,7 @@ const Dashboard = () => {
           value={stats.productsSold.toString()} 
           description="Unidades hoje"
           icon={<Package className="text-amber-500" />}
+          className="border-l-amber-500"
         />
       </div>
       
