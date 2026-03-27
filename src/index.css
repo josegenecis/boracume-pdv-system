@@ -7,7 +7,7 @@
 
 @layer base {
   :root {
-    --background: 38 61% 92%; /* F7EEDF - Pomar Light */
+    --background: 0 0% 98%; /* FAFBFA - Um fundo bem claro e limpo para não pesar a página */
     --foreground: 164 82% 13%; /* 063D2E - Pomar Dark Green */
 
     --card: 0 0% 100%;
