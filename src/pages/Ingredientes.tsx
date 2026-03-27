@@ -110,9 +110,9 @@ export default function Ingredientes() {
       const payload = {
         name: formData.name,
         unit: formData.unit,
-        current_stock: formData.current_stock,
-        min_stock: formData.min_stock,
-        cost_price: formData.cost_price,
+        current_stock: Number(formData.current_stock || 0),
+        min_stock: Number(formData.min_stock || 0),
+        cost_price: Number(formData.cost_price || 0),
         user_id: user.id
       };
 
@@ -133,11 +133,11 @@ export default function Ingredientes() {
 
       setIsFormOpen(false);
       loadIngredients();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving ingredient:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível salvar o insumo.',
+        description: error?.message || 'Não foi possível salvar o insumo.',
         variant: 'destructive'
       });
     }
@@ -372,8 +372,8 @@ export default function Ingredientes() {
                     type="number"
                     step="0.001"
                     min="0"
-                    value={formData.current_stock}
-                    onChange={(e) => setFormData(prev => ({ ...prev, current_stock: parseFloat(e.target.value) || 0 }))}
+                    value={formData.current_stock === 0 ? '' : formData.current_stock}
+                    onChange={(e) => setFormData(prev => ({ ...prev, current_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
                   />
                 </div>
                 <div className="grid gap-2">
@@ -383,8 +383,8 @@ export default function Ingredientes() {
                     type="number"
                     step="0.001"
                     min="0"
-                    value={formData.min_stock}
-                    onChange={(e) => setFormData(prev => ({ ...prev, min_stock: parseFloat(e.target.value) || 0 }))}
+                    value={formData.min_stock === 0 ? '' : formData.min_stock}
+                    onChange={(e) => setFormData(prev => ({ ...prev, min_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
                   />
                 </div>
               </div>
@@ -396,8 +396,8 @@ export default function Ingredientes() {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.cost_price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cost_price: parseFloat(e.target.value) || 0 }))}
+                  value={formData.cost_price === 0 ? '' : formData.cost_price}
+                  onChange={(e) => setFormData(prev => ({ ...prev, cost_price: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
                   placeholder="0,00"
                   required
                 />
