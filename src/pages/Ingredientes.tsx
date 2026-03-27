@@ -17,6 +17,8 @@ interface Ingredient {
   name: string;
   unit: string;
   price: number;
+  current_stock: number;
+  min_stock: number;
   user_id: string;
   created_at: string;
   updated_at: string;
@@ -66,8 +68,7 @@ export default function Ingredientes() {
     }
 
     if (filterStockStatus === 'low_stock') {
-      // Temporariamente desativado até implementar lógica de estoque no banco
-      // filtered = filtered.filter(ing => ing.current_stock <= ing.min_stock);
+      filtered = filtered.filter(ing => (ing.current_stock || 0) <= (ing.min_stock || 0));
     }
 
     setFilteredIngredients(filtered);
@@ -110,6 +111,8 @@ export default function Ingredientes() {
         name: formData.name,
         unit: formData.unit,
         price: Number(formData.cost_price || 0),
+        current_stock: Number(formData.current_stock || 0),
+        min_stock: Number(formData.min_stock || 0),
         user_id: user.id
       };
 
@@ -146,8 +149,8 @@ export default function Ingredientes() {
       name: ingredient.name,
       unit: ingredient.unit,
       cost_price: ingredient.price,
-      current_stock: 0,
-      min_stock: 0
+      current_stock: ingredient.current_stock || 0,
+      min_stock: ingredient.min_stock || 0
     });
     setIsFormOpen(true);
   };
@@ -271,17 +274,17 @@ export default function Ingredientes() {
                 </TableHeader>
                 <TableBody>
                   {filteredIngredients.map((ingredient) => {
-                    const isLowStock = false; // Ajustar depois quando tiver colunas de estoque
+                    const isLowStock = (ingredient.current_stock || 0) <= (ingredient.min_stock || 0);
                     return (
                       <TableRow key={ingredient.id}>
                         <TableCell className="font-medium">{ingredient.name}</TableCell>
                         <TableCell>{UNITS.find(u => u.value === ingredient.unit)?.label || ingredient.unit}</TableCell>
                         <TableCell>
                           <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
-                            -
+                            {ingredient.current_stock || 0}
                           </Badge>
                         </TableCell>
-                        <TableCell>-</TableCell>
+                        <TableCell>{ingredient.min_stock || 0}</TableCell>
                         <TableCell>{formatCurrency(ingredient.price)}</TableCell>
                         <TableCell>
                           {isLowStock ? (
@@ -362,31 +365,30 @@ export default function Ingredientes() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Campos de estoque ocultos temporariamente pois não existem no banco atual
-                <div className="grid gap-2">
-                  <Label htmlFor="current_stock">Estoque Atual</Label>
-                  <Input
-                    id="current_stock"
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={formData.current_stock === 0 ? '' : formData.current_stock}
-                    onChange={(e) => setFormData(prev => ({ ...prev, current_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
-                  />
+                  <div className="grid gap-2">
+                    <Label htmlFor="current_stock">Estoque Atual</Label>
+                    <Input
+                      id="current_stock"
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={formData.current_stock === 0 ? '' : formData.current_stock}
+                      onChange={(e) => setFormData(prev => ({ ...prev, current_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="min_stock">Estoque Mínimo</Label>
+                    <Input
+                      id="min_stock"
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={formData.min_stock === 0 ? '' : formData.min_stock}
+                      onChange={(e) => setFormData(prev => ({ ...prev, min_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
+                    />
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="min_stock">Estoque Mínimo</Label>
-                  <Input
-                    id="min_stock"
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={formData.min_stock === 0 ? '' : formData.min_stock}
-                    onChange={(e) => setFormData(prev => ({ ...prev, min_stock: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
-                  />
-                </div>
-                */}
-              </div>
 
               <div className="grid gap-2">
                 <Label htmlFor="cost_price">Preço de Custo (Por unidade escolhida acima) *</Label>
