@@ -247,23 +247,7 @@ const CollapsibleSidebar = () => {
         : `${isOpen ? 'w-64' : 'w-16'}`
       }
     `}>
-
-      <div className={`p-2 border-b flex items-center justify-end`}>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleSidebar}
-          className={`${isOpen ? '' : 'w-full'} flex justify-center hover:bg-boracume-orange/10 text-gray-400 hover:text-boracume-orange transition-colors`}
-        >
-          {isMobile ? (
-            <X size={16} />
-          ) : (
-            isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />
-          )}
-        </Button>
-      </div>
-      
-      <nav className="mt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide flex flex-col justify-between">
+      <nav className="pt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide flex flex-col justify-between">
         <div className="flex-1">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
