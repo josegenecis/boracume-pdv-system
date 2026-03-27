@@ -107,6 +107,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
+  const isCardSelected = (selectedPaymentMethod as any)?.is_card === true;
+  const requiresMercadoPago = isPixSelected || isCardSelected;
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -473,7 +475,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     const { data, status } = await invokeEdgeFunction('pix-start-checkout', {
       restaurantUserId: userId,
       orderPayload: orderData,
-      preferredMethod: 'pix'
+      preferredMethod: isCardSelected ? 'cartao' : 'pix',
+      useCheckoutPro: isCardSelected
     }, { timeoutMs: 60000 });
 
     if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
@@ -504,7 +507,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const finalizeOrder = async (orderData: any) => {
-    if (String(orderData?.payment_method || '') === 'pix') {
+    if (String(orderData?.payment_method || '') === 'pix' || requiresMercadoPago) {
       await startPixCheckout(orderData);
       onClose();
       return;
@@ -1069,9 +1072,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               {isPixSelected && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
-                  <div className="text-sm font-medium text-gray-900">PIX</div>
+                  <div className="text-sm font-medium text-gray-900">PIX ou Cartão/Wallets</div>
                   <div className="text-sm text-gray-700">
-                    Pagamento via PIX será exibido com QR Code e copia e cola para pagamento online.
+                    Você será redirecionado para o ambiente seguro do Mercado Pago, onde poderá pagar com PIX, Cartão de Crédito, Débito, Apple Pay ou Google Pay.
                   </div>
                 </div>
               )}

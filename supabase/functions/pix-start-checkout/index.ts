@@ -74,8 +74,9 @@ Deno.serve(async (req: Request) => {
     const orderPayload = body?.orderPayload
     const total = Number(orderPayload?.total || 0)
     const preferredMethod = String(body?.preferredMethod || orderPayload?.payment_method || '')
+    const useCheckoutPro = Boolean(body?.useCheckoutPro)
 
-    console.log(`Processing request for user: ${restaurantUserId}, total: ${total}`)
+    console.log(`Processing request for user: ${restaurantUserId}, total: ${total}, method: ${preferredMethod}, pro: ${useCheckoutPro}`)
 
     if (!restaurantUserId || !orderPayload || !Number.isFinite(total) || total <= 0) {
       return ok({ ok: false, error: 'invalid_payload' })
@@ -195,7 +196,7 @@ Deno.serve(async (req: Request) => {
 
       console.log("Calling Mercado Pago API...")
       
-      if (preferredMethod === 'pix') {
+      if (preferredMethod === 'pix' && !useCheckoutPro) {
         const payerEmail = `${correlationID}@example.com`
         const callPayment = async (token: string) =>
           fetch('https://api.mercadopago.com/v1/payments', {
