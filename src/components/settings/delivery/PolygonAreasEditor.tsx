@@ -70,7 +70,7 @@ declare global {
   }
 }
 
-function loadGoogleMaps(key: string): Promise<void> {
+export function loadGoogleMaps(key: string): Promise<void> {
   if (window.google?.maps) return Promise.resolve()
   if (window.__boracumeGoogleMapsPromise) return window.__boracumeGoogleMapsPromise
 

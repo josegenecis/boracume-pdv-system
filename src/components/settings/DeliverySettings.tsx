@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
-import PolygonAreasEditor, { PolygonAreaDraft, GooglePolygonMap } from '@/components/settings/delivery/PolygonAreasEditor';
+import PolygonAreasEditor, { PolygonAreaDraft, GooglePolygonMap, loadGoogleMaps } from '@/components/settings/delivery/PolygonAreasEditor';
 import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 interface DeliveryZone {
@@ -91,6 +91,8 @@ const DeliverySettings = () => {
     free_shipping_max_distance: ''
   });
   
+  const [googleReady, setGoogleReady] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
   const [newZone, setNewZone] = useState({ name: '', delivery_fee: '', minimum_order: '', delivery_time: '30-45 min' });
   const [loading, setLoading] = useState(false);
@@ -105,30 +107,43 @@ const DeliverySettings = () => {
     }
   }, [user]);
 
-  // Carregar biblioteca Places para o autocomplete
+  // Carregar script do Google Maps de forma reativa para toda a tela
   useEffect(() => {
-    if (!googleKey) return;
+    if (!googleKey) {
+      setGoogleReady(false);
+      setGoogleError('Chave do Google Maps não configurada');
+      return;
+    }
+
+    let cancelled = false;
     
-    // Aproveitar a função já existente no PolygonAreasEditor ou criar uma nova injeção
-    const loadGooglePlaces = async () => {
-      try {
-        if (!window.google?.maps?.places) {
-          // Se o script principal do google maps já foi carregado sem places, 
-          // precisamos avisar o usuário que ele precisa recarregar a página 
-          // pois a Vercel acabou de atualizar o script base.
-          console.log("Aguardando Google Places API...");
-        }
-      } catch (e) {
-        console.error("Erro ao verificar Places API:", e);
-      }
+    // Tratamento global de erro de autenticação do Google
+    (window as any).gm_authFailure = () => {
+      if (cancelled) return;
+      setGoogleReady(false);
+      setGoogleError('Falha na autenticação do Google Maps (verifique restrições/billing).');
     };
-    
-    loadGooglePlaces();
+
+    loadGoogleMaps(googleKey)
+      .then(() => {
+        if (cancelled) return;
+        setGoogleReady(true);
+        setGoogleError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setGoogleReady(false);
+        setGoogleError(String(e?.message || 'Erro ao carregar script do Google Maps'));
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [googleKey]);
 
-  // Instanciar o Autocomplete
+  // Instanciar o Autocomplete apenas quando o Google estiver pronto
   useEffect(() => {
-    if (!window.google?.maps?.places) return;
+    if (!googleReady || !window.google?.maps?.places) return;
     
     const inputElement = document.getElementById('store-address-autocomplete') as HTMLInputElement;
     if (!inputElement) return;
@@ -160,7 +175,7 @@ const DeliverySettings = () => {
         window.google.maps.event.removeListener(listener);
       }
     };
-  }, [googleKey, window.google?.maps?.places]);
+  }, [googleReady]);
 
   const loadProfile = async () => {
     try {
@@ -880,7 +895,7 @@ const DeliverySettings = () => {
                 Prévia do raio
               </div>
               <div className="h-[500px] w-full">
-                {googleKey && window.google?.maps ? (
+                {googleReady && window.google?.maps ? (
                   <GooglePolygonMap
                     center={{ lat: storeLocation.lat, lng: storeLocation.lng }}
                     enabled={false}
@@ -890,23 +905,15 @@ const DeliverySettings = () => {
                     radiusMeters={radiusMeters}
                   />
                 ) : (
-                  <MapContainer
-                    center={[storeLocation.lat, storeLocation.lng]}
-                    zoom={radiusKm >= 8 ? 12 : radiusKm >= 4 ? 13 : 14}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <LeafletAutoResize />
-                    <Circle
-                      center={[storeLocation.lat, storeLocation.lng]}
-                      radius={radiusMeters || 0}
-                      pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 0.15, weight: 2 }}
-                    />
-                    <CircleMarker center={[storeLocation.lat, storeLocation.lng]} radius={6} pathOptions={{ color: '#003A2B', fillColor: '#003A2B', fillOpacity: 1 }} />
-                  </MapContainer>
+                  googleError ? (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-red-500 bg-red-50">
+                      {googleError}
+                    </div>
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground bg-gray-50">
+                      Carregando mapa...
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -1118,7 +1125,7 @@ const DeliverySettings = () => {
                   </div>
                 )}
                 
-                {googleKey && window.google?.maps ? (
+                {googleReady && window.google?.maps ? (
                   <div className="h-full w-full">
                     <GooglePolygonMap
                       center={storeLocation ? { lat: storeLocation.lat, lng: storeLocation.lng } : { lat: -15.793889, lng: -47.882778 }}
@@ -1130,30 +1137,15 @@ const DeliverySettings = () => {
                     />
                   </div>
                 ) : (
-                  <MapContainer
-                    center={storeLocation ? [storeLocation.lat, storeLocation.lng] : [-15.793889, -47.882778]}
-                    zoom={storeLocation ? 16 : 4}
-                    style={{ height: '100%', width: '100%' }}
-                    key={`store-map-${storeLocation?.lat || 0}-${storeLocation?.lng || 0}`}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <LeafletAutoResize />
-                    {storeLocation && (
-                      <CircleMarker 
-                        center={[storeLocation.lat, storeLocation.lng]} 
-                        radius={8} 
-                        pathOptions={{ color: '#F26522', fillColor: '#F26522', fillOpacity: 1, weight: 2 }} 
-                      />
-                    )}
-                    {/* Evento para mover o pino clicando no mapa */}
-                    <MapClickAdder 
-                      enabled={true} 
-                      onAdd={(p) => setStoreLocation({ lat: p.lat, lng: p.lng, formattedAddress: storeAddress })} 
-                    />
-                  </MapContainer>
+                  googleError ? (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-red-500 bg-red-50">
+                      {googleError}
+                    </div>
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground bg-gray-50">
+                      Carregando mapa...
+                    </div>
+                  )
                 )}
               </div>
               <p className="text-xs text-muted-foreground text-center">
