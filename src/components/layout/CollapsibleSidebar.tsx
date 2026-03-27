@@ -248,33 +248,7 @@ const CollapsibleSidebar = () => {
       }
     `}>
 
-      <div className={`p-2 border-b flex items-center ${isOpen ? 'justify-between px-3' : 'justify-center'}`}>
-        {isOpen && (
-           <div className="flex items-center gap-2 overflow-hidden mr-2 animate-in fade-in duration-300">
-             <Avatar className="h-8 w-8 border-2 border-boracume-orange/20 flex-shrink-0">
-               <AvatarImage src={profile?.logo_url} />
-               <AvatarFallback className="bg-boracume-orange/10 text-boracume-orange font-bold text-xs">
-                 {profile?.restaurant_name?.substring(0, 2).toUpperCase() || 'BC'}
-               </AvatarFallback>
-             </Avatar>
-             <div className="flex flex-col overflow-hidden min-w-0">
-               <span className="text-sm font-semibold truncate leading-tight text-gray-800" title={profile?.restaurant_name}>
-                 {profile?.restaurant_name || 'Seu Restaurante'}
-               </span>
-               {ifoodStatus && (
-                 <span className="text-[10px] flex items-center gap-1.5 text-muted-foreground leading-tight mt-0.5">
-                   <span className="relative flex h-2 w-2">
-                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${ifoodStatus === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></span>
-                      <span className={`relative inline-flex rounded-full h-2 w-2 ${ifoodStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                    </span>
-                   <IfoodLogo className="h-3 w-auto" />
-                   {ifoodStatus === 'online' ? 'ON' : 'OFF'}
-                 </span>
-               )}
-             </div>
-           </div>
-        )}
-
+      <div className={`p-2 border-b flex items-center justify-end`}>
         <Button
           variant="ghost"
           size="sm"
@@ -408,16 +382,29 @@ const CollapsibleSidebar = () => {
           {isOpen ? (
             <div className="space-y-2">
               <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-boracume-orange/10 text-boracume-orange font-semibold">
-                  {user?.email?.charAt(0).toUpperCase()}
-                </div>
+                <Avatar className="h-8 w-8 border-2 border-boracume-orange/20 flex-shrink-0">
+                  <AvatarImage src={profile?.logo_url} />
+                  <AvatarFallback className="bg-boracume-orange/10 text-boracume-orange font-bold text-xs">
+                    {profile?.restaurant_name?.substring(0, 2).toUpperCase() || 'BC'}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate" title={user?.email}>
+                  <p className="text-sm font-semibold text-gray-900 truncate" title={profile?.restaurant_name}>
+                    {profile?.restaurant_name || 'Seu Restaurante'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate" title={user?.email}>
                     {user?.email}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {profile?.restaurant_name || 'Usuário'}
-                  </p>
+                  {ifoodStatus && (
+                    <span className="text-[10px] flex items-center gap-1.5 text-muted-foreground leading-tight mt-0.5">
+                      <span className="relative flex h-2 w-2">
+                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${ifoodStatus === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                         <span className={`relative inline-flex rounded-full h-2 w-2 ${ifoodStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                       </span>
+                      <IfoodLogo className="h-3 w-auto" />
+                      {ifoodStatus === 'online' ? 'ON' : 'OFF'}
+                    </span>
+                  )}
                 </div>
               </div>
               <Button 
