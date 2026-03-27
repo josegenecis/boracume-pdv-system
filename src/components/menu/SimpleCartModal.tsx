@@ -109,8 +109,53 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const phoneLookupTimerRef = useRef<number | null>(null);
   const lastLookupDigitsRef = useRef<string>('');
+
+  // Setup Google Places Autocomplete para o endereço do cliente
+  useEffect(() => {
+    if (!isOpen || step !== 'checkout') return;
+    if (!window.google?.maps?.places) return;
+
+    const inputElement = addressInputRef.current;
+    if (!inputElement) return;
+
+    // Limpar listeners antigos se houver
+    google.maps.event.clearInstanceListeners(inputElement);
+
+    const autocomplete = new window.google.maps.places.Autocomplete(inputElement, {
+      types: ['address'],
+      componentRestrictions: { country: 'br' } // Restringir buscas ao Brasil
+    });
+
+    const listener = autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place.geometry?.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const formattedAddress = place.formatted_address;
+        
+        if (formattedAddress) {
+          setCustomerAddress(formattedAddress);
+          // Opcionalmente, podemos definir a localização GPS baseada no autocomplete
+          setLocation({
+            latitude: lat,
+            longitude: lng,
+            accuracy: 10, // precisão simulada alta
+            isLoading: false,
+            error: null
+          });
+        }
+      }
+    });
+
+    return () => {
+      if (listener) {
+        window.google.maps.event.removeListener(listener);
+      }
+    };
+  }, [isOpen, step, window.google?.maps?.places]);
 
   useEffect(() => {
     const fetchPaymentMethods = async () => {
@@ -845,12 +890,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               <Label htmlFor="address">Endereço completo *</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Textarea
+                <Input
                   id="address"
+                  ref={addressInputRef}
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
-                  placeholder="Rua, número, complemento, bairro"
-                  rows={2}
+                  placeholder="Rua, número, bairro, cidade"
                   className="pl-10"
                 />
               </div>

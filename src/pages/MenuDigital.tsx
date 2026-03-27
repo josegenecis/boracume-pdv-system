@@ -86,6 +86,18 @@ const MenuDigital = () => {
     error: menuError 
   } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
 
+  // Pré-carregar script do Google Maps se houver chave configurada e o usuário precisar usar mapas
+  const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
+  useEffect(() => {
+    if (!googleKey) return;
+    const mode = deliverySettings?.pricing?.mode;
+    if (mode === 'distance_km' || mode === 'radius_km' || mode === 'polygon') {
+      import('@/components/settings/delivery/PolygonAreasEditor').then(({ loadGoogleMaps }) => {
+        loadGoogleMaps(googleKey).catch(console.error);
+      });
+    }
+  }, [googleKey, deliverySettings]);
+
   useEffect(() => {
     const name = String(profile?.restaurant_name || '').trim();
     if (!name) return;
