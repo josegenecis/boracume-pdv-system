@@ -57,7 +57,7 @@ const FixedHeader = () => {
           >
             <Menu size={18} />
           </Button>
-          <Logo size="sm" />
+          <Logo size="md" />
         </div>
 
         <div className="hidden md:flex flex-1 px-4 justify-center items-center gap-4">

@@ -37,6 +37,8 @@ import Loyalty from '@/pages/Loyalty';
 import BairrosEntrega from '@/pages/BairrosEntrega';
 import Entregadores from '@/pages/Entregadores';
 import Garcons from '@/pages/Garcons';
+import Ingredientes from '@/pages/Ingredientes';
+import InteligenciaCMV from '@/pages/InteligenciaCMV';
 import NFCe from '@/pages/NFCe';
 import Financeiro from '@/pages/Financeiro';
 import Despesas from '@/pages/Despesas';
@@ -127,6 +129,9 @@ function AppContent() {
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/produtos" element={<Products />} />
+          <Route path="/estoque" element={<Ingredientes />} />
+          <Route path="/inteligencia/cmv" element={<InteligenciaCMV />} />
+          <Route path="/inteligencia/curva-abc" element={<InteligenciaCMV />} />
           <Route path="/pedidos" element={<Orders />} />
           <Route path="/orders" element={<Navigate to="/pedidos" replace />} />
           <Route path="/cozinha" element={<Kitchen />} />
