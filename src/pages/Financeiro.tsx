@@ -746,7 +746,7 @@ const Financeiro = () => {
       </Card>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-boracume-green bg-boracume-green/10">
+        <Card className="border-t-4 border-t-boracume-green shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <ArrowUp className="h-5 w-5 text-boracume-green" />
@@ -761,7 +761,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="border-l-4 border-l-boracume-orange bg-boracume-orange/10">
+        <Card className="border-t-4 border-t-boracume-orange shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <ArrowDown className="h-5 w-5 text-boracume-orange" />
@@ -776,7 +776,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="border-l-4 border-l-boracume-dark-green bg-boracume-dark-green/5">
+        <Card className="border-t-4 border-t-boracume-dark-green shadow-sm bg-boracume-green/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-boracume-dark-green" />

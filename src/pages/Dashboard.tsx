@@ -304,37 +304,37 @@ const Dashboard = () => {
           value={formatCurrency(stats.todaySales)} 
           description={`${stats.todayOrders} pedidos realizados`}
           icon={<CreditCard className="text-boracume-green" />}
-          className="border-l-boracume-green"
+          className="border-t-boracume-green"
           trend={getStatsTrend(stats.todaySales, 'sales')}
         />
         <StatsCard 
           title="Ticket Médio" 
           value={formatCurrency(stats.averageTicket)} 
           description="Por pedido hoje"
-          icon={<TrendingUp className="text-blue-500" />}
-          className="border-l-blue-500"
+          icon={<TrendingUp className="text-boracume-orange" />}
+          className="border-t-boracume-orange"
         />
         <StatsCard 
           title="Despesas Mês" 
           value={formatCurrency(stats.monthlyExpenses)} 
           description="Total de custos"
           icon={<DollarSign className="text-red-500" />}
-          className="border-l-red-500"
+          className="border-t-red-500"
         />
         <StatsCard 
           title="Novos Clientes" 
           value={stats.newCustomers.toString()} 
           description={`Total: ${stats.totalCustomers} clientes`}
-          icon={<Users className="text-purple-500" />}
-          className="border-l-purple-500"
+          icon={<Users className="text-blue-500" />}
+          className="border-t-blue-500"
           trend={getStatsTrend(stats.newCustomers, 'customers')}
         />
         <StatsCard 
           title="Produtos Vendidos" 
           value={stats.productsSold.toString()} 
           description="Unidades hoje"
-          icon={<Package className="text-amber-500" />}
-          className="border-l-amber-500"
+          icon={<Package className="text-purple-500" />}
+          className="border-t-purple-500"
         />
       </div>
       

@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
-import TableAccountManager from '@/components/pdv/TableAccountManager';
+import TableManager from '@/components/tables/TableManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
@@ -1953,9 +1953,9 @@ const PDV = () => {
           </Sheet>
         </TabsContent>
 
-        <TabsContent value="accounts" className="flex-1 overflow-y-auto p-4 mt-0">
-          <TableAccountManager onFinalize={handleTableFinalization} />
-        </TabsContent>
+          <TabsContent value="accounts" className="flex-1 overflow-y-auto p-4 mt-0">
+            <TableManager />
+          </TabsContent>
       </Tabs>
 
       {selectedProduct && (

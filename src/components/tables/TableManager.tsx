@@ -181,13 +181,13 @@ const TableManager: React.FC = () => {
   const getBorderColor = (status: string) => {
     switch (status) {
       case 'available':
-        return 'border-l-boracume-green';
+        return 'border-t-boracume-green';
       case 'occupied':
-        return 'border-l-red-500';
+        return 'border-t-red-500';
       case 'reserved':
-        return 'border-l-boracume-orange';
+        return 'border-t-boracume-orange';
       default:
-        return 'border-l-gray-300';
+        return 'border-t-gray-300';
     }
   };
 
@@ -286,7 +286,7 @@ const TableManager: React.FC = () => {
         {tables.map((table) => (
           <Card 
             key={table.id} 
-            className={`hover:shadow-md transition-all duration-200 cursor-pointer border-l-4 ${getBorderColor(table.status)}`}
+            className={`hover:shadow-md transition-all duration-200 cursor-pointer border-t-4 ${getBorderColor(table.status)}`}
             onClick={() => handleTableClick(table)}
           >
             <CardHeader className="pb-2">

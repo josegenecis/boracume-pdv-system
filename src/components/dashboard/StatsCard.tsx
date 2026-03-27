@@ -23,7 +23,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
   className,
 }) => {
   return (
-    <Card className={`w-full min-w-0 transition-all duration-200 hover:shadow-md border-l-4 ${className || 'border-l-boracume-orange'}`}>
+    <Card className={`w-full min-w-0 transition-all duration-200 hover:shadow-md border-t-4 ${className || 'border-t-boracume-orange'}`}>
       <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
         <CardTitle className="text-sm font-medium text-muted-foreground truncate pr-2">
           {title}
