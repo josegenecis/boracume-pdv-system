@@ -1298,75 +1298,74 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </Tabs>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light mt-3">
           <div className="space-y-1">
-            <Label htmlFor="stock_quantity" className="text-boracume-orange">Estoque</Label>
+            <Label htmlFor="stock_quantity" className="text-boracume-dark-green font-semibold">Estoque</Label>
             <Input
               id="stock_quantity"
               type="number"
               value={String(formData.stock_quantity ?? 0)}
               onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
-              className="border-boracume-orange"
+              className="bg-white rounded-xl h-11"
               disabled={!formData.track_stock}
               min={0}
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="low_stock_threshold">Estoque mín.</Label>
+            <Label htmlFor="low_stock_threshold" className="text-boracume-dark-green font-semibold">Estoque mín.</Label>
             <Input
               id="low_stock_threshold"
               type="number"
               value={String(formData.low_stock_threshold ?? 0)}
               onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+              className="bg-white rounded-xl h-11"
               disabled={!formData.track_stock}
               min={0}
             />
           </div>
+          <div className="col-span-2 flex items-center justify-between pt-2 border-t border-gray-100">
+            <div className="text-sm font-semibold text-boracume-dark-green">Controle de estoque ativo</div>
+            <Switch
+              id="track_stock"
+              checked={formData.track_stock}
+              onCheckedChange={async (checked) => {
+                if (checked) {
+                  const ok = await checkStockSchema();
+                  if (!ok) return;
+                }
+                setFormData(prev => ({ ...prev, track_stock: checked }));
+              }}
+              disabled={false}
+            />
+          </div>
+          {!stockSchemaSupported && (
+            <div className="col-span-2 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+              Controle de estoque ainda não está habilitado no banco.
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Custo</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Custo</Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
+          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
         </div>
 
-        <div className="flex items-center justify-between py-2 border-t">
-          <div className="text-sm font-semibold">Controle de estoque</div>
-          <Switch
-            id="track_stock"
-            checked={formData.track_stock}
-            onCheckedChange={async (checked) => {
-              if (checked) {
-                const ok = await checkStockSchema();
-                if (!ok) return;
-              }
-              setFormData(prev => ({ ...prev, track_stock: checked }));
-            }}
-            disabled={false}
-          />
-        </div>
-
-        {!stockSchemaSupported && (
-          <div className="text-sm text-red-600 border rounded-lg p-3">
-            Controle de estoque ainda não está habilitado no banco.
-          </div>
-        )}
-
-        <div className="space-y-3 border-t pt-3">
+        <div className="space-y-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold">Adicionar variações</div>
-              <Badge variant="secondary">{selectedVariations.length}</Badge>
+              <div className="text-sm font-semibold text-boracume-dark-green">Adicionar variações</div>
+              <Badge variant="secondary" className="bg-boracume-dark-green text-white">{selectedVariations.length}</Badge>
             </div>
-            <Button type="button" variant="outline" size="icon" onClick={() => setVariationsDialogOpen(true)} className="h-9 w-9">
+            <Button type="button" variant="outline" size="icon" onClick={() => setVariationsDialogOpen(true)} className="h-9 w-9 rounded-xl border-boracume-green text-boracume-orange hover:bg-boracume-green/10">
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <div className="text-xs text-muted-foreground">Ingredientes, sabores, talheres...</div>
+          <div className="text-xs text-gray-500">Ingredientes, sabores, talheres...</div>
 
           {selectedVariations.length === 0 ? (
-            <div className="text-sm text-muted-foreground border rounded-lg p-3">
+            <div className="text-sm text-gray-400 bg-white border border-dashed border-gray-200 rounded-xl p-4 text-center">
               Nenhuma variação selecionada.
             </div>
           ) : (
@@ -1376,7 +1375,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   <div 
                     {...provided.droppableProps}
                     ref={provided.innerRef}
-                    className="border rounded-lg divide-y"
+                    className="border border-gray-100 rounded-xl divide-y overflow-hidden"
                   >
                     {selectedVariations.map((id, index) => {
                       const v = globalVariations.find((gv: any) => gv.id === id);
@@ -1500,8 +1499,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </DialogContent>
         </Dialog>
 
-        <div className="space-y-2">
-          <Label htmlFor="category">Categoria</Label>
+        <div className="space-y-2 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+          <Label htmlFor="category" className="text-boracume-dark-green font-semibold">Categoria</Label>
           <div className="flex gap-2">
             <Select 
               value={formData.category} 
@@ -1514,7 +1513,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 }));
               }}
             >
-              <SelectTrigger className="flex-1">
+              <SelectTrigger className="flex-1 bg-white rounded-xl h-11 border-gray-200">
                 <SelectValue placeholder="Selecione uma categoria" />
               </SelectTrigger>
               <SelectContent>
@@ -1528,8 +1527,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             
             <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
               <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="icon">
-                  <Plus className="h-4 w-4" />
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-boracume-green text-boracume-orange hover:bg-boracume-green/10">
+                  <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -1577,14 +1576,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-2">
+        <div className="grid grid-cols-2 gap-4 pt-4 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
           <div className="flex items-center space-x-2">
             <Switch
               id="available"
               checked={formData.available}
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: checked }))}
             />
-            <Label htmlFor="available">Disponível</Label>
+            <Label htmlFor="available" className="font-medium text-boracume-dark-green">Disponível</Label>
           </div>
 
           <div className="flex items-center space-x-2">
@@ -1593,25 +1592,25 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               checked={formData.show_in_delivery}
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
             />
-            <Label htmlFor="show_in_delivery">Mostrar no delivery</Label>
+            <Label htmlFor="show_in_delivery" className="font-medium text-boracume-dark-green">Mostrar no delivery</Label>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 col-span-2">
             <Switch
               id="is_highlight"
               checked={!!formData.is_highlight}
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_highlight: checked }))}
               disabled={isUnsupported('is_highlight')}
             />
-            <Label htmlFor="is_highlight">Adicionar aos destaques</Label>
+            <Label htmlFor="is_highlight" className="font-medium text-boracume-dark-green">Adicionar aos destaques</Label>
           </div>
         </div>
 
-        <div className="flex gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={onCancel}>
+        <div className="flex gap-3 pt-6 pb-2">
+          <Button type="button" variant="outline" onClick={onCancel} className="flex-1 rounded-xl h-12 text-boracume-dark-green border-gray-200">
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading} className="flex-1 rounded-xl font-bold h-12 text-white bg-boracume-green hover:bg-boracume-green/90 transition-transform hover:scale-[1.02]">
             {loading ? 'Salvando...' : 'Salvar Produto'}
           </Button>
         </div>

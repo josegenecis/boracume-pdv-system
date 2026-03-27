@@ -1299,7 +1299,7 @@ const DeliverySettings = () => {
       </div>
 
       <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
-        <SheetContent side="right" className={`w-full ${editorMode === 'polygon' || editorMode === 'radius_km' || editorMode === 'neighborhood' ? 'sm:max-w-[100vw] md:max-w-[90vw] lg:max-w-[1200px] xl:max-w-[1400px]' : 'sm:max-w-xl'} overflow-auto`}>
+        <SheetContent side="right" className={`w-full ${editorMode === 'polygon' || editorMode === 'radius_km' || editorMode === 'neighborhood' ? 'sm:max-w-[100vw] md:max-w-[90vw] lg:max-w-[1200px] xl:max-w-[1400px]' : 'sm:max-w-xl'} overflow-auto bg-boracume-light`}>
           <SheetHeader className="mb-4">
             <SheetTitle>Editar: {pricingCards.find((c) => c.id === editorMode)?.title || 'Delivery'}</SheetTitle>
           </SheetHeader>
