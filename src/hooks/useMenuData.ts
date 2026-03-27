@@ -54,6 +54,7 @@ type MenuPayload = {
   categories: Category[];
   profile: RestaurantProfile | null;
   deliveryZones: DeliveryZone[];
+  deliverySettings: any;
 };
 
 interface MenuData {
@@ -62,6 +63,7 @@ interface MenuData {
   highlights: Product[];
   profile: RestaurantProfile | null;
   deliveryZones: DeliveryZone[];
+  deliverySettings: any;
   isLoading: boolean;
   error: string | null;
 }
@@ -106,7 +108,7 @@ function writeCache(userId: string, data: MenuPayload) {
 async function fetchMenuData(userId: string): Promise<MenuPayload> {
   const span = perfStart('menu.data.fetch', { userId });
   try {
-    const [{ data: profileArr, error: profileError }, { data: categoriesData, error: categoriesError }, { data: deliveryZonesData, error: deliveryZonesError }] =
+    const [{ data: profileArr, error: profileError }, { data: categoriesData, error: categoriesError }, { data: deliveryZonesData, error: deliveryZonesError }, { data: deliverySettingsData }] =
       await Promise.all([
         supabase
           .from('profiles')
@@ -123,7 +125,12 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
           .select('id, name, delivery_fee, minimum_order, delivery_time, active')
           .eq('user_id', userId)
           .eq('active', true)
-          .order('name', { ascending: true }) as any
+          .order('name', { ascending: true }) as any,
+        supabase
+          .from('delivery_settings')
+          .select('delivery_areas')
+          .eq('user_id', userId)
+          .maybeSingle() as any
       ]);
 
     let productsData: any[] | null = null;
@@ -176,7 +183,8 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
       products: (productsData || []) as any,
       categories: (categoriesData || []) as any,
       profile,
-      deliveryZones: (deliveryZonesData || []) as any
+      deliveryZones: (deliveryZonesData || []) as any,
+      deliverySettings: deliverySettingsData?.delivery_areas || null
     };
   } finally {
     span.end();
@@ -322,7 +330,7 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     };
   }, [userId, queryClient]);
 
-  const payload = query.data || { products: [], categories: [], profile: null, deliveryZones: [] };
+  const payload = query.data || { products: [], categories: [], profile: null, deliveryZones: [], deliverySettings: null };
 
   const highlights = useMemo(() => {
     return (payload.products || [])
@@ -345,6 +353,7 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     highlights,
     profile: payload.profile,
     deliveryZones: payload.deliveryZones || [],
+    deliverySettings: payload.deliverySettings || null,
     isLoading,
     error
   };

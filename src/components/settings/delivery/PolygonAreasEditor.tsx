@@ -104,6 +104,17 @@ export function GooglePolygonMap(props: {
   const enabledRef = useRef<boolean>(props.enabled)
   enabledRef.current = props.enabled
 
+  const [isDrawing, setIsDrawing] = useState(props.points.length < 3)
+  const isDrawingRef = useRef(isDrawing)
+  isDrawingRef.current = isDrawing
+
+  // Se a área for limpa, volta ao modo de desenho
+  useEffect(() => {
+    if (props.points.length === 0) {
+      setIsDrawing(true)
+    }
+  }, [props.points.length])
+
   useEffect(() => {
     if (!containerRef.current) return
     if (mapRef.current) return
@@ -148,7 +159,7 @@ export function GooglePolygonMap(props: {
     localOnAddPointRef.current = props.onAddPoint
 
     mapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
-      if (!enabledRef.current) return
+      if (!enabledRef.current || !isDrawingRef.current) return
       const lat = e.latLng?.lat()
       const lng = e.latLng?.lng()
       if (typeof lat !== 'number' || typeof lng !== 'number') return
@@ -248,26 +259,39 @@ export function GooglePolygonMap(props: {
     polygonRef.current.setPaths(path)
 
     markersRef.current = props.points.map(
-      (p) =>
-        new g.maps.Marker({
+      (p, i) => {
+        const isFirstPoint = i === 0;
+        const marker = new g.maps.Marker({
           position: { lat: p.lat, lng: p.lng },
           map: mapRef.current!,
-          clickable: false,
+          clickable: isFirstPoint && isDrawingRef.current,
+          title: isFirstPoint && isDrawingRef.current ? 'Clique para fechar a área' : undefined,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 5,
+            scale: isFirstPoint && isDrawingRef.current ? 7 : 5, // Make the first point slightly larger to indicate it can be clicked
             fillColor: '#f97316',
             fillOpacity: 1,
-            strokeColor: '#ffffff',
+            strokeColor: isFirstPoint && isDrawingRef.current ? '#000000' : '#ffffff',
             strokeWeight: 2,
           }
-        })
+        });
+
+        if (isFirstPoint && isDrawingRef.current) {
+          marker.addListener('click', () => {
+            if (props.points.length >= 3) {
+              setIsDrawing(false);
+            }
+          });
+        }
+
+        return marker;
+      }
     )
-  }, [props.points])
+  }, [props.points, isDrawing])
 
   // Draw line to mouse
   useEffect(() => {
-    if (!mapRef.current || !polygonRef.current || !props.enabled) return
+    if (!mapRef.current || !polygonRef.current || !props.enabled || !isDrawing) return
     const g = window.google
     if (!g?.maps) return
 
@@ -408,6 +432,7 @@ export default function PolygonAreasEditor(props: {
         {googleKey ? (
           googleReady ? (
             <GooglePolygonMap
+              key={props.selectedId || 'unselected'}
               center={{ lat: center[0], lng: center[1] }}
               enabled={!!selected}
               points={selected?.points || []}
@@ -520,7 +545,7 @@ export default function PolygonAreasEditor(props: {
                         <Input className="h-8 text-sm rounded-lg bg-white" value={a.delivery_time} onChange={(e) => updateSelected({ delivery_time: e.target.value })} placeholder="Ex: 30-45 min" />
                       </div>
                       <div className="text-[11px] text-boracume-orange bg-boracume-orange/10 p-2 rounded-lg text-center font-medium">
-                        Clique no mapa para desenhar os limites (mín. 3 pontos)
+                        Clique no mapa para desenhar. Clique no 1º ponto para fechar a área.
                       </div>
                     </div>
                   )}

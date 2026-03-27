@@ -80,7 +80,8 @@ const MenuDigital = () => {
     categories, 
     highlights, 
     profile, 
-    deliveryZones, 
+    deliveryZones,
+    deliverySettings,
     isLoading: menuLoading,
     error: menuError 
   } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
@@ -674,6 +675,7 @@ const MenuDigital = () => {
         onRemoveItem={removeFromCart}
         onPlaceOrder={handlePlaceOrder}
         deliveryZones={deliveryZones}
+        deliverySettings={deliverySettings}
         userId={finalUserId}
       />
 

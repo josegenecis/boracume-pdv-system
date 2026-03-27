@@ -46,6 +46,7 @@ interface SimpleCartModalProps {
   onRemoveItem: (uniqueId: string) => void;
   onPlaceOrder: (orderData: any) => void;
   deliveryZones?: any[];
+  deliverySettings?: any;
   userId: string;
 }
 
@@ -58,6 +59,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   onRemoveItem,
   onPlaceOrder,
   deliveryZones = [],
+  deliverySettings = null,
   userId
 }) => {
   const formatBRL = (value: number) =>
@@ -225,7 +227,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
   const quoteMode = String(deliveryQuote?.mode || '');
   const quoteZone = deliveryQuote?.zone || null;
-  const deliveryFee = deliveryZoneId !== '' ? (selectedZone?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
+  const storePricingMode = deliverySettings?.pricing?.mode || 'neighborhood';
+  const showNeighborhoodSelect = storePricingMode === 'neighborhood';
+  
+  // O valor da entrega depende do modo configurado na loja
+  let deliveryFee = 0;
+  if (showNeighborhoodSelect) {
+    deliveryFee = deliveryZoneId !== '' ? (selectedZone?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
+  } else if (deliveryQuote?.ok && typeof deliveryQuote.fee === 'number') {
+    deliveryFee = deliveryQuote.fee;
+  } else if (storePricingMode === 'fixed') {
+    deliveryFee = Number(deliverySettings?.pricing?.fixed?.fee || 0);
+  } else if (storePricingMode === 'free') {
+    deliveryFee = 0;
+  }
   // Calcular taxa extra como percentual, igual ao CheckoutModal
   const computedExtraFee = selectedPaymentMethod && selectedPaymentMethod.extra_fee_percent > 0 ? (total + deliveryFee) * (selectedPaymentMethod.extra_fee_percent / 100) : 0;
   
@@ -873,7 +888,31 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               </p>
             </div>
 
-            {quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
+            {!showNeighborhoodSelect ? (
+              <div className="p-3 border rounded-lg bg-gray-50">
+                <div className="text-sm font-medium">Frete da entrega</div>
+                {deliveryQuote?.ok ? (
+                  <div className="text-sm text-muted-foreground mt-1">
+                    <span className="font-bold text-gray-900">{deliveryFee === 0 ? 'Grátis' : `R$ ${deliveryFee.toFixed(2)}`}</span>
+                    {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
+                    {deliveryQuote?.zone?.name ? ` • ${deliveryQuote.zone.name}` : ''}
+                  </div>
+                ) : storePricingMode === 'free' ? (
+                  <div className="text-sm text-green-600 font-bold mt-1">Grátis</div>
+                ) : storePricingMode === 'fixed' ? (
+                  <div className="text-sm text-muted-foreground mt-1">Fixo: R$ {deliveryFee.toFixed(2)}</div>
+                ) : (
+                  <div className="text-sm text-orange-600 mt-1 flex items-center gap-1">
+                    {isDetectingZone ? 'Calculando valor...' : 'Preencha o endereço completo para calcular o frete'}
+                  </div>
+                )}
+                {detectZoneError && !isDetectingZone && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+                    ❌ {detectZoneError}
+                  </div>
+                )}
+              </div>
+            ) : quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
               <div className="p-3 border rounded-lg bg-gray-50">
                 <div className="text-sm font-medium">Frete calculado automaticamente</div>
                 <div className="text-sm text-muted-foreground">
