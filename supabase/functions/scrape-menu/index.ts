@@ -372,7 +372,10 @@ Deno.serve(async (req: Request) => {
                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
                );
              }
-             const categories = consolidateVariantsAndCategories(await aiStructurize(text, GEMINI_API_KEY, GEMINI_MODEL));
+             const structuredResult = await aiStructurize(text, GEMINI_API_KEY, GEMINI_MODEL);
+             console.log('[ScrapeMenu] aiStructurize result:', JSON.stringify(structuredResult).substring(0, 200));
+             const categories = consolidateVariantsAndCategories(structuredResult);
+             console.log('[ScrapeMenu] consolidated categories:', JSON.stringify(categories).substring(0, 200));
              if (!categories || categories.length === 0) {
                return new Response(
                  JSON.stringify({ success: false, status: 'failed', error: 'Não foi possível estruturar o cardápio a partir do texto.' }),
