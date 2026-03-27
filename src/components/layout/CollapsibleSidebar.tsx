@@ -29,7 +29,7 @@ import {
   Bot,
   User,
   LogOut,
-
+  Package,
   Download,
   Megaphone,
   X
