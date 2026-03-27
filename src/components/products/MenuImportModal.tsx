@@ -321,7 +321,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       } 
       else if (activeTab === 'link') {
         // 1. Iniciar Job (Async)
-        setLoadingMessage('Conectando ao iFood...');
+        setLoadingMessage('Extraindo dados...');
         const { data: startData, status: startStatus } = await invokeEdgeFunction('scrape-menu', { 
             type: 'url', 
             data: urlInput,
@@ -338,9 +338,11 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         if (runId) {
             console.log('[Import] Job iniciado. RunID:', runId);
             categoriesToImport = await pollForResults(runId);
+        } else if (startData.categories && startData.categories.length > 0) {
+            // Fallback imediato se não precisar de polling
+            categoriesToImport = startData.categories;
         } else {
-            // Fallback para caso não tenha retornado runId (ex: imagem ou erro)
-            categoriesToImport = startData.categories || [];
+            throw new Error('Não foi possível extrair o cardápio. Verifique se o link está correto e público.');
         }
       }
       else if (activeTab === 'image') {
