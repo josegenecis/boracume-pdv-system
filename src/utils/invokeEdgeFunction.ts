@@ -5,7 +5,10 @@ export const invokeEdgeFunction = async (
   body: unknown,
   options?: { timeoutMs?: number }
 ): Promise<{ data: any | null; status: number }> => {
-  console.log(`[EdgeFunction] Invoking ${functionName}...`);
+  // GARANTIR TRAILING SLASH PARA EVITAR REDIRECIONAMENTO 307 DO SUPABASE (CAUSA ERRO CORS)
+  const functionPath = functionName.endsWith('/') ? functionName : `${functionName}/`;
+  
+  console.log(`[EdgeFunction] Invoking ${functionPath}...`);
   const startTime = Date.now();
 
   try {
@@ -13,7 +16,7 @@ export const invokeEdgeFunction = async (
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const invokePromise = supabase.functions.invoke(functionName, {
+    const invokePromise = supabase.functions.invoke(functionPath, {
       body: body,
       // @ts-ignore
       signal: controller.signal
