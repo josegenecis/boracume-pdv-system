@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Plus, Trash2, Save, Map, Pencil, X } from 'lucide-react';
+import { MapPin, Plus, Trash2, Save, Map, Pencil, X, Users } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import PolygonAreasEditor, { PolygonAreaDraft, GooglePolygonMap, loadGoogleMaps } from '@/components/settings/delivery/PolygonAreasEditor';
 import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
@@ -98,6 +99,7 @@ const DeliverySettings = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (user) {
@@ -1056,6 +1058,17 @@ const DeliverySettings = () => {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+        <div>
+          <h3 className="font-semibold text-gray-900">Equipe de Entregadores</h3>
+          <p className="text-sm text-gray-500">Gerencie sua equipe de entregadores e motoboys</p>
+        </div>
+        <Button onClick={() => navigate('/entregadores')} variant="outline" className="gap-2">
+          <Users size={16} />
+          Gerenciar Equipe
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1286,7 +1299,7 @@ const DeliverySettings = () => {
       </div>
 
       <Sheet open={editorOpen} onOpenChange={setEditorOpen}>
-        <SheetContent side="right" className={`w-full ${editorMode === 'polygon' || editorMode === 'radius_km' ? 'sm:max-w-[100vw] md:max-w-[90vw] lg:max-w-[1200px] xl:max-w-[1400px]' : 'sm:max-w-xl'} overflow-auto`}>
+        <SheetContent side="right" className={`w-full ${editorMode === 'polygon' || editorMode === 'radius_km' || editorMode === 'neighborhood' ? 'sm:max-w-[100vw] md:max-w-[90vw] lg:max-w-[1200px] xl:max-w-[1400px]' : 'sm:max-w-xl'} overflow-auto`}>
           <SheetHeader className="mb-4">
             <SheetTitle>Editar: {pricingCards.find((c) => c.id === editorMode)?.title || 'Delivery'}</SheetTitle>
           </SheetHeader>

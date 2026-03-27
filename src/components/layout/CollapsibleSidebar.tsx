@@ -128,15 +128,6 @@ const CollapsibleSidebar = () => {
       ]
     },
     {
-      id: 'entrega',
-      icon: MapPin,
-      label: 'Entrega',
-      items: [
-        { to: '/entregadores', label: 'Entregadores' },
-        { to: '/bairros-entrega', label: 'Bairros de entrega' },
-      ]
-    },
-    {
       id: 'relatorios',
       icon: BarChart3,
       label: 'Relatórios',
