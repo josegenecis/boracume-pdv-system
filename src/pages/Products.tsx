@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -496,6 +496,137 @@ const Products = () => {
     }).format(value);
   };
 
+  const handleExportCSV = () => {
+    if (products.length === 0) {
+      toast({ title: 'Aviso', description: 'Não há produtos para exportar.' });
+      return;
+    }
+    
+    const headers = ['name', 'price', 'category', 'description', 'image_url', 'available'];
+    const csvContent = [
+      headers.join(','),
+      ...products.map(p => {
+        return [
+          `"${(p.name || '').replace(/"/g, '""')}"`,
+          p.price,
+          `"${(p.category || 'Geral').replace(/"/g, '""')}"`,
+          `"${(p.description || '').replace(/"/g, '""')}"`,
+          `"${(p.image_url || '').replace(/"/g, '""')}"`,
+          p.available ? 'TRUE' : 'FALSE'
+        ].join(',');
+      })
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `produtos_boracume_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsLoading(true);
+      const text = await file.text();
+      const lines = text.split('\n');
+      
+      if (lines.length < 2) throw new Error('O arquivo parece estar vazio.');
+      
+      const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+      const nameIdx = headers.indexOf('name');
+      const priceIdx = headers.indexOf('price');
+      
+      if (nameIdx === -1 || priceIdx === -1) {
+        throw new Error('O arquivo deve conter as colunas "name" e "price". Use o botão de Exportar para pegar o modelo.');
+      }
+
+      const categoryIdx = headers.indexOf('category');
+      const descIdx = headers.indexOf('description');
+      const imgIdx = headers.indexOf('image_url');
+      const availIdx = headers.indexOf('available');
+
+      const toInsert = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        
+        // Simples parser de CSV considerando aspas
+        const values = [];
+        let inQuotes = false;
+        let currentVal = '';
+        
+        for (let char of lines[i]) {
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            values.push(currentVal);
+            currentVal = '';
+          } else {
+            currentVal += char;
+          }
+        }
+        values.push(currentVal);
+
+        const name = values[nameIdx]?.trim().replace(/^"|"$/g, '');
+        const price = parseFloat(values[priceIdx]?.trim() || '0');
+        
+        if (!name || isNaN(price)) continue;
+
+        let catName = categoryIdx !== -1 ? values[categoryIdx]?.trim().replace(/^"|"$/g, '') : 'Geral';
+        if (!catName) catName = 'Geral';
+        
+        // Encontra ou cria categoria
+        let catObj = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+        let catId = catObj?.id;
+        
+        if (!catId) {
+          const { data: newCat } = await supabase
+            .from('product_categories')
+            .insert({ name: catName, user_id: activeUserIdSync })
+            .select()
+            .single();
+            
+          if (newCat) {
+            catId = newCat.id;
+            setCategories(prev => [...prev, newCat]);
+          }
+        }
+
+        toInsert.push({
+          user_id: activeUserIdSync,
+          name,
+          price,
+          category: catName,
+          category_id: catId,
+          description: descIdx !== -1 ? values[descIdx]?.trim().replace(/^"|"$/g, '') : '',
+          image_url: imgIdx !== -1 ? values[imgIdx]?.trim().replace(/^"|"$/g, '') : null,
+          available: availIdx !== -1 ? (values[availIdx]?.trim().toUpperCase() === 'TRUE') : true,
+          show_in_pdv: true,
+          show_in_delivery: true
+        });
+      }
+
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from('products').insert(toInsert);
+        if (error) throw error;
+        toast({ title: 'Sucesso', description: `${toInsert.length} produtos importados!` });
+        fetchData();
+      } else {
+        toast({ title: 'Aviso', description: 'Nenhum produto válido encontrado no arquivo.', variant: 'destructive' });
+      }
+
+    } catch (err: any) {
+      toast({ title: 'Erro na importação', description: err.message || 'Falha ao processar arquivo.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+      // Reseta o input
+      event.target.value = '';
+    }
+  };
+
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
@@ -516,9 +647,28 @@ const Products = () => {
           <h1 className="text-2xl font-bold">Produtos</h1>
         </div>
         <div>
+          <Button variant="outline" onClick={handleExportCSV} className="mr-2 hidden md:inline-flex">
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+          
+          <div className="hidden md:inline-block relative mr-2">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleImportCSV}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              title="Importar CSV"
+            />
+            <Button variant="outline">
+              <Upload className="h-4 w-4 mr-2" />
+              Importar CSV
+            </Button>
+          </div>
+
           <Button variant="outline" onClick={() => setShowImportModal(true)} className="mr-2">
             <Import className="h-4 w-4 mr-2" />
-            Importar
+            Importar IA
           </Button>
           <Button onClick={() => {
             setEditingProduct(null);
