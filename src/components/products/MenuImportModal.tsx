@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2 } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -286,6 +286,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         toast({ title: 'Atenção', description: 'Cole o texto do cardápio.', variant: 'destructive' });
         return;
     }
+    if (activeTab === 'json' && !textInput.trim()) {
+        toast({ title: 'Atenção', description: 'Cole o JSON do cardápio.', variant: 'destructive' });
+        return;
+    }
     if (activeTab === 'link' && !urlInput.trim()) {
         toast({ title: 'Atenção', description: 'Insira um link válido.', variant: 'destructive' });
         return;
@@ -319,6 +323,27 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           categoriesToImport = data.categories || [];
         }
       } 
+      else if (activeTab === 'json') {
+        setLoadingMessage('Validando JSON...');
+        try {
+          const parsed = JSON.parse(textInput);
+          // Aceitar tanto o formato do Apify antigo quanto o formato direto
+          categoriesToImport = Array.isArray(parsed) ? parsed : (parsed.categories || []);
+          
+          if (!Array.isArray(categoriesToImport)) {
+            throw new Error('O JSON deve ser uma lista (array) de categorias.');
+          }
+
+          // Converter o formato sugerido pelo seu amigo {"products": []} para o formato interno do sistema {"items": []}
+          categoriesToImport = categoriesToImport.map(cat => ({
+             name: cat.category || cat.name || 'Geral',
+             items: Array.isArray(cat.products) ? cat.products : (Array.isArray(cat.items) ? cat.items : [])
+          }));
+
+        } catch (e) {
+          throw new Error('Formato JSON inválido. Verifique se copiou corretamente.');
+        }
+      }
       else if (activeTab === 'link') {
         // 1. Iniciar Job (Async)
         setLoadingMessage('Extraindo dados...');
@@ -513,7 +538,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     user_id: user?.id,
                     name: product.name,
                     price: effectiveBasePrice,
-                    description: product.description || '',
+                    description: product.description ? product.description.toLowerCase() : '',
                     image_url: normalizedImageUrl,
                     category: category.name || 'Geral',
                     category_id: categoryId,
@@ -636,10 +661,11 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="text"><Type className="w-4 h-4 mr-2" /> Texto</TabsTrigger>
             <TabsTrigger value="link"><LinkIcon className="w-4 h-4 mr-2" /> Link</TabsTrigger>
-            <TabsTrigger value="image"><Upload className="w-4 h-4 mr-2" /> Imagem</TabsTrigger>
+            <TabsTrigger value="image"><Upload className="w-4 h-4 mr-2" /> Foto</TabsTrigger>
+            <TabsTrigger value="json"><FileJson className="w-4 h-4 mr-2" /> JSON</TabsTrigger>
           </TabsList>
 
           <TabsContent value="text" className="space-y-4 py-4">
@@ -695,6 +721,21 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                   />
                 </>
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="json" className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Cole o JSON Estruturado (Bulk Import)</Label>
+              <Textarea 
+                placeholder='Ex: [{"category": "Pizzas", "items": [{"name": "Calabresa", "price": 40}]}]'
+                className="h-40 font-mono text-sm"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                O sistema criará as categorias automaticamente, importará as imagens e evitará produtos duplicados.
+              </p>
             </div>
           </TabsContent>
         </Tabs>

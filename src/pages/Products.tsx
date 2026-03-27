@@ -672,7 +672,7 @@ const Products = () => {
 
           <Button variant="outline" onClick={() => setShowImportModal(true)} className="mr-2">
             <Import className="h-4 w-4 mr-2" />
-            Importar IA
+            Módulo de Importação
           </Button>
           <Button onClick={() => {
             setEditingProduct(null);
