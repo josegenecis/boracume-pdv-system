@@ -1116,7 +1116,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
-        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start">
+        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start bg-boracume-orange/5 p-4 rounded-2xl border border-boracume-orange/20">
           <ProductImageUpload
             compact
             onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
@@ -1125,21 +1125,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label htmlFor="name">Nome</Label>
+              <Label htmlFor="name" className="text-boracume-dark-green font-semibold">Nome do Produto *</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 required
+                className="bg-white rounded-xl shadow-sm h-11"
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="description">Descrição</Label>
+              <Label htmlFor="description" className="text-boracume-dark-green font-semibold">Descrição</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 rows={2}
+                className="bg-white rounded-xl shadow-sm"
               />
             </div>
           </div>
@@ -1198,11 +1200,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </DialogContent>
         </Dialog>
 
-        <div className="space-y-2">
+        <div className="space-y-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Preço</div>
+            <div className="text-sm font-semibold text-boracume-dark-green">Preço</div>
             <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
-              <TabsList className="h-8">
+              <TabsList className="h-8 bg-white border border-gray-100">
                 <TabsTrigger value="simple" className="h-7 text-xs">Simples</TabsTrigger>
                 <TabsTrigger value="variants" className="h-7 text-xs">Variantes</TabsTrigger>
               </TabsList>
@@ -1212,7 +1214,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
             <TabsContent value="simple" className="mt-2">
               <div className="space-y-2">
-                <Label htmlFor="price">Preço</Label>
+                <Label htmlFor="price" className="text-sm font-semibold">Valor Final (R$)</Label>
                 <Input
                   id="price"
                   type="text"
@@ -1220,14 +1222,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   onChange={handlePriceChange}
                   placeholder="0,00"
                   required={priceMode === 'simple'}
+                  className="bg-white rounded-xl shadow-sm h-11 text-lg font-bold text-boracume-dark-green"
                 />
               </div>
             </TabsContent>
             <TabsContent value="variants" className="mt-2">
               <div className="space-y-3">
                  <div className="flex justify-end">
-                    <Button type="button" size="sm" variant="outline" onClick={handleAddPriceVariant}>
-                        <Plus className="h-3 w-3 mr-1" />
+                    <Button type="button" size="sm" variant="outline" onClick={handleAddPriceVariant} className="rounded-xl border-boracume-green text-boracume-dark-green hover:bg-boracume-green/10">
+                        <Plus className="h-4 w-4 mr-1 text-boracume-orange" />
                         Adicionar Tamanho
                     </Button>
                  </div>
@@ -1242,26 +1245,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                             <div
                                                 ref={draggableProvided.innerRef}
                                                 {...draggableProvided.draggableProps}
-                                                className="flex items-center gap-2 p-2 border rounded-lg bg-white"
+                                                className="flex items-center gap-2 p-3 border border-gray-100 rounded-xl bg-white shadow-sm hover:border-boracume-green transition-colors group"
                                             >
-                                                <div {...draggableProvided.dragHandleProps} className="cursor-grab text-gray-400">
-                                                    <GripVertical className="h-4 w-4" />
+                                                <div {...draggableProvided.dragHandleProps} className="cursor-grab text-gray-300 group-hover:text-boracume-orange transition-colors">
+                                                    <GripVertical className="h-5 w-5" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <Input 
                                                         value={variant.name}
                                                         onChange={(e) => handlePriceVariantChange(index, 'name', e.target.value)}
                                                         placeholder="Ex: Pequena"
-                                                        className="h-8"
+                                                        className="h-10 border-gray-100 focus-visible:ring-boracume-green"
                                                     />
                                                 </div>
-                                                <div className="w-24">
+                                                <div className="w-28 relative">
+                                                    <span className="absolute left-3 top-2.5 text-sm text-gray-500 font-medium">R$</span>
                                                     <Input 
                                                         type="number"
                                                         value={variant.price}
                                                         onChange={(e) => handlePriceVariantChange(index, 'price', parseFloat(e.target.value) || 0)}
                                                         placeholder="0.00"
-                                                        className="h-8"
+                                                        className="h-10 pl-8 font-bold text-boracume-dark-green border-gray-100 focus-visible:ring-boracume-green"
                                                         step="0.01"
                                                     />
                                                 </div>
@@ -1269,10 +1273,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     type="button" 
                                                     variant="ghost" 
                                                     size="icon" 
-                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    className="h-10 w-10 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl"
                                                     onClick={() => handleRemovePriceVariant(index)}
                                                 >
-                                                    <Trash2 className="h-4 w-4" />
+                                                    <Trash2 className="h-5 w-5" />
                                                 </Button>
                                             </div>
                                         )}
