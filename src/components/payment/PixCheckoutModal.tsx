@@ -107,13 +107,36 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
         </DialogHeader>
 
         <div className="flex flex-col items-center justify-center p-4 space-y-4">
-          {qrCodeImage ? (
-            <img src={qrCodeImage} alt="QR Code PIX" className="w-[200px] h-[200px] rounded-lg border bg-white p-2" />
-          ) : (
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
-              <QRCodeSVG value={brCode} size={200} />
+          <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-gray-100 w-full relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-[#009EE3]"></div>
+            
+            <div className="flex items-center justify-center mb-4 mt-2">
+              <img 
+                src="https://logopng.com.br/logos/mercado-pago-83.png" 
+                alt="Mercado Pago" 
+                className="h-8 object-contain"
+              />
             </div>
-          )}
+
+            {qrCodeImage ? (
+              <img src={qrCodeImage} alt="QR Code PIX" className="w-[200px] h-[200px] rounded-lg border bg-white p-2" />
+            ) : (
+              <div className="bg-white p-4 rounded-lg border shadow-sm">
+                <QRCodeSVG value={brCode} size={200} />
+              </div>
+            )}
+
+            <div className="mt-6 pt-4 border-t border-gray-100 w-full flex flex-col items-center justify-center opacity-80">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest mb-1">Processado por</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4 rounded-full bg-boracume-orange flex items-center justify-center">
+                  <span className="text-white text-[8px] font-bold">BC</span>
+                </div>
+                <span className="text-xs font-bold text-boracume-dark-green">BoraCumê</span>
+              </div>
+              <span className="text-[9px] text-gray-500 mt-0.5">sistema para restaurantes</span>
+            </div>
+          </div>
 
           <div className="w-full flex gap-2">
             <Button variant="outline" className="flex-1" onClick={handleCopy} disabled={!brCode}>

@@ -45,26 +45,23 @@ const Configuracoes: React.FC = () => {
   };
 
   const getInitialTab = () => {
-    const requested = searchParams.get('tab') || 'general';
+    const requested = searchParams.get('tab') || 'profile';
     const allowed = [
-      'general',
-      'hardware',
-      'menu',
-      'devices',
       'profile',
-      'notifications',
       'appearance',
       'delivery',
-      'whatsapp',
-      'fiscal',
       'payment-methods',
       'pix',
+      'whatsapp',
+      'fiscal',
+      'hardware',
       'ifood',
       'users',
+      'notifications',
       'marketing'
     ];
-    if (!allowed.includes(requested)) return 'general';
-    if (requested === 'marketing' && !hasMarketingFeature()) return 'general';
+    if (!allowed.includes(requested)) return 'profile';
+    if (requested === 'marketing' && !hasMarketingFeature()) return 'profile';
     return requested;
   };
 
@@ -99,20 +96,17 @@ const Configuracoes: React.FC = () => {
               value={tab}
               onChange={(e) => setTabAndUrl(e.target.value)}
             >
-              <option value="general">Geral</option>
-              <option value="hardware">Impressoras e Balanças</option>
-              <option value="menu">Cardápio</option>
-              <option value="devices">Dispositivos</option>
               <option value="profile">Perfil</option>
-              <option value="notifications">Notificações</option>
-              <option value="appearance">Aparência</option>
+              <option value="appearance">Cores do Cardápio</option>
               <option value="delivery">Delivery</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="fiscal">Fiscal</option>
               <option value="payment-methods">Formas de Pagamento</option>
               <option value="pix">PIX</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="hardware">Impressoras e Balanças</option>
+              <option value="fiscal">Fiscal</option>
               <option value="ifood">iFood</option>
               <option value="users">Usuários e Equipe</option>
+              <option value="notifications">Notificações</option>
               {hasMarketingFeature() && (<option value="marketing">Marketing</option>)}
             </select>
           </div>
@@ -121,69 +115,35 @@ const Configuracoes: React.FC = () => {
 
       <Tabs value={tab} onValueChange={setTabAndUrl} className="w-full">
         <TabsList className="mb-4 hidden sm:flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="general">Geral</TabsTrigger>
-          <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
-          <TabsTrigger value="menu">Cardápio</TabsTrigger>
-          <TabsTrigger value="devices">Sessões Ativas</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
-          <TabsTrigger value="appearance">Aparência</TabsTrigger>
+          <TabsTrigger value="appearance">Cores do Cardápio</TabsTrigger>
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
+          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
           <TabsTrigger value="ifood">
             <div className="flex items-center gap-2">
               <IfoodLogo className="h-4 w-auto" />
             </div>
           </TabsTrigger>
           <TabsTrigger value="users">Usuários e Equipe</TabsTrigger>
+          <TabsTrigger value="notifications">Notificações</TabsTrigger>
 
           {hasMarketingFeature() && (
             <TabsTrigger value="marketing">Marketing</TabsTrigger>
           )}
         </TabsList>
         
-        <TabsContent value="general" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <WhatsAppSettings />
-            {/* Outras configs gerais */}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="hardware">
-          <HardwareSettings />
-        </TabsContent>
-        
-        <TabsContent value="menu">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <MenuLinkGenerator />
-            <QRCodeGenerator />
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="devices">
-          <ErrorBoundary fallback={<div className="p-4 text-sm">
-            <p className="mb-2">Erro ao carregar Dispositivos. Tente atualizar a página.</p>
-            <button
-              className="h-9 px-3 rounded-md border"
-              onClick={() => {
-                try { window.location.reload(); } catch {}
-              }}
-            >
-              Atualizar
-            </button>
-          </div>}>
-            <DeviceManager />
-          </ErrorBoundary>
-        </TabsContent>
-        
         <TabsContent value="profile">
           <ProfileSettings />
         </TabsContent>
         
+        <TabsContent value="appearance">
+          <AppearanceSettings />
+        </TabsContent>
+
         <TabsContent value="notifications">
           <div className="space-y-4">
             <NotificationSettings />
@@ -245,28 +205,28 @@ const Configuracoes: React.FC = () => {
           </div>
         </TabsContent>
         
-        <TabsContent value="appearance">
-          <AppearanceSettings />
-        </TabsContent>
-        
         <TabsContent value="delivery">
           <DeliverySettings />
         </TabsContent>
         
-        <TabsContent value="whatsapp">
-          <WhatsAppIntegration />
-        </TabsContent>
-        
-        <TabsContent value="fiscal">
-          <FiscalSettings />
-        </TabsContent>
-
         <TabsContent value="payment-methods">
           <PaymentMethodsSettings />
         </TabsContent>
 
         <TabsContent value="pix">
           <PixSetup />
+        </TabsContent>
+        
+        <TabsContent value="whatsapp">
+          <WhatsAppIntegration />
+        </TabsContent>
+
+        <TabsContent value="hardware">
+          <HardwareSettings />
+        </TabsContent>
+        
+        <TabsContent value="fiscal">
+          <FiscalSettings />
         </TabsContent>
 
         <TabsContent value="ifood">

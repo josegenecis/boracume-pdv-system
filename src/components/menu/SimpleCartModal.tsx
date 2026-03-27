@@ -822,171 +822,185 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           <div className="space-y-4">
             <h3 className="font-bold text-gray-900">Dados para entrega:</h3>
             
-            <div>
-              <Label htmlFor="phone">WhatsApp *</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  ref={phoneInputRef}
-                  value={customerPhone}
-                  onChange={async (e) => {
-                    const phone = e.target.value;
-                    setCustomerPhone(phone);
-                    
-                    // Auto-lookup customer if phone has enough digits
-                    const digits = phone.replace(/\D/g, '');
-                    if (digits.length < 10) {
-                      setIsExistingCustomer(false);
-                      lastLookupDigitsRef.current = '';
-                      if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
-                      phoneLookupTimerRef.current = null;
-                      return;
-                    }
-
-                    if (digits === lastLookupDigitsRef.current) return;
-                    lastLookupDigitsRef.current = digits;
-                    if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
-                    phoneLookupTimerRef.current = window.setTimeout(async () => {
-                      const customer = await lookupCustomer(digits);
-                      if (customer) {
-                        setCustomerName((prev) => prev.trim() ? prev : customer.name);
-                        setCustomerAddress((prev) => prev.trim() ? prev : customer.address);
-                        setCustomerNeighborhood((prev) => prev.trim() ? prev : String((customer as any)?.neighborhood || ''));
-                        const zoneId = String((customer as any)?.deliveryZoneId || '');
-                        if (zoneId && (!deliveryZoneId || zoneWasAutoRef.current)) {
-                          zoneWasAutoRef.current = true;
-                          setDeliveryZoneId(zoneId);
-                        }
-                        setIsExistingCustomer(true);
-                      } else {
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="phone" className="text-sm font-semibold text-boracume-dark-green mb-2 block">WhatsApp *</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-5 w-5 text-boracume-orange" />
+                  <Input
+                    id="phone"
+                    ref={phoneInputRef}
+                    value={customerPhone}
+                    onChange={async (e) => {
+                      const phone = e.target.value;
+                      let val = phone.replace(/\D/g, '');
+                      if (val.length > 11) val = val.slice(0, 11);
+                      let formatted = val;
+                      if (val.length > 2) formatted = `(${val.slice(0, 2)}) ${val.slice(2)}`;
+                      if (val.length > 7) formatted = `(${val.slice(0, 2)}) ${val.slice(2, 7)}-${val.slice(7)}`;
+                      setCustomerPhone(formatted);
+                      
+                      // Auto-lookup customer if phone has enough digits
+                      const digits = formatted.replace(/\D/g, '');
+                      if (digits.length < 10) {
                         setIsExistingCustomer(false);
+                        lastLookupDigitsRef.current = '';
+                        if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
+                        phoneLookupTimerRef.current = null;
+                        return;
                       }
-                    }, 350);
-                  }}
-                  placeholder="(11) 99999-9999"
-                  className="pl-10"
-                />
-                {isLookingUp && (
-                  <div className="absolute right-3 top-3">
-                    <div className="animate-spin h-4 w-4 border-2 border-boracume-orange border-t-transparent rounded-full" />
+
+                      if (digits === lastLookupDigitsRef.current) return;
+                      lastLookupDigitsRef.current = digits;
+                      if (phoneLookupTimerRef.current) window.clearTimeout(phoneLookupTimerRef.current);
+                      
+                      setIsLookingUp(true);
+                      phoneLookupTimerRef.current = window.setTimeout(async () => {
+                        const customer = await lookupCustomer(digits);
+                        if (customer) {
+                          setCustomerName((prev) => prev.trim() ? prev : customer.name);
+                          setCustomerAddress((prev) => prev.trim() ? prev : customer.address);
+                          setCustomerNeighborhood((prev) => prev.trim() ? prev : String((customer as any)?.neighborhood || ''));
+                          const zoneId = String((customer as any)?.deliveryZoneId || '');
+                          if (zoneId && (!deliveryZoneId || zoneWasAutoRef.current)) {
+                            zoneWasAutoRef.current = true;
+                            setDeliveryZoneId(zoneId);
+                          }
+                          setIsExistingCustomer(true);
+                        } else {
+                          setIsExistingCustomer(false);
+                        }
+                      }, 350);
+                    }}
+                    placeholder="(11) 99999-9999"
+                    className="pl-11 h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
+                  />
+                  {isLookingUp && (
+                    <div className="absolute right-3 top-3.5">
+                      <div className="animate-spin h-5 w-5 border-2 border-boracume-orange border-t-transparent rounded-full" />
+                    </div>
+                  )}
+                </div>
+                {isExistingCustomer && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 mt-2 bg-green-50 p-2 rounded-lg border border-green-100">
+                    <CheckCircle className="h-4 w-4" />
+                    Cliente encontrado! Dados preenchidos automaticamente.
                   </div>
                 )}
               </div>
-              {isExistingCustomer && (
-                <div className="flex items-center gap-2 text-sm text-green-600 mt-2">
-                  <CheckCircle className="h-4 w-4" />
-                  Cliente encontrado! Dados preenchidos automaticamente.
+
+              <div>
+                <Label htmlFor="name" className="text-sm font-semibold text-boracume-dark-green mb-2 block">Nome completo *</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-5 w-5 text-boracume-orange" />
+                  <Input
+                    id="name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Seu nome completo"
+                    className="pl-11 h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
+                  />
+                </div>
+              </div>
+
+              {showNeighborhoodSelect && (
+                <div>
+                  <Label htmlFor="neighborhood" className="text-sm font-semibold text-boracume-dark-green mb-2 block">Bairro</Label>
+                  <Input
+                    id="neighborhood"
+                    value={customerNeighborhood}
+                    onChange={(e) => setCustomerNeighborhood(e.target.value)}
+                    placeholder="Ex: Centro"
+                    className="h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
+                  />
                 </div>
               )}
             </div>
 
-            <div>
-              <Label htmlFor="name">Nome completo *</Label>
+            <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+              <Label htmlFor="address" className="text-sm font-semibold text-boracume-dark-green mb-2 block">Endereço completo *</Label>
               <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Seu nome completo"
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="neighborhood">Bairro</Label>
-              <Input
-                id="neighborhood"
-                value={customerNeighborhood}
-                onChange={(e) => setCustomerNeighborhood(e.target.value)}
-                placeholder="Ex: Centro"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="address">Endereço completo *</Label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <MapPin className="absolute left-3 top-3 h-5 w-5 text-boracume-orange" />
                 <Input
                   id="address"
                   ref={addressInputRef}
                   value={customerAddress}
                   onChange={(e) => setCustomerAddress(e.target.value)}
                   placeholder="Rua, número, bairro, cidade"
-                  className="pl-10"
+                  className="pl-11 h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
                 />
               </div>
             </div>
 
-            <div>
-              <Label>Localização Exata (GPS)</Label>
+            <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+              <Label className="text-sm font-semibold text-boracume-dark-green mb-2 block">Localização Exata (GPS)</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={requestLocation}
                   disabled={location.isLoading}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 h-11 rounded-xl w-full justify-center bg-white border-boracume-green/30 text-boracume-dark-green hover:bg-boracume-green/10 transition-colors"
                 >
-                  <Navigation className="h-4 w-4" />
-                  {location.isLoading ? 'Obtendo localização...' : 'Usar minha localização'}
+                  <Navigation className="h-4 w-4 text-boracume-orange" />
+                  {location.isLoading ? 'Obtendo localização...' : 'Usar minha localização atual'}
                 </Button>
               </div>
               
               {location.latitude && location.longitude && (
-                <div className="p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
-                  ✅ Localização capturada com precisão de {Math.round(location.accuracy || 0)}m
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>Localização capturada com sucesso!</span>
                 </div>
               )}
               
               {location.error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
-                  ❌ {location.error}
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-center gap-2">
+                  <span className="flex-shrink-0">❌</span>
+                  <span>{location.error}</span>
                 </div>
               )}
               
-              <p className="text-xs text-muted-foreground">
-                A localização GPS ajuda o entregador a encontrar você com mais facilidade
+              <p className="text-xs text-gray-500 mt-3 text-center">
+                A localização ajuda o entregador a chegar mais rápido.
               </p>
             </div>
 
             {!showNeighborhoodSelect ? (
-              <div className="p-3 border rounded-lg bg-gray-50">
-                <div className="text-sm font-medium">Frete da entrega</div>
+              <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+                <div className="text-sm font-semibold text-boracume-dark-green mb-1">Frete da entrega</div>
                 {deliveryQuote?.ok ? (
-                  <div className="text-sm text-muted-foreground mt-1">
-                    <span className="font-bold text-gray-900">{deliveryFee === 0 ? 'Grátis' : `R$ ${deliveryFee.toFixed(2)}`}</span>
-                    {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
-                    {deliveryQuote?.zone?.name ? ` • ${deliveryQuote.zone.name}` : ''}
+                  <div className="text-sm mt-1">
+                    <span className="font-bold text-boracume-dark-green text-lg">{deliveryFee === 0 ? 'Grátis' : `R$ ${deliveryFee.toFixed(2)}`}</span>
+                    {typeof deliveryQuote?.distanceKm === 'number' ? <span className="text-gray-500"> • {Number(deliveryQuote.distanceKm).toFixed(2)} km</span> : ''}
+                    {deliveryQuote?.zone?.name ? <span className="text-gray-500"> • {deliveryQuote.zone.name}</span> : ''}
                   </div>
                 ) : storePricingMode === 'free' ? (
-                  <div className="text-sm text-green-600 font-bold mt-1">Grátis</div>
+                  <div className="text-lg text-boracume-green font-bold mt-1">Grátis</div>
                 ) : storePricingMode === 'fixed' ? (
-                  <div className="text-sm text-muted-foreground mt-1">Fixo: R$ {deliveryFee.toFixed(2)}</div>
+                  <div className="text-lg text-boracume-dark-green font-bold mt-1">Fixo: R$ {deliveryFee.toFixed(2)}</div>
                 ) : (
-                  <div className="text-sm text-orange-600 mt-1 flex items-center gap-1">
+                  <div className="text-sm text-boracume-orange mt-2 flex items-center gap-1 font-medium bg-orange-50 p-2 rounded-lg">
                     {isDetectingZone ? 'Calculando valor...' : 'Preencha o endereço completo para calcular o frete'}
                   </div>
                 )}
                 {detectZoneError && !isDetectingZone && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
-                    ❌ {detectZoneError}
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-center gap-2">
+                    <span>❌</span> {detectZoneError}
                   </div>
                 )}
               </div>
             ) : quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
-              <div className="p-3 border rounded-lg bg-gray-50">
-                <div className="text-sm font-medium">Frete calculado automaticamente</div>
-                <div className="text-sm text-muted-foreground">
+              <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+                <div className="text-sm font-semibold text-boracume-dark-green mb-1">Frete calculado automaticamente</div>
+                <div className="text-lg font-bold text-boracume-dark-green">
                   R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
-                  {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
+                  {typeof deliveryQuote?.distanceKm === 'number' ? <span className="text-gray-500 text-sm font-normal"> • {Number(deliveryQuote.distanceKm).toFixed(2)} km</span> : ''}
                 </div>
               </div>
             ) : (
-              <div>
-                <Label htmlFor="zone">Área de entrega *</Label>
+              <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+                <Label htmlFor="zone" className="text-sm font-semibold text-boracume-dark-green mb-2 block">Área de entrega *</Label>
                 <Select
                   value={deliveryZoneId}
                   onValueChange={(v) => {
@@ -995,7 +1009,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     setDeliveryZoneId(v);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12 bg-white rounded-xl text-base shadow-sm border-gray-200">
                     <SelectValue placeholder="Selecione sua área" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1007,19 +1021,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   </SelectContent>
                 </Select>
                 {isDetectingZone && (
-                  <div className="mt-2 text-xs text-muted-foreground">
+                  <div className="mt-2 text-sm text-boracume-orange font-medium">
                     Detectando bairro automaticamente...
                   </div>
                 )}
                 {detectZoneError && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
-                    ❌ {detectZoneError}
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-center gap-2">
+                    <span>❌</span> {detectZoneError}
                   </div>
                 )}
               </div>
             )}
 
-            <div>
+            <div className="bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+              <Label className="text-sm font-semibold text-boracume-dark-green mb-3 block">Forma de Pagamento *</Label>
 
               <RadioGroup 
                 value={selectedPaymentMethod?.id || ''} 
@@ -1163,14 +1178,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           </div>
 
           {/* Botões */}
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setStep('bag')} className="flex-1 rounded-xl">
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" onClick={() => setStep('bag')} className="flex-1 rounded-xl h-12 text-boracume-dark-green border-gray-200">
               Voltar
             </Button>
             <Button 
               onClick={handlePlaceOrder}
               disabled={!isFormValid() || isLoading}
-              className="flex-1 bg-boracume-orange hover:bg-boracume-orange/90 rounded-xl font-bold"
+              className="flex-1 rounded-xl font-bold h-12 text-white transition-transform hover:scale-[1.02]"
+              style={{ backgroundColor: 'var(--menu-primary, #85C441)' }}
             >
               {isLoading ? 'Processando...' : 'Finalizar Pedido'}
             </Button>
@@ -1183,7 +1199,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <div className="border-t border-gray-100 p-4 bg-white">
               <Button
                 onClick={() => setStep('checkout')}
-                className="w-full bg-boracume-orange hover:bg-boracume-orange/90 rounded-xl font-bold h-12"
+                className="w-full rounded-xl font-bold h-12 text-white transition-transform hover:scale-[1.02]"
+                style={{ backgroundColor: 'var(--menu-primary, #85C441)' }}
               >
                 Continuar • {formatBRL(total)}
               </Button>

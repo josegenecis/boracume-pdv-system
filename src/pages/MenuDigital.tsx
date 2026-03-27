@@ -88,6 +88,35 @@ const MenuDigital = () => {
 
   // Pré-carregar script do Google Maps se houver chave configurada e o usuário precisar usar mapas
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
+  // Aplicar cores personalizadas ao CSS via variáveis no root do cardápio
+  useEffect(() => {
+    if (!profile) return;
+    
+    const themeConfig = (profile as any)?.theme_config;
+    if (themeConfig) {
+      const root = document.documentElement;
+      if (themeConfig.primary) {
+        root.style.setProperty('--menu-primary', themeConfig.primary);
+      }
+      if (themeConfig.secondary) {
+        root.style.setProperty('--menu-secondary', themeConfig.secondary);
+      }
+      if (themeConfig.accent) {
+        root.style.setProperty('--menu-accent', themeConfig.accent);
+      }
+      if (themeConfig.background) {
+        root.style.setProperty('--menu-bg', themeConfig.background);
+      }
+    } else {
+      // Cores padrão (Pomar)
+      const root = document.documentElement;
+      root.style.setProperty('--menu-primary', '#85C441');
+      root.style.setProperty('--menu-secondary', '#063D2E');
+      root.style.setProperty('--menu-accent', '#EF6C20');
+      root.style.setProperty('--menu-bg', '#F7EEDF');
+    }
+  }, [profile]);
+
   useEffect(() => {
     if (!googleKey) return;
     const mode = deliverySettings?.pricing?.mode;
@@ -531,10 +560,10 @@ const MenuDigital = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen pb-24" style={{ backgroundColor: 'var(--menu-bg, #F7EEDF)' }}>
       <MarketingPixels userId={finalUserId} />
       <div className="relative">
-        <div className="relative h-40 sm:h-48 w-full bg-boracume-dark-green overflow-hidden">
+        <div className="relative h-40 sm:h-48 w-full overflow-hidden" style={{ backgroundColor: 'var(--menu-secondary, #063D2E)' }}>
           {(profile as any)?.banner_url ? (
             <img
               src={String((profile as any).banner_url)}
@@ -564,18 +593,18 @@ const MenuDigital = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">
+                <h1 className="text-lg sm:text-xl font-bold leading-tight" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
                   {profile?.restaurant_name || 'Cardápio'}
                 </h1>
                 {((profile as any)?.address || (profile as any)?.phone) && (
-                  <div className="text-xs text-gray-600 mt-1">
+                  <div className="text-xs mt-1" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.8 }}>
                     {(profile as any)?.address ? String((profile as any).address) : ''}
                     {(profile as any)?.address && (profile as any)?.phone ? ' • ' : ''}
                     {(profile as any)?.phone ? String((profile as any).phone) : ''}
                   </div>
                 )}
                 {(profile as any)?.description && (
-                  <div className="text-xs text-gray-600 mt-2 line-clamp-2">
+                  <div className="text-xs mt-2 line-clamp-2" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.7 }}>
                     {String((profile as any).description)}
                   </div>
                 )}
@@ -595,7 +624,7 @@ const MenuDigital = () => {
             </div>
           </div>
 
-          <div className="bg-white sticky top-0 z-40 mt-3 pb-2">
+          <div className="bg-transparent sticky top-0 z-40 mt-3 pb-2">
             {categories.length > 0 && (
               <CategoryTabs
                 categories={categories}
@@ -640,7 +669,7 @@ const MenuDigital = () => {
               }}
               className="scroll-mt-32"
             >
-              <h2 className="text-lg font-bold text-gray-900 mb-3">
+              <h2 className="text-lg font-bold mb-3" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
                 {category.name}
               </h2>
               <div className="space-y-3">
