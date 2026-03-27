@@ -112,7 +112,6 @@ const CollapsibleSidebar = () => {
       label: 'Estoque & Insumos',
       items: [
         { to: '/estoque', label: 'Gestão de Insumos' },
-        { to: '/produtos', label: 'Ficha Técnica' },
       ]
     },
     {
@@ -120,8 +119,7 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Inteligência',
       items: [
-        { to: '/inteligencia/curva-abc', label: 'Curva ABC' },
-        { to: '/inteligencia/cmv', label: 'Dashboard de CMV' },
+        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC' },
       ]
     },
     {
