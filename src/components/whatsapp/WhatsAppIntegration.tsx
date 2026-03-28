@@ -64,14 +64,10 @@ const WhatsAppIntegration: React.FC = () => {
 
   // Função auxiliar para iniciar o polling da Z-API
   const startPolling = (instanceId: string, token: string) => {
-    const clientToken = "Fbc0988636b00424dae1d37443ec1e846S";
     const checkInterval = setInterval(async () => {
       try {
         const statusRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/status`, {
-          method: 'GET',
-          headers: {
-            'client-token': clientToken
-          }
+          method: 'GET'
         });
         const statusData = await statusRes.json();
         if (statusData?.connected) {
@@ -94,7 +90,6 @@ const WhatsAppIntegration: React.FC = () => {
       // Credenciais Z-API
       const instanceId = "3F0D0FE4F122120138F06A1199C38405"; 
       const token = "8DE7ECF2C8EE32A8E56153A4";
-      const clientToken = "Fbc0988636b00424dae1d37443ec1e846S";
 
       console.log("Conectando na Z-API...");
       
@@ -102,7 +97,7 @@ const WhatsAppIntegration: React.FC = () => {
       const connectRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`, {
         method: 'GET',
         headers: {
-          'client-token': clientToken
+          'Accept': 'application/json'
         }
       });
 
