@@ -53,6 +53,7 @@ const Configuracoes: React.FC = () => {
       'payment-methods',
       'pix',
       'whatsapp',
+      'whatsapp-api',
       'fiscal',
       'hardware',
       'ifood',
@@ -101,7 +102,8 @@ const Configuracoes: React.FC = () => {
               <option value="delivery">Delivery</option>
               <option value="payment-methods">Formas de Pagamento</option>
               <option value="pix">PIX</option>
-              <option value="whatsapp">WhatsApp</option>
+              <option value="whatsapp">WhatsApp Mensagens</option>
+              <option value="whatsapp-api">WhatsApp Global (API)</option>
               <option value="hardware">Impressoras e Balanças</option>
               <option value="fiscal">Fiscal</option>
               <option value="ifood">iFood</option>
@@ -120,7 +122,8 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp Mensagens</TabsTrigger>
+          <TabsTrigger value="whatsapp-api">WhatsApp Global (API)</TabsTrigger>
           <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
           <TabsTrigger value="ifood">
@@ -219,6 +222,10 @@ const Configuracoes: React.FC = () => {
         
         <TabsContent value="whatsapp">
           <WhatsAppIntegration />
+        </TabsContent>
+
+        <TabsContent value="whatsapp-api">
+          <WhatsAppSettings />
         </TabsContent>
 
         <TabsContent value="hardware">
