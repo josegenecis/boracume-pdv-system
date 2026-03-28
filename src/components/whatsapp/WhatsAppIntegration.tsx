@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { QrCode, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 const WhatsAppIntegration: React.FC = () => {
   const [settings, setSettings] = useState({
