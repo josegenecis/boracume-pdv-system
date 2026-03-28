@@ -83,6 +83,11 @@ const WhatsAppIntegration: React.FC = () => {
         throw new Error('A integração com WhatsApp ainda não foi configurada pelo administrador do sistema.');
       }
 
+      console.log("Tentando conectar com as chaves:", {
+        url: evolutionUrl,
+        keyExists: !!evolutionApiKey
+      });
+
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
 
