@@ -88,6 +88,11 @@ const WhatsAppIntegration: React.FC = () => {
         keyExists: !!evolutionApiKey
       });
 
+      // Se a URL estiver vazia (undefined), jogue um erro imediato
+      if (!evolutionUrl) {
+          throw new Error('Erro: URL da Evolution API não foi encontrada no banco de dados.');
+      }
+
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
 
