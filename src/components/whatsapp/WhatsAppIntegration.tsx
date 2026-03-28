@@ -186,9 +186,9 @@ const WhatsAppIntegration: React.FC = () => {
                 id="phone"
                 value={settings.phone_number}
                 onChange={(e) => setSettings(prev => ({ ...prev, phone_number: e.target.value }))}
-                placeholder="(11) 99999-9999"
+                placeholder="(11) 99999-9999 (Opcional para o QR)"
               />
-              <Button onClick={generateQRCode} disabled={loading || !settings.phone_number}>
+              <Button onClick={generateQRCode} disabled={loading}>
                 <QrCode className="w-4 h-4 mr-2" />
                 Gerar QR
               </Button>
