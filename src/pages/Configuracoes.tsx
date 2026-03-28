@@ -103,7 +103,7 @@ const Configuracoes: React.FC = () => {
               <option value="payment-methods">Formas de Pagamento</option>
               <option value="pix">PIX</option>
               <option value="whatsapp">WhatsApp Mensagens</option>
-              <option value="whatsapp-api">WhatsApp Global (API)</option>
+              {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
               <option value="hardware">Impressoras e Balanças</option>
               <option value="fiscal">Fiscal</option>
               <option value="ifood">iFood</option>
@@ -123,7 +123,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
           <TabsTrigger value="pix">PIX</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp Mensagens</TabsTrigger>
-          <TabsTrigger value="whatsapp-api">WhatsApp Global (API)</TabsTrigger>
+          {subscription?.plan_id === 2 && <TabsTrigger value="whatsapp-api">WhatsApp Global (Admin)</TabsTrigger>}
           <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
           <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
           <TabsTrigger value="ifood">
