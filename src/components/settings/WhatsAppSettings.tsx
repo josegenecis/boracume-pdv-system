@@ -176,12 +176,26 @@ const WhatsAppSettings = () => {
         </div>
 
         <div className="space-y-4 pt-4 border-t border-gray-100">
-          <h3 className="font-medium text-lg flex items-center gap-2">
-            Integração Evolution API (Opcional)
-          </h3>
-          <p className="text-sm text-gray-500">
-            Configure as chaves da sua Evolution API para habilitar o envio automático de mensagens do sistema (KDS, Pedidos, etc).
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="font-medium text-lg flex items-center gap-2">
+                Integração Evolution API (Envio Automático)
+              </h3>
+              <p className="text-sm text-gray-500">
+                Configure as chaves da sua Evolution API para habilitar o envio automático de mensagens do sistema (KDS, Pedidos, etc).
+              </p>
+            </div>
+            {settings.evolutionUrl && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.open(`${settings.evolutionUrl}/manager`, '_blank')}
+                className="whitespace-nowrap"
+              >
+                Abrir Painel QR Code
+              </Button>
+            )}
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="evolution-url">URL da Evolution API</Label>
