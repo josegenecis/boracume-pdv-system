@@ -23,12 +23,25 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         ...(headers || {})
       },
-      body: method === 'POST' ? JSON.stringify(payload || {}) : undefined
+      body: method === 'POST' && payload ? JSON.stringify(payload) : undefined
     })
 
-    const data = await response.json()
+    const responseText = await response.text()
     
-    return new Response(JSON.stringify({ status: response.status, data }), {
+    let jsonData = null;
+    try {
+        if (responseText) {
+            jsonData = JSON.parse(responseText);
+        }
+    } catch (e) {
+        jsonData = { raw: responseText };
+    }
+    
+    return new Response(JSON.stringify({ 
+      status: response.status, 
+      ok: response.ok,
+      data: jsonData 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

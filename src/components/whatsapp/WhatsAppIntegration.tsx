@@ -117,11 +117,13 @@ const WhatsAppIntegration: React.FC = () => {
         }
       });
 
-      if (connectRes.error || !connectRes.data) {
+      if (connectRes.error) {
+         console.error("Connect Res Error:", connectRes.error);
          throw new Error('Falha ao obter QR Code da API');
       }
 
-      const connectData = connectRes.data.data;
+      const connectData = connectRes.data?.data;
+      console.log("Connect Data Received:", connectData);
       
       if (connectData && connectData.base64) {
          setQrCodeUrl(connectData.base64);
