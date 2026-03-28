@@ -62,6 +62,27 @@ const WhatsAppIntegration: React.FC = () => {
 
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
+  // Função auxiliar para iniciar o polling
+  const startPolling = (evolutionUrl: string, evolutionApiKey: string, instanceName: string) => {
+    const checkInterval = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
+          method: 'GET',
+          headers: { 'apikey': evolutionApiKey }
+        });
+        const statusData = await statusRes.json();
+        if (statusData?.instance?.state === 'open') {
+          clearInterval(checkInterval);
+          setSettings(prev => ({ ...prev, connected: true }));
+          toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
+        }
+      } catch (e) {}
+    }, 3000);
+
+    // Limpar interval após 2 minutos
+    setTimeout(() => clearInterval(checkInterval), 120000);
+  };
+
   const generateQRCode = async () => {
     try {
       setLoading(true);
@@ -81,93 +102,74 @@ const WhatsAppIntegration: React.FC = () => {
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
 
-      // Vamos usar uma Edge Function do Supabase como proxy para evitar erros de Mixed Content (HTTP vs HTTPS)
-      // 1. Criar a instância
-      const createRes = await supabase.functions.invoke('evolution-proxy', {
-        body: {
-          endpoint: `${evolutionUrl}/instance/create`,
+      // 1. Pedir para a API buscar o status da instância
+      const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
+        method: 'GET',
+        headers: { 'apikey': evolutionApiKey }
+      });
+
+      const statusData = await statusRes.json();
+      console.log("Status Data:", statusData);
+
+      // 2. Se a instância NÃO existir (erro 404), vamos criar ela do zero
+      if (statusRes.status === 404 || statusData.error === 'Not Found') {
+        console.log("Instância não existe, criando...");
+        const createRes = await fetch(`${evolutionUrl}/instance/create`, {
           method: 'POST',
-          headers: { 'apikey': evolutionApiKey },
-          payload: {
+          headers: { 
+            'Content-Type': 'application/json',
+            'apikey': evolutionApiKey 
+          },
+          body: JSON.stringify({
             instanceName: instanceName,
             token: "",
             qrcode: true
-          }
+          })
+        });
+        
+        const createData = await createRes.json();
+        console.log("Create Data:", createData);
+
+        // A criação já devolve o QR Code na mesma hora
+        if (createData.qrcode && createData.qrcode.base64) {
+            setQrCodeUrl(createData.qrcode.base64);
+            setSettings(prev => ({ ...prev, qr_code_data: createData.qrcode.base64 }));
+            toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
+            startPolling(evolutionUrl, evolutionApiKey, instanceName);
+            return;
         }
-      });
-
-      console.log("Create Res:", createRes);
-
-      // Se a instância já existir, a Evolution pode retornar um erro genérico na nossa edge function. 
-      // Então, em vez de parar o código aqui e dar erro, vamos tentar buscar o QR Code logo em seguida.
-      // Se a busca do QR Code falhar, aí sim nós damos o erro.
-
-      // 2. Pedir o QRCode (Connect)
-      const connectRes = await supabase.functions.invoke('evolution-proxy', {
-        body: {
-          endpoint: `${evolutionUrl}/instance/connect/${instanceName}`,
-          method: 'GET',
-          headers: { 'apikey': evolutionApiKey }
-        }
-      });
-
-      if (connectRes.error) {
-         console.error("Connect Res Error:", connectRes.error);
-         throw new Error('Falha ao obter QR Code da API');
       }
 
-      const connectData = connectRes.data?.data;
+      // 3. Se a instância JÁ EXISTE, vamos verificar o estado dela
+      if (statusData?.instance?.state === 'open') {
+         setSettings(prev => ({ ...prev, connected: true }));
+         toast({ title: "Aviso", description: "Esta instância já está conectada!" });
+         return;
+      }
+
+      // 4. Se a instância existe, mas não está conectada, pedimos o QR Code
+      console.log("Pedindo QR Code de instância existente...");
+      const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
+        method: 'GET',
+        headers: { 'apikey': evolutionApiKey }
+      });
+
+      const connectData = await connectRes.json();
       console.log("Connect Data Received:", connectData);
       
       if (connectData && connectData.base64) {
          setQrCodeUrl(connectData.base64);
          setSettings(prev => ({ ...prev, qr_code_data: connectData.base64 }));
-         
-         toast({
-           title: "QR Code gerado",
-           description: "Escaneie o QR Code no seu WhatsApp para conectar.",
-         });
-
-         // Iniciar polling para ver se conectou
-         const checkInterval = setInterval(async () => {
-            try {
-              const statusRes = await supabase.functions.invoke('evolution-proxy', {
-                body: {
-                  endpoint: `${evolutionUrl}/instance/connectionState/${instanceName}`,
-                  method: 'GET',
-                  headers: { 'apikey': evolutionApiKey }
-                }
-              });
-              const statusData = statusRes.data?.data;
-              if (statusData && statusData.instance?.state === 'open') {
-                clearInterval(checkInterval);
-                setSettings(prev => ({ ...prev, connected: true }));
-                toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
-              }
-            } catch (e) {}
-         }, 3000);
-
-         // Limpar interval após 2 minutos
-         setTimeout(() => clearInterval(checkInterval), 120000);
-
-      } else if (connectData?.instance?.state === 'open') {
-         setSettings(prev => ({ ...prev, connected: true }));
-         toast({ title: "Aviso", description: "Esta instância já está conectada!" });
+         toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
+         startPolling(evolutionUrl, evolutionApiKey, instanceName);
       } else {
-         // Tentar forçar um restart da instância e pegar o QR code
-         console.log("Tentando reiniciar a instância para gerar novo QR...");
-         try {
-             await supabase.functions.invoke('evolution-proxy', {
-                body: {
-                  endpoint: `${evolutionUrl}/instance/restart/${instanceName}`,
-                  method: 'PUT',
-                  headers: { 'apikey': evolutionApiKey }
-                }
-             });
-             toast({ title: "Reiniciando", description: "Preparando novo QR Code, tente novamente em 5 segundos." });
-         } catch(e) {
-             throw new Error('Não foi possível gerar o QR Code.');
-         }
+         // Se não veio QR code, forçamos um logout/restart para limpar a instância travada
+         console.log("Forçando logout da instância para limpar o estado...");
+         await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
+            method: 'DELETE',
+            headers: { 'apikey': evolutionApiKey }
+         });
+         toast({ title: "Limpando conexão", description: "Aguarde 5 segundos e clique em Gerar QR novamente." });
       }
 
     } catch (error: any) {
