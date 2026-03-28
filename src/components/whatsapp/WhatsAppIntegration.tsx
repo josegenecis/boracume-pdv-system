@@ -64,12 +64,13 @@ const WhatsAppIntegration: React.FC = () => {
 
   // Função auxiliar para iniciar o polling da Z-API
   const startPolling = (instanceId: string, token: string) => {
+    const clientToken = "Fbc0988636b00424dae1d37443ec1e846S";
     const checkInterval = setInterval(async () => {
       try {
         const statusRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/status`, {
           method: 'GET',
           headers: {
-            'Client-Token': 'Fbc0988636b00424dae1d37443ec1e846S'
+            'client-token': clientToken
           }
         });
         const statusData = await statusRes.json();
@@ -91,8 +92,9 @@ const WhatsAppIntegration: React.FC = () => {
       setQrCodeUrl(null); // Limpar QR anterior
       
       // Credenciais Z-API
-      const instanceId = "3F0D0FE4F122120138F06A1199C38405";
+      const instanceId = "3F0D0FE4F122120138F06A1199C38405"; 
       const token = "8DE7ECF2C8EE32A8E56153A4";
+      const clientToken = "Fbc0988636b00424dae1d37443ec1e846S";
 
       console.log("Conectando na Z-API...");
       
@@ -100,8 +102,7 @@ const WhatsAppIntegration: React.FC = () => {
       const connectRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`, {
         method: 'GET',
         headers: {
-          'Client-Token': 'Fbc0988636b00424dae1d37443ec1e846S',
-          'Accept': 'application/json'
+          'client-token': clientToken
         }
       });
 
