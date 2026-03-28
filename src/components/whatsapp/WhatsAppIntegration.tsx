@@ -67,35 +67,91 @@ const WhatsAppIntegration: React.FC = () => {
       setQrCodeUrl(null); // Limpar QR anterior
       
       // Aqui você chamaria sua Evolution API
-      // Exemplo real: POST /instance/create
-      
-      // Simulação visual para demonstração (substitua pela chamada real da API)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // QR Code simulado (numa integração real, viria da API em base64)
-      setQrCodeUrl("https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=EvolutionAPI_Integration_Demo");
-      
-      setSettings(prev => ({ ...prev, qr_code_data: 'generated' }));
-      
-      toast({
-        title: "QR Code gerado",
-        description: "Escaneie o QR Code no seu WhatsApp para conectar.",
-      });
-      
-      // Simular conexão após 5 segundos (apenas para demo)
-      setTimeout(() => {
-         setSettings(prev => ({ ...prev, connected: true }));
-         toast({
-            title: "Conectado!",
-            description: "WhatsApp conectado com sucesso.",
-         });
-      }, 8000);
+      // Buscar configurações globais do banco de dados primeiro
+      const { data: globalSettings } = await supabase
+        .from('whatsapp_settings')
+        .select('evolution_url, evolution_api_key')
+        .eq('user_id', user?.id)
+        .single();
 
-    } catch (error) {
+      const evolutionUrl = globalSettings?.evolution_url;
+      const evolutionApiKey = globalSettings?.evolution_api_key;
+
+      if (!evolutionUrl || !evolutionApiKey) {
+        throw new Error('Você precisa configurar a URL e Chave da Evolution API na aba "WhatsApp" (painel global) primeiro.');
+      }
+
+      // Nome da instância baseado no ID do usuário
+      const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
+
+      // 1. Criar a instância
+      const createRes = await fetch(`${evolutionUrl}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': evolutionApiKey
+        },
+        body: JSON.stringify({
+          instanceName: instanceName,
+          token: "",
+          qrcode: true
+        })
+      });
+
+      // Se der erro 403 (já existe), a gente tenta só conectar
+      if (!createRes.ok && createRes.status !== 403) {
+         throw new Error('Falha ao comunicar com a Evolution API');
+      }
+
+      // 2. Pedir o QRCode (Connect)
+      const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'apikey': evolutionApiKey
+        }
+      });
+
+      const connectData = await connectRes.json();
+      
+      if (connectData.base64) {
+         setQrCodeUrl(connectData.base64);
+         setSettings(prev => ({ ...prev, qr_code_data: connectData.base64 }));
+         
+         toast({
+           title: "QR Code gerado",
+           description: "Escaneie o QR Code no seu WhatsApp para conectar.",
+         });
+
+         // Iniciar polling para ver se conectou
+         const checkInterval = setInterval(async () => {
+            try {
+              const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
+                headers: { 'apikey': evolutionApiKey }
+              });
+              const statusData = await statusRes.json();
+              if (statusData.instance?.state === 'open') {
+                clearInterval(checkInterval);
+                setSettings(prev => ({ ...prev, connected: true }));
+                toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
+              }
+            } catch (e) {}
+         }, 3000);
+
+         // Limpar interval após 2 minutos
+         setTimeout(() => clearInterval(checkInterval), 120000);
+
+      } else if (connectData.instance?.state === 'open') {
+         setSettings(prev => ({ ...prev, connected: true }));
+         toast({ title: "Aviso", description: "Esta instância já está conectada!" });
+      } else {
+         throw new Error('Não foi possível gerar o QR Code.');
+      }
+
+    } catch (error: any) {
       console.error('Erro ao gerar QR Code:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao gerar QR Code. Verifique a conexão com a API.",
+        title: "Erro de Conexão",
+        description: error.message || "Verifique se a Evolution API está online e configurada.",
         variant: "destructive"
       });
     } finally {
