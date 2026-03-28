@@ -68,30 +68,15 @@ const WhatsAppIntegration: React.FC = () => {
       setQrCodeUrl(null); // Limpar QR anterior
       
       // Aqui você chamaria sua Evolution API
-      // Buscar configurações globais do banco de dados primeiro
-      const { data: globalSettings } = await supabase
-        .from('whatsapp_settings')
-        .select('evolution_url, evolution_api_key')
-        .not('evolution_url', 'is', null)
-        .limit(1)
-        .single();
+      // Configurações Globais Hardcoded (Chumbadas) da Evolution API
+      // O sistema agora sempre baterá nesta VPS para gerar os QR Codes de qualquer cliente
+      const evolutionUrl = "https://api.boracume.com";
+      const evolutionApiKey = "BoraCumeMasterKey2024!";
 
-      const evolutionUrl = globalSettings?.evolution_url;
-      const evolutionApiKey = globalSettings?.evolution_api_key;
-
-      if (!evolutionUrl || !evolutionApiKey) {
-        throw new Error('A integração com WhatsApp ainda não foi configurada pelo administrador do sistema.');
-      }
-
-      console.log("Tentando conectar com as chaves:", {
+      console.log("Tentando conectar com as chaves hardcoded:", {
         url: evolutionUrl,
         keyExists: !!evolutionApiKey
       });
-
-      // Se a URL estiver vazia (undefined), jogue um erro imediato
-      if (!evolutionUrl) {
-          throw new Error('Erro: URL da Evolution API não foi encontrada no banco de dados.');
-      }
 
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
