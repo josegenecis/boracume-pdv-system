@@ -111,12 +111,11 @@ const WhatsAppIntegration: React.FC = () => {
         }
       });
 
-      // Se der erro diferente de 403 (já existe), lançamos o erro
-      // A API v2.1.1 retorna 409 quando a instância já existe e está conectada, e 400 se já existir mas desconectada.
-      if (createRes.error || (createRes.data?.status !== 200 && createRes.data?.status !== 201 && createRes.data?.status !== 403 && createRes.data?.status !== 409 && createRes.data?.status !== 400)) {
-         console.log("Create Res:", createRes);
-         throw new Error('Falha ao comunicar com a Evolution API');
-      }
+      console.log("Create Res:", createRes);
+
+      // Se a instância já existir, a Evolution pode retornar um erro genérico na nossa edge function. 
+      // Então, em vez de parar o código aqui e dar erro, vamos tentar buscar o QR Code logo em seguida.
+      // Se a busca do QR Code falhar, aí sim nós damos o erro.
 
       // 2. Pedir o QRCode (Connect)
       const connectRes = await supabase.functions.invoke('evolution-proxy', {
