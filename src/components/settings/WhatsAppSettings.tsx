@@ -14,7 +14,9 @@ const WhatsAppSettings = () => {
   const [settings, setSettings] = useState({
     phoneNumber: '',
     defaultMessage: 'Olá! Gostaria de fazer um pedido.',
-    enabled: true
+    enabled: true,
+    evolutionUrl: '',
+    evolutionApiKey: ''
   });
   
   const [loading, setLoading] = useState(false);
@@ -42,9 +44,11 @@ const WhatsAppSettings = () => {
 
       if (data) {
         setSettings({
-          phoneNumber: data.phone_number,
-          defaultMessage: data.default_message,
-          enabled: data.enabled
+          phoneNumber: data.phone_number || '',
+          defaultMessage: data.default_message || 'Olá! Gostaria de fazer um pedido.',
+          enabled: data.enabled !== false,
+          evolutionUrl: data.evolution_url || '',
+          evolutionApiKey: data.evolution_api_key || ''
         });
       }
     } catch (error) {
@@ -75,6 +79,8 @@ const WhatsAppSettings = () => {
         phone_number: settings.phoneNumber,
         default_message: settings.defaultMessage,
         enabled: settings.enabled,
+        evolution_url: settings.evolutionUrl,
+        evolution_api_key: settings.evolutionApiKey,
         updated_at: new Date().toISOString()
       };
 
@@ -169,7 +175,37 @@ const WhatsAppSettings = () => {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="space-y-4 pt-4 border-t border-gray-100">
+          <h3 className="font-medium text-lg flex items-center gap-2">
+            Integração Evolution API (Opcional)
+          </h3>
+          <p className="text-sm text-gray-500">
+            Configure as chaves da sua Evolution API para habilitar o envio automático de mensagens do sistema (KDS, Pedidos, etc).
+          </p>
+
+          <div className="space-y-2">
+            <Label htmlFor="evolution-url">URL da Evolution API</Label>
+            <Input
+              id="evolution-url"
+              placeholder="http://sua-vps.com:8080"
+              value={settings.evolutionUrl}
+              onChange={(e) => handleInputChange('evolutionUrl', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="evolution-apikey">Chave Global (Global API Key)</Label>
+            <Input
+              id="evolution-apikey"
+              type="password"
+              placeholder="BoraCumeMasterKey2024!"
+              value={settings.evolutionApiKey}
+              onChange={(e) => handleInputChange('evolutionApiKey', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-4">
           <Button onClick={handleSave} className="flex-1" disabled={loading}>
             <Save size={16} className="mr-2" />
             {loading ? 'Salvando...' : 'Salvar Configurações'}
