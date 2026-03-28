@@ -62,19 +62,18 @@ const WhatsAppIntegration: React.FC = () => {
 
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
-  // Função auxiliar para iniciar o polling
-  const startPolling = (evolutionUrl: string, evolutionApiKey: string, instanceName: string) => {
+  // Função auxiliar para iniciar o polling da Z-API
+  const startPolling = (instanceId: string, token: string) => {
     const checkInterval = setInterval(async () => {
       try {
-        const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
-          method: 'GET',
-          headers: { 'apikey': evolutionApiKey }
+        const statusRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/status`, {
+          method: 'GET'
         });
         const statusData = await statusRes.json();
-        if (statusData?.instance?.state === 'open') {
+        if (statusData?.connected) {
           clearInterval(checkInterval);
           setSettings(prev => ({ ...prev, connected: true }));
-          toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
+          toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso na Z-API." });
         }
       } catch (e) {}
     }, 3000);
@@ -88,104 +87,30 @@ const WhatsAppIntegration: React.FC = () => {
       setLoading(true);
       setQrCodeUrl(null); // Limpar QR anterior
       
-      // Aqui você chamaria sua Evolution API
-      // Configurações Globais Hardcoded (Chumbadas) da Evolution API
-      // O sistema agora sempre baterá nesta VPS para gerar os QR Codes de qualquer cliente
-      const evolutionUrl = "https://api.boracume.com";
-      const evolutionApiKey = "BoraCumeMasterKey2024!";
+      // Credenciais Z-API
+      const instanceId = "3D307D5A7BAE02778A9C1D183B765A20"; // Coloque o ID da sua instância aqui se for diferente
+      const token = "2768109EA7AFD1047A3EE3C8";
 
-      console.log("Tentando conectar com as chaves hardcoded:", {
-        url: evolutionUrl,
-        keyExists: !!evolutionApiKey
-      });
-
-      // Se a URL estiver vazia (undefined), jogue um erro imediato
-      if (!evolutionUrl) {
-          throw new Error('Erro: URL da Evolution API não foi encontrada no banco de dados.');
-      }
-
-      // Nome da instância baseado no ID do usuário
-      const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
-
-      console.log(`Buscando status da instancia: ${instanceName}`);
+      console.log("Conectando na Z-API...");
       
-      // 1. Pedir para a API buscar o status da instância
-      const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
-        method: 'GET',
-        headers: { 
-            'apikey': evolutionApiKey,
-            'Content-Type': 'application/json'
-        }
-      });
-
-      const statusData = await statusRes.json();
-      console.log("Status Data:", statusData);
-
-      // 2. Se a instância NÃO existir (erro 404), vamos criar ela do zero
-      if (statusRes.status === 404 || statusData.error === 'Not Found') {
-        console.log("Instância não existe, criando...");
-        const createRes = await fetch(`${evolutionUrl}/instance/create`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey 
-          },
-          body: JSON.stringify({
-            instanceName: instanceName,
-            token: "",
-            qrcode: true
-          })
-        });
-        
-        const createData = await createRes.json();
-        console.log("Create Data:", createData);
-
-        // A criação já devolve o QR Code na mesma hora
-        if (createData.qrcode && createData.qrcode.base64) {
-            setQrCodeUrl(createData.qrcode.base64);
-            setSettings(prev => ({ ...prev, qr_code_data: createData.qrcode.base64 }));
-            toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
-            startPolling(evolutionUrl, evolutionApiKey, instanceName);
-            return;
-        }
-      }
-
-      // 3. Se a instância JÁ EXISTE, vamos verificar o estado dela
-      if (statusData?.instance?.state === 'open') {
-         setSettings(prev => ({ ...prev, connected: true }));
-         toast({ title: "Aviso", description: "Esta instância já está conectada!" });
-         return;
-      }
-
-      // 4. Se a instância existe, mas não está conectada, pedimos o QR Code
-      console.log("Pedindo QR Code de instância existente...");
-      const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
-        method: 'GET',
-        headers: { 
-            'apikey': evolutionApiKey,
-            'Content-Type': 'application/json'
-        }
+      // Pedir QR Code da Z-API
+      const connectRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`, {
+        method: 'GET'
       });
 
       const connectData = await connectRes.json();
-      console.log("Connect Data Received:", connectData);
+      console.log("Z-API QR Response:", connectData);
       
-      if (connectData && connectData.base64) {
-         setQrCodeUrl(connectData.base64);
-         setSettings(prev => ({ ...prev, qr_code_data: connectData.base64 }));
+      if (connectData && connectData.value) {
+         setQrCodeUrl(connectData.value); // Z-API retorna a base64 no campo "value"
+         setSettings(prev => ({ ...prev, qr_code_data: connectData.value }));
          toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
-         startPolling(evolutionUrl, evolutionApiKey, instanceName);
+         startPolling(instanceId, token);
+      } else if (connectData?.connected) {
+         setSettings(prev => ({ ...prev, connected: true }));
+         toast({ title: "Aviso", description: "Esta instância já está conectada na Z-API!" });
       } else {
-         // Se não veio QR code, forçamos um logout/restart para limpar a instância travada
-         console.log("Forçando logout da instância para limpar o estado...");
-         await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
-            method: 'DELETE',
-            headers: { 
-                'apikey': evolutionApiKey,
-                'Content-Type': 'application/json'
-            }
-         });
-         toast({ title: "Limpando conexão", description: "Aguarde 5 segundos e clique em Gerar QR novamente." });
+         throw new Error('Não foi possível gerar o QR Code na Z-API.');
       }
 
     } catch (error: any) {
