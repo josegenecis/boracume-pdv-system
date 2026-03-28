@@ -88,8 +88,8 @@ const WhatsAppIntegration: React.FC = () => {
       setQrCodeUrl(null); // Limpar QR anterior
       
       // Credenciais Z-API
-      const instanceId = "3D307D5A7BAE02778A9C1D183B765A20"; // Coloque o ID da sua instância aqui se for diferente
-      const token = "2768109EA7AFD1047A3EE3C8";
+      const instanceId = "3F0D0FE4F122120138F06A1199C38405"; 
+      const token = "8DE7ECF2C8EE32A8E56153A4";
 
       console.log("Conectando na Z-API...");
       
