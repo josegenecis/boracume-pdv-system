@@ -99,13 +99,23 @@ const WhatsAppIntegration: React.FC = () => {
         keyExists: !!evolutionApiKey
       });
 
+      // Se a URL estiver vazia (undefined), jogue um erro imediato
+      if (!evolutionUrl) {
+          throw new Error('Erro: URL da Evolution API não foi encontrada no banco de dados.');
+      }
+
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
 
+      console.log(`Buscando status da instancia: ${instanceName}`);
+      
       // 1. Pedir para a API buscar o status da instância
       const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
         method: 'GET',
-        headers: { 'apikey': evolutionApiKey }
+        headers: { 
+            'apikey': evolutionApiKey,
+            'Content-Type': 'application/json'
+        }
       });
 
       const statusData = await statusRes.json();
@@ -151,7 +161,10 @@ const WhatsAppIntegration: React.FC = () => {
       console.log("Pedindo QR Code de instância existente...");
       const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
         method: 'GET',
-        headers: { 'apikey': evolutionApiKey }
+        headers: { 
+            'apikey': evolutionApiKey,
+            'Content-Type': 'application/json'
+        }
       });
 
       const connectData = await connectRes.json();
@@ -167,7 +180,10 @@ const WhatsAppIntegration: React.FC = () => {
          console.log("Forçando logout da instância para limpar o estado...");
          await fetch(`${evolutionUrl}/instance/logout/${instanceName}`, {
             method: 'DELETE',
-            headers: { 'apikey': evolutionApiKey }
+            headers: { 
+                'apikey': evolutionApiKey,
+                'Content-Type': 'application/json'
+            }
          });
          toast({ title: "Limpando conexão", description: "Aguarde 5 segundos e clique em Gerar QR novamente." });
       }
