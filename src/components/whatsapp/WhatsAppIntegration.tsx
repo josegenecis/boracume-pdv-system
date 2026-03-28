@@ -86,36 +86,43 @@ const WhatsAppIntegration: React.FC = () => {
       // Nome da instância baseado no ID do usuário
       const instanceName = `boracume_${user?.id.replace(/-/g, '')}`;
 
+      // Vamos usar uma Edge Function do Supabase como proxy para evitar erros de Mixed Content (HTTP vs HTTPS)
       // 1. Criar a instância
-      const createRes = await fetch(`${evolutionUrl}/instance/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': evolutionApiKey
-        },
-        body: JSON.stringify({
-          instanceName: instanceName,
-          token: "",
-          qrcode: true
-        })
+      const createRes = await supabase.functions.invoke('evolution-proxy', {
+        body: {
+          endpoint: `${evolutionUrl}/instance/create`,
+          method: 'POST',
+          headers: { 'apikey': evolutionApiKey },
+          payload: {
+            instanceName: instanceName,
+            token: "",
+            qrcode: true
+          }
+        }
       });
 
-      // Se der erro 403 (já existe), a gente tenta só conectar
-      if (!createRes.ok && createRes.status !== 403) {
+      // Se der erro diferente de 403 (já existe), lançamos o erro
+      if (createRes.error || (createRes.data?.status !== 200 && createRes.data?.status !== 201 && createRes.data?.status !== 403)) {
+         console.log("Create Res:", createRes);
          throw new Error('Falha ao comunicar com a Evolution API');
       }
 
       // 2. Pedir o QRCode (Connect)
-      const connectRes = await fetch(`${evolutionUrl}/instance/connect/${instanceName}`, {
-        method: 'GET',
-        headers: {
-          'apikey': evolutionApiKey
+      const connectRes = await supabase.functions.invoke('evolution-proxy', {
+        body: {
+          endpoint: `${evolutionUrl}/instance/connect/${instanceName}`,
+          method: 'GET',
+          headers: { 'apikey': evolutionApiKey }
         }
       });
 
-      const connectData = await connectRes.json();
+      if (connectRes.error || !connectRes.data) {
+         throw new Error('Falha ao obter QR Code da API');
+      }
+
+      const connectData = connectRes.data.data;
       
-      if (connectData.base64) {
+      if (connectData && connectData.base64) {
          setQrCodeUrl(connectData.base64);
          setSettings(prev => ({ ...prev, qr_code_data: connectData.base64 }));
          
@@ -127,11 +134,15 @@ const WhatsAppIntegration: React.FC = () => {
          // Iniciar polling para ver se conectou
          const checkInterval = setInterval(async () => {
             try {
-              const statusRes = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
-                headers: { 'apikey': evolutionApiKey }
+              const statusRes = await supabase.functions.invoke('evolution-proxy', {
+                body: {
+                  endpoint: `${evolutionUrl}/instance/connectionState/${instanceName}`,
+                  method: 'GET',
+                  headers: { 'apikey': evolutionApiKey }
+                }
               });
-              const statusData = await statusRes.json();
-              if (statusData.instance?.state === 'open') {
+              const statusData = statusRes.data?.data;
+              if (statusData && statusData.instance?.state === 'open') {
                 clearInterval(checkInterval);
                 setSettings(prev => ({ ...prev, connected: true }));
                 toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
