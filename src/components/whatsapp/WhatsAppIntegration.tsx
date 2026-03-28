@@ -150,11 +150,24 @@ const WhatsAppIntegration: React.FC = () => {
          // Limpar interval após 2 minutos
          setTimeout(() => clearInterval(checkInterval), 120000);
 
-      } else if (connectData.instance?.state === 'open') {
+      } else if (connectData?.instance?.state === 'open') {
          setSettings(prev => ({ ...prev, connected: true }));
          toast({ title: "Aviso", description: "Esta instância já está conectada!" });
       } else {
-         throw new Error('Não foi possível gerar o QR Code.');
+         // Tentar forçar um restart da instância e pegar o QR code
+         console.log("Tentando reiniciar a instância para gerar novo QR...");
+         try {
+             await supabase.functions.invoke('evolution-proxy', {
+                body: {
+                  endpoint: `${evolutionUrl}/instance/restart/${instanceName}`,
+                  method: 'PUT',
+                  headers: { 'apikey': evolutionApiKey }
+                }
+             });
+             toast({ title: "Reiniciando", description: "Preparando novo QR Code, tente novamente em 5 segundos." });
+         } catch(e) {
+             throw new Error('Não foi possível gerar o QR Code.');
+         }
       }
 
     } catch (error: any) {
