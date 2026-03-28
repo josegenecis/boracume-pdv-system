@@ -328,14 +328,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         try {
           const parsed = JSON.parse(textInput);
           // Aceitar tanto o formato do Apify antigo quanto o formato direto
-          categoriesToImport = Array.isArray(parsed) ? parsed : (parsed.categories || []);
+          let rawCategories = Array.isArray(parsed) ? parsed : (parsed.categories || []);
           
-          if (!Array.isArray(categoriesToImport)) {
+          if (!Array.isArray(rawCategories)) {
             throw new Error('O JSON deve ser uma lista (array) de categorias.');
           }
 
           // Converter o formato sugerido pelo seu amigo {"products": []} para o formato interno do sistema {"items": []}
-          categoriesToImport = categoriesToImport.map(cat => ({
+          categoriesToImport = rawCategories.map(cat => ({
              name: cat.category || cat.name || 'Geral',
              items: Array.isArray(cat.products) ? cat.products : (Array.isArray(cat.items) ? cat.items : [])
           }));
@@ -503,6 +503,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
 
         for (const product of category.items) {
+            if (!product || !product.name) continue; // Pula produtos nulos ou sem nome
+
             const { data: existingProduct } = await supabase
                 .from('products')
                 .select('id')
@@ -548,6 +550,11 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 })
                 .select('id')
                 .single();
+
+            if (prodError) {
+                console.error('[Import] Erro ao inserir produto:', product.name, prodError);
+                continue; // Pula para o próximo se der erro
+            }
 
             if (!prodError && newProduct) {
                 totalProducts++;
