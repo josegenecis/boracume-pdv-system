@@ -72,14 +72,15 @@ const WhatsAppIntegration: React.FC = () => {
       const { data: globalSettings } = await supabase
         .from('whatsapp_settings')
         .select('evolution_url, evolution_api_key')
-        .eq('user_id', user?.id)
+        .not('evolution_url', 'is', null)
+        .limit(1)
         .single();
 
       const evolutionUrl = globalSettings?.evolution_url;
       const evolutionApiKey = globalSettings?.evolution_api_key;
 
       if (!evolutionUrl || !evolutionApiKey) {
-        throw new Error('Você precisa configurar a URL e Chave da Evolution API na aba "WhatsApp" (painel global) primeiro.');
+        throw new Error('A integração com WhatsApp ainda não foi configurada pelo administrador do sistema.');
       }
 
       // Nome da instância baseado no ID do usuário
