@@ -95,7 +95,10 @@ const WhatsAppIntegration: React.FC = () => {
       
       // Pedir QR Code da Z-API
       const connectRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`, {
-        method: 'GET'
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
       });
 
       const connectData = await connectRes.json();
