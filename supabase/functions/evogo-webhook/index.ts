@@ -1,11 +1,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { autoReplyWithMenu, extractPhoneFromRemoteJid } from "../_shared/restaurant-whatsapp.ts";
+import { autoReplyWithMenu, buildMenuShareUrl, buildTrackShareUrl, extractPhoneFromRemoteJid, fillTemplate, loadRestaurantContext, sendRestaurantWhatsApp } from "../_shared/restaurant-whatsapp.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+function toTextFromMessage(message: any) {
+  if (!message || typeof message !== 'object') return '';
+  return String(
+    message?.conversation ||
+    message?.extendedTextMessage?.text ||
+    message?.imageMessage?.caption ||
+    message?.videoMessage?.caption ||
+    message?.documentMessage?.caption ||
+    message?.buttonsResponseMessage?.selectedDisplayText ||
+    message?.listResponseMessage?.title ||
+    message?.templateButtonReplyMessage?.selectedDisplayText ||
+    ''
+  ).trim();
+}
+
+function isGreeting(text: string) {
+  return /^(oi+|ol[áa]+|opa+|bom dia|boa tarde|boa noite|e ai|e aí|menu|card[aá]pio|link)\b/i.test(text.trim());
+}
+
+function wantsMenuLink(text: string) {
+  return /(link|card[aá]pio|cat[aá]logo|menu|me envia|me manda|manda o link|envia o link|quero pedir|fazer pedido|fazer um pedido|como pedir|me passa o link)/i.test(text);
+}
+
+function wantsOrderTracking(text: string) {
+  return /(acompanh|rastre|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(text);
+}
+
+function minutesSince(dateString?: string | null) {
+  if (!dateString) return Number.POSITIVE_INFINITY;
+  const time = new Date(dateString).getTime();
+  if (Number.isNaN(time)) return Number.POSITIVE_INFINITY;
+  return (Date.now() - time) / 60000;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -64,17 +98,13 @@ serve(async (req) => {
         const key = incoming?.key || incoming?.data?.key || {};
         const message = incoming?.message || incoming?.data?.message || {};
         const remoteJid = String(key?.remoteJid || '');
-        const text =
-          message?.conversation ||
-          message?.extendedTextMessage?.text ||
-          message?.imageMessage?.caption ||
-          '';
+        const text = toTextFromMessage(message);
 
         const phone = extractPhoneFromRemoteJid(remoteJid);
-        if (phone) {
+        if (phone && text) {
           const { data: existingCustomer } = await supabaseClient
             .from('customers')
-            .select('id')
+            .select('id, name, updated_at')
             .eq('user_id', instanceRow.restaurant_id)
             .eq('phone', phone)
             .maybeSingle();
@@ -86,12 +116,121 @@ serve(async (req) => {
                 user_id: instanceRow.restaurant_id,
                 name: 'Cliente WhatsApp',
                 phone
-              });
+              })
+              .select('id, name, updated_at')
+              .single();
           }
 
-          const shouldAutoReply = !existingCustomer || /(oi|olá|ola|menu|card[aá]pio|pedido|quero|boa tarde|bom dia|boa noite)/i.test(String(text || ''));
-          if (shouldAutoReply) {
-            await autoReplyWithMenu(supabaseClient, instanceRow.restaurant_id, phone);
+          const { data: conversation } = await supabaseClient
+            .from('whatsapp_conversations')
+            .select('id, updated_at')
+            .eq('user_id', instanceRow.restaurant_id)
+            .eq('customer_phone', phone)
+            .maybeSingle();
+
+          let conversationId = conversation?.id || null;
+          if (!conversationId) {
+            const { data: createdConversation } = await supabaseClient
+              .from('whatsapp_conversations')
+              .insert({
+                user_id: instanceRow.restaurant_id,
+                customer_phone: phone,
+                customer_name: existingCustomer?.name || 'Cliente WhatsApp',
+                status: 'open'
+              })
+              .select('id')
+              .single();
+            conversationId = createdConversation?.id || null;
+          }
+
+          if (conversationId) {
+            await supabaseClient.from('whatsapp_messages').insert({
+              conversation_id: conversationId,
+              content: text,
+              sender: 'customer',
+              message_type: 'text',
+              delivered: true
+            });
+          }
+
+          const { data: lastOrder } = await supabaseClient
+            .from('orders')
+            .select('id, order_number, status, created_at')
+            .eq('user_id', instanceRow.restaurant_id)
+            .eq('customer_phone', phone)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const { data: lastBotMessage } = conversationId
+            ? await supabaseClient
+                .from('whatsapp_messages')
+                .select('id, content, sent_at')
+                .eq('conversation_id', conversationId)
+                .eq('sender', 'bot')
+                .order('sent_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+            : { data: null };
+
+          const explicitMenuIntent = wantsMenuLink(text);
+          const greetingIntent = isGreeting(text);
+          const trackIntent = wantsOrderTracking(text);
+          const customerHasNoOrder = !lastOrder;
+          const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
+          const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20;
+
+          if (trackIntent && lastOrder?.id) {
+            const context = await loadRestaurantContext(supabaseClient, instanceRow.restaurant_id);
+            const trackLink = buildTrackShareUrl(lastOrder.id, instanceRow.restaurant_id, String(lastOrder.order_number || ''));
+            const replyText = fillTemplate(
+              `📦 ${context.restaurantName}: acompanhe seu pedido #{order_number} aqui: {track_link}`,
+              {
+                restaurant_name: context.restaurantName,
+                order_number: String(lastOrder.order_number || ''),
+                track_link: trackLink,
+                menu_link: '',
+                customer_name: existingCustomer?.name || 'Cliente'
+              }
+            );
+
+            const sendResult = await sendRestaurantWhatsApp(instanceRow.restaurant_id, phone, replyText);
+            if (sendResult?.ok && conversationId) {
+              await supabaseClient.from('whatsapp_messages').insert({
+                conversation_id: conversationId,
+                content: replyText,
+                sender: 'bot',
+                message_type: 'text',
+                delivered: true
+              });
+            }
+          } else if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
+            const sendResult = await autoReplyWithMenu(supabaseClient, instanceRow.restaurant_id, phone, existingCustomer?.name || 'Cliente');
+            if (sendResult?.ok) {
+              await supabaseClient
+                .from('customers')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('user_id', instanceRow.restaurant_id)
+                .eq('phone', phone);
+
+              if (conversationId) {
+                const context = await loadRestaurantContext(supabaseClient, instanceRow.restaurant_id);
+                const replyText = fillTemplate(context.autoResponses.welcome || '', {
+                  restaurant_name: context.restaurantName,
+                  menu_link: buildMenuShareUrl(instanceRow.restaurant_id),
+                  customer_name: existingCustomer?.name || 'Cliente',
+                  order_number: '',
+                  track_link: ''
+                });
+                await supabaseClient.from('whatsapp_messages').insert({
+                  conversation_id: conversationId,
+                  content: replyText,
+                  sender: 'bot',
+                  message_type: 'text',
+                  delivered: true
+                });
+              }
+            }
           }
         }
       }

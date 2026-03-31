@@ -71,7 +71,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   // Se estiver carregando auth ou verificando status
   if (loading || checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-emerald-50">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
           <p className="text-gray-500 text-sm">Carregando...</p>
@@ -81,7 +81,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   }
 
   return (
-    <div className="min-h-screen bg-white w-full overflow-x-hidden relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-orange-50 w-full overflow-x-hidden relative">
       {/* Onboarding Overlay */}
       {showWizard && (
         <OnboardingWizard onComplete={handleOnboardingComplete} />
@@ -109,7 +109,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
           }
         `}>
           <div className="h-[calc(100vh-64px)] w-full">
-            <div className="w-full max-w-full h-full mobile-safe-x sm:px-6">
+            <div className="w-full max-w-full h-full mobile-safe-x px-4 py-4 sm:px-6 sm:py-6">
               {children}
             </div>
           </div>
