@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const EVOLUTION_URL = "https://api.boracume.com";
-const EVOLUTION_API_KEY = "BoraCumeMasterKey2024!";
+const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
