@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { autoReplyWithMenu, buildMenuShareUrl, buildTrackShareUrl, extractPhoneFromRemoteJid, fillTemplate, loadRestaurantContext, sendRestaurantWhatsApp } from "../_shared/restaurant-whatsapp.ts";
+import { autoReplyWithMenu, buildMenuShareUrl, buildPhoneCandidates, buildTrackShareUrl, extractPhoneFromRemoteJid, fillTemplate, loadRestaurantContext, sendRestaurantWhatsApp } from "../_shared/restaurant-whatsapp.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -108,11 +108,12 @@ serve(async (req) => {
 
         const phone = extractPhoneFromRemoteJid(remoteJid);
         if (phone && text) {
+          const phoneCandidates = buildPhoneCandidates(phone);
           const { data: existingCustomer } = await supabaseClient
             .from('customers')
             .select('id, name, updated_at')
             .eq('user_id', instanceRow.restaurant_id)
-            .eq('phone', phone)
+            .in('phone', phoneCandidates)
             .maybeSingle();
 
           if (!existingCustomer) {
@@ -163,7 +164,7 @@ serve(async (req) => {
             .from('orders')
             .select('id, order_number, status, created_at')
             .eq('user_id', instanceRow.restaurant_id)
-            .eq('customer_phone', phone)
+            .in('customer_phone', phoneCandidates)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -217,7 +218,7 @@ serve(async (req) => {
                 .from('customers')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('user_id', instanceRow.restaurant_id)
-                .eq('phone', phone);
+                .in('phone', phoneCandidates);
 
               if (conversationId) {
                 const context = await loadRestaurantContext(supabaseClient, instanceRow.restaurant_id);

@@ -44,8 +44,18 @@ export function normalizePhone(value: string | null | undefined) {
 }
 
 export function extractPhoneFromRemoteJid(value: string | null | undefined) {
-  const remote = String(value || "").split("@")[0];
+  const remote = String(value || "").split("@")[0].split(":")[0];
   return normalizePhone(remote);
+}
+
+export function buildPhoneCandidates(value: string | null | undefined) {
+  const normalized = normalizePhone(value);
+  const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
+  const candidates = [normalized, withoutCountry, withoutCountry.slice(-11), withoutCountry.slice(-10)]
+    .map((item) => String(item || "").replace(/\D/g, ""))
+    .filter(Boolean);
+
+  return Array.from(new Set(candidates));
 }
 
 export function fillTemplate(template: string, variables: Record<string, string>) {
