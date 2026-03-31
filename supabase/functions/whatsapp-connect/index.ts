@@ -55,9 +55,31 @@ serve(async (req) => {
         instanceName: instanceName,
         token: instanceToken,
         qrcode: true,
-        integration: "WHATSAPP-BAILEYS",
-        webhook: `${Deno.env.get('SUPABASE_URL')}/functions/v1/evogo-webhook`,
-        webhook_events: [
+        integration: "WHATSAPP-BAILEYS"
+      })
+    });
+
+    let evoData;
+    try {
+      evoData = await evoRes.json();
+    } catch (e) {
+      evoData = { message: "Could not parse JSON from Evolution API" };
+    }
+
+    if (!evoRes.ok && evoData?.response?.message?.[0] !== 'Instance already exists' && evoData?.error !== 'Instance already exists') {
+      console.error("Evolution API Error:", evoData);
+      return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': instanceToken
+      },
+      body: JSON.stringify({
+        webhookUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/evogo-webhook`,
+        subscribe: [
           "APPLICATION_STARTUP",
           "QRCODE_UPDATED",
           "MESSAGES_UPSERT",
@@ -71,22 +93,23 @@ serve(async (req) => {
           "CHATS_UPDATE",
           "CHATS_DELETE",
           "CONNECTION_UPDATE"
-        ]
+        ],
+        rabbitmqEnable: "",
+        websocketEnable: "",
+        natsEnable: ""
       })
     });
 
-    let evoData;
+    let connectData;
     try {
-      evoData = await evoRes.json();
+      connectData = await connectRes.json();
     } catch (e) {
-      evoData = { message: "Could not parse JSON from Evolution API" };
+      connectData = { message: "Could not parse JSON from Evolution API" };
     }
 
-    // Ignore error if instance already exists (409 or 400 usually, but let's check)
-    if (!evoRes.ok && evoData?.response?.message?.[0] !== 'Instance already exists' && evoData?.error !== 'Instance already exists') {
-      console.error("Evolution API Error:", evoData);
-      // Retornar 200 com flag de erro para o frontend conseguir ler os detalhes (Supabase esconde em 400)
-      return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!connectRes.ok) {
+      console.error("Evolution API Connect Error:", connectData);
+      return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // 2. Save in Database using service role to bypass RLS or just use the user client

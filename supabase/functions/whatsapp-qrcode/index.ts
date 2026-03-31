@@ -30,29 +30,12 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
+    const instanceToken = `token_${restaurant_id.replace(/-/g, '')}`;
 
-    // Get instance name from database
-    const { data: instanceData, error: dbError } = await supabaseClient
-      .from('whatsapp_instances')
-      .select('instance_name')
-      .eq('restaurant_id', restaurant_id)
-      .single();
-
-    if (dbError || !instanceData) {
-      return new Response(JSON.stringify({ error: 'Instance not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const instanceName = instanceData.instance_name;
-
-    // Fetch QR code from EvoGo
-    // Usually it's GET /instance/connect/{instanceName} or we can use the connect endpoint
-    // The spec says GET `http://5.189.149.31:8080/instance/{instanceName}/qrcode`
-    // Evolution API v2 uses GET /instance/connect/{instanceName}
-    
-    const evoRes = await fetch(`${EVOLUTION_URL}/instance/connect/${instanceName}`, {
+    const evoRes = await fetch(`${EVOLUTION_URL}/instance/qr`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY
+        'apikey': instanceToken
       }
     });
 
@@ -68,7 +51,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: true, message: 'Evolution API Error', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ qrcode: evoData?.base64 || evoData?.qrcode || evoData }), {
+    return new Response(JSON.stringify({ qrcode: evoData?.data?.Qrcode || evoData?.data?.qrcode || evoData?.Qrcode || evoData?.qrcode || evoData }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -30,23 +30,11 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
+    const instanceSuffix = restaurant_id.replace(/-/g, '');
+    const instanceName = `rest_${instanceSuffix}`;
+    const instanceToken = `token_${instanceSuffix}`;
 
-    // Get instance name from database
-    const { data: instanceData, error: dbError } = await supabaseClient
-      .from('whatsapp_instances')
-      .select('instance_name')
-      .eq('restaurant_id', restaurant_id)
-      .single();
-
-    if (dbError || !instanceData) {
-      return new Response(JSON.stringify({ status: 'disconnected', error: 'Instance not found' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const instanceName = instanceData.instance_name;
-
-    // Fetch status from EvoGo
-    // Evolution API v2 uses GET /instance/connectionState/{instanceName}
-    const evoRes = await fetch(`${EVOLUTION_URL}/instance/connectionState/${instanceName}`, {
+    const evoRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
       method: 'GET',
       headers: {
         'apikey': EVOLUTION_API_KEY
@@ -69,26 +57,19 @@ serve(async (req) => {
         });
     }
 
+    const instances = Array.isArray(evoData?.data) ? evoData.data : [];
+    const currentInstance = instances.find((instance: any) => instance?.token === instanceToken || instance?.name === instanceName);
+
     let newStatus = 'disconnected';
-    if (evoData?.instance?.state === 'open') {
+    let phone = null;
+    if (currentInstance?.connected) {
       newStatus = 'connected';
-    } else if (evoData?.instance?.state === 'connecting') {
+    } else if (currentInstance?.qrcode) {
       newStatus = 'connecting';
     }
 
-    // Optional: get phone if connected. /instance/fetchInstances
-    let phone = null;
-    if (newStatus === 'connected') {
-        const infoRes = await fetch(`${EVOLUTION_URL}/instance/fetchInstances?instanceName=${instanceName}`, {
-            method: 'GET',
-            headers: { 'apikey': EVOLUTION_API_KEY }
-        });
-        if (infoRes.ok) {
-            const infoData = await infoRes.json();
-            if (infoData && infoData.length > 0 && infoData[0].ownerJid) {
-                phone = infoData[0].ownerJid.split('@')[0];
-            }
-        }
+    if (currentInstance?.jid) {
+      phone = String(currentInstance.jid).split('@')[0] || null;
     }
 
     // Update database

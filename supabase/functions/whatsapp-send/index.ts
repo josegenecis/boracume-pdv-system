@@ -30,9 +30,7 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
-
-    // We can get instance_name from DB, or just generate it as in the spec
-    const instanceName = `rest_${restaurant_id.replace(/-/g, '')}`;
+    const instanceToken = `token_${restaurant_id.replace(/-/g, '')}`;
 
     const { number, message } = await req.json();
 
@@ -40,11 +38,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Missing number or message' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const evoRes = await fetch(`${EVOLUTION_URL}/message/sendText/${instanceName}`, {
+    const evoRes = await fetch(`${EVOLUTION_URL}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY
+        'apikey': instanceToken
       },
       body: JSON.stringify({
         number: number,
