@@ -56,14 +56,19 @@ serve(async (req) => {
       }
     });
 
-    const evoData = await evoRes.json();
+    let evoData;
+    try {
+      evoData = await evoRes.json();
+    } catch (e) {
+      evoData = { message: "Could not parse JSON from Evolution API" };
+    }
 
     if (!evoRes.ok) {
       console.error("Evolution API Error (QR Code):", evoData);
-      return new Response(JSON.stringify({ error: 'Failed to fetch QR Code from Evolution API' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: true, message: 'Evolution API Error', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ qrcode: evoData.base64 || evoData.qrcode }), {
+    return new Response(JSON.stringify({ qrcode: evoData?.base64 || evoData?.qrcode || evoData }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

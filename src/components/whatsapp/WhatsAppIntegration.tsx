@@ -112,6 +112,10 @@ const WhatsAppIntegration: React.FC = () => {
       });
 
       if (connectError) throw new Error(connectError.message);
+      if (connectData?.error) {
+        console.error("Detalhes do erro na EvoGo (Connect):", connectData);
+        throw new Error(`Falha na API EvoGo (${connectData.status}): ${JSON.stringify(connectData.details)}`);
+      }
 
       // 2. Aguardar um pouco para a instância inicializar
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -122,6 +126,10 @@ const WhatsAppIntegration: React.FC = () => {
       });
 
       if (qrError) throw new Error(qrError.message);
+      if (qrData?.error) {
+        console.error("Detalhes do erro na EvoGo (QR):", qrData);
+        throw new Error(`Falha ao pegar QR (${qrData.status}): ${JSON.stringify(qrData.details)}`);
+      }
 
       if (qrData?.qrcode) {
          setQrCodeUrl(qrData.qrcode); 

@@ -39,7 +39,7 @@ serve(async (req) => {
       .single();
 
     if (dbError || !instanceData) {
-      return new Response(JSON.stringify({ error: 'Instance not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ status: 'disconnected', error: 'Instance not found' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const instanceName = instanceData.instance_name;
@@ -53,7 +53,21 @@ serve(async (req) => {
       }
     });
 
-    const evoData = await evoRes.json();
+    let evoData;
+    try {
+      evoData = await evoRes.json();
+    } catch(e) {
+      evoData = {};
+    }
+
+    if (!evoRes.ok) {
+        console.log("Evolution API status error", evoData);
+        // Não falha fatalmente, só retorna disconnected para não dar 500 no polling
+        return new Response(JSON.stringify({ status: 'disconnected', details: evoData }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+    }
 
     let newStatus = 'disconnected';
     if (evoData?.instance?.state === 'open') {

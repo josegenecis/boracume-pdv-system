@@ -52,11 +52,16 @@ serve(async (req) => {
       })
     });
 
-    const evoData = await evoRes.json();
+    let evoData;
+    try {
+      evoData = await evoRes.json();
+    } catch(e) {
+      evoData = {};
+    }
 
     if (!evoRes.ok) {
       console.error("Evolution API Error (Send Message):", evoData);
-      return new Response(JSON.stringify({ error: 'Failed to send message' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: true, message: 'Failed to send message', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     return new Response(JSON.stringify({ success: true, data: evoData }), {

@@ -65,12 +65,18 @@ serve(async (req) => {
       })
     });
 
-    const evoData = await evoRes.json();
-    
+    let evoData;
+    try {
+      evoData = await evoRes.json();
+    } catch (e) {
+      evoData = { message: "Could not parse JSON from Evolution API" };
+    }
+
     // Ignore error if instance already exists (409 or 400 usually, but let's check)
     if (!evoRes.ok && evoData?.response?.message?.[0] !== 'Instance already exists' && evoData?.error !== 'Instance already exists') {
       console.error("Evolution API Error:", evoData);
-      // We will still try to insert in case it was created before
+      // Retornar 200 com flag de erro para o frontend conseguir ler os detalhes (Supabase esconde em 400)
+      return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // 2. Save in Database using service role to bypass RLS or just use the user client
