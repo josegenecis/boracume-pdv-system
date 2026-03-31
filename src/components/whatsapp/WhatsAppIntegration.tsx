@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +27,7 @@ const WhatsAppIntegration: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Carregar configurações do localStorage
@@ -35,14 +35,31 @@ const WhatsAppIntegration: React.FC = () => {
     if (saved) {
       setSettings(JSON.parse(saved));
     }
+
+    // Verificar status inicial
+    checkStatus();
   }, []);
+
+  const checkStatus = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-status', {
+        method: 'GET'
+      });
+      if (data?.status === 'connected') {
+        setSettings(prev => ({ ...prev, connected: true, phone_number: data.phone || prev.phone_number }));
+      } else {
+        setSettings(prev => ({ ...prev, connected: false }));
+      }
+    } catch (e) {
+      console.error("Erro ao checar status inicial:", e);
+    }
+  };
 
   const saveSettings = async () => {
     try {
       setLoading(true);
-      
       // Salvar no localStorage
-      localStorage.setItem('whatsapp_settings', JSON.stringify(settings));
+      localStorage.setItem('whatsapp_settings', JSON.stringify(settings));      
 
       toast({
         title: "Sucesso",
@@ -60,22 +77,22 @@ const WhatsAppIntegration: React.FC = () => {
     }
   };
 
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-
-  // Função auxiliar para iniciar o polling da Z-API
-  const startPolling = (instanceId: string, token: string) => {
+  const startPolling = () => {
     const checkInterval = setInterval(async () => {
       try {
-        const statusRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/status`, {
+        const { data, error } = await supabase.functions.invoke('whatsapp-status', {
           method: 'GET'
         });
-        const statusData = await statusRes.json();
-        if (statusData?.connected) {
+        
+        if (data?.status === 'connected') {
           clearInterval(checkInterval);
-          setSettings(prev => ({ ...prev, connected: true }));
-          toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso na Z-API." });
+          setSettings(prev => ({ ...prev, connected: true, phone_number: data.phone || prev.phone_number }));
+          setQrCodeUrl(null);
+          toast({ title: "Conectado!", description: "WhatsApp conectado com sucesso." });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("Erro no polling:", e);
+      }
     }, 3000);
 
     // Limpar interval após 2 minutos
@@ -86,41 +103,40 @@ const WhatsAppIntegration: React.FC = () => {
     try {
       setLoading(true);
       setQrCodeUrl(null); // Limpar QR anterior
-      
-      // Credenciais Z-API
-      const instanceId = "3F0D0FE4F122120138F06A1199C38405"; 
-      const token = "8DE7ECF2C8EE32A8E56153A4";
 
-      console.log("Conectando na Z-API...");
-      
-      // Pedir QR Code da Z-API
-      const connectRes = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+      console.log("Conectando na EvoGo...");
+
+      // 1. Chamar connect
+      const { data: connectData, error: connectError } = await supabase.functions.invoke('whatsapp-connect', {
+        method: 'POST'
       });
 
-      const connectData = await connectRes.json();
-      console.log("Z-API QR Response:", connectData);
-      
-      if (connectData && connectData.value) {
-         setQrCodeUrl(connectData.value); // Z-API retorna a base64 no campo "value"
-         setSettings(prev => ({ ...prev, qr_code_data: connectData.value }));
+      if (connectError) throw new Error(connectError.message);
+
+      // 2. Aguardar um pouco para a instância inicializar
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 3. Pegar QR Code
+      const { data: qrData, error: qrError } = await supabase.functions.invoke('whatsapp-qrcode', {
+        method: 'GET'
+      });
+
+      if (qrError) throw new Error(qrError.message);
+
+      if (qrData?.qrcode) {
+         setQrCodeUrl(qrData.qrcode); 
+         setSettings(prev => ({ ...prev, qr_code_data: qrData.qrcode }));   
          toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
-         startPolling(instanceId, token);
-      } else if (connectData?.connected) {
-         setSettings(prev => ({ ...prev, connected: true }));
-         toast({ title: "Aviso", description: "Esta instância já está conectada na Z-API!" });
+         startPolling();
       } else {
-         throw new Error('Não foi possível gerar o QR Code na Z-API.');
+         throw new Error('Não foi possível gerar o QR Code.');       
       }
 
     } catch (error: any) {
       console.error('Erro ao gerar QR Code:', error);
       toast({
         title: "Erro de Conexão",
-        description: error.message || "Verifique se a Evolution API está online e configurada.",
+        description: error.message || "Verifique se a API está online.",
         variant: "destructive"
       });
     } finally {
@@ -146,19 +162,28 @@ const WhatsAppIntegration: React.FC = () => {
                 value={settings.phone_number}
                 onChange={(e) => setSettings(prev => ({ ...prev, phone_number: e.target.value }))}
                 placeholder="(11) 99999-9999 (Opcional para o QR)"
+                disabled={settings.connected}
               />
-              <Button onClick={generateQRCode} disabled={loading}>
-                <QrCode className="w-4 h-4 mr-2" />
-                Gerar QR
-              </Button>
+              {!settings.connected && (
+                <Button onClick={generateQRCode} disabled={loading}>
+                  <QrCode className="w-4 h-4 mr-2" />
+                  Conectar WhatsApp
+                </Button>
+              )}
+              {settings.connected && (
+                <Button variant="outline" disabled className="text-green-600 border-green-600">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  WhatsApp Conectado
+                </Button>
+              )}
             </div>
           </div>
 
-          {settings.qr_code_data && (
+          {(qrCodeUrl || (!settings.connected && settings.qr_code_data)) && !settings.connected && (
             <div className="p-4 border rounded-lg text-center bg-white shadow-sm">
               <div className="mx-auto mb-4 flex items-center justify-center">
                  {qrCodeUrl ? (
-                   <img src={qrCodeUrl} alt="QR Code WhatsApp" className="w-64 h-64 border-4 border-white shadow-md rounded-lg" />
+                   <img src={qrCodeUrl.includes('base64') ? qrCodeUrl : `data:image/png;base64,${qrCodeUrl}`} alt="QR Code WhatsApp" className="w-64 h-64 border-4 border-white shadow-md rounded-lg" />
                  ) : (
                    <div className="w-64 h-64 bg-gray-100 rounded-lg flex items-center justify-center">
                      <QrCode className="w-16 h-16 text-gray-400 animate-pulse" />
@@ -171,7 +196,7 @@ const WhatsAppIntegration: React.FC = () => {
               <p className="text-xs text-gray-500 mb-4">
                 Abra o WhatsApp {'>'} Configurações {'>'} Aparelhos conectados {'>'} Conectar aparelho
               </p>
-              
+
               <div className="flex items-center justify-center gap-2 mt-4 p-2 bg-gray-50 rounded-full w-fit mx-auto">
                 <div className={`w-3 h-3 rounded-full ${settings.connected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
                 <span className="text-sm font-medium text-gray-700">
@@ -182,8 +207,8 @@ const WhatsAppIntegration: React.FC = () => {
           )}
 
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Mensagens Automáticas</h3>
-            
+            <h3 className="text-lg font-medium">Mensagens Automáticas</h3>     
+
             <div className="space-y-2">
               <Label>Pedido Recebido</Label>
               <Textarea
@@ -216,7 +241,7 @@ const WhatsAppIntegration: React.FC = () => {
                   ...prev,
                   auto_messages: { ...prev.auto_messages, ready: e.target.value }
                 }))}
-                placeholder="✅ Pedido #{order_number} pronto para retirada!"
+                placeholder="✅ Pedido #{order_number} pronto para retirada!"  
               />
             </div>
 
@@ -228,7 +253,7 @@ const WhatsAppIntegration: React.FC = () => {
                   ...prev,
                   auto_messages: { ...prev.auto_messages, out_for_delivery: e.target.value }
                 }))}
-                placeholder="🚗 Pedido #{order_number} saiu para entrega!"
+                placeholder="🚗 Pedido #{order_number} saiu para entrega!"    
               />
             </div>
 

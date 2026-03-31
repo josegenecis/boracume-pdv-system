@@ -1,1 +1,55 @@
 project_id = "gcfyrcpugmducptktjic"
+[functions.whatsapp-connect]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-connect/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-connect/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-connect/*.html" ]
+
+[functions.whatsapp-qrcode]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-qrcode/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-qrcode/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-qrcode/*.html" ]
+
+[functions.whatsapp-status]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-status/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-status/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-status/*.html" ]
+
+[functions.whatsapp-send]
+enabled = true
+verify_jwt = true
+import_map = "./functions/whatsapp-send/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/whatsapp-send/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/whatsapp-send/*.html" ]
+
+[functions.evogo-webhook]
+enabled = true
+verify_jwt = true
+import_map = "./functions/evogo-webhook/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/evogo-webhook/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/evogo-webhook/*.html" ]

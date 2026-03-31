@@ -17,12 +17,19 @@ serve(async (req) => {
 
     if (!endpoint) throw new Error("Endpoint is required")
 
+    // FORÇAR HEADERS DA EVOLUTION API
+    const finalHeaders = {
+      'Content-Type': 'application/json',
+      'apikey': headers?.apikey || ''
+    };
+
+    console.log(`[PROXY] Chamando: ${method} ${endpoint}`);
+    console.log(`[PROXY] Headers:`, finalHeaders);
+    if (payload) console.log(`[PROXY] Payload:`, payload);
+
     const response = await fetch(endpoint, {
       method: method || 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(headers || {})
-      },
+      headers: finalHeaders,
       body: method === 'POST' && payload ? JSON.stringify(payload) : undefined
     })
 
@@ -40,7 +47,11 @@ serve(async (req) => {
     return new Response(JSON.stringify({ 
       status: response.status, 
       ok: response.ok,
-      data: jsonData 
+      data: jsonData,
+      debug: {
+        endpoint,
+        method
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
