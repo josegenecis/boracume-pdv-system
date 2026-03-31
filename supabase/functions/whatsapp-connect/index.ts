@@ -33,7 +33,13 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
-    const instanceName = `rest_${restaurant_id.replace(/-/g, '')}`; // removing hyphens to make it clean
+    const instanceName = `rest_${restaurant_id.replace(/-/g, '')}`;
+    const { data: profileData } = await supabaseClient
+      .from('profiles')
+      .select('restaurant_name')
+      .eq('id', restaurant_id)
+      .maybeSingle();
+    const restaurantName = profileData?.restaurant_name?.trim() || 'Restaurante';
 
     // 1. Call EvoGo to create instance
     const evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
@@ -43,6 +49,7 @@ serve(async (req) => {
         'apikey': EVOLUTION_API_KEY
       },
       body: JSON.stringify({
+        name: restaurantName,
         instanceName: instanceName,
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
