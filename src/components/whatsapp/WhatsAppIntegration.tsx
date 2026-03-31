@@ -9,20 +9,23 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
+const defaultAutoMessages = {
+  order_received: '🎉 Recebemos seu pedido #{order_number}! Acompanhe aqui: {track_link}',
+  preparing: '👨‍🍳 Seu pedido #{order_number} está sendo preparado. Acompanhe aqui: {track_link}',
+  ready: '✅ Seu pedido #{order_number} está pronto! Acompanhe aqui: {track_link}',
+  out_for_delivery: '🚗 Seu pedido #{order_number} saiu para entrega. Acompanhe aqui: {track_link}',
+  delivered: '📦 Seu pedido #{order_number} foi entregue. Obrigado pela preferência!',
+  cancelled: '❌ Seu pedido #{order_number} foi cancelado. Se precisar, fale com a gente.',
+  menu_link: '📋 Confira nosso cardápio: {menu_link}',
+  welcome: 'Olá! 👋 Bem-vindo ao {restaurant_name}. Aqui está nosso cardápio: {menu_link}'
+};
+
 const WhatsAppIntegration: React.FC = () => {
   const [settings, setSettings] = useState({
     phone_number: '',
     connected: false,
     qr_code_data: '',
-    auto_messages: {
-      order_received: '',
-      preparing: '',
-      ready: '',
-      out_for_delivery: '',
-      delivered: '',
-      menu_link: '',
-      welcome: ''
-    }
+    auto_messages: defaultAutoMessages
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -30,15 +33,43 @@ const WhatsAppIntegration: React.FC = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Carregar configurações do localStorage
+    loadSettings();
+    checkStatus();
+  }, [user?.id]);
+
+  const loadSettings = async () => {
     const saved = localStorage.getItem('whatsapp_settings');
     if (saved) {
-      setSettings(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      setSettings(prev => ({
+        ...prev,
+        ...parsed,
+        auto_messages: {
+          ...defaultAutoMessages,
+          ...(parsed?.auto_messages || {})
+        }
+      }));
     }
 
-    // Verificar status inicial
-    checkStatus();
-  }, []);
+    if (!user?.id) return;
+
+    const { data } = await supabase
+      .from('whatsapp_settings')
+      .select('phone_number, auto_responses')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (data) {
+      setSettings(prev => ({
+        ...prev,
+        phone_number: data.phone_number || prev.phone_number,
+        auto_messages: {
+          ...defaultAutoMessages,
+          ...(typeof data.auto_responses === 'object' && data.auto_responses ? data.auto_responses as Record<string, string> : {})
+        }
+      }));
+    }
+  };
 
   const checkStatus = async () => {
     try {
@@ -58,8 +89,39 @@ const WhatsAppIntegration: React.FC = () => {
   const saveSettings = async () => {
     try {
       setLoading(true);
-      // Salvar no localStorage
       localStorage.setItem('whatsapp_settings', JSON.stringify(settings));      
+
+      if (user?.id) {
+        const payload = {
+          user_id: user.id,
+          phone_number: settings.phone_number || '',
+          default_message: settings.auto_messages.welcome || defaultAutoMessages.welcome,
+          enabled: true,
+          auto_responses: settings.auto_messages,
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: existing } = await supabase
+          .from('whatsapp_settings')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (existing?.id) {
+          const { error } = await supabase
+            .from('whatsapp_settings')
+            .update(payload)
+            .eq('user_id', user.id);
+
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('whatsapp_settings')
+            .insert(payload);
+
+          if (error) throw error;
+        }
+      }
 
       toast({
         title: "Sucesso",
@@ -274,6 +336,18 @@ const WhatsAppIntegration: React.FC = () => {
                   auto_messages: { ...prev.auto_messages, delivered: e.target.value }
                 }))}
                 placeholder="✅ Pedido #{order_number} foi entregue!"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cancelado</Label>
+              <Textarea
+                value={settings.auto_messages.cancelled}
+                onChange={(e) => setSettings(prev => ({
+                  ...prev,
+                  auto_messages: { ...prev.auto_messages, cancelled: e.target.value }
+                }))}
+                placeholder="❌ Seu pedido #{order_number} foi cancelado. Se precisar, fale com a gente."
               />
             </div>
 
