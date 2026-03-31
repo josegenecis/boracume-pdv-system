@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, FolderPlus, GripVertical } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderPlus, GripVertical, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -177,6 +177,23 @@ const CategoryManager = () => {
     }
   };
 
+  const toggleCategoryActive = async (category: Category) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('product_categories')
+        .update({ active: !category.active })
+        .eq('id', category.id);
+      if (error) throw error;
+      toast({ title: 'Categoria atualizada', description: `Categoria ${category.active ? 'ocultada' : 'ativada'} com sucesso.` });
+      fetchCategories();
+    } catch (error: any) {
+      toast({ title: 'Erro ao atualizar categoria', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const toggleSelect = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -265,66 +282,89 @@ const CategoryManager = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden rounded-[30px] border border-orange-200/70 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/70 shadow-[0_24px_60px_-40px_rgba(249,115,22,0.45)]">
+      <CardHeader className="border-b border-orange-100/80 bg-white/65 backdrop-blur-md">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-semibold text-boracume-orange">
+              <Sparkles className="h-3.5 w-3.5" />
+              Categorias com toque de vidro
+            </div>
+            <CardTitle className="mt-2 flex items-center gap-2 text-slate-900">
             <FolderPlus className="h-5 w-5" />
             Categorias de Produtos
-          </CardTitle>
+            </CardTitle>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={resetForm}>
+              <Button onClick={resetForm} className="rounded-2xl bg-boracume-orange text-white hover:bg-orange-600 shadow-[0_18px_35px_-20px_rgba(249,115,22,0.8)]">
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Categoria
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-orange-50/95 via-white to-amber-50/95 shadow-[0_28px_70px_-35px_rgba(249,115,22,0.45)]">
               <DialogHeader>
-                <DialogTitle>
+                <DialogTitle className="text-slate-900">
                   {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Nome da Categoria *</Label>
+                  <Label htmlFor="name" className="font-semibold text-boracume-dark-green">Nome da Categoria *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="Ex: Hambúrgueres, Pizzas..."
+                    className="mt-2 rounded-2xl border-orange-200/80 bg-white/80 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(249,115,22,0.5)]"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="description">Descrição</Label>
+                  <Label htmlFor="description" className="font-semibold text-boracume-dark-green">Descrição</Label>
                   <Textarea
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Descrição opcional da categoria"
                     rows={3}
+                    className="mt-2 rounded-2xl border-orange-200/80 bg-white/80 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(249,115,22,0.5)]"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="display_order">Ordem de Exibição</Label>
-                  <Input
-                    id="display_order"
-                    type="number"
-                    value={formData.display_order}
-                    onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
-                    placeholder="0"
-                  />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="display_order" className="font-semibold text-boracume-dark-green">Ordem de Exibição</Label>
+                    <Input
+                      id="display_order"
+                      type="number"
+                      value={formData.display_order}
+                      onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+                      placeholder="0"
+                      className="mt-2 rounded-2xl border-orange-200/80 bg-white/80 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(249,115,22,0.5)]"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={formData.active ? 'w-full rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600' : 'w-full rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50'}
+                      onClick={() => setFormData(prev => ({ ...prev, active: !prev.active }))}
+                    >
+                      {formData.active ? 'Categoria ativa' : 'Categoria oculta'}
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex gap-2 justify-end">
                   <Button 
                     variant="outline" 
                     onClick={() => setIsDialogOpen(false)}
+                    className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50"
                   >
                     Cancelar
                   </Button>
                   <Button 
                     onClick={handleSave} 
                     disabled={isLoading || !formData.name.trim()}
+                    className="rounded-2xl bg-boracume-orange text-white hover:bg-orange-600"
                   >
                     {isLoading ? 'Salvando...' : (editingCategory ? 'Atualizar' : 'Criar')}
                   </Button>
@@ -338,6 +378,7 @@ const CategoryManager = () => {
             <Button
               variant="outline"
               size="sm"
+              className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50"
               onClick={() => {
                 if (selectedIds.size === categories.length) clearSelection();
                 else selectAll();
@@ -434,6 +475,15 @@ const CategoryManager = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50"
+                                  onClick={() => toggleCategoryActive(category)}
+                                >
+                                  {category.active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50"
                                   onClick={() => handleEdit(category)}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -441,6 +491,7 @@ const CategoryManager = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="rounded-2xl border-red-200 bg-white/80 text-red-500 hover:bg-red-50"
                                   onClick={() => handleDelete(category.id)}
                                 >
                                   <Trash2 className="h-4 w-4" />

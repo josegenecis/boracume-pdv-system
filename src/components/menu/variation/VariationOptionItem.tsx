@@ -9,7 +9,8 @@ interface VariationOption {
 
 interface VariationOptionItemProps {
   option: VariationOption;
-  isSelected: boolean;
+  selectedCount: number;
+  freeSelectionsLimit?: number;
   addDisabled: boolean;
   removeDisabled: boolean;
   onAdd: () => void;
@@ -18,18 +19,25 @@ interface VariationOptionItemProps {
 
 export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   option,
-  isSelected,
+  selectedCount,
+  freeSelectionsLimit = 0,
   addDisabled,
   removeDisabled,
   onAdd,
   onRemove
 }) => {
+  const isSelected = selectedCount > 0;
+  const priceLabel = option.price > 0
+    ? freeSelectionsLimit > 0
+      ? `+ R$ ${option.price.toFixed(2)} por adicional`
+      : `+ R$ ${option.price.toFixed(2)}`
+    : '';
   return (
     <div className={`flex items-center justify-between gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>
       <div className="min-w-0">
         <div className="text-sm font-medium text-gray-900 truncate">{option.name}</div>
-        {option.price > 0 && (
-          <div className="text-xs text-gray-600">+ R$ {option.price.toFixed(2)}</div>
+        {priceLabel && (
+          <div className="text-xs text-gray-600">{priceLabel}</div>
         )}
       </div>
 
@@ -49,13 +57,17 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             >
               <Minus className="h-4 w-4" />
             </Button>
-            <div className="w-6 text-center font-bold text-boracume-orange">1</div>
+            <div className="w-6 text-center font-bold text-boracume-orange">{selectedCount}</div>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-xl text-boracume-orange opacity-40"
-              disabled
+              className="h-10 w-10 rounded-xl text-boracume-orange"
+              disabled={addDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdd();
+              }}
             >
               <Plus className="h-4 w-4" />
             </Button>

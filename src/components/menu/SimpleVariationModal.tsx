@@ -78,7 +78,6 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
           [variationId]: isSelected ? [optionName] : []
         };
       } else {
-        // Checkbox: múltiplas seleções
         if (isSelected) {
           if (current.length < variation.max_selections) {
             return {
@@ -87,9 +86,13 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             };
           }
         } else {
+          const removeIndex = current.lastIndexOf(optionName);
+          if (removeIndex === -1) return prev;
+          const next = [...current];
+          next.splice(removeIndex, 1);
           return {
             ...prev,
-            [variationId]: current.filter(name => name !== optionName)
+            [variationId]: next
           };
         }
       }

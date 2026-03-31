@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -360,6 +360,33 @@ const Products = () => {
       toast({
         title: 'Erro ao excluir produto',
         description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleProductAvailability = async (product: ProductItem) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('products')
+        .update({ available: !product.available })
+        .eq('id', product.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Produto atualizado',
+        description: `Produto ${product.available ? 'ocultado' : 'ativado'} com sucesso.`,
+      });
+
+      fetchProducts();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao atualizar produto',
+        description: error?.message || 'Não foi possível alterar a visibilidade do produto.',
         variant: 'destructive',
       });
     } finally {
@@ -888,6 +915,9 @@ const Products = () => {
                                                 </div>
                                                 
                                                 <div className="flex flex-row flex-nowrap items-center gap-1 flex-shrink-0">
+                                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-boracume-orange" onClick={(e) => { e.stopPropagation(); toggleProductAvailability(product); }}>
+                                                    {product.available ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                                  </Button>
                                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}>
                                                     <Edit className="h-4 w-4" />
                                                   </Button>
@@ -1057,6 +1087,9 @@ const Products = () => {
                                                 </div>
                                                 
                                                 <div className="flex flex-row flex-nowrap items-center gap-1 flex-shrink-0">
+                                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-boracume-orange" onClick={(e) => { e.stopPropagation(); toggleProductAvailability(product); }}>
+                                                    {product.available ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                                  </Button>
                                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}>
                                                     <Edit className="h-4 w-4" />
                                                   </Button>

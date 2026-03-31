@@ -14,6 +14,10 @@ export type Variation = {
   required: boolean;
   min_selections: number;
   max_selections: number;
+  standard_max_selections: number;
+  free_selections_limit: number;
+  allow_paid_excess: boolean;
+  paid_max_selections?: number;
   options: VariationOption[];
 };
 
@@ -65,6 +69,11 @@ function normalizeVariation(item: any): Variation | null {
   const displayOrder = displayOrderRaw !== undefined && Number.isFinite(displayOrderRaw) ? Math.max(0, Math.floor(displayOrderRaw)) : undefined;
   const maxSelections = item.max_selections !== undefined && item.max_selections !== null ? Math.max(1, Number(item.max_selections) || 1) : 1;
   const minSelectionsRaw = item.min_selections !== undefined && item.min_selections !== null ? Math.max(0, Number(item.min_selections) || 0) : 0;
+  const allowPaidExcess = Boolean(item.allow_paid_excess);
+  const paidMaxSelections = allowPaidExcess ? Math.max(maxSelections, Number(item.paid_max_selections) || maxSelections) : undefined;
+  const effectiveMaxSelections = paidMaxSelections ?? maxSelections;
+  const freeSelectionsLimit = Math.min(effectiveMaxSelections, Math.max(0, Number(item.free_selections_limit) || 0));
+  const isActive = item.active !== false;
   const processedOptions = parseOptions(item.options);
   const validOptions: VariationOption[] = [];
   for (const opt of processedOptions as any[]) {
@@ -74,7 +83,7 @@ function normalizeVariation(item: any): Variation | null {
     const optionPrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
     validOptions.push({ name: optionName, price: Number.isFinite(optionPrice) ? Math.max(0, optionPrice) : 0 });
   }
-  if (validOptions.length === 0) return null;
+  if (validOptions.length === 0 || !isActive) return null;
   const required = Boolean(item.required ?? item.is_required ?? false);
   const minSelections = required ? Math.max(1, minSelectionsRaw) : minSelectionsRaw;
   return {
@@ -84,8 +93,12 @@ function normalizeVariation(item: any): Variation | null {
     receipt_label: receiptLabel || undefined,
     display_order: displayOrder,
     required,
-    min_selections: Math.min(minSelections, maxSelections),
-    max_selections: maxSelections,
+    min_selections: Math.min(minSelections, effectiveMaxSelections),
+    max_selections: effectiveMaxSelections,
+    standard_max_selections: maxSelections,
+    free_selections_limit: freeSelectionsLimit,
+    allow_paid_excess: allowPaidExcess,
+    paid_max_selections: paidMaxSelections,
     options: validOptions
   };
 }
@@ -128,8 +141,8 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     } catch {}
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
-      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
-      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,display_order').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
+      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
+      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
     if (productError) throw productError;
@@ -139,7 +152,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     const linkIds = linkRows.map((l: any) => l.global_variation_id).filter(Boolean);
     let globalVariations: any[] = [];
     if (linkIds.length > 0) {
-      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,options,customer_label,receipt_label').in('id', linkIds as any) as any, 2);
+      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,active,options,customer_label,receipt_label').in('id', linkIds as any) as any, 2);
       if (globalVarError) throw globalVarError;
       const base = Array.isArray(globalVars) ? globalVars : [];
       const byId = new Map(linkRows.map((l: any) => [String(l.global_variation_id), l]));
@@ -153,6 +166,9 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
             required: link.required !== undefined && link.required !== null ? Boolean(link.required) : gv.required,
             min_selections: link.min_selections ?? 0,
             max_selections: link.max_selections ?? gv.max_selections,
+            free_selections_limit: (link as any).free_selections_limit ?? 0,
+            allow_paid_excess: Boolean((link as any).allow_paid_excess),
+            paid_max_selections: (link as any).paid_max_selections ?? null,
             display_order: link.display_order
           };
         })
@@ -242,9 +258,15 @@ export function useSimpleVariations() {
     let total = 0;
     for (const variation of variations) {
       const selected = selectedVariations[variation.id] || [];
+      let freeRemaining = Math.max(0, Number(variation.free_selections_limit || 0));
       for (const optionName of selected) {
         const option = variation.options.find((opt) => opt.name === optionName);
-        if (option) total += option.price;
+        if (!option) continue;
+        if (freeRemaining > 0) {
+          freeRemaining -= 1;
+          continue;
+        }
+        total += option.price;
       }
     }
     return total;

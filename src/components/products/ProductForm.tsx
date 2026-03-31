@@ -88,8 +88,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   // Price Variants State
   const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
 
-  const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number }>>({});
-  const [variationSettingsRaw, setVariationSettingsRaw] = useState<Record<string, { min: string; max: string }>>({});
+  const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }>>({});
+  const [variationSettingsRaw, setVariationSettingsRaw] = useState<Record<string, { min: string; max: string; free: string; paidMax: string }>>({});
   const [loading, setLoading] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -125,12 +125,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const stockColumns = new Set(['track_stock', 'stock_quantity', 'low_stock_threshold']);
 
-  const syncVariationSettingsRaw = (settings: Record<string, { required: boolean; min_selections: number; max_selections: number }>) => {
-    const raw: Record<string, { min: string; max: string }> = {};
+  const syncVariationSettingsRaw = (settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }>) => {
+    const raw: Record<string, { min: string; max: string; free: string; paidMax: string }> = {};
     Object.entries(settings || {}).forEach(([id, s]) => {
       raw[id] = {
         min: String(Math.max(0, Math.floor(Number(s?.min_selections) || 0))),
-        max: String(Math.max(1, Math.floor(Number(s?.max_selections) || 1)))
+        max: String(Math.max(1, Math.floor(Number(s?.max_selections) || 1))),
+        free: String(Math.max(0, Math.floor(Number(s?.free_selections_limit) || 0))),
+        paidMax: String(Math.max(1, Math.floor(Number(s?.paid_max_selections) || Number(s?.max_selections) || 1)))
       };
     });
     setVariationSettingsRaw(raw);
@@ -138,15 +140,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const commitVariationMinMax = (variationId: string) => {
     setVariationSettings(prev => {
-      const current = prev?.[variationId] || { required: false, min_selections: 0, max_selections: 1 };
-      const raw = variationSettingsRaw?.[variationId] || { min: String(current.min_selections ?? 0), max: String(current.max_selections ?? 1) };
+      const current = prev?.[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null };
+      const raw = variationSettingsRaw?.[variationId] || { min: String(current.min_selections ?? 0), max: String(current.max_selections ?? 1), free: String(current.free_selections_limit ?? 0), paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1) };
       const minNum = Math.max(0, Math.floor(raw.min === '' ? 0 : Number(raw.min) || 0));
       const maxNum = Math.max(1, Math.floor(raw.max === '' ? 1 : Number(raw.max) || 1));
       const safeMax = Math.max(maxNum, minNum);
+      const freeNum = Math.max(0, Math.floor(raw.free === '' ? 0 : Number(raw.free) || 0));
+      const paidMaxNum = current.allow_paid_excess ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? safeMax : Number(raw.paidMax) || safeMax)) : null;
 
       setVariationSettingsRaw(prevRaw => ({
         ...prevRaw,
-        [variationId]: { min: String(minNum), max: String(safeMax) }
+        [variationId]: { min: String(minNum), max: String(safeMax), free: String(Math.min(freeNum, paidMaxNum ?? safeMax)), paidMax: String(paidMaxNum ?? safeMax) }
       }));
 
       return {
@@ -154,7 +158,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         [variationId]: {
           ...current,
           min_selections: minNum,
-          max_selections: safeMax
+          max_selections: safeMax,
+          free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
+          paid_max_selections: paidMaxNum
         }
       };
     });
@@ -525,7 +531,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       try {
         const res = await supabase
           .from('product_global_variation_links')
-          .select('global_variation_id, required, min_selections, max_selections, display_order')
+          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order')
           .eq('product_id', productId)
           .order('display_order', { ascending: true });
         data = (res as any).data;
@@ -561,7 +567,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .in('id', gvIds);
 
       const byId = new Map((gvData || []).map((gv: any) => [String(gv.id), gv]));
-      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
+      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }> = {};
       for (const link of links) {
         const id = String(link.global_variation_id || '');
         if (!id) continue;
@@ -569,7 +575,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         const required = link.required !== undefined && link.required !== null ? Boolean(link.required) : Boolean(gv?.required);
         const minSel = link.min_selections !== undefined && link.min_selections !== null ? Math.max(0, Number(link.min_selections) || 0) : 0;
         const maxSel = link.max_selections !== undefined && link.max_selections !== null ? Math.max(1, Number(link.max_selections) || 1) : Math.max(1, Number(gv?.max_selections) || 1);
-        settings[id] = { required, min_selections: minSel, max_selections: Math.max(maxSel, minSel) };
+        const allowPaidExcess = Boolean((link as any).allow_paid_excess);
+        const paidMax = allowPaidExcess ? Math.max(Math.max(maxSel, minSel), Number((link as any).paid_max_selections) || Math.max(maxSel, minSel)) : null;
+        settings[id] = {
+          required,
+          min_selections: minSel,
+          max_selections: Math.max(maxSel, minSel),
+          free_selections_limit: Math.max(0, Number((link as any).free_selections_limit) || 0),
+          allow_paid_excess: allowPaidExcess,
+          paid_max_selections: paidMax
+        };
       }
       
       console.log('⚙️ Configurações das variações carregadas:', settings);
@@ -605,12 +620,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .from('global_variations')
         .select('id, required, max_selections')
         .in('id', gvIds);
-      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number }> = {};
+      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }> = {};
       (gvData || []).forEach((gv: any) => {
         settings[gv.id] = {
           required: !!gv.required,
           min_selections: 0,
-          max_selections: gv.max_selections ?? 1
+          max_selections: gv.max_selections ?? 1,
+          free_selections_limit: 0,
+          allow_paid_excess: false,
+          paid_max_selections: null
         };
       });
       
@@ -897,15 +915,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
         const links = variations.map((variationId, idx) => {
-          const s = variationSettings?.[variationId] || { required: false, min_selections: 0, max_selections: 1 };
+          const s = variationSettings?.[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null };
           const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
           const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
+          const allowPaidExcess = Boolean(s.allow_paid_excess);
+          const paidMax = allowPaidExcess ? Math.max(maxSel, Math.floor(Number(s.paid_max_selections) || maxSel)) : null;
           return {
             product_id: productId,
             global_variation_id: variationId,
             required: Boolean(s.required),
             min_selections: minSel,
             max_selections: Math.max(maxSel, minSel),
+            free_selections_limit: Math.max(0, Math.floor(Number(s.free_selections_limit) || 0)),
+            allow_paid_excess: allowPaidExcess,
+            paid_max_selections: paidMax,
             display_order: idx
           };
         });
@@ -918,7 +941,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         error = (first as any).error;
 
         const errMsg = String(error?.message || '');
-        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order'))) {
+        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections'))) {
           const minimalLinks = variations.map((variationId) => ({
             product_id: productId,
             global_variation_id: variationId
@@ -992,13 +1015,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setVariationSettings(prev => {
         const next = {
           ...prev,
-          [variationId]: prev[variationId] || { required: false, min_selections: 0, max_selections: 1 }
+          [variationId]: prev[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null }
         };
         return next;
       });
       setVariationSettingsRaw(prev => ({
         ...prev,
-        [variationId]: prev[variationId] || { min: '0', max: '1' }
+        [variationId]: prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1' }
       }));
     } else {
       setVariationSettings(prev => {
@@ -1014,7 +1037,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   };
 
-  const handleVariationSettingChange = (variationId: string, field: 'required' | 'min_selections' | 'max_selections', value: boolean | number) => {
+  const handleVariationSettingChange = (variationId: string, field: 'required' | 'min_selections' | 'max_selections' | 'free_selections_limit' | 'allow_paid_excess' | 'paid_max_selections', value: boolean | number | null) => {
     setVariationSettings(prev => ({
       ...prev,
       [variationId]: {
@@ -1398,7 +1421,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                             <div 
                               ref={draggableProvided.innerRef}
                               {...draggableProvided.draggableProps}
-                              className="p-3 bg-white"
+                              className="p-3 bg-white/85 backdrop-blur-sm"
                             >
                               <div className="flex items-center gap-2">
                                 <button 
@@ -1408,7 +1431,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 >
                                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                                 </button>
-                                <div className="flex-1 text-sm font-medium">{v.name}</div>
+                                <div className="flex-1 text-sm font-medium text-slate-900">{v.name}</div>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1420,44 +1443,110 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 </Button>
                               </div>
                               {expandedVariationId === v.id && (
-                                <div className="mt-3 flex gap-4 flex-wrap sm:flex-nowrap pl-7">
-                                  <div className="flex items-center gap-2">
-                                    <Checkbox
-                                      id={`required-${v.id}`}
-                                      checked={variationSettings[v.id]?.required || false}
-                                      onCheckedChange={(checked) => handleVariationSettingChange(v.id, 'required', checked as boolean)}
-                                    />
-                                    <Label htmlFor={`required-${v.id}`}>Obrigatório</Label>
+                                <div className="mt-3 space-y-3 rounded-2xl border border-orange-100 bg-orange-50/50 p-4 pl-7">
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={variationSettings[v.id]?.required ? 'rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600' : 'rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50'}
+                                      onClick={() => handleVariationSettingChange(v.id, 'required', !(variationSettings[v.id]?.required || false))}
+                                    >
+                                      {variationSettings[v.id]?.required ? 'Obrigatório' : 'Opcional'}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={variationSettings[v.id]?.allow_paid_excess ? 'rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600' : 'rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50'}
+                                      onClick={() => handleVariationSettingChange(v.id, 'allow_paid_excess', !(variationSettings[v.id]?.allow_paid_excess || false))}
+                                    >
+                                      {variationSettings[v.id]?.allow_paid_excess ? 'Extras pagos liberados' : 'Liberar extras pagos'}
+                                    </Button>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
-                                    <Input
-                                      id={`min-selections-${v.id}`}
-                                      type="number"
-                                      min="0"
-                                      value={variationSettingsRaw[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0)}
-                                      onChange={e => setVariationSettingsRaw(prev => ({
-                                        ...prev,
-                                        [v.id]: { min: e.target.value, max: prev[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1) }
-                                      }))}
-                                      onBlur={() => commitVariationMinMax(v.id)}
-                                      className="w-14 min-w-[56px] text-center appearance-none"
-                                    />
+                                  <div className="grid gap-3 sm:grid-cols-4">
+                                    <div className="flex items-center gap-2">
+                                      <Label htmlFor={`min-selections-${v.id}`}>Mín.</Label>
+                                      <Input
+                                        id={`min-selections-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={variationSettingsRaw[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0)}
+                                        onChange={e => setVariationSettingsRaw(prev => ({
+                                          ...prev,
+                                          [v.id]: {
+                                            min: e.target.value,
+                                            max: prev[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1),
+                                            free: prev[v.id]?.free ?? String(variationSettings[v.id]?.free_selections_limit ?? 0),
+                                            paidMax: prev[v.id]?.paidMax ?? String(variationSettings[v.id]?.paid_max_selections ?? variationSettings[v.id]?.max_selections ?? 1)
+                                          }
+                                        }))}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="w-16 min-w-[64px] text-center appearance-none rounded-xl border-orange-200 bg-white/80"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
+                                      <Input
+                                        id={`max-selections-${v.id}`}
+                                        type="number"
+                                        min="1"
+                                        value={variationSettingsRaw[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1)}
+                                        onChange={e => setVariationSettingsRaw(prev => ({
+                                          ...prev,
+                                          [v.id]: {
+                                            min: prev[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0),
+                                            max: e.target.value,
+                                            free: prev[v.id]?.free ?? String(variationSettings[v.id]?.free_selections_limit ?? 0),
+                                            paidMax: prev[v.id]?.paidMax ?? String(variationSettings[v.id]?.paid_max_selections ?? variationSettings[v.id]?.max_selections ?? 1)
+                                          }
+                                        }))}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="w-16 min-w-[64px] text-center appearance-none rounded-xl border-orange-200 bg-white/80"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Label htmlFor={`free-selections-${v.id}`}>Grátis</Label>
+                                      <Input
+                                        id={`free-selections-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={variationSettingsRaw[v.id]?.free ?? String(variationSettings[v.id]?.free_selections_limit ?? 0)}
+                                        onChange={e => setVariationSettingsRaw(prev => ({
+                                          ...prev,
+                                          [v.id]: {
+                                            min: prev[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0),
+                                            max: prev[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1),
+                                            free: e.target.value,
+                                            paidMax: prev[v.id]?.paidMax ?? String(variationSettings[v.id]?.paid_max_selections ?? variationSettings[v.id]?.max_selections ?? 1)
+                                          }
+                                        }))}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="w-16 min-w-[64px] text-center appearance-none rounded-xl border-orange-200 bg-white/80"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Label htmlFor={`paid-max-selections-${v.id}`}>Total</Label>
+                                      <Input
+                                        id={`paid-max-selections-${v.id}`}
+                                        type="number"
+                                        min={String(Math.max(1, variationSettings[v.id]?.max_selections ?? 1))}
+                                        disabled={!variationSettings[v.id]?.allow_paid_excess}
+                                        value={variationSettingsRaw[v.id]?.paidMax ?? String(variationSettings[v.id]?.paid_max_selections ?? variationSettings[v.id]?.max_selections ?? 1)}
+                                        onChange={e => setVariationSettingsRaw(prev => ({
+                                          ...prev,
+                                          [v.id]: {
+                                            min: prev[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0),
+                                            max: prev[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1),
+                                            free: prev[v.id]?.free ?? String(variationSettings[v.id]?.free_selections_limit ?? 0),
+                                            paidMax: e.target.value
+                                          }
+                                        }))}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="w-16 min-w-[64px] text-center appearance-none rounded-xl border-orange-200 bg-white/80 disabled:opacity-50"
+                                      />
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Label htmlFor={`max-selections-${v.id}`}>Máx.</Label>
-                                    <Input
-                                      id={`max-selections-${v.id}`}
-                                      type="number"
-                                      min="1"
-                                      value={variationSettingsRaw[v.id]?.max ?? String(variationSettings[v.id]?.max_selections ?? 1)}
-                                      onChange={e => setVariationSettingsRaw(prev => ({
-                                        ...prev,
-                                        [v.id]: { min: prev[v.id]?.min ?? String(variationSettings[v.id]?.min_selections ?? 0), max: e.target.value }
-                                      }))}
-                                      onBlur={() => commitVariationMinMax(v.id)}
-                                      className="w-14 min-w-[56px] text-center appearance-none"
-                                    />
+                                  <div className="text-xs text-slate-500">
+                                    Use “Grátis” para o limite sem cobrança e “Total” para liberar adicionais pagos.
                                   </div>
                                 </div>
                               )}
@@ -1484,7 +1573,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             ) : (
               <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
                 {globalVariations.map((variation: any) => (
-                  <div key={variation.id} className="flex items-start space-x-3">
+                  <div key={variation.id} className={`flex items-start space-x-3 rounded-2xl border p-3 ${variation.active !== false ? 'border-orange-100 bg-white/80' : 'border-slate-200 bg-slate-50 opacity-70'}`}>
                     <Checkbox
                       id={`variation-${variation.id}`}
                       checked={selectedVariations.includes(variation.id)}
@@ -1494,6 +1583,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                       <Label htmlFor={`variation-${variation.id}`} className="font-medium cursor-pointer">
                         {variation.name}
                       </Label>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {variation.active !== false ? 'Complemento ativo' : 'Complemento oculto'}
+                      </div>
                       {variation.description && (
                         <p className="text-sm text-muted-foreground mt-1">{variation.description}</p>
                       )}

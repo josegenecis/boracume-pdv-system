@@ -15,6 +15,10 @@ interface ProductVariation {
   required: boolean;
   min_selections: number;
   max_selections: number;
+  standard_max_selections?: number;
+  free_selections_limit?: number;
+  allow_paid_excess?: boolean;
+  paid_max_selections?: number;
   options: VariationOption[];
 }
 
@@ -32,18 +36,22 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
   const selectedOptions = selectedVariations[variation.id] || [];
   const minSel = Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
   const maxSel = Math.max(1, Number(variation.max_selections || 1));
+  const baseMax = Math.max(1, Number(variation.standard_max_selections || maxSel));
+  const freeLimit = Math.max(0, Number(variation.free_selections_limit || 0));
   const count = selectedOptions.length;
   const reachedMax = count >= maxSel;
   const isValid = count >= minSel && count <= maxSel;
 
   const subtitle =
-    minSel > 0
-      ? maxSel > 1
-        ? `Escolha de ${minSel} a ${maxSel}`
-        : `Escolha ${minSel}`
-      : maxSel > 1
-        ? `Escolha até ${maxSel}`
-        : 'Opcional';
+    variation.allow_paid_excess && maxSel > baseMax
+      ? `${minSel > 0 ? `Escolha de ${minSel} a ${baseMax}` : `Até ${baseMax} grátis`} • até ${maxSel} com extras pagos`
+      : minSel > 0
+        ? maxSel > 1
+          ? `Escolha de ${minSel} a ${maxSel}`
+          : `Escolha ${minSel}`
+        : maxSel > 1
+          ? `Escolha até ${maxSel}`
+          : 'Opcional';
 
   return (
     <div className="border rounded-xl p-4 bg-white">
@@ -63,16 +71,17 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
       
       <div className="mt-3 divide-y divide-gray-100">
         {variation.options.map((option, index) => {
-          const isSelected = selectedOptions.includes(option.name);
-          const addDisabled = !isSelected && reachedMax;
-          const removeDisabled = isSelected && count <= minSel;
+          const selectedCount = selectedOptions.filter((name) => name === option.name).length;
+          const addDisabled = reachedMax;
+          const removeDisabled = selectedCount > 0 && count <= minSel;
           return (
             <VariationOptionItem
               key={`${variation.id}-${index}`}
               option={option}
-              isSelected={isSelected}
+              selectedCount={selectedCount}
+              freeSelectionsLimit={freeLimit}
               addDisabled={addDisabled}
-              removeDisabled={removeDisabled}
+              removeDisabled={selectedCount === 0 || removeDisabled}
               onAdd={() => onVariationChange(variation.id, option.name, true)}
               onRemove={() => onVariationChange(variation.id, option.name, false)}
             />
