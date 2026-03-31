@@ -52,6 +52,17 @@ function pickIncomingMessages(body: any) {
   ];
 }
 
+function normalizeInstanceKey(value: unknown) {
+  return String(value || '').trim();
+}
+
+function restaurantIdFromToken(value: unknown) {
+  const token = String(value || '').trim();
+  const raw = token.startsWith('token_') ? token.slice(6) : '';
+  if (!/^[a-f0-9]{32}$/i.test(raw)) return '';
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -61,23 +72,54 @@ serve(async (req) => {
     const body = await req.json();
     console.log("Webhook received:", JSON.stringify(body, null, 2));
 
-    const instanceName = body.instance || body.instanceName || body.data?.instance || body.data?.instanceName;
+    const instanceName = normalizeInstanceKey(
+      body.instance ||
+      body.instanceName ||
+      body.data?.instance ||
+      body.data?.instanceName ||
+      body.name ||
+      body.data?.name
+    );
     const event = body.event;
-
-    if (!instanceName) {
-      return new Response('OK', { status: 200, headers: corsHeaders });
-    }
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { data: instanceRow } = await supabaseClient
-      .from('whatsapp_instances')
-      .select('restaurant_id, instance_name')
-      .eq('instance_name', instanceName)
-      .maybeSingle();
+    let instanceRow: { restaurant_id: string; instance_name?: string } | null = null;
+
+    if (instanceName) {
+      const { data } = await supabaseClient
+        .from('whatsapp_instances')
+        .select('restaurant_id, instance_name')
+        .eq('instance_name', instanceName)
+        .maybeSingle();
+      instanceRow = data;
+    }
+
+    if (!instanceRow && instanceName) {
+      const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('restaurant_name', instanceName)
+        .maybeSingle();
+
+      if (profile?.id) {
+        instanceRow = { restaurant_id: profile.id, instance_name: instanceName };
+      }
+    }
+
+    if (!instanceRow) {
+      const tokenRestaurantId = restaurantIdFromToken(body.token || body.data?.token || body.apikey || body.data?.apikey);
+      if (tokenRestaurantId) {
+        instanceRow = { restaurant_id: tokenRestaurantId, instance_name: instanceName || undefined };
+      }
+    }
+
+    if (!instanceName && !instanceRow) {
+      return new Response('OK', { status: 200, headers: corsHeaders });
+    }
 
     if (event === 'CONNECTION_UPDATE') {
       const state = body.data?.state || body.data?.connection;
