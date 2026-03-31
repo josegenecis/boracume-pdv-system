@@ -33,7 +33,9 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
-    const instanceName = `rest_${restaurant_id.replace(/-/g, '')}`;
+    const instanceSuffix = restaurant_id.replace(/-/g, '');
+    const instanceName = `rest_${instanceSuffix}`;
+    const instanceToken = `token_${instanceSuffix}`;
     const { data: profileData } = await supabaseClient
       .from('profiles')
       .select('restaurant_name')
@@ -51,6 +53,7 @@ serve(async (req) => {
       body: JSON.stringify({
         name: restaurantName,
         instanceName: instanceName,
+        token: instanceToken,
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
         webhook: `${Deno.env.get('SUPABASE_URL')}/functions/v1/evogo-webhook`,
