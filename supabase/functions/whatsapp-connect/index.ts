@@ -80,19 +80,7 @@ serve(async (req) => {
       body: JSON.stringify({
         webhookUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/evogo-webhook`,
         subscribe: [
-          "APPLICATION_STARTUP",
-          "QRCODE_UPDATED",
-          "MESSAGES_UPSERT",
-          "MESSAGES_UPDATE",
-          "MESSAGES_DELETE",
-          "SEND_MESSAGE",
-          "CONTACTS_UPSERT",
-          "CONTACTS_UPDATE",
-          "PRESENCE_UPDATE",
-          "CHATS_UPSERT",
-          "CHATS_UPDATE",
-          "CHATS_DELETE",
-          "CONNECTION_UPDATE"
+          "ALL"
         ],
         rabbitmqEnable: "",
         websocketEnable: "",

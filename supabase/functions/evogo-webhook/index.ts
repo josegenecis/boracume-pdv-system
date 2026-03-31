@@ -41,6 +41,17 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
+function pickIncomingMessages(body: any) {
+  return [
+    ...(Array.isArray(body?.data?.messages) ? body.data.messages : []),
+    ...(Array.isArray(body?.messages) ? body.messages : []),
+    ...(body?.data?.message ? [{ key: body?.data?.key, message: body?.data?.message, data: body?.data }] : []),
+    ...(body?.message ? [{ key: body?.key, message: body?.message, data: body }] : []),
+    ...(body?.data?.key ? [body.data] : []),
+    ...(body?.key ? [body] : [])
+  ];
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -80,13 +91,8 @@ serve(async (req) => {
         .eq('instance_name', instanceName);
     }
 
-    if (event === 'MESSAGES_UPSERT' && instanceRow?.restaurant_id) {
-      const candidates = [
-        ...(Array.isArray(body?.data?.messages) ? body.data.messages : []),
-        ...(Array.isArray(body?.messages) ? body.messages : []),
-        ...(body?.data?.key ? [body.data] : []),
-        ...(body?.key ? [body] : [])
-      ];
+    if (['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(String(event || '').toUpperCase()) && instanceRow?.restaurant_id) {
+      const candidates = pickIncomingMessages(body);
 
       const incoming = candidates.find((item: any) => {
         const key = item?.key || item?.data?.key || {};
