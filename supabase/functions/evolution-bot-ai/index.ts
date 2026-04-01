@@ -199,146 +199,20 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return userMessage('Método não permitido', 405);
 
   try {
-    const BORACUME_INTERNAL_KEY = getEnv('BORACUME_INTERNAL_KEY');
-    const OPENAI_API_KEY = getEnv('OPENAI_API_KEY');
-    const OPENAI_MODEL = getEnv('OPENAI_MODEL', 'gpt-5.4-mini') || 'gpt-5.4-mini';
-    const SUPABASE_URL = getEnv('SUPABASE_URL');
-    const SERVICE_ROLE_KEY = getEnv('SERVICE_ROLE_KEY') || getEnv('SUPABASE_SERVICE_ROLE_KEY');
-
     const body = await req.json().catch(() => null);
     const safeBody = body && typeof body === 'object' ? body : {};
     const receivedKey = pickApiKey(req, safeBody);
     console.log('Headers recebidos:', JSON.stringify(Object.fromEntries(req.headers.entries())));
     console.log('Body recebido:', JSON.stringify(safeBody));
 
-    if (BORACUME_INTERNAL_KEY && receivedKey && receivedKey !== BORACUME_INTERNAL_KEY) {
-      return userMessage('Acesso não autorizado');
-    }
-
-    if (BORACUME_INTERNAL_KEY && !receivedKey) {
-      console.log('Chave não recebida no request');
-    }
-
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-      return userMessage('Bot temporariamente indisponível');
-    }
-
     const message = pickText(safeBody);
     const customerPhone = pickPhone(safeBody);
-    const phoneCandidates = buildPhoneCandidates(customerPhone);
     const instanceName = pickInstanceName(safeBody);
-    let restaurantId = String(safeBody?.restaurantId || safeBody?.userId || safeBody?.restaurant_id || '').trim();
-
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    if (!restaurantId && instanceName) {
-      const { data: instanceRow } = await supabase
-        .from('whatsapp_instances')
-        .select('restaurant_id, instance_name')
-        .eq('instance_name', instanceName)
-        .maybeSingle();
-      restaurantId = String(instanceRow?.restaurant_id || '').trim();
-    }
-
-    if (!restaurantId && safeBody?.restaurantName) {
-      const { data: profileByName } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('restaurant_name', String(safeBody.restaurantName).trim())
-        .maybeSingle();
-      restaurantId = String(profileByName?.id || '').trim();
-    }
-
-    if (!restaurantId) {
-      restaurantId = parseRestaurantIdFromToken(safeBody?.token || safeBody?.apikey || safeBody?.data?.token || safeBody?.data?.apikey || safeBody?.inputs?.apiKey);
-    }
-
     console.log('instanceName:', instanceName);
     console.log('customerPhone:', customerPhone);
     console.log('message:', message);
     console.log('receivedKey:', receivedKey ? 'present' : 'missing');
-
-    if (!restaurantId) return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
-    if (!message) return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
-
-    const [
-      profileResult,
-      settingsResult,
-      customerResult,
-      ordersResult,
-      productsResult
-    ] = await Promise.all([
-      supabase.from('profiles').select('id, restaurant_name').eq('id', restaurantId).maybeSingle(),
-      supabase.from('whatsapp_settings').select('enabled, ai_enabled, default_message, auto_responses').eq('user_id', restaurantId).maybeSingle(),
-      phoneCandidates.length
-        ? supabase.from('customers').select('id, name, phone, updated_at').eq('user_id', restaurantId).in('phone', phoneCandidates).maybeSingle()
-        : Promise.resolve({ data: null }),
-      phoneCandidates.length
-        ? supabase
-            .from('orders')
-            .select('id, order_number, status, created_at, customer_name, customer_phone')
-            .eq('user_id', restaurantId)
-            .in('customer_phone', phoneCandidates)
-            .order('created_at', { ascending: false })
-            .limit(3)
-        : Promise.resolve({ data: [] }),
-      supabase
-        .from('products')
-        .select('name, price, category, available')
-        .eq('user_id', restaurantId)
-        .eq('available', true)
-        .order('updated_at', { ascending: false })
-        .limit(12)
-    ]);
-
-    const restaurantName = String(profileResult?.data?.restaurant_name || body?.restaurantName || 'BoraCumê').trim();
-    const customerName = String(body?.customerName || customerResult?.data?.name || 'Cliente').trim();
-    const systemPrompt = buildSystemPrompt({
-      restaurantName,
-      customerName,
-      customerPhone,
-      latestOrders: Array.isArray(ordersResult?.data) ? ordersResult.data : [],
-      menuHighlights: Array.isArray(productsResult?.data) ? productsResult.data : [],
-      whatsappEnabled: settingsResult?.data?.enabled !== false,
-      defaultMessage: String(settingsResult?.data?.default_message || '').trim(),
-      autoResponses: settingsResult?.data?.auto_responses || {}
-    });
-
-    const history = normalizeHistory(safeBody?.conversationHistory || safeBody?.history || []);
-    const input = [
-      ...history,
-      {
-        role: 'user',
-        content: [{ type: 'input_text', text: buildUserPrompt(message, restaurantName) }]
-      }
-    ];
-
-    if (!OPENAI_API_KEY) {
-      return json({ message: `Teste OK do BoraCume bot` });
-    }
-
-    const openAIResp = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        instructions: systemPrompt,
-        input,
-        max_output_tokens: 350
-      })
-    });
-
-    const openAIData = await openAIResp.json().catch(() => null);
-    console.log('Resposta OpenAI:', JSON.stringify(openAIData));
-    if (!openAIResp.ok) {
-      return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
-    }
-
-    const finalMessage = extractResponseText(openAIData) || `Olá! Sou o assistente do ${restaurantName}. Como posso ajudar?`;
-    return json({ message: finalMessage });
+    return json({ message: 'Teste OK do BoraCume bot' });
   } catch (error) {
     console.error('Erro na function:', error);
     return json({ message: 'Erro interno no bot' });
