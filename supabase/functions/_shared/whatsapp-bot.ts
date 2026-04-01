@@ -25,6 +25,10 @@ function wantsOpeningHours(text: string) {
   return /(que horas (fecha|abre)|hor[aá]rio|horario de funcionamento|voc[eê]s abrem|voc[eê]s fecham|at[eé] que horas|qual o hor[aá]rio)/i.test(text);
 }
 
+function wantsPromotions(text: string) {
+  return /(promo[cç][aã]o|promo|desconto|oferta|ofertas|tem combo|tem combos|tem alguma promo|alguma promo[cç][aã]o)/i.test(text);
+}
+
 function buildOrderStatusLabel(status: string) {
   const labels: Record<string, string> = {
     pending: 'recebido',
@@ -42,6 +46,35 @@ function buildOpeningHoursReply(restaurantName: string, openingHours: string, re
   return openingHours
     ? `🕒 O horário de funcionamento do ${restaurantName} é: ${openingHours}`
     : `🕒 Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Se preferir, posso te enviar o cardápio: ${buildMenuShareUrl(restaurantId)}`;
+}
+
+function buildPromotionsReply(restaurantName: string, restaurantId: string, products: any[]) {
+  const promoProducts = (products || []).filter((product: any) => {
+    const discount = Number(product?.discount_percentage || 0);
+    const price = Number(product?.price || 0);
+    const originalPrice = Number(product?.original_price || 0);
+    return discount > 0 || (originalPrice > 0 && originalPrice > price) || Boolean(product?.is_highlight);
+  }).slice(0, 3);
+
+  if (promoProducts.length === 0) {
+    return `✨ No momento não encontrei promoções ativas no ${restaurantName}, mas posso te enviar o cardápio completo: ${buildMenuShareUrl(restaurantId)}`;
+  }
+
+  const lines = promoProducts.map((product: any) => {
+    const name = String(product?.name || 'Item').trim();
+    const price = Number(product?.price || 0).toFixed(2);
+    const originalPrice = Number(product?.original_price || 0);
+    const discount = Number(product?.discount_percentage || 0);
+    if (discount > 0) {
+      return `- ${name}: R$ ${price} (${discount}% OFF)`;
+    }
+    if (originalPrice > 0 && originalPrice > Number(product?.price || 0)) {
+      return `- ${name}: de R$ ${originalPrice.toFixed(2)} por R$ ${price}`;
+    }
+    return `- ${name}: R$ ${price}`;
+  });
+
+  return `✨ Hoje no ${restaurantName} encontrei estas opções em destaque:\n${lines.join('\n')}\n\n📋 Cardápio completo: ${buildMenuShareUrl(restaurantId)}`;
 }
 
 function minutesSince(dateString?: string | null) {
@@ -231,7 +264,7 @@ export async function processRestaurantBotMessage(params: {
     delivered: true
   });
 
-  const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }] = await Promise.all([
+  const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }, { data: productsData }] = await Promise.all([
     supabase
       .from('whatsapp_messages')
       .select('sender, content, sent_at')
@@ -253,7 +286,14 @@ export async function processRestaurantBotMessage(params: {
       .eq('sender', 'bot')
       .order('sent_at', { ascending: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
+    supabase
+      .from('products')
+      .select('name, price, original_price, discount_percentage, is_highlight, available')
+      .eq('user_id', restaurantId)
+      .eq('available', true)
+      .order('updated_at', { ascending: false })
+      .limit(12)
   ]);
 
   const { data: profileRow } = await supabase
@@ -266,6 +306,7 @@ export async function processRestaurantBotMessage(params: {
   const greetingIntent = isGreeting(text);
   const trackIntent = wantsOrderTracking(text);
   const openingHoursIntent = wantsOpeningHours(text);
+  const promotionsIntent = wantsPromotions(text);
   const customerHasNoOrder = !lastOrder;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20;
@@ -302,6 +343,15 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
+  if (promotionsIntent) {
+    deterministicReplies.push(buildPromotionsReply(context.restaurantName, restaurantId, Array.isArray(productsData) ? productsData : []));
+    if (replyStrategy === 'fallback') {
+      replyStrategy = 'promotions';
+    } else {
+      replyStrategy = `multi_intent_${replyStrategy}`;
+    }
+  }
+
   if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
     deterministicReplies.push(
       fillTemplate(context.autoResponses.welcome || '', {
@@ -323,24 +373,33 @@ export async function processRestaurantBotMessage(params: {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
   } else {
     replyStrategy = 'openai';
-    replyText = await callOpenAiBot({
-      supabase,
-      message: text,
-      restaurantId,
-      customerPhone,
-      instance: instanceName,
-      conversationHistory: (history || [])
-        .map((item: any) => ({
-          role: item?.sender === 'customer' ? 'user' : 'assistant',
-          content: toTextFromHistoryItem(item)
-        }))
-        .filter((item: any) => item.content)
-    });
+    try {
+      replyText = await callOpenAiBot({
+        supabase,
+        message: text,
+        restaurantId,
+        customerPhone,
+        instance: instanceName,
+        conversationHistory: (history || [])
+          .map((item: any) => ({
+            role: item?.sender === 'customer' ? 'user' : 'assistant',
+            content: toTextFromHistoryItem(item)
+          }))
+          .filter((item: any) => item.content)
+      });
+    } catch (error: any) {
+      await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_openai_exception', 'Falha ao consultar resposta aberta do bot', {
+        instanceName,
+        customerPhone,
+        error: String(error?.message || error || 'unknown_error')
+      });
+      replyText = '';
+    }
   }
 
   if (!replyText) {
     replyStrategy = 'generic_fallback';
-    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, horário de funcionamento e status do pedido. Cardápio: ${buildMenuShareUrl(restaurantId)}`;
+    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, promoções, horário de funcionamento e status do pedido. Se quiser, já te envio o cardápio: ${buildMenuShareUrl(restaurantId)}`;
   }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {
