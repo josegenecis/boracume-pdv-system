@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, SlidersHorizontal } from 'lucide-react';
+import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
@@ -109,7 +109,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
-  const [expandedVariationId, setExpandedVariationId] = useState<string | null>(null);
   const variationSaveTimerRef = useRef<number | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
@@ -1467,7 +1466,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                               {...draggableProvided.draggableProps}
                               className="overflow-hidden rounded-[22px] border border-[#FF6400]/15 bg-white/95 shadow-[0_12px_30px_-24px_rgba(0,50,35,0.18)]"
                             >
-                              <div className="flex items-start gap-3 p-4">
+                              <div className="flex items-start gap-3 p-3.5">
                                 <button 
                                   type="button"
                                   {...draggableProvided.dragHandleProps}
@@ -1488,98 +1487,84 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                     Ajuste obrigatoriedade, limite grátis e adicionais pagos sem bagunça visual.
                                   </div>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="rounded-2xl border-[#FF6400]/20 bg-white text-[#FF6400] hover:bg-[#F5EBE1]"
-                                  onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
-                                >
-                                  <SlidersHorizontal className="mr-2 h-4 w-4" />
-                                  {expandedVariationId === v.id ? 'Fechar' : 'Configurar'}
-                                </Button>
                               </div>
-                              {expandedVariationId === v.id && (
-                                <div className="border-t border-[#FF6400]/10 bg-gradient-to-br from-[#F5EBE1]/80 to-white p-4">
-                                  <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)]">
-                                    <div className="space-y-3 rounded-2xl border border-[#8CC850]/30 bg-[#8CC850]/10 p-4">
-                                      <div className="text-xs font-semibold uppercase tracking-wide text-[#003223]">Regras rápidas</div>
-                                      <div className="grid gap-2">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={getVariationConfig(v.id).required ? 'justify-start rounded-2xl border-[#003223] bg-[#003223] text-white hover:bg-[#003223]/90' : 'justify-start rounded-2xl border-[#003223]/15 bg-white/90 text-[#003223] hover:bg-white'}
-                                          onClick={() => handleVariationSettingChange(v.id, 'required', !getVariationConfig(v.id).required)}
-                                        >
-                                          {getVariationConfig(v.id).required ? 'Obrigatório para o cliente' : 'Opcional para o cliente'}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={getVariationConfig(v.id).allow_paid_excess ? 'justify-start rounded-2xl border-[#FF6400] bg-[#FF6400] text-white hover:bg-[#FF6400]/90' : 'justify-start rounded-2xl border-[#FF6400]/20 bg-white/90 text-[#FF6400] hover:bg-white'}
-                                          onClick={() => handleVariationSettingChange(v.id, 'allow_paid_excess', !getVariationConfig(v.id).allow_paid_excess)}
-                                        >
-                                          {getVariationConfig(v.id).allow_paid_excess ? 'Extras pagos habilitados' : 'Liberar extras pagos'}
-                                        </Button>
-                                      </div>
+                              <div className="border-t border-[#FF6400]/10 bg-gradient-to-br from-[#F5EBE1]/70 to-white px-3.5 py-3">
+                                <div className="grid gap-2.5 lg:grid-cols-[1.1fr_1fr_1fr]">
+                                  <div className="grid gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className={getVariationConfig(v.id).required ? 'h-9 justify-center rounded-xl border-[#003223] bg-[#003223] px-3 text-white hover:bg-[#003223]/90' : 'h-9 justify-center rounded-xl border-[#003223]/15 bg-white/90 px-3 text-[#003223] hover:bg-white'}
+                                      onClick={() => handleVariationSettingChange(v.id, 'required', !getVariationConfig(v.id).required)}
+                                    >
+                                      {getVariationConfig(v.id).required ? 'Obrigatório' : 'Opcional'}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className={getVariationConfig(v.id).allow_paid_excess ? 'h-9 justify-center rounded-xl border-[#FF6400] bg-[#FF6400] px-3 text-white hover:bg-[#FF6400]/90' : 'h-9 justify-center rounded-xl border-[#FF6400]/20 bg-white/90 px-3 text-[#FF6400] hover:bg-white'}
+                                      onClick={() => handleVariationSettingChange(v.id, 'allow_paid_excess', !getVariationConfig(v.id).allow_paid_excess)}
+                                    >
+                                      {getVariationConfig(v.id).allow_paid_excess ? 'Extras pagos' : 'Sem extras pagos'}
+                                    </Button>
+                                  </div>
+                                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                    <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`min-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Mín.</Label>
+                                      <Input
+                                        id={`min-selections-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
+                                        onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
+                                      />
                                     </div>
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                      <div className="rounded-2xl border border-[#FF6400]/15 bg-white/95 p-3">
-                                        <Label htmlFor={`min-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Mínimo</Label>
-                                        <Input
-                                          id={`min-selections-${v.id}`}
-                                          type="number"
-                                          min="0"
-                                          value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
-                                          onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
-                                          onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-[#FF6400]/20 bg-[#F5EBE1]/50 text-center text-base font-semibold text-[#003223]"
-                                        />
-                                      </div>
-                                      <div className="rounded-2xl border border-[#FF6400]/15 bg-white/95 p-3">
-                                        <Label htmlFor={`max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Máximo padrão</Label>
-                                        <Input
-                                          id={`max-selections-${v.id}`}
-                                          type="number"
-                                          min="1"
-                                          value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
-                                          onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
-                                          onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-[#FF6400]/20 bg-[#F5EBE1]/50 text-center text-base font-semibold text-[#003223]"
-                                        />
-                                      </div>
-                                      <div className="rounded-2xl border border-[#8CC850]/25 bg-white/95 p-3">
-                                        <Label htmlFor={`free-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Grátis até</Label>
-                                        <Input
-                                          id={`free-selections-${v.id}`}
-                                          type="number"
-                                          min="0"
-                                          value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
-                                          onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
-                                          onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-base font-semibold text-[#003223]"
-                                        />
-                                      </div>
-                                      <div className="rounded-2xl border border-[#003223]/12 bg-white/95 p-3">
-                                        <Label htmlFor={`paid-max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Total com extras</Label>
-                                        <Input
-                                          id={`paid-max-selections-${v.id}`}
-                                          type="number"
-                                          min={String(Math.max(1, getVariationConfig(v.id).max_selections ?? 1))}
-                                          disabled={!getVariationConfig(v.id).allow_paid_excess}
-                                          value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
-                                          onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
-                                          onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-[#003223]/15 bg-[#003223]/[0.04] text-center text-base font-semibold text-[#003223] disabled:opacity-50"
-                                        />
-                                      </div>
+                                    <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`max-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Máx.</Label>
+                                      <Input
+                                        id={`max-selections-${v.id}`}
+                                        type="number"
+                                        min="1"
+                                        value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
+                                        onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
+                                      />
                                     </div>
                                   </div>
-                                  <div className="mt-3 rounded-2xl border border-[#FF6400]/15 bg-white/85 px-3 py-2 text-xs text-[#003223]/70">
-                                    Exemplo: grátis até 3 e total 5 → o cliente pega 3 sem cobrança e pode adicionar mais 2 pagando.
+                                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                    <div className="rounded-xl border border-[#8CC850]/25 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`free-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Grátis</Label>
+                                      <Input
+                                        id={`free-selections-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
+                                        onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-sm font-semibold text-[#003223]"
+                                      />
+                                    </div>
+                                    <div className="rounded-xl border border-[#003223]/12 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`paid-max-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Total</Label>
+                                      <Input
+                                        id={`paid-max-selections-${v.id}`}
+                                        type="number"
+                                        min={String(Math.max(1, getVariationConfig(v.id).max_selections ?? 1))}
+                                        disabled={!getVariationConfig(v.id).allow_paid_excess}
+                                        value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
+                                        onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
-                              )}
+                              </div>
                             </div>
                           )}
                         </Draggable>
