@@ -73,7 +73,7 @@ Deno.serve(async (req: Request) => {
   // @ts-ignore
   const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
   // @ts-ignore
-  const BOT_WEBHOOK_SECRET = Deno.env.get('BOT_WEBHOOK_SECRET') || '';
+  const BORACUME_INTERNAL_KEY = Deno.env.get('BORACUME_INTERNAL_KEY') || Deno.env.get('BOT_WEBHOOK_SECRET') || '';
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env missing' }, 500);
   if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) return json({ success: false, error: 'Evolution env missing' }, 500);
@@ -145,13 +145,19 @@ Deno.serve(async (req: Request) => {
     content: String(m.content || '')
   }));
 
-  const aiResp = await fetch(`${SUPABASE_URL}/functions/v1/ai-agent`, {
+  const aiResp = await fetch(`${SUPABASE_URL}/functions/v1/evolution-bot-ai`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-bot-token': BOT_WEBHOOK_SECRET
+      'x-boracume-key': BORACUME_INTERNAL_KEY
     },
-    body: JSON.stringify({ command: text, userId, supportMode: true, conversationHistory })
+    body: JSON.stringify({
+      message: text,
+      restaurantId: userId,
+      customerPhone,
+      instance,
+      conversationHistory
+    })
   });
 
   const aiData = await aiResp.json().catch(() => null);
