@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { buildMenuShareUrl, loadRestaurantContext } from '../_shared/restaurant-whatsapp.ts';
+import { processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -152,98 +152,17 @@ Deno.serve(async (req: Request) => {
   }
   if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
 
-  const { data: convo } = await supabase
-    .from('whatsapp_conversations')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('customer_phone', customerPhone)
-    .maybeSingle();
+  const result = await processRestaurantBotMessage({
+    supabase,
+    restaurantId: userId,
+    instanceName: instance,
+    customerPhone,
+    text
+  });
 
-  let conversationId = convo?.id as string | undefined;
-  if (!conversationId) {
-    const { data: created, error } = await supabase
-      .from('whatsapp_conversations')
-      .insert({ user_id: userId, customer_phone: customerPhone, status: 'open' })
-      .select('id')
-      .single();
-    if (error) return json({ success: false, error: error.message }, 500);
-    conversationId = created.id;
+  if (!result.ok) {
+    return json({ success: false, error: result.error || 'bot_failed', details: result.details || null }, 502);
   }
 
-  await supabase.from('whatsapp_messages').insert({
-    conversation_id: conversationId,
-    content: text,
-    sender: 'customer',
-    message_type: 'text',
-    delivered: true
-  });
-
-  const { data: history } = await supabase
-    .from('whatsapp_messages')
-    .select('sender, content, sent_at')
-    .eq('conversation_id', conversationId)
-    .order('sent_at', { ascending: true })
-    .limit(20);
-
-  const conversationHistory = (history || []).map((m: any) => ({
-    role: m.sender === 'customer' ? 'user' : 'assistant',
-    content: String(m.content || '')
-  }));
-
-  const aiResp = await fetch(`${SUPABASE_URL}/functions/v1/evolution-bot-ai`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-boracume-key': BORACUME_INTERNAL_KEY
-    },
-    body: JSON.stringify({
-      message: text,
-      restaurantId: userId,
-      customerPhone,
-      instance,
-      conversationHistory
-    })
-  });
-
-  const aiData = await aiResp.json().catch(() => null);
-  let replyText = String(aiData?.message || '').trim();
-
-  if (!replyText) {
-    try {
-      const context = await loadRestaurantContext(supabase, userId);
-      const menuLink = buildMenuShareUrl(userId);
-      replyText = context?.autoResponses?.welcome?.replace('{restaurant_name}', context.restaurantName).replace('{menu_link}', menuLink) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${menuLink}`;
-    } catch {
-      replyText = 'Olá! Como posso ajudar?';
-    }
-  }
-
-  await supabase.from('whatsapp_messages').insert({
-    conversation_id: conversationId,
-    content: replyText,
-    sender: 'bot',
-    message_type: 'text',
-    delivered: true
-  });
-
-  const sendResp = await fetch(`${EVOLUTION_BASE_URL.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: EVOLUTION_API_KEY
-    },
-    body: JSON.stringify({
-      number: customerPhone,
-      text: replyText,
-      delay: 400,
-      linkPreview: true
-    })
-  });
-
-  if (!sendResp.ok) {
-    const errText = await sendResp.text();
-    return json({ success: false, error: 'Failed to send message', details: errText }, 502);
-  }
-
-  return json({ success: true });
+  return json({ success: true, message: result.replyText });
 });
