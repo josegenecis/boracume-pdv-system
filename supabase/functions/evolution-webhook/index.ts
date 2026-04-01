@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
+import { logWhatsAppBotStep, processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -152,6 +152,14 @@ Deno.serve(async (req: Request) => {
   }
   if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
 
+  await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_received', 'Webhook evolution recebido', {
+    provider: 'evolution',
+    event,
+    instanceName: instance,
+    customerPhone,
+    textPreview: text.slice(0, 120)
+  });
+
   const result = await processRestaurantBotMessage({
     supabase,
     restaurantId: userId,
@@ -161,8 +169,23 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!result.ok) {
+    await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_error', 'Webhook evolution falhou ao processar', {
+      provider: 'evolution',
+      event,
+      instanceName: instance,
+      customerPhone,
+      error: result.error || null,
+      details: result.details || null
+    });
     return json({ success: false, error: result.error || 'bot_failed', details: result.details || null }, 502);
   }
+
+  await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_processed', 'Webhook evolution processado com sucesso', {
+    provider: 'evolution',
+    event,
+    instanceName: instance,
+    customerPhone
+  });
 
   return json({ success: true, message: result.replyText });
 });

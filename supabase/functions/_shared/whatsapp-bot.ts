@@ -28,7 +28,22 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
+export async function logWhatsAppBotStep(supabase: any, restaurantId: string, actionType: string, description: string, metadata: Record<string, unknown> = {}) {
+  const userId = String(restaurantId || '').trim();
+  if (!supabase || !userId) return;
+  await supabase.from('agent_activity_logs').insert({
+    user_id: userId,
+    action_type: actionType,
+    description,
+    metadata: {
+      channel: 'whatsapp_bot',
+      ...metadata
+    }
+  });
+}
+
 async function callOpenAiBot(payload: {
+  supabase?: any;
   message: string;
   restaurantId: string;
   customerPhone: string;
@@ -37,7 +52,13 @@ async function callOpenAiBot(payload: {
 }) {
   const SUPABASE_URL = getEnv('SUPABASE_URL');
   const BORACUME_INTERNAL_KEY = getEnv('BORACUME_INTERNAL_KEY', getEnv('BOT_WEBHOOK_SECRET'));
-  if (!SUPABASE_URL || !BORACUME_INTERNAL_KEY) return '';
+  if (!SUPABASE_URL || !BORACUME_INTERNAL_KEY) {
+    await logWhatsAppBotStep(payload.supabase, payload.restaurantId, 'whatsapp_bot_openai_env_missing', 'OpenAI bot sem ambiente interno configurado', {
+      hasSupabaseUrl: Boolean(SUPABASE_URL),
+      hasInternalKey: Boolean(BORACUME_INTERNAL_KEY)
+    });
+    return '';
+  }
 
   const response = await fetch(`${SUPABASE_URL}/functions/v1/evolution-bot-ai`, {
     method: 'POST',
@@ -49,6 +70,13 @@ async function callOpenAiBot(payload: {
   });
 
   const data = await response.json().catch(() => null);
+  await logWhatsAppBotStep(payload.supabase, payload.restaurantId, response.ok ? 'whatsapp_bot_openai_ok' : 'whatsapp_bot_openai_error', response.ok ? 'OpenAI respondeu para o bot' : 'OpenAI não respondeu com sucesso para o bot', {
+    status: response.status,
+    instance: payload.instance,
+    customerPhone: payload.customerPhone,
+    hasMessage: Boolean(String(data?.message || '').trim()),
+    error: String(data?.error || data?.details || '')
+  });
   return String(data?.message || '').trim();
 }
 
@@ -83,6 +111,7 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
     if (response.ok) {
       return { ok: true, status: response.status, data, transport: 'evolution-sendText' };
     }
+    return { ok: false, status: response.status, data, transport: 'evolution-sendText' };
   }
 
   if (!fallbackRestaurantId) {
@@ -109,6 +138,12 @@ export async function processRestaurantBotMessage(params: {
   if (!restaurantId || !customerPhone || !text) {
     return { ok: false, skipped: true, reason: 'missing_input' };
   }
+
+  await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_received', 'Mensagem recebida para processamento do bot', {
+    instanceName,
+    customerPhone,
+    textPreview: text.slice(0, 120)
+  });
 
   const phoneCandidates = buildPhoneCandidates(customerPhone);
   const [{ data: existingCustomer }, { data: context }] = await Promise.all([
@@ -195,8 +230,10 @@ export async function processRestaurantBotMessage(params: {
   const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20;
 
   let replyText = '';
+  let replyStrategy = 'fallback';
 
   if (trackIntent && lastOrder?.id) {
+    replyStrategy = 'order_tracking';
     replyText = fillTemplate(
       `📦 ${context.restaurantName}: acompanhe seu pedido #{order_number} aqui: {track_link}`,
       {
@@ -208,6 +245,7 @@ export async function processRestaurantBotMessage(params: {
       }
     );
   } else if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
+    replyStrategy = 'menu_auto_reply';
     replyText = fillTemplate(context.autoResponses.welcome || '', {
       restaurant_name: context.restaurantName,
       menu_link: buildMenuShareUrl(restaurantId),
@@ -216,7 +254,9 @@ export async function processRestaurantBotMessage(params: {
       track_link: ''
     });
   } else {
+    replyStrategy = 'openai';
     replyText = await callOpenAiBot({
+      supabase,
       message: text,
       restaurantId,
       customerPhone,
@@ -231,6 +271,7 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (!replyText) {
+    replyStrategy = 'welcome_fallback';
     replyText = fillTemplate(context.autoResponses.welcome || '', {
       restaurant_name: context.restaurantName,
       menu_link: buildMenuShareUrl(restaurantId),
@@ -240,10 +281,35 @@ export async function processRestaurantBotMessage(params: {
     }) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${buildMenuShareUrl(restaurantId)}`;
   }
 
+  await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {
+    instanceName,
+    customerPhone,
+    replyStrategy,
+    replyPreview: replyText.slice(0, 160),
+    hasOrder: Boolean(lastOrder?.id),
+    greetingIntent,
+    explicitMenuIntent,
+    trackIntent
+  });
+
   const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
   if (!sendResult?.ok) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_send_error', 'Falha ao enviar resposta do bot no WhatsApp', {
+      instanceName,
+      customerPhone,
+      transport: sendResult?.transport || 'unknown',
+      status: sendResult?.status || null,
+      details: sendResult?.data || sendResult?.error || null
+    });
     return { ok: false, error: 'send_failed', details: sendResult };
   }
+
+  await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_sent', 'Resposta do bot enviada no WhatsApp', {
+    instanceName,
+    customerPhone,
+    transport: sendResult?.transport || 'unknown',
+    status: sendResult?.status || null
+  });
 
   await supabase.from('whatsapp_messages').insert({
     conversation_id: conversationId,

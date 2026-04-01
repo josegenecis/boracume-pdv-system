@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractPhoneFromRemoteJid } from "../_shared/restaurant-whatsapp.ts";
-import { processRestaurantBotMessage } from "../_shared/whatsapp-bot.ts";
+import { logWhatsAppBotStep, processRestaurantBotMessage } from "../_shared/whatsapp-bot.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,6 +131,12 @@ serve(async (req) => {
     }
 
     if (['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(String(event || '').toUpperCase()) && instanceRow?.restaurant_id) {
+      await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, 'whatsapp_webhook_received', 'Webhook evogo recebido', {
+        provider: 'evogo',
+        event: String(event || ''),
+        instanceName: instanceRow.instance_name || instanceName
+      });
+
       const candidates = pickIncomingMessages(body);
 
       const incoming = candidates.find((item: any) => {
@@ -147,12 +153,20 @@ serve(async (req) => {
         const phone = extractPhoneFromRemoteJid(remoteJid);
 
         if (phone && text) {
-          await processRestaurantBotMessage({
+          const result = await processRestaurantBotMessage({
             supabase: supabaseClient,
             restaurantId: instanceRow.restaurant_id,
             instanceName: instanceRow.instance_name || instanceName,
             customerPhone: phone,
             text
+          });
+          await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, result.ok ? 'whatsapp_webhook_processed' : 'whatsapp_webhook_error', result.ok ? 'Webhook evogo processado com sucesso' : 'Webhook evogo falhou ao processar', {
+            provider: 'evogo',
+            event: String(event || ''),
+            instanceName: instanceRow.instance_name || instanceName,
+            customerPhone: phone,
+            error: result.error || null,
+            details: result.details || null
           });
         }
       }
