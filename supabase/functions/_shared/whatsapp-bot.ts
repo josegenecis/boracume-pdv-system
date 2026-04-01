@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import { buildMenuShareUrl, buildPhoneCandidates, buildTrackShareUrl, fillTemplate, loadRestaurantContext, normalizePhone } from './restaurant-whatsapp.ts';
+import { buildMenuShareUrl, buildPhoneCandidates, buildTrackShareUrl, fillTemplate, loadRestaurantContext, normalizePhone, sendRestaurantWhatsApp } from './restaurant-whatsapp.ts';
 
 function getEnv(name: string, fallback = '') {
   return String(Deno.env.get(name) || fallback).trim();
@@ -52,33 +52,45 @@ async function callOpenAiBot(payload: {
   return String(data?.message || '').trim();
 }
 
-export async function sendEvolutionText(instanceName: string, phone: string, text: string) {
+export async function sendEvolutionText(restaurantId: string, instanceName: string, phone: string, text: string) {
   const EVOLUTION_BASE_URL = getEnv('EVOLUTION_BASE_URL');
   const EVOLUTION_API_KEY = getEnv('EVOLUTION_API_KEY');
+  const fallbackRestaurantId = String(restaurantId || '').trim();
   const instance = String(instanceName || '').trim();
   const number = normalizePhone(phone);
   const message = String(text || '').trim();
 
-  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY || !instance || !number || !message) {
+  if (!number || !message) {
     return { ok: false, skipped: true };
   }
 
-  const response = await fetch(`${EVOLUTION_BASE_URL.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: EVOLUTION_API_KEY
-    },
-    body: JSON.stringify({
-      number,
-      text: message,
-      delay: 400,
-      linkPreview: true
-    })
-  });
+  if (EVOLUTION_BASE_URL && EVOLUTION_API_KEY && instance) {
+    const response = await fetch(`${EVOLUTION_BASE_URL.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: EVOLUTION_API_KEY
+      },
+      body: JSON.stringify({
+        number,
+        text: message,
+        delay: 400,
+        linkPreview: true
+      })
+    });
 
-  const data = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, data };
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      return { ok: true, status: response.status, data, transport: 'evolution-sendText' };
+    }
+  }
+
+  if (!fallbackRestaurantId) {
+    return { ok: false, error: 'missing_restaurant_id' };
+  }
+
+  const legacy = await sendRestaurantWhatsApp(fallbackRestaurantId, number, message);
+  return { ...legacy, transport: 'legacy-send-text' };
 }
 
 export async function processRestaurantBotMessage(params: {
@@ -228,7 +240,7 @@ export async function processRestaurantBotMessage(params: {
     }) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${buildMenuShareUrl(restaurantId)}`;
   }
 
-  const sendResult = await sendEvolutionText(instanceName, customerPhone, replyText);
+  const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
   if (!sendResult?.ok) {
     return { ok: false, error: 'send_failed', details: sendResult };
   }
