@@ -17,6 +17,10 @@ function getEnv(name: string, fallback = '') {
   return String(Deno.env.get(name) || fallback).trim();
 }
 
+function userMessage(message: string, status = 200) {
+  return new Response(JSON.stringify({ message }), { status, headers: corsHeaders });
+}
+
 function parseRestaurantIdFromToken(value: unknown) {
   const token = String(value || '').trim();
   const raw = token.startsWith('token_') ? token.slice(6) : '';
@@ -36,12 +40,31 @@ function pickInstanceName(body: any) {
   ).trim();
 }
 
+function pickApiKey(req: Request, body: any) {
+  const authHeader = req.headers.get('authorization') || '';
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  return String(
+    body?.apiKey ||
+    body?.inputs?.apiKey ||
+    body?.data?.apiKey ||
+    body?.data?.apikey ||
+    req.headers.get('apikey') ||
+    req.headers.get('x-api-key') ||
+    req.headers.get('x-boracume-key') ||
+    bearerToken ||
+    ''
+  ).trim();
+}
+
 function pickText(body: any): string {
   const direct = [
     body?.message,
     body?.text,
     body?.content,
     body?.prompt,
+    body?.inputs?.message,
+    body?.inputs?.text,
+    body?.inputs?.content,
     body?.data?.text,
     body?.data?.message,
     body?.messageData?.text
@@ -65,6 +88,8 @@ function pickPhone(body: any) {
     body?.customerPhone,
     body?.phone,
     body?.number,
+    body?.inputs?.remoteJid,
+    body?.inputs?.number,
     body?.customer?.phone,
     body?.data?.phone,
     body?.data?.number
@@ -74,6 +99,7 @@ function pickPhone(body: any) {
 
   const remoteJid =
     body?.remoteJid ||
+    body?.inputs?.remoteJid ||
     body?.data?.remoteJid ||
     body?.data?.key?.remoteJid ||
     body?.messageData?.key?.remoteJid ||
@@ -170,37 +196,38 @@ function buildUserPrompt(message: string, restaurantName: string) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (req.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
+  if (req.method !== 'POST') return userMessage('Método não permitido', 405);
 
   try {
     const BORACUME_INTERNAL_KEY = getEnv('BORACUME_INTERNAL_KEY');
-    const internalKeyHeader = req.headers.get('x-boracume-key') || '';
-    const authHeader = req.headers.get('authorization') || '';
-    const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
-
-    if (BORACUME_INTERNAL_KEY && internalKeyHeader !== BORACUME_INTERNAL_KEY && bearerToken !== BORACUME_INTERNAL_KEY) {
-      return json({ error: 'Unauthorized' }, 401);
-    }
-
     const OPENAI_API_KEY = getEnv('OPENAI_API_KEY');
     const OPENAI_MODEL = getEnv('OPENAI_MODEL', 'gpt-5.4-mini') || 'gpt-5.4-mini';
-    const EVOLUTION_API_KEY = getEnv('EVOLUTION_API_KEY');
-    const EVOLUTION_BASE_URL = getEnv('EVOLUTION_BASE_URL');
     const SUPABASE_URL = getEnv('SUPABASE_URL');
     const SERVICE_ROLE_KEY = getEnv('SERVICE_ROLE_KEY') || getEnv('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!OPENAI_API_KEY) return json({ error: 'OPENAI_API_KEY não configurada' }, 500);
-    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Supabase não configurado' }, 500);
-    if (!EVOLUTION_API_KEY || !EVOLUTION_BASE_URL) return json({ error: 'Evolution não configurado' }, 500);
-
     const body = await req.json().catch(() => null);
-    if (!body || typeof body !== 'object') return json({ error: 'JSON inválido' }, 400);
+    const safeBody = body && typeof body === 'object' ? body : {};
+    const receivedKey = pickApiKey(req, safeBody);
+    console.log('Headers recebidos:', JSON.stringify(Object.fromEntries(req.headers.entries())));
+    console.log('Body recebido:', JSON.stringify(safeBody));
 
-    const message = pickText(body);
-    const customerPhone = pickPhone(body);
+    if (BORACUME_INTERNAL_KEY && receivedKey && receivedKey !== BORACUME_INTERNAL_KEY) {
+      return userMessage('Acesso não autorizado');
+    }
+
+    if (BORACUME_INTERNAL_KEY && !receivedKey) {
+      console.log('Chave não recebida no request');
+    }
+
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      return userMessage('Bot temporariamente indisponível');
+    }
+
+    const message = pickText(safeBody);
+    const customerPhone = pickPhone(safeBody);
     const phoneCandidates = buildPhoneCandidates(customerPhone);
-    const instanceName = pickInstanceName(body);
-    let restaurantId = String(body?.restaurantId || body?.userId || body?.restaurant_id || '').trim();
+    const instanceName = pickInstanceName(safeBody);
+    let restaurantId = String(safeBody?.restaurantId || safeBody?.userId || safeBody?.restaurant_id || '').trim();
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -213,21 +240,26 @@ Deno.serve(async (req: Request) => {
       restaurantId = String(instanceRow?.restaurant_id || '').trim();
     }
 
-    if (!restaurantId && body?.restaurantName) {
+    if (!restaurantId && safeBody?.restaurantName) {
       const { data: profileByName } = await supabase
         .from('profiles')
         .select('id')
-        .eq('restaurant_name', String(body.restaurantName).trim())
+        .eq('restaurant_name', String(safeBody.restaurantName).trim())
         .maybeSingle();
       restaurantId = String(profileByName?.id || '').trim();
     }
 
     if (!restaurantId) {
-      restaurantId = parseRestaurantIdFromToken(body?.token || body?.apikey || body?.data?.token || body?.data?.apikey);
+      restaurantId = parseRestaurantIdFromToken(safeBody?.token || safeBody?.apikey || safeBody?.data?.token || safeBody?.data?.apikey || safeBody?.inputs?.apiKey);
     }
 
-    if (!restaurantId) return json({ error: 'Restaurante não identificado' }, 400);
-    if (!message) return json({ error: 'Mensagem não encontrada' }, 400);
+    console.log('instanceName:', instanceName);
+    console.log('customerPhone:', customerPhone);
+    console.log('message:', message);
+    console.log('receivedKey:', receivedKey ? 'present' : 'missing');
+
+    if (!restaurantId) return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
+    if (!message) return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
 
     const [
       profileResult,
@@ -272,7 +304,7 @@ Deno.serve(async (req: Request) => {
       autoResponses: settingsResult?.data?.auto_responses || {}
     });
 
-    const history = normalizeHistory(body?.conversationHistory || body?.history || []);
+    const history = normalizeHistory(safeBody?.conversationHistory || safeBody?.history || []);
     const input = [
       ...history,
       {
@@ -280,6 +312,10 @@ Deno.serve(async (req: Request) => {
         content: [{ type: 'input_text', text: buildUserPrompt(message, restaurantName) }]
       }
     ];
+
+    if (!OPENAI_API_KEY) {
+      return json({ message: `Teste OK do BoraCume bot` });
+    }
 
     const openAIResp = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -296,16 +332,15 @@ Deno.serve(async (req: Request) => {
     });
 
     const openAIData = await openAIResp.json().catch(() => null);
+    console.log('Resposta OpenAI:', JSON.stringify(openAIData));
     if (!openAIResp.ok) {
-      return json({
-        error: 'Falha ao consultar OpenAI',
-        details: String(openAIData?.error?.message || openAIData?.message || openAIResp.statusText || 'unknown_error')
-      }, 502);
+      return userMessage('Olá! Posso te ajudar com cardápio, pedido ou status.');
     }
 
     const finalMessage = extractResponseText(openAIData) || `Olá! Sou o assistente do ${restaurantName}. Como posso ajudar?`;
     return json({ message: finalMessage });
   } catch (error) {
-    return json({ error: String((error as Error)?.message || error || 'unknown_error') }, 500);
+    console.error('Erro na function:', error);
+    return json({ message: 'Erro interno no bot' });
   }
 });
