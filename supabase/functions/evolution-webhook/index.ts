@@ -14,7 +14,10 @@ function json(res: any, status = 200) {
 }
 
 function toTextFromMessage(msg: any): string {
+  if (typeof msg === 'string') return msg.trim();
   if (!msg || typeof msg !== 'object') return '';
+  if (typeof msg.text === 'string') return msg.text.trim();
+  if (typeof msg.content === 'string') return msg.content.trim();
   if (typeof msg.conversation === 'string') return msg.conversation;
   if (msg.extendedTextMessage?.text) return String(msg.extendedTextMessage.text);
   if (msg.imageMessage?.caption) return String(msg.imageMessage.caption);
@@ -135,7 +138,7 @@ Deno.serve(async (req: Request) => {
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
 
   const customerPhone = normalizeNumber(remoteJid);
-  const text = toTextFromMessage(data?.message || data);
+  const text = toTextFromMessage(data?.message || data?.text || data?.content || data);
   if (!customerPhone || !text) return json({ success: true, ignored: true });
 
   let userId = getMappedUserIdForInstance(instance);
