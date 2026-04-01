@@ -12,15 +12,37 @@ function toTextFromMessage(message: any) {
   if (typeof message === 'string') return message.trim();
   if (!message || typeof message !== 'object') return '';
   return String(
+    message?.Text ||
+    message?.Content ||
+    message?.Conversation ||
     message?.text ||
     message?.content ||
     message?.conversation ||
+    message?.extendedTextMessage?.Text ||
     message?.extendedTextMessage?.text ||
+    message?.ExtendedTextMessage?.text ||
+    message?.ExtendedTextMessage?.Text ||
+    message?.imageMessage?.Caption ||
     message?.imageMessage?.caption ||
+    message?.ImageMessage?.caption ||
+    message?.ImageMessage?.Caption ||
+    message?.videoMessage?.Caption ||
     message?.videoMessage?.caption ||
+    message?.VideoMessage?.caption ||
+    message?.VideoMessage?.Caption ||
+    message?.documentMessage?.Caption ||
     message?.documentMessage?.caption ||
+    message?.DocumentMessage?.caption ||
+    message?.DocumentMessage?.Caption ||
+    message?.buttonsResponseMessage?.SelectedDisplayText ||
     message?.buttonsResponseMessage?.selectedDisplayText ||
+    message?.ButtonsResponseMessage?.selectedDisplayText ||
+    message?.ButtonsResponseMessage?.SelectedDisplayText ||
+    message?.listResponseMessage?.Title ||
     message?.listResponseMessage?.title ||
+    message?.ListResponseMessage?.title ||
+    message?.ListResponseMessage?.Title ||
+    message?.templateButtonReplyMessage?.SelectedDisplayText ||
     message?.templateButtonReplyMessage?.selectedDisplayText ||
     ''
   ).trim();
@@ -31,7 +53,9 @@ function pickIncomingMessages(body: any) {
     ...(Array.isArray(body?.data?.messages) ? body.data.messages : []),
     ...(Array.isArray(body?.messages) ? body.messages : []),
     ...(body?.data?.message ? [{ key: body?.data?.key, message: body?.data?.message, data: body?.data }] : []),
+    ...(body?.data?.Message ? [{ key: body?.data?.key, message: body?.data?.Message, data: body?.data }] : []),
     ...(body?.message ? [{ key: body?.key, message: body?.message, data: body }] : []),
+    ...(body?.Message ? [{ key: body?.key, message: body?.Message, data: body }] : []),
     ...(body?.data && typeof body.data === 'object' ? [body.data] : []),
     ...(body?.data?.key ? [body.data] : []),
     ...(body?.key ? [body] : [])
@@ -182,15 +206,39 @@ serve(async (req) => {
 
       const incoming = candidates.find((item: any) => {
         const key = item?.key || item?.data?.key || {};
-        const remoteJid = String(key?.remoteJid || item?.remoteJid || item?.data?.remoteJid || '');
-        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe);
+        const remoteJid = String(
+          key?.remoteJid ||
+          item?.remoteJid ||
+          item?.data?.remoteJid ||
+          item?.Info?.Chat ||
+          item?.data?.Info?.Chat ||
+          ''
+        );
+        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe ?? item?.Info?.IsFromMe ?? item?.data?.Info?.IsFromMe);
         return !fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
 
       if (incoming) {
         const key = incoming?.key || incoming?.data?.key || {};
-        const message = incoming?.message || incoming?.data?.message || incoming?.text || incoming?.data?.text || incoming?.data || {};
-        const remoteJid = String(key?.remoteJid || incoming?.remoteJid || incoming?.data?.remoteJid || '');
+        const message =
+          incoming?.message ||
+          incoming?.Message ||
+          incoming?.data?.message ||
+          incoming?.data?.Message ||
+          incoming?.text ||
+          incoming?.Text ||
+          incoming?.data?.text ||
+          incoming?.data?.Text ||
+          incoming?.data ||
+          {};
+        const remoteJid = String(
+          key?.remoteJid ||
+          incoming?.remoteJid ||
+          incoming?.data?.remoteJid ||
+          incoming?.Info?.Chat ||
+          incoming?.data?.Info?.Chat ||
+          ''
+        );
         const text = toTextFromMessage(message);
         const phone = extractPhoneFromRemoteJid(remoteJid);
 
