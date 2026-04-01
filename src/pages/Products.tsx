@@ -1130,7 +1130,7 @@ const Products = () => {
       </Tabs>
 
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="right" className="w-full sm:w-[96vw] sm:max-w-none lg:w-[1180px] xl:w-[1320px] 2xl:w-[1440px] p-0 bg-white">
+        <SheetContent side="right" className="w-full sm:w-[54vw] sm:max-w-none lg:w-[820px] xl:w-[920px] 2xl:w-[980px] p-0 bg-white">
           {showForm && (
             <div className="overflow-y-auto h-full pb-6">
               <ProductForm

@@ -1423,27 +1423,27 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </div>
         )}
 
-        <div className="space-y-4 rounded-[26px] border border-orange-200/70 bg-gradient-to-br from-orange-50/90 via-white to-amber-50/80 p-4 shadow-[0_22px_45px_-35px_rgba(249,115,22,0.45)]">
+        <div className="space-y-4 rounded-[26px] border border-[#FF6400]/20 bg-gradient-to-br from-[#F5EBE1] via-white to-[#F5EBE1]/70 p-4 shadow-[0_22px_45px_-35px_rgba(255,100,0,0.35)]">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-boracume-orange">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/20 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#FF6400]">
                 <Sparkles className="h-3.5 w-3.5" />
                 Complementos do produto
               </div>
               <div className="flex items-center gap-2">
-                <div className="text-sm font-semibold text-boracume-dark-green">Adicionar variações</div>
-                <Badge variant="secondary" className="rounded-full bg-boracume-dark-green px-2.5 py-0.5 text-white">{selectedVariations.length}</Badge>
+                <div className="text-sm font-semibold text-[#003223]">Adicionar variações</div>
+                <Badge variant="secondary" className="rounded-full bg-[#8CC850] px-2.5 py-0.5 text-[#003223]">{selectedVariations.length}</Badge>
               </div>
-              <div className="text-xs text-slate-500">Organize sabores, bordas e adicionais sem deixar a lateral pesada.</div>
+              <div className="text-xs text-[#003223]/70">Organize sabores, bordas e adicionais com mais clareza visual e contraste.</div>
             </div>
-            <Button type="button" variant="outline" onClick={() => setVariationsDialogOpen(true)} className="h-10 rounded-2xl border-orange-200 bg-white/85 px-3 text-boracume-orange hover:bg-orange-50">
+            <Button type="button" variant="outline" onClick={() => setVariationsDialogOpen(true)} className="h-10 rounded-2xl border-[#FF6400]/20 bg-white/90 px-3 text-[#FF6400] hover:bg-[#F5EBE1]">
               <Plus className="mr-1 h-4 w-4" />
               Selecionar
             </Button>
           </div>
 
           {selectedVariations.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-orange-200 bg-white/90 p-5 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-[#FF6400]/25 bg-white/90 p-5 text-center text-sm text-[#003223]/45">
               Nenhuma variação selecionada.
             </div>
           ) : (
@@ -1465,26 +1465,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                             <div 
                               ref={draggableProvided.innerRef}
                               {...draggableProvided.draggableProps}
-                              className="overflow-hidden rounded-[22px] border border-orange-100 bg-white/92 shadow-[0_12px_30px_-24px_rgba(249,115,22,0.45)]"
+                              className="overflow-hidden rounded-[22px] border border-[#FF6400]/15 bg-white/95 shadow-[0_12px_30px_-24px_rgba(0,50,35,0.18)]"
                             >
                               <div className="flex items-start gap-3 p-4">
                                 <button 
                                   type="button"
                                   {...draggableProvided.dragHandleProps}
-                                  className="mt-0.5 cursor-grab rounded-xl border border-orange-100 bg-orange-50 p-1.5 text-muted-foreground transition hover:bg-orange-100 active:cursor-grabbing"
+                                  className="mt-0.5 cursor-grab rounded-xl border border-[#FF6400]/15 bg-[#F5EBE1] p-1.5 text-[#003223]/60 transition hover:bg-[#F5EBE1] active:cursor-grabbing"
                                 >
                                   <GripVertical className="h-4 w-4 text-muted-foreground" />
                                 </button>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <div className="truncate text-sm font-semibold text-slate-900">{v.name}</div>
+                                    <div className="truncate text-sm font-semibold text-[#003223]">{v.name}</div>
                                     {getVariationSummary(v.id).map((item) => (
-                                      <Badge key={`${v.id}-${item}`} variant="outline" className="rounded-full border-orange-200 bg-orange-50/80 text-[10px] text-boracume-orange">
+                                      <Badge key={`${v.id}-${item}`} variant="outline" className="rounded-full border-[#8CC850]/40 bg-[#8CC850]/15 text-[10px] text-[#003223]">
                                         {item}
                                       </Badge>
                                     ))}
                                   </div>
-                                  <div className="mt-1 text-xs text-slate-500">
+                                  <div className="mt-1 text-xs text-[#003223]/65">
                                     Ajuste obrigatoriedade, limite grátis e adicionais pagos sem bagunça visual.
                                   </div>
                                 </div>
@@ -1492,7 +1492,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="rounded-2xl border-orange-200 bg-white text-boracume-orange hover:bg-orange-50"
+                                  className="rounded-2xl border-[#FF6400]/20 bg-white text-[#FF6400] hover:bg-[#F5EBE1]"
                                   onClick={() => setExpandedVariationId(prev => (prev === v.id ? null : v.id))}
                                 >
                                   <SlidersHorizontal className="mr-2 h-4 w-4" />
@@ -1500,15 +1500,15 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 </Button>
                               </div>
                               {expandedVariationId === v.id && (
-                                <div className="border-t border-orange-100 bg-gradient-to-br from-orange-50/80 to-white p-4">
-                                  <div className="grid gap-4 2xl:grid-cols-[280px_minmax(0,1fr)]">
-                                    <div className="space-y-3 rounded-2xl border border-orange-100 bg-white/85 p-4">
-                                      <div className="text-xs font-semibold uppercase tracking-wide text-boracume-orange">Regras rápidas</div>
+                                <div className="border-t border-[#FF6400]/10 bg-gradient-to-br from-[#F5EBE1]/80 to-white p-4">
+                                  <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)]">
+                                    <div className="space-y-3 rounded-2xl border border-[#8CC850]/30 bg-[#8CC850]/10 p-4">
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-[#003223]">Regras rápidas</div>
                                       <div className="grid gap-2">
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={getVariationConfig(v.id).required ? 'justify-start rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600' : 'justify-start rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50'}
+                                          className={getVariationConfig(v.id).required ? 'justify-start rounded-2xl border-[#003223] bg-[#003223] text-white hover:bg-[#003223]/90' : 'justify-start rounded-2xl border-[#003223]/15 bg-white/90 text-[#003223] hover:bg-white'}
                                           onClick={() => handleVariationSettingChange(v.id, 'required', !getVariationConfig(v.id).required)}
                                         >
                                           {getVariationConfig(v.id).required ? 'Obrigatório para o cliente' : 'Opcional para o cliente'}
@@ -1516,16 +1516,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={getVariationConfig(v.id).allow_paid_excess ? 'justify-start rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600' : 'justify-start rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50'}
+                                          className={getVariationConfig(v.id).allow_paid_excess ? 'justify-start rounded-2xl border-[#FF6400] bg-[#FF6400] text-white hover:bg-[#FF6400]/90' : 'justify-start rounded-2xl border-[#FF6400]/20 bg-white/90 text-[#FF6400] hover:bg-white'}
                                           onClick={() => handleVariationSettingChange(v.id, 'allow_paid_excess', !getVariationConfig(v.id).allow_paid_excess)}
                                         >
                                           {getVariationConfig(v.id).allow_paid_excess ? 'Extras pagos habilitados' : 'Liberar extras pagos'}
                                         </Button>
                                       </div>
                                     </div>
-                                    <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
-                                      <div className="rounded-2xl border border-orange-100 bg-white/90 p-3">
-                                        <Label htmlFor={`min-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Mínimo</Label>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                      <div className="rounded-2xl border border-[#FF6400]/15 bg-white/95 p-3">
+                                        <Label htmlFor={`min-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Mínimo</Label>
                                         <Input
                                           id={`min-selections-${v.id}`}
                                           type="number"
@@ -1533,11 +1533,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
                                           onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
                                           onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-orange-200 bg-orange-50/40 text-center text-base font-semibold"
+                                          className="mt-2 h-11 rounded-xl border-[#FF6400]/20 bg-[#F5EBE1]/50 text-center text-base font-semibold text-[#003223]"
                                         />
                                       </div>
-                                      <div className="rounded-2xl border border-orange-100 bg-white/90 p-3">
-                                        <Label htmlFor={`max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Máximo padrão</Label>
+                                      <div className="rounded-2xl border border-[#FF6400]/15 bg-white/95 p-3">
+                                        <Label htmlFor={`max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Máximo padrão</Label>
                                         <Input
                                           id={`max-selections-${v.id}`}
                                           type="number"
@@ -1545,11 +1545,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
                                           onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
                                           onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-orange-200 bg-orange-50/40 text-center text-base font-semibold"
+                                          className="mt-2 h-11 rounded-xl border-[#FF6400]/20 bg-[#F5EBE1]/50 text-center text-base font-semibold text-[#003223]"
                                         />
                                       </div>
-                                      <div className="rounded-2xl border border-orange-100 bg-white/90 p-3">
-                                        <Label htmlFor={`free-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Grátis até</Label>
+                                      <div className="rounded-2xl border border-[#8CC850]/25 bg-white/95 p-3">
+                                        <Label htmlFor={`free-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Grátis até</Label>
                                         <Input
                                           id={`free-selections-${v.id}`}
                                           type="number"
@@ -1557,11 +1557,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
                                           onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
                                           onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-orange-200 bg-orange-50/40 text-center text-base font-semibold"
+                                          className="mt-2 h-11 rounded-xl border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-base font-semibold text-[#003223]"
                                         />
                                       </div>
-                                      <div className="rounded-2xl border border-orange-100 bg-white/90 p-3">
-                                        <Label htmlFor={`paid-max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total com extras</Label>
+                                      <div className="rounded-2xl border border-[#003223]/12 bg-white/95 p-3">
+                                        <Label htmlFor={`paid-max-selections-${v.id}`} className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/65">Total com extras</Label>
                                         <Input
                                           id={`paid-max-selections-${v.id}`}
                                           type="number"
@@ -1570,12 +1570,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
                                           onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
                                           onBlur={() => commitVariationMinMax(v.id)}
-                                          className="mt-2 h-11 rounded-xl border-orange-200 bg-orange-50/40 text-center text-base font-semibold disabled:opacity-50"
+                                          className="mt-2 h-11 rounded-xl border-[#003223]/15 bg-[#003223]/[0.04] text-center text-base font-semibold text-[#003223] disabled:opacity-50"
                                         />
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="mt-3 rounded-2xl border border-orange-100 bg-white/80 px-3 py-2 text-xs text-slate-500">
+                                  <div className="mt-3 rounded-2xl border border-[#FF6400]/15 bg-white/85 px-3 py-2 text-xs text-[#003223]/70">
                                     Exemplo: grátis até 3 e total 5 → o cliente pega 3 sem cobrança e pode adicionar mais 2 pagando.
                                   </div>
                                 </div>
