@@ -63,6 +63,10 @@ function restaurantIdFromToken(value: unknown) {
   return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -114,6 +118,17 @@ serve(async (req) => {
       const tokenRestaurantId = restaurantIdFromToken(body.token || body.data?.token || body.apikey || body.data?.apikey);
       if (tokenRestaurantId) {
         instanceRow = { restaurant_id: tokenRestaurantId, instance_name: instanceName || undefined };
+      }
+    }
+
+    if (!instanceRow && isUuid(instanceName)) {
+      const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('id', instanceName)
+        .maybeSingle();
+      if (profile?.id) {
+        instanceRow = { restaurant_id: profile.id, instance_name: instanceName || undefined };
       }
     }
 

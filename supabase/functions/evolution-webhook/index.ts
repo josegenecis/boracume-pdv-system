@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { buildMenuShareUrl, loadRestaurantContext } from '../_shared/restaurant-whatsapp.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,13 +31,13 @@ function normalizeNumber(remoteJid: string): string {
 }
 
 function pickInstanceName(body: any): string {
-  const fromBody = String(body?.instance || body?.instanceName || body?.data?.instance || body?.data?.instanceName || '').trim();
+  const fromBody = String(body?.instance || body?.instanceName || body?.data?.instance || body?.data?.instanceName || body?.name || body?.data?.name || '').trim();
   if (fromBody) return fromBody;
   // @ts-ignore
   return String(Deno.env.get('EVOLUTION_DEFAULT_INSTANCE') || '').trim();
 }
 
-function getUserIdForInstance(instance: string): string {
+function getMappedUserIdForInstance(instance: string): string {
   // @ts-ignore
   const mapRaw = Deno.env.get('EVOLUTION_INSTANCE_USER_MAP') || '';
   // @ts-ignore
@@ -49,6 +50,31 @@ function getUserIdForInstance(instance: string): string {
     } catch {}
   }
   return String(fallback || '').trim();
+}
+
+function parseRestaurantIdFromToken(value: unknown) {
+  const token = String(value || '').trim();
+  const raw = token.startsWith('token_') ? token.slice(6) : '';
+  if (!/^[a-f0-9]{32}$/i.test(raw)) return '';
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
+function pickIncomingEnvelope(body: any) {
+  const direct = body?.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
+  const list = body?.data?.messages || body?.messages || body?.data;
+  if (Array.isArray(list)) {
+    const found = list.find((item: any) => {
+      const key = item?.key || item?.data?.key || {};
+      const remoteJid = String(key?.remoteJid || item?.remoteJid || '');
+      return remoteJid && !remoteJid.includes('@g.us') && !Boolean(key?.fromMe ?? item?.fromMe);
+    });
+    if (found) return found;
+  }
+  return direct;
 }
 
 Deno.serve(async (req: Request) => {
@@ -88,24 +114,43 @@ Deno.serve(async (req: Request) => {
   }
 
   const event = String(body?.event || body?.type || '').trim().toUpperCase().replace(/[.\-\s]+/g, '_');
-  if (event && event !== 'MESSAGES_UPSERT') {
+  if (event && !['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(event)) {
     return json({ success: true, ignored: true });
   }
 
   const instance = pickInstanceName(body);
-  const userId = getUserIdForInstance(instance);
-  if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
-
-  const data = body?.data || body;
-  const fromMe = Boolean(data?.key?.fromMe);
+  const data = pickIncomingEnvelope(body);
+  const fromMe = Boolean(data?.key?.fromMe ?? data?.fromMe);
   if (fromMe) return json({ success: true, ignored: true });
 
-  const remoteJid = String(data?.key?.remoteJid || '');
+  const remoteJid = String(data?.key?.remoteJid || data?.remoteJid || '');
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
 
   const customerPhone = normalizeNumber(remoteJid);
-  const text = toTextFromMessage(data?.message);
+  const text = toTextFromMessage(data?.message || data);
   if (!customerPhone || !text) return json({ success: true, ignored: true });
+
+  let userId = getMappedUserIdForInstance(instance);
+  if (!userId && instance) {
+    const { data: instanceRow } = await supabase
+      .from('whatsapp_instances')
+      .select('restaurant_id')
+      .eq('instance_name', instance)
+      .maybeSingle();
+    userId = String(instanceRow?.restaurant_id || '').trim();
+  }
+  if (!userId) {
+    userId = parseRestaurantIdFromToken(body?.token || body?.data?.token || body?.apikey || body?.data?.apikey);
+  }
+  if (!userId && isUuid(instance)) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', instance)
+      .maybeSingle();
+    userId = String(profile?.id || '').trim();
+  }
+  if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
 
   const { data: convo } = await supabase
     .from('whatsapp_conversations')
@@ -161,7 +206,17 @@ Deno.serve(async (req: Request) => {
   });
 
   const aiData = await aiResp.json().catch(() => null);
-  const replyText = String(aiData?.message || aiData?.error || 'Certo.');
+  let replyText = String(aiData?.message || '').trim();
+
+  if (!replyText) {
+    try {
+      const context = await loadRestaurantContext(supabase, userId);
+      const menuLink = buildMenuShareUrl(userId);
+      replyText = context?.autoResponses?.welcome?.replace('{restaurant_name}', context.restaurantName).replace('{menu_link}', menuLink) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${menuLink}`;
+    } catch {
+      replyText = 'Olá! Como posso ajudar?';
+    }
+  }
 
   await supabase.from('whatsapp_messages').insert({
     conversation_id: conversationId,
