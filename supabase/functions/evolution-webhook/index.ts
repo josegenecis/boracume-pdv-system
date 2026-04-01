@@ -87,7 +87,7 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Invalid JSON' }, 400);
   }
 
-  const event = String(body?.event || body?.type || '').toUpperCase();
+  const event = String(body?.event || body?.type || '').trim().toUpperCase().replace(/[.\-\s]+/g, '_');
   if (event && event !== 'MESSAGES_UPSERT') {
     return json({ success: true, ignored: true });
   }

@@ -69,3 +69,8 @@ entrypoint = "./functions/whatsapp-order-created/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/evolution-bot-ai/index.ts"
+
+[functions.evolution-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/evolution-webhook/index.ts"
