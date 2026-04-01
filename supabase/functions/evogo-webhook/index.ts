@@ -204,7 +204,7 @@ serve(async (req) => {
 
       const candidates = pickIncomingMessages(body);
 
-      const incoming = candidates.find((item: any) => {
+      const incomingMessages = candidates.filter((item: any) => {
         const key = item?.key || item?.data?.key || {};
         const remoteJid = String(
           key?.remoteJid ||
@@ -218,28 +218,34 @@ serve(async (req) => {
         return !fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
 
-      if (incoming) {
-        const key = incoming?.key || incoming?.data?.key || {};
-        const message =
-          incoming?.message ||
-          incoming?.Message ||
-          incoming?.data?.message ||
-          incoming?.data?.Message ||
-          incoming?.text ||
-          incoming?.Text ||
-          incoming?.data?.text ||
-          incoming?.data?.Text ||
-          incoming?.data ||
-          {};
+      if (incomingMessages.length > 0) {
+        const primaryIncoming = incomingMessages[0];
+        const key = primaryIncoming?.key || primaryIncoming?.data?.key || {};
         const remoteJid = String(
           key?.remoteJid ||
-          incoming?.remoteJid ||
-          incoming?.data?.remoteJid ||
-          incoming?.Info?.Chat ||
-          incoming?.data?.Info?.Chat ||
+          primaryIncoming?.remoteJid ||
+          primaryIncoming?.data?.remoteJid ||
+          primaryIncoming?.Info?.Chat ||
+          primaryIncoming?.data?.Info?.Chat ||
           ''
         );
-        const text = toTextFromMessage(message);
+        const text = Array.from(new Set(incomingMessages
+          .map((incoming: any) => {
+            const message =
+              incoming?.message ||
+              incoming?.Message ||
+              incoming?.data?.message ||
+              incoming?.data?.Message ||
+              incoming?.text ||
+              incoming?.Text ||
+              incoming?.data?.text ||
+              incoming?.data?.Text ||
+              incoming?.data ||
+              {};
+            return toTextFromMessage(message);
+          })
+          .filter(Boolean)))
+          .join('\n');
         const phone = extractPhoneFromRemoteJid(remoteJid);
 
         if (phone && text) {

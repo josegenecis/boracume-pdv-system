@@ -21,6 +21,29 @@ function wantsOrderTracking(text: string) {
   return /(acompanh|rastre|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(text);
 }
 
+function wantsOpeningHours(text: string) {
+  return /(que horas (fecha|abre)|hor[aá]rio|horario de funcionamento|voc[eê]s abrem|voc[eê]s fecham|at[eé] que horas|qual o hor[aá]rio)/i.test(text);
+}
+
+function buildOrderStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: 'recebido',
+    preparing: 'em preparo',
+    ready: 'pronto',
+    in_delivery: 'saiu para entrega',
+    delivered: 'entregue',
+    completed: 'finalizado',
+    cancelled: 'cancelado'
+  };
+  return labels[String(status || '').trim()] || String(status || 'em andamento');
+}
+
+function buildOpeningHoursReply(restaurantName: string, openingHours: string, restaurantId: string) {
+  return openingHours
+    ? `🕒 O horário de funcionamento do ${restaurantName} é: ${openingHours}`
+    : `🕒 Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Se preferir, posso te enviar o cardápio: ${buildMenuShareUrl(restaurantId)}`;
+}
+
 function minutesSince(dateString?: string | null) {
   if (!dateString) return Number.POSITIVE_INFINITY;
   const time = new Date(dateString).getTime();
@@ -233,19 +256,26 @@ export async function processRestaurantBotMessage(params: {
       .maybeSingle()
   ]);
 
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('opening_hours')
+    .eq('id', restaurantId)
+    .maybeSingle();
+
   const explicitMenuIntent = wantsMenuLink(text);
   const greetingIntent = isGreeting(text);
   const trackIntent = wantsOrderTracking(text);
+  const openingHoursIntent = wantsOpeningHours(text);
   const customerHasNoOrder = !lastOrder;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20;
 
   let replyText = '';
   let replyStrategy = 'fallback';
+  const deterministicReplies: string[] = [];
 
   if (trackIntent && lastOrder?.id) {
-    replyStrategy = 'order_tracking';
-    replyText = fillTemplate(
+    deterministicReplies.push(fillTemplate(
       `📦 ${context.restaurantName}: acompanhe seu pedido #{order_number} aqui: {track_link}`,
       {
         restaurant_name: context.restaurantName,
@@ -254,16 +284,43 @@ export async function processRestaurantBotMessage(params: {
         menu_link: buildMenuShareUrl(restaurantId),
         customer_name: customerName
       }
+    ));
+    replyStrategy = openingHoursIntent ? 'multi_intent_tracking_hours' : 'order_tracking';
+  } else if (trackIntent) {
+    deterministicReplies.push(`📦 Não encontrei um pedido recente para este número no ${context.restaurantName}. Se quiser, me envie o nome usado no pedido ou peça o cardápio: ${buildMenuShareUrl(restaurantId)}`);
+    replyStrategy = openingHoursIntent ? 'multi_intent_tracking_not_found_hours' : 'order_tracking_not_found';
+  } else if (lastOrder?.id && /(status|situa[cç][aã]o|andamento).*(pedido)|pedido.*(status|situa[cç][aã]o|andamento)/i.test(text)) {
+    deterministicReplies.push(`📦 Seu pedido #${String(lastOrder.order_number || '')} está ${buildOrderStatusLabel(String(lastOrder.status || ''))}. Acompanhe aqui: ${buildTrackShareUrl(String(lastOrder.id), restaurantId, String(lastOrder.order_number || ''))}`);
+    replyStrategy = openingHoursIntent ? 'multi_intent_order_status_hours' : 'order_status_summary';
+  }
+
+  if (openingHoursIntent) {
+    const openingHours = String(profileRow?.opening_hours || '').trim();
+    deterministicReplies.push(buildOpeningHoursReply(context.restaurantName, openingHours, restaurantId));
+    if (!trackIntent && replyStrategy === 'fallback') {
+      replyStrategy = 'opening_hours';
+    }
+  }
+
+  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
+    deterministicReplies.push(
+      fillTemplate(context.autoResponses.welcome || '', {
+        restaurant_name: context.restaurantName,
+        menu_link: buildMenuShareUrl(restaurantId),
+        customer_name: customerName,
+        order_number: '',
+        track_link: ''
+      }) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${buildMenuShareUrl(restaurantId)}`
     );
-  } else if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
-    replyStrategy = 'menu_auto_reply';
-    replyText = fillTemplate(context.autoResponses.welcome || '', {
-      restaurant_name: context.restaurantName,
-      menu_link: buildMenuShareUrl(restaurantId),
-      customer_name: customerName,
-      order_number: '',
-      track_link: ''
-    });
+    if (replyStrategy === 'fallback') {
+      replyStrategy = 'menu_auto_reply';
+    } else {
+      replyStrategy = `multi_intent_${replyStrategy}`;
+    }
+  }
+
+  if (deterministicReplies.length > 0) {
+    replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
   } else {
     replyStrategy = 'openai';
     replyText = await callOpenAiBot({
@@ -282,14 +339,8 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (!replyText) {
-    replyStrategy = 'welcome_fallback';
-    replyText = fillTemplate(context.autoResponses.welcome || '', {
-      restaurant_name: context.restaurantName,
-      menu_link: buildMenuShareUrl(restaurantId),
-      customer_name: customerName,
-      order_number: '',
-      track_link: ''
-    }) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${buildMenuShareUrl(restaurantId)}`;
+    replyStrategy = 'generic_fallback';
+    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, horário de funcionamento e status do pedido. Cardápio: ${buildMenuShareUrl(restaurantId)}`;
   }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {
