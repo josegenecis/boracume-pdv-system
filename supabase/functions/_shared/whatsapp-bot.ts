@@ -87,6 +87,7 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
   const instance = String(instanceName || '').trim();
   const number = normalizePhone(phone);
   const message = String(text || '').trim();
+  let primaryFailure: any = null;
 
   if (!number || !message) {
     return { ok: false, skipped: true };
@@ -111,15 +112,23 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
     if (response.ok) {
       return { ok: true, status: response.status, data, transport: 'evolution-sendText' };
     }
-    return { ok: false, status: response.status, data, transport: 'evolution-sendText' };
+    primaryFailure = { ok: false, status: response.status, data, transport: 'evolution-sendText' };
   }
 
   if (!fallbackRestaurantId) {
-    return { ok: false, error: 'missing_restaurant_id' };
+    return primaryFailure || { ok: false, error: 'missing_restaurant_id' };
   }
 
   const legacy = await sendRestaurantWhatsApp(fallbackRestaurantId, number, message);
-  return { ...legacy, transport: 'legacy-send-text' };
+  if (legacy?.ok) {
+    return { ...legacy, transport: 'legacy-send-text', fallbackFrom: primaryFailure?.transport || null };
+  }
+
+  return {
+    ...legacy,
+    transport: 'legacy-send-text',
+    primaryFailure
+  };
 }
 
 export async function processRestaurantBotMessage(params: {
@@ -146,7 +155,7 @@ export async function processRestaurantBotMessage(params: {
   });
 
   const phoneCandidates = buildPhoneCandidates(customerPhone);
-  const [{ data: existingCustomer }, { data: context }] = await Promise.all([
+  const [existingCustomerResult, context] = await Promise.all([
     supabase
       .from('customers')
       .select('id, name, updated_at')
@@ -155,6 +164,8 @@ export async function processRestaurantBotMessage(params: {
       .maybeSingle(),
     loadRestaurantContext(supabase, restaurantId)
   ]);
+
+  const existingCustomer = existingCustomerResult?.data;
 
   const customerName = String(existingCustomer?.name || 'Cliente WhatsApp');
 

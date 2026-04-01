@@ -63,6 +63,14 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
 
+function normalizeLookupKey(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function pickIncomingEnvelope(body: any) {
   const direct = body?.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
   const list = body?.data?.messages || body?.messages || body?.data;
@@ -149,6 +157,23 @@ Deno.serve(async (req: Request) => {
       .eq('id', instance)
       .maybeSingle();
     userId = String(profile?.id || '').trim();
+  }
+  if (!userId && instance) {
+    const normalizedInstance = normalizeLookupKey(instance);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, restaurant_name')
+      .limit(2000);
+    const matchedProfile = (profiles || []).find((profile: any) => normalizeLookupKey(profile?.restaurant_name) === normalizedInstance);
+    userId = String(matchedProfile?.id || '').trim();
+    if (userId) {
+      await supabase
+        .from('whatsapp_instances')
+        .upsert(
+          { restaurant_id: userId, instance_name: instance, status: 'connected' },
+          { onConflict: 'instance_name' }
+        );
+    }
   }
   if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
 

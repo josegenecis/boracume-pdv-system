@@ -49,7 +49,16 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
 
+function normalizeLookupKey(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 serve(async (req) => {
+  const debugMode = new URL(req.url).searchParams.get('debug') === '1';
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -68,10 +77,16 @@ serve(async (req) => {
     );
     const event = body.event;
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || '';
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      if (debugMode) {
+        return new Response(JSON.stringify({ success: false, error: 'supabase_env_missing', hasSupabaseUrl: Boolean(supabaseUrl), hasServiceRoleKey: Boolean(supabaseServiceRoleKey) }), { status: 500, headers: corsHeaders });
+      }
+      return new Response('OK', { status: 200, headers: corsHeaders });
+    }
 
     let instanceRow: { restaurant_id: string; instance_name?: string } | null = null;
 
@@ -93,6 +108,24 @@ serve(async (req) => {
 
       if (profile?.id) {
         instanceRow = { restaurant_id: profile.id, instance_name: instanceName };
+      }
+    }
+
+    if (!instanceRow && instanceName) {
+      const normalizedInstance = normalizeLookupKey(instanceName);
+      const { data: profiles } = await supabaseClient
+        .from('profiles')
+        .select('id, restaurant_name')
+        .limit(2000);
+      const matchedProfile = (profiles || []).find((profile: any) => normalizeLookupKey(profile?.restaurant_name) === normalizedInstance);
+      if (matchedProfile?.id) {
+        instanceRow = { restaurant_id: matchedProfile.id, instance_name: instanceName };
+        await supabaseClient
+          .from('whatsapp_instances')
+          .upsert(
+            { restaurant_id: matchedProfile.id, instance_name: instanceName, status: 'connected' },
+            { onConflict: 'instance_name' }
+          );
       }
     }
 
@@ -130,6 +163,8 @@ serve(async (req) => {
         .eq('instance_name', instanceName);
     }
 
+    let lastResult: any = { success: true, ignored: true };
+
     if (['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(String(event || '').toUpperCase()) && instanceRow?.restaurant_id) {
       await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, 'whatsapp_webhook_received', 'Webhook evogo recebido', {
         provider: 'evogo',
@@ -160,6 +195,7 @@ serve(async (req) => {
             customerPhone: phone,
             text
           });
+          lastResult = result;
           await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, result.ok ? 'whatsapp_webhook_processed' : 'whatsapp_webhook_error', result.ok ? 'Webhook evogo processado com sucesso' : 'Webhook evogo falhou ao processar', {
             provider: 'evogo',
             event: String(event || ''),
@@ -172,9 +208,23 @@ serve(async (req) => {
       }
     }
 
+    if (debugMode) {
+      return new Response(JSON.stringify({
+        success: Boolean(lastResult?.ok ?? true),
+        event: String(event || ''),
+        instanceName,
+        hasInstanceRow: Boolean(instanceRow?.restaurant_id),
+        restaurantId: instanceRow?.restaurant_id || null,
+        result: lastResult
+      }), { status: lastResult?.ok === false ? 502 : 200, headers: corsHeaders });
+    }
+
     return new Response('OK', { status: 200, headers: corsHeaders });
   } catch (error) {
     console.error("Webhook Error:", error);
+    if (debugMode) {
+      return new Response(JSON.stringify({ success: false, error: String((error as Error)?.message || error || 'unknown_error') }), { status: 500, headers: corsHeaders });
+    }
     // Always return 200 for webhooks so EvoGo doesn't retry infinitely
     return new Response('OK', { status: 200, headers: corsHeaders });
   }
