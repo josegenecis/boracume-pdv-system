@@ -9,8 +9,11 @@ const corsHeaders = {
 };
 
 function toTextFromMessage(message: any) {
+  if (typeof message === 'string') return message.trim();
   if (!message || typeof message !== 'object') return '';
   return String(
+    message?.text ||
+    message?.content ||
     message?.conversation ||
     message?.extendedTextMessage?.text ||
     message?.imageMessage?.caption ||
@@ -29,6 +32,7 @@ function pickIncomingMessages(body: any) {
     ...(Array.isArray(body?.messages) ? body.messages : []),
     ...(body?.data?.message ? [{ key: body?.data?.key, message: body?.data?.message, data: body?.data }] : []),
     ...(body?.message ? [{ key: body?.key, message: body?.message, data: body }] : []),
+    ...(body?.data && typeof body.data === 'object' ? [body.data] : []),
     ...(body?.data?.key ? [body.data] : []),
     ...(body?.key ? [body] : [])
   ];
@@ -75,7 +79,8 @@ serve(async (req) => {
       body.name ||
       body.data?.name
     );
-    const event = body.event;
+    const rawEvent = String(body?.event || body?.type || '').trim();
+    const event = rawEvent.toUpperCase().replace(/[.\-\s]+/g, '_');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || '';
@@ -165,10 +170,11 @@ serve(async (req) => {
 
     let lastResult: any = { success: true, ignored: true };
 
-    if (['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(String(event || '').toUpperCase()) && instanceRow?.restaurant_id) {
+    if (instanceRow?.restaurant_id) {
       await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, 'whatsapp_webhook_received', 'Webhook evogo recebido', {
         provider: 'evogo',
-        event: String(event || ''),
+        event,
+        rawEvent,
         instanceName: instanceRow.instance_name || instanceName
       });
 
@@ -176,14 +182,15 @@ serve(async (req) => {
 
       const incoming = candidates.find((item: any) => {
         const key = item?.key || item?.data?.key || {};
-        const remoteJid = String(key?.remoteJid || '');
-        return !key?.fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
+        const remoteJid = String(key?.remoteJid || item?.remoteJid || item?.data?.remoteJid || '');
+        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe);
+        return !fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
       });
 
       if (incoming) {
         const key = incoming?.key || incoming?.data?.key || {};
-        const message = incoming?.message || incoming?.data?.message || {};
-        const remoteJid = String(key?.remoteJid || '');
+        const message = incoming?.message || incoming?.data?.message || incoming?.text || incoming?.data?.text || incoming?.data || {};
+        const remoteJid = String(key?.remoteJid || incoming?.remoteJid || incoming?.data?.remoteJid || '');
         const text = toTextFromMessage(message);
         const phone = extractPhoneFromRemoteJid(remoteJid);
 
@@ -198,7 +205,8 @@ serve(async (req) => {
           lastResult = result;
           await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, result.ok ? 'whatsapp_webhook_processed' : 'whatsapp_webhook_error', result.ok ? 'Webhook evogo processado com sucesso' : 'Webhook evogo falhou ao processar', {
             provider: 'evogo',
-            event: String(event || ''),
+            event,
+            rawEvent,
             instanceName: instanceRow.instance_name || instanceName,
             customerPhone: phone,
             error: result.error || null,
@@ -211,7 +219,8 @@ serve(async (req) => {
     if (debugMode) {
       return new Response(JSON.stringify({
         success: Boolean(lastResult?.ok ?? true),
-        event: String(event || ''),
+        event,
+        rawEvent,
         instanceName,
         hasInstanceRow: Boolean(instanceRow?.restaurant_id),
         restaurantId: instanceRow?.restaurant_id || null,

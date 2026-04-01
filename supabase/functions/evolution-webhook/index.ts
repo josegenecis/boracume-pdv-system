@@ -124,10 +124,8 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Invalid JSON' }, 400);
   }
 
-  const event = String(body?.event || body?.type || '').trim().toUpperCase().replace(/[.\-\s]+/g, '_');
-  if (event && !['MESSAGES_UPSERT', 'MESSAGE', 'MESSAGES_UPDATE'].includes(event)) {
-    return json({ success: true, ignored: true });
-  }
+  const rawEvent = String(body?.event || body?.type || '').trim();
+  const event = rawEvent.toUpperCase().replace(/[.\-\s]+/g, '_');
 
   const instance = pickInstanceName(body);
   const data = pickIncomingEnvelope(body);
@@ -183,6 +181,7 @@ Deno.serve(async (req: Request) => {
   await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_received', 'Webhook evolution recebido', {
     provider: 'evolution',
     event,
+    rawEvent,
     instanceName: instance,
     customerPhone,
     textPreview: text.slice(0, 120)
@@ -200,6 +199,7 @@ Deno.serve(async (req: Request) => {
     await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_error', 'Webhook evolution falhou ao processar', {
       provider: 'evolution',
       event,
+      rawEvent,
       instanceName: instance,
       customerPhone,
       error: result.error || null,
@@ -211,6 +211,7 @@ Deno.serve(async (req: Request) => {
   await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_processed', 'Webhook evolution processado com sucesso', {
     provider: 'evolution',
     event,
+    rawEvent,
     instanceName: instance,
     customerPhone
   });
