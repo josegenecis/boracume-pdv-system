@@ -586,8 +586,9 @@ const Orders = () => {
         ? Math.max(0, Number(fixedPayout) || 0)
         : Math.max(0, Number((order as any)?.delivery_fee) || 0);
     try {
+      await updateOrderStatus(orderId, 'in_delivery');
+
       const payload = {
-        status: 'in_delivery',
         delivery_personnel_id: driverId,
         delivery_assigned_at: new Date().toISOString(),
         delivery_payout_amount: payoutAmount
