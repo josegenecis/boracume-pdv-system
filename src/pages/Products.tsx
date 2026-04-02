@@ -69,6 +69,8 @@ const Products = () => {
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [inlinePriceDrafts, setInlinePriceDrafts] = useState<Record<string, string>>({});
+  const [inlinePriceSavingId, setInlinePriceSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -108,6 +110,18 @@ const Products = () => {
   useEffect(() => {
     filterProducts();
   }, [products, searchQuery, selectedCategory]);
+
+  useEffect(() => {
+    setInlinePriceDrafts(prev => {
+      const next = { ...prev };
+      for (const product of products) {
+        if (!next[product.id]) {
+          next[product.id] = Number(product.price || 0).toFixed(2);
+        }
+      }
+      return next;
+    });
+  }, [products]);
 
   const fetchData = async () => {
     await Promise.all([fetchProducts(), fetchCategories()]);
@@ -523,6 +537,102 @@ const Products = () => {
     }).format(value);
   };
 
+  const parseInlinePrice = (raw: string) => {
+    const normalized = String(raw || '').replace(/\s/g, '').replace(',', '.');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+  };
+
+  const handleInlinePriceChange = (productId: string, value: string) => {
+    setInlinePriceDrafts(prev => ({
+      ...prev,
+      [productId]: value
+    }));
+  };
+
+  const saveInlinePrice = async (product: ProductItem) => {
+    const rawValue = inlinePriceDrafts[product.id] ?? Number(product.price || 0).toFixed(2);
+    const parsedPrice = parseInlinePrice(rawValue);
+
+    if (parsedPrice === null) {
+      toast({
+        title: 'Preço inválido',
+        description: 'Digite um valor válido para o preço do produto.',
+        variant: 'destructive',
+      });
+      setInlinePriceDrafts(prev => ({
+        ...prev,
+        [product.id]: Number(product.price || 0).toFixed(2)
+      }));
+      return;
+    }
+
+    if (Math.abs(parsedPrice - Number(product.price || 0)) < 0.0001) {
+      setInlinePriceDrafts(prev => ({
+        ...prev,
+        [product.id]: parsedPrice.toFixed(2)
+      }));
+      return;
+    }
+
+    try {
+      setInlinePriceSavingId(product.id);
+      const { error } = await supabase
+        .from('products')
+        .update({ price: parsedPrice })
+        .eq('id', product.id);
+
+      if (error) throw error;
+
+      setProducts(prev => prev.map(item => item.id === product.id ? { ...item, price: parsedPrice } : item));
+      setInlinePriceDrafts(prev => ({
+        ...prev,
+        [product.id]: parsedPrice.toFixed(2)
+      }));
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao atualizar preço',
+        description: error?.message || 'Não foi possível atualizar o preço do produto.',
+        variant: 'destructive',
+      });
+      setInlinePriceDrafts(prev => ({
+        ...prev,
+        [product.id]: Number(product.price || 0).toFixed(2)
+      }));
+    } finally {
+      setInlinePriceSavingId(current => current === product.id ? null : current);
+    }
+  };
+
+  const renderInlinePriceEditor = (product: ProductItem) => (
+    <div className="flex items-center gap-2 rounded-xl border border-[#FF6400]/15 bg-gradient-to-r from-[#FFF7EF] to-white px-2.5 py-1.5 shadow-[0_8px_20px_-18px_rgba(255,100,0,0.4)]">
+      <span className="text-[11px] font-bold uppercase tracking-wide text-[#003223]/75">R$</span>
+      <Input
+        value={inlinePriceDrafts[product.id] ?? Number(product.price || 0).toFixed(2)}
+        inputMode="decimal"
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => handleInlinePriceChange(product.id, e.target.value)}
+        onBlur={() => saveInlinePrice(product)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.currentTarget.blur();
+          }
+          if (e.key === 'Escape') {
+            setInlinePriceDrafts(prev => ({
+              ...prev,
+              [product.id]: Number(product.price || 0).toFixed(2)
+            }));
+            e.currentTarget.blur();
+          }
+        }}
+        className="h-8 w-[88px] border-0 bg-transparent px-0 text-sm font-bold text-[#0B5137] shadow-none focus-visible:ring-0"
+      />
+      {product.weight_based && <span className="text-[10px] text-[#003223]/55">/kg</span>}
+      {inlinePriceSavingId === product.id && <span className="text-[10px] font-semibold text-[#FF6400]">Salvando</span>}
+    </div>
+  );
+
   const handleExportCSV = () => {
     if (products.length === 0) {
       toast({ title: 'Aviso', description: 'Não há produtos para exportar.' });
@@ -903,9 +1013,8 @@ const Products = () => {
                                                   </div>
                                                   <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                      <div className="flex items-baseline gap-1">
-                                                        <span className="text-sm font-bold text-gray-700">{formatCurrency(product.price)}</span>
-                                                        {product.weight_based && <span className="text-[10px] text-muted-foreground">/kg</span>}
+                                                      <div onClick={(e) => e.stopPropagation()}>
+                                                        {renderInlinePriceEditor(product)}
                                                       </div>
                                                       {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
                                                         <span className="text-[10px] text-red-600 font-medium bg-red-50 px-1.5 py-0.5 rounded">Estoque baixo: {product.stock_quantity}</span>
@@ -1078,9 +1187,8 @@ const Products = () => {
                                                   </div>
                                                   <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                      <div className="flex items-baseline gap-1">
-                                                        <span className="text-sm font-bold text-gray-700">{formatCurrency(product.price)}</span>
-                                                        {product.weight_based && <span className="text-[10px] text-muted-foreground">/kg</span>}
+                                                      <div onClick={(e) => e.stopPropagation()}>
+                                                        {renderInlinePriceEditor(product)}
                                                       </div>
                                                     </div>
                                                   </div>
@@ -1130,7 +1238,7 @@ const Products = () => {
       </Tabs>
 
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="right" className="w-full sm:w-[58vw] sm:max-w-none lg:w-[900px] xl:w-[1020px] 2xl:w-[1100px] p-0 bg-white">
+        <SheetContent side="right" className="w-full sm:w-[58vw] sm:max-w-none lg:w-[900px] xl:w-[1020px] 2xl:w-[1100px] border-l border-[#FF6400]/10 bg-gradient-to-b from-[#FFF8F2] via-white to-[#F5EBE1]/75 p-0">
           {showForm && (
             <div className="overflow-y-auto h-full pb-6">
               <ProductForm
