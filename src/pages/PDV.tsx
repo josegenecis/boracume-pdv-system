@@ -1211,7 +1211,7 @@ const PDV = () => {
   const operatorSelected = !!getOperatorSession()?.id;
 
   return (
-    <div className="-mt-4 sm:-mt-6 h-full flex flex-col overflow-hidden rounded-[28px] border border-[#FF6400]/10 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/45 shadow-[0_24px_60px_-42px_rgba(0,50,35,0.22)]">
+    <div className="-mx-4 -mt-4 -mb-4 flex h-[calc(100%+1rem)] flex-col overflow-hidden bg-white sm:-mx-6 sm:-mt-6 sm:-mb-6 sm:h-[calc(100%+1.5rem)]">
       <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
