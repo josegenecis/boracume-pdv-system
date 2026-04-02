@@ -1216,7 +1216,7 @@ const PDV = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row mt-0 min-h-0">
           {/* Left Column: Products (Scrollable) */}
-          <div className="flex-1 overflow-y-auto scrollbar-hide p-2 sm:p-4 lg:border-r">
+          <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-2 pt-0 sm:px-4 sm:pb-4 sm:pt-0 lg:border-r">
             <div className="sticky top-0 z-20 mb-3 flex flex-col gap-3 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-2 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] sm:px-4 lg:px-6">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <TabsList className="grid h-9 w-full grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm xl:w-64">

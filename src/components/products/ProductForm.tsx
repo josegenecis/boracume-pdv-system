@@ -329,6 +329,31 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
+  const updateVariationRawAndPersist = (variationId: string, updates: Partial<VariationConfigRaw>) => {
+    const currentSetting = getVariationConfig(variationId);
+    const currentRaw = variationSettingsRaw[variationId];
+    const nextRawForVariation: VariationConfigRaw = {
+      min: currentRaw?.min ?? String(currentSetting.min_selections ?? 0),
+      max: currentRaw?.max ?? String(currentSetting.max_selections ?? 1),
+      free: currentRaw?.free ?? String(currentSetting.free_selections_limit ?? 0),
+      paidMax: currentRaw?.paidMax ?? String(currentSetting.paid_max_selections ?? currentSetting.max_selections ?? 1),
+      multiplier: currentRaw?.multiplier ?? String(Number(currentSetting.price_multiplier ?? 1)),
+      fixedPrice: currentRaw?.fixedPrice ?? String(Number(currentSetting.fixed_option_price ?? 0)),
+      optionOverrides: currentRaw?.optionOverrides ?? Object.fromEntries(
+        Object.entries(currentSetting.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+      ),
+      ...updates
+    };
+
+    const nextRawState = {
+      ...variationSettingsRaw,
+      [variationId]: nextRawForVariation
+    };
+
+    setVariationSettingsRaw(nextRawState);
+    setVariationSettings(buildPersistedVariationSettings(variationSettings, nextRawState));
+  };
+
   const getVariationEffectiveOptionPrice = (variationId: string, option: any) => {
     const config = getVariationConfig(variationId);
     const optionName = String(option?.name || '').trim();
@@ -1937,7 +1962,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="0"
                                         value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
-                                        onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { min: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -1949,7 +1974,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="1"
                                         value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { max: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -1963,7 +1988,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="0"
                                         value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
-                                        onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { free: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -1976,7 +2001,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         min={String(Math.max(1, getVariationConfig(v.id).max_selections ?? 1))}
                                         disabled={!getVariationConfig(v.id).allow_paid_excess}
                                         value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { paidMax: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
@@ -1992,7 +2017,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         step="0.1"
                                         disabled={getVariationConfig(v.id).pricing_mode !== 'multiplier'}
                                         value={variationSettingsRaw[v.id]?.multiplier ?? String(Number(getVariationConfig(v.id).price_multiplier ?? 1))}
-                                        onChange={e => updateVariationRaw(v.id, { multiplier: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { multiplier: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
@@ -2006,7 +2031,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         step="0.01"
                                         disabled={getVariationConfig(v.id).pricing_mode !== 'fixed'}
                                         value={variationSettingsRaw[v.id]?.fixedPrice ?? String(Number(getVariationConfig(v.id).fixed_option_price ?? 0))}
-                                        onChange={e => updateVariationRaw(v.id, { fixedPrice: e.target.value })}
+                                        onChange={e => updateVariationRawAndPersist(v.id, { fixedPrice: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
