@@ -787,13 +787,13 @@ const Products = () => {
           <Package className="h-6 w-6 text-orange-500" />
           <h1 className="text-2xl font-bold">Produtos</h1>
         </div>
-        <div>
-          <Button variant="outline" onClick={handleExportCSV} className="mr-2 hidden md:inline-flex">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" onClick={handleExportCSV} className="hidden h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex">
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
           
-          <div className="hidden md:inline-block relative mr-2">
+          <div className="relative hidden md:inline-block">
             <input
               type="file"
               accept=".csv"
@@ -801,17 +801,17 @@ const Products = () => {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               title="Importar CSV"
             />
-            <Button variant="outline">
+            <Button variant="outline" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
           </div>
 
-          <Button variant="outline" onClick={() => setShowImportModal(true)} className="mr-2">
+          <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
             <Import className="h-4 w-4 mr-2" />
             Módulo de Importação
           </Button>
-          <Button onClick={() => {
+          <Button className="h-9 rounded-xl bg-[#8CC850] px-4 text-sm font-semibold text-white hover:bg-[#79b541]" onClick={() => {
             setEditingProduct(null);
             setShowForm(true);
             setIsSheetOpen(true);
@@ -840,16 +840,16 @@ const Products = () => {
         }}
         className="w-full"
       >
-        <TabsList className="mb-2 flex flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="products">Produtos</TabsTrigger>
-          <TabsTrigger value="categories">Categorias</TabsTrigger>
-          <TabsTrigger value="global-variations">Complementos</TabsTrigger>
+        <TabsList className="mb-2 flex h-10 flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1">
+          <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
+          <TabsTrigger value="categories" className="h-8 rounded-lg px-4 text-sm font-semibold">Categorias</TabsTrigger>
+          <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col md:flex-row gap-4">
+            <CardContent className="pt-4">
+              <div className="flex flex-col gap-3 md:flex-row">
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -857,13 +857,13 @@ const Products = () => {
                       placeholder="Buscar produtos..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+                      className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 pl-10"
                     />
                   </div>
                 </div>
                 <div className="sm:hidden w-full">
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/85">
                       <SelectValue placeholder="Filtrar por categoria" />
                     </SelectTrigger>
                     <SelectContent>
@@ -875,19 +875,19 @@ const Products = () => {
                   </Select>
                 </div>
                 <div className="hidden sm:flex gap-2 flex-nowrap overflow-x-auto scrollbar-hide py-1">
-                  <Button variant="outline" size="sm" className="shrink-0" onClick={selectAllFiltered}>
+                  <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]" onClick={selectAllFiltered}>
                     Selecionar todos
                   </Button>
-                  <Button variant="outline" size="sm" className="shrink-0" onClick={clearSelection}>
+                  <Button variant="outline" size="sm" className="h-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]" onClick={clearSelection}>
                     Limpar seleção
                   </Button>
-                  <Button variant="destructive" size="sm" className="shrink-0" onClick={bulkDeleteSelected} disabled={filteredProducts.every(p => !selectedIds.has(p.id))}>
+                  <Button variant="destructive" size="sm" className="h-9 shrink-0 rounded-xl px-4 font-semibold" onClick={bulkDeleteSelected} disabled={filteredProducts.every(p => !selectedIds.has(p.id))}>
                     Excluir selecionados
                   </Button>
                   <Button
                     variant={selectedCategory === 'all' ? "default" : "outline"}
                     size="sm"
-                    className="shrink-0"
+                    className={`h-9 shrink-0 rounded-xl px-4 font-semibold ${selectedCategory === 'all' ? 'bg-[#8CC850] text-white hover:bg-[#79b541]' : 'border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]'}`}
                     onClick={() => setSelectedCategory('all')}
                   >
                     Todos
@@ -897,7 +897,7 @@ const Products = () => {
                       key={category.id}
                       variant={selectedCategory === category.id ? "default" : "outline"}
                       size="sm"
-                      className="shrink-0"
+                      className={`h-9 shrink-0 rounded-xl px-4 font-semibold ${selectedCategory === category.id ? 'bg-[#8CC850] text-white hover:bg-[#79b541]' : 'border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]'}`}
                       onClick={() => setSelectedCategory(category.id)}
                     >
                       {category.name}

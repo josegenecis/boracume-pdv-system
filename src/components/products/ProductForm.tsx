@@ -938,26 +938,29 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     try {
       let data: any[] | null = null;
       let error: any = null;
-      try {
-        const res = await supabase
-          .from('product_global_variation_links')
-          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order, pricing_mode, price_multiplier, fixed_option_price, option_price_overrides')
-          .eq('product_id', productId)
-          .order('display_order', { ascending: true });
-        data = (res as any).data;
-        error = (res as any).error;
-      } catch (e: any) {
-        error = e;
-      }
+      const selectAttempts = [
+        'global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order, pricing_mode, price_multiplier, fixed_option_price, option_price_overrides',
+        'global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order',
+        'global_variation_id, required, min_selections, max_selections, display_order',
+        'global_variation_id'
+      ];
 
-      const errMsg = String((error as any)?.message || '');
-      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price') || errMsg.includes('option_price_overrides'))) {
-        const res = await supabase
-          .from('product_global_variation_links')
-          .select('global_variation_id')
-          .eq('product_id', productId);
-        data = (res as any).data;
-        error = (res as any).error;
+      for (const selectClause of selectAttempts) {
+        try {
+          let query = supabase
+            .from('product_global_variation_links')
+            .select(selectClause)
+            .eq('product_id', productId);
+          if (selectClause.includes('display_order')) {
+            query = query.order('display_order', { ascending: true });
+          }
+          const res = await query;
+          data = (res as any).data;
+          error = (res as any).error;
+          if (!error) break;
+        } catch (e: any) {
+          error = e;
+        }
       }
 
       console.log('📊 Resultado da consulta de variações:', { data, error });
@@ -1382,19 +1385,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         console.log('💾 Inserindo vínculos no banco:', links);
         let data: any = null;
         let error: any = null;
-        const first = await supabase.from('product_global_variation_links').insert(links);
-        data = (first as any).data;
-        error = (first as any).error;
+        const insertAttempts = [
+          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order', 'pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
+          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order'],
+          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'display_order'],
+          ['product_id', 'global_variation_id']
+        ] as const;
 
-        const errMsg = String(error?.message || '');
-        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price') || errMsg.includes('option_price_overrides'))) {
-          const minimalLinks = variations.map((variationId) => ({
-            product_id: productId,
-            global_variation_id: variationId
-          }));
-          const second = await supabase.from('product_global_variation_links').insert(minimalLinks);
-          data = (second as any).data;
-          error = (second as any).error;
+        for (const allowedKeys of insertAttempts) {
+          const payload = links.map((link) => Object.fromEntries(
+            Object.entries(link).filter(([key]) => allowedKeys.includes(key as typeof allowedKeys[number]))
+          ));
+          const res = await supabase.from('product_global_variation_links').insert(payload as any);
+          data = (res as any).data;
+          error = (res as any).error;
+          if (!error) break;
         }
           
         console.log('📊 Resultado da inserção:', { data, error });
