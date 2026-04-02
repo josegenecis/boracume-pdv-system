@@ -242,13 +242,13 @@ const CollapsibleSidebar = () => {
 
   return (
     <aside className={`
-      bg-white shadow-md fixed left-0 top-16 bottom-0 z-50 transition-all duration-300
+      fixed left-0 top-16 bottom-0 z-50 border-r border-[#FF6400]/10 bg-gradient-to-b from-[#FFF8F2] via-white to-[#F5EBE1]/80 shadow-[8px_0_30px_-24px_rgba(0,50,35,0.22)] transition-all duration-300
       ${isMobile 
         ? `${isOpen ? 'translate-x-0' : '-translate-x-full'} w-64` 
         : `${isOpen ? 'w-64' : 'w-16'}`
       }
     `}>
-      <nav className="pt-4 px-2 h-full overflow-y-auto overscroll-contain touch-pan-y pb-20 scrollbar-hide flex flex-col justify-between">
+      <nav className="h-full overflow-y-auto overscroll-contain touch-pan-y px-2 pb-20 pt-4 scrollbar-hide flex flex-col justify-between">
         <div className="flex-1">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
@@ -262,8 +262,8 @@ const CollapsibleSidebar = () => {
                     onClick={handleLinkClick}
                     className={`flex items-center justify-center px-3 py-2 text-sm rounded-xl transition-colors ${
                       isActive
-                        ? 'bg-boracume-orange/10 text-boracume-orange'
-                        : 'text-gray-700 hover:bg-boracume-orange/5'
+                        ? 'border border-[#FF6400]/15 bg-white/90 text-boracume-orange shadow-[0_8px_18px_-16px_rgba(255,100,0,0.65)]'
+                        : 'text-gray-700 hover:bg-white/80 hover:text-[#003223]'
                     }`}
                     title={typeof link.label === 'string' ? link.label : ''}
                   >
@@ -286,8 +286,8 @@ const CollapsibleSidebar = () => {
                       onClick={handleLinkClick}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
-                          : 'text-gray-700 hover:bg-boracume-orange/5'
+                          ? 'border border-[#FF6400]/15 bg-white/90 font-medium text-boracume-orange shadow-[0_10px_20px_-18px_rgba(255,100,0,0.65)]'
+                          : 'text-gray-700 hover:bg-white/80 hover:text-[#003223]'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -304,7 +304,7 @@ const CollapsibleSidebar = () => {
                 return (
                   <AccordionItem key={group.id} value={group.id} className="border-none">
                     <AccordionTrigger
-                      className="px-3 py-2 rounded-xl text-sm hover:no-underline data-[state=open]:bg-boracume-dark-green data-[state=open]:text-white text-gray-700 hover:bg-boracume-orange/5"
+                      className="rounded-xl px-3 py-2 text-sm text-gray-700 hover:bg-white/80 hover:text-[#003223] hover:no-underline data-[state=open]:bg-gradient-to-r data-[state=open]:from-[#003223] data-[state=open]:to-[#0B5137] data-[state=open]:text-white"
                     >
                       <div className="flex items-center gap-3">
                         <Icon size={18} className="flex-shrink-0" />
@@ -312,7 +312,7 @@ const CollapsibleSidebar = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="pb-0">
-                      <div className="rounded-xl bg-boracume-light border border-boracume-orange/10 p-2 space-y-1 mt-1">
+                      <div className="mt-1 space-y-1 rounded-xl border border-[#FF6400]/10 bg-white/75 p-2 backdrop-blur-sm">
                         {group.items.map((item) => {
                           const isActive = isActivePath(item.to);
                           return (
@@ -322,8 +322,8 @@ const CollapsibleSidebar = () => {
                               onClick={handleLinkClick}
                               className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                                 isActive
-                                  ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
-                                  : 'text-gray-700 hover:bg-boracume-orange/5'
+                                  ? 'border border-[#FF6400]/15 bg-[#FFF7EF] font-medium text-boracume-orange'
+                                  : 'text-gray-700 hover:bg-[#FFF7EF] hover:text-[#003223]'
                               }`}
                             >
                               <span className="truncate flex items-center">{item.label}</span>
@@ -348,8 +348,8 @@ const CollapsibleSidebar = () => {
                       onClick={handleLinkClick}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'bg-boracume-orange/10 text-boracume-orange font-medium border border-boracume-orange/20'
-                          : 'text-gray-700 hover:bg-boracume-orange/5'
+                          ? 'border border-[#FF6400]/15 bg-white/90 font-medium text-boracume-orange shadow-[0_10px_20px_-18px_rgba(255,100,0,0.65)]'
+                          : 'text-gray-700 hover:bg-white/80 hover:text-[#003223]'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -363,10 +363,10 @@ const CollapsibleSidebar = () => {
         )}
         </div>
 
-        <div className={`mt-auto border-t pt-4 pb-4 ${isOpen ? 'px-2' : 'px-0'}`}>
+        <div className={`mt-auto border-t border-[#FF6400]/10 pt-4 pb-4 ${isOpen ? 'px-2' : 'px-0'}`}>
           {isOpen ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+              <div className="flex items-center gap-3 rounded-xl border border-[#FF6400]/10 bg-white/80 px-3 py-2 shadow-[0_12px_26px_-22px_rgba(0,50,35,0.28)]">
                 <Avatar className="h-8 w-8 border-2 border-boracume-orange/20 flex-shrink-0">
                   <AvatarImage src={profile?.logo_url} />
                   <AvatarFallback className="bg-boracume-orange/10 text-boracume-orange font-bold text-xs">
@@ -374,7 +374,7 @@ const CollapsibleSidebar = () => {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate" title={profile?.restaurant_name}>
+                  <p className="truncate text-sm font-semibold text-[#003223]" title={profile?.restaurant_name}>
                     {profile?.restaurant_name || 'Seu Restaurante'}
                   </p>
                   <p className="text-xs text-muted-foreground truncate" title={user?.email}>
@@ -394,7 +394,7 @@ const CollapsibleSidebar = () => {
               </div>
               <Button 
                 variant="ghost" 
-                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="w-full justify-start text-red-600 hover:bg-red-50/80 hover:text-red-700"
                 onClick={handleSignOut}
               >
                 <LogOut size={18} className="mr-2" />
@@ -406,7 +406,7 @@ const CollapsibleSidebar = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="w-full h-10 p-0 rounded-none text-gray-500 hover:text-gray-900"
+                className="h-10 w-full rounded-none p-0 text-gray-500 hover:bg-white/70 hover:text-[#003223]"
                 onClick={() => {
                   if (isMobile) {
                     closeSidebar();
@@ -420,7 +420,7 @@ const CollapsibleSidebar = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="w-full h-10 p-0 rounded-none text-red-500 hover:text-red-700 hover:bg-red-50"
+                className="h-10 w-full rounded-none p-0 text-red-500 hover:bg-red-50/80 hover:text-red-700"
                 onClick={handleSignOut}
                 title="Sair"
               >
