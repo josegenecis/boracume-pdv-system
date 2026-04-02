@@ -5,11 +5,72 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Upload, Save } from 'lucide-react';
+import { Upload, Save, Copy, Clock3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+
+const weekDays = [
+  { key: 'monday', label: 'Segunda' },
+  { key: 'tuesday', label: 'Terça' },
+  { key: 'wednesday', label: 'Quarta' },
+  { key: 'thursday', label: 'Quinta' },
+  { key: 'friday', label: 'Sexta' },
+  { key: 'saturday', label: 'Sábado' },
+  { key: 'sunday', label: 'Domingo' },
+] as const;
+
+type WeekDayKey = typeof weekDays[number]['key'];
+
+type DailySchedule = {
+  open: string;
+  close: string;
+  closed: boolean;
+};
+
+const createDefaultSchedule = (): Record<WeekDayKey, DailySchedule> => ({
+  monday: { open: '10:00', close: '22:00', closed: false },
+  tuesday: { open: '10:00', close: '22:00', closed: false },
+  wednesday: { open: '10:00', close: '22:00', closed: false },
+  thursday: { open: '10:00', close: '22:00', closed: false },
+  friday: { open: '10:00', close: '22:00', closed: false },
+  saturday: { open: '10:00', close: '22:00', closed: false },
+  sunday: { open: '10:00', close: '22:00', closed: false },
+});
+
+const normalizeSchedule = (value: any, fallback?: DailySchedule): DailySchedule => ({
+  open: typeof value?.open === 'string' && value.open ? value.open : fallback?.open || '10:00',
+  close: typeof value?.close === 'string' && value.close ? value.close : fallback?.close || '22:00',
+  closed: Boolean(value?.closed),
+});
+
+const parseWeeklySchedule = (openingHours?: string | null): Record<WeekDayKey, DailySchedule> => {
+  const defaults = createDefaultSchedule();
+  if (!openingHours) return defaults;
+
+  try {
+    const parsed = JSON.parse(openingHours);
+    if (parsed && typeof parsed === 'object') {
+      return weekDays.reduce((acc, day) => {
+        acc[day.key] = normalizeSchedule(parsed[day.key], defaults[day.key]);
+        return acc;
+      }, {} as Record<WeekDayKey, DailySchedule>);
+    }
+  } catch {}
+
+  const match = String(openingHours).match(/(\d{2}:\d{2})\s*[-àa]+\s*(\d{2}:\d{2})/i);
+  if (match) {
+    const [, open, close] = match;
+    return weekDays.reduce((acc, day) => {
+      acc[day.key] = { open, close, closed: false };
+      return acc;
+    }, {} as Record<WeekDayKey, DailySchedule>);
+  }
+
+  return defaults;
+};
 
 const ProfileSettings = () => {
   const [formData, setFormData] = useState({
@@ -29,6 +90,7 @@ const ProfileSettings = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [weeklySchedule, setWeeklySchedule] = useState<Record<WeekDayKey, DailySchedule>>(createDefaultSchedule());
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -65,6 +127,7 @@ const ProfileSettings = () => {
           deliveryFee: data.delivery_fee?.toString() || '5.00',
           minimumOrder: data.minimum_order?.toString() || '25.00'
         });
+        setWeeklySchedule(parseWeeklySchedule(data.opening_hours));
         setProfileImage(data.logo_url || '');
         setBannerImage(data.banner_url || '');
       }
@@ -78,6 +141,31 @@ const ProfileSettings = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  const updateWeeklySchedule = (day: WeekDayKey, updates: Partial<DailySchedule>) => {
+    setWeeklySchedule(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        ...updates
+      }
+    }));
+  };
+
+  const copyDayToAll = (sourceDay: WeekDayKey) => {
+    setWeeklySchedule(prev => {
+      const source = prev[sourceDay];
+      return weekDays.reduce((acc, day) => {
+        acc[day.key] = { ...source };
+        return acc;
+      }, {} as Record<WeekDayKey, DailySchedule>);
+    });
+
+    toast({
+      title: 'Horários copiados',
+      description: 'O horário selecionado foi aplicado para todos os dias.',
+    });
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -211,7 +299,7 @@ const ProfileSettings = () => {
         address: formData.address,
         email: formData.email,
         website: formData.website,
-        opening_hours: formData.openingHours,
+        opening_hours: JSON.stringify(weeklySchedule),
         delivery_fee: parseMoney(formData.deliveryFee),
         minimum_order: parseMoney(formData.minimumOrder),
         logo_url: profileImage,
@@ -416,17 +504,63 @@ const ProfileSettings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="opening-hours">Horário de Funcionamento</Label>
-              <Input
-                id="opening-hours"
-                value={formData.openingHours}
-                onChange={(e) => handleInputChange('openingHours', e.target.value)}
-                placeholder="10:00 - 22:00"
-              />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock3 className="h-4 w-4 text-[#FF6400]" />
+              <Label>Horário de Funcionamento por Dia</Label>
             </div>
-            
+            <div className="space-y-3 rounded-2xl border border-[#FF6400]/12 bg-[#FFF8F2] p-3">
+              {weekDays.map((day) => {
+                const current = weeklySchedule[day.key];
+                return (
+                  <div key={day.key} className="grid gap-3 rounded-xl border border-[#FF6400]/10 bg-white p-3 md:grid-cols-[120px_1fr_1fr_auto_auto] md:items-center">
+                    <div className="text-sm font-semibold text-[#003223]">{day.label}</div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${day.key}-open`} className="text-xs text-muted-foreground">Abre</Label>
+                      <Input
+                        id={`${day.key}-open`}
+                        type="time"
+                        value={current.open}
+                        disabled={current.closed}
+                        onChange={(e) => updateWeeklySchedule(day.key, { open: e.target.value })}
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${day.key}-close`} className="text-xs text-muted-foreground">Fecha</Label>
+                      <Input
+                        id={`${day.key}-close`}
+                        type="time"
+                        value={current.close}
+                        disabled={current.closed}
+                        onChange={(e) => updateWeeklySchedule(day.key, { close: e.target.value })}
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/35 px-3 py-2">
+                      <Label htmlFor={`${day.key}-closed`} className="text-sm font-medium text-[#003223]">Fechado</Label>
+                      <Switch
+                        id={`${day.key}-closed`}
+                        checked={current.closed}
+                        onCheckedChange={(checked) => updateWeeklySchedule(day.key, { closed: checked })}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]"
+                      onClick={() => copyDayToAll(day.key)}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copiar para todos
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="delivery-fee">Taxa de Entrega (R$)</Label>
               <Input
