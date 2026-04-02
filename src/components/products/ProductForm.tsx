@@ -13,7 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen } from 'lucide-react';
+import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
@@ -1962,12 +1962,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           const hasOverride = getVariationConfig(v.id).option_price_overrides?.[optionName] !== undefined;
                                           return (
                                             <div key={`${v.id}-option-${optionIndex}`} className="rounded-2xl border border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1]/55 via-white to-[#F5EBE1]/35 p-3">
-                                              <div className="grid gap-3 xl:grid-cols-[1.2fr_120px_130px_130px]">
+                                              <div className="grid gap-3 xl:grid-cols-[1.2fr_120px_130px_auto]">
                                                 <div className="min-w-0">
                                                   <div className="flex flex-wrap items-center gap-2">
                                                     <div className="truncate text-sm font-semibold text-[#003223]">{optionOverride.label || optionName}</div>
-                                                    {optionOverride.recommended && <Badge className="rounded-full bg-[#8CC850]/20 text-[#003223] hover:bg-[#8CC850]/20">Recomendado</Badge>}
-                                                    {optionOverride.hidden && <Badge variant="outline" className="rounded-full border-[#003223]/15 text-[#003223]/70">Oculto neste produto</Badge>}
                                                   </div>
                                                   <div className="mt-1 text-xs text-[#003223]/60">Nome original: {optionName}</div>
                                                 </div>
@@ -1983,14 +1981,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     R$ {effectivePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                   </div>
                                                 </div>
-                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
-                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Ordem atual</div>
-                                                  <div className="mt-1 text-sm font-bold text-[#003223]">
-                                                    {optionOverride.display_order ?? optionIndex}
-                                                  </div>
-                                                </div>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="icon"
+                                                  className={`h-12 w-12 rounded-xl border-[#003223]/15 bg-white ${optionRaw.hidden ? 'text-[#FF6400]' : 'text-[#003223]'} hover:bg-[#F5EBE1]`}
+                                                  onClick={() => {
+                                                    handleOptionOverrideFieldChange(v.id, optionName, 'hidden', !optionRaw.hidden);
+                                                    setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
+                                                  }}
+                                                >
+                                                  {optionRaw.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </Button>
                                               </div>
-                                              <div className="mt-3 grid gap-2 xl:grid-cols-[1.2fr_130px_130px_150px_150px]">
+                                              <div className="mt-3 grid gap-2 xl:grid-cols-[1.2fr_130px_130px]">
                                                 <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
                                                   <Label htmlFor={`option-label-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Nome neste produto</Label>
                                                   <Input
@@ -2027,34 +2031,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
                                                   />
-                                                </div>
-                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
-                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Visibilidade</div>
-                                                  <div className="mt-2 flex items-center justify-between gap-3">
-                                                    <Label htmlFor={`option-hidden-${v.id}-${optionIndex}`} className="text-sm font-medium text-[#003223]">Ocultar</Label>
-                                                    <Switch
-                                                      id={`option-hidden-${v.id}-${optionIndex}`}
-                                                      checked={optionRaw.hidden}
-                                                      onCheckedChange={(checked) => {
-                                                        handleOptionOverrideFieldChange(v.id, optionName, 'hidden', checked);
-                                                        setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
-                                                      }}
-                                                    />
-                                                  </div>
-                                                </div>
-                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
-                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Destaque</div>
-                                                  <div className="mt-2 flex items-center justify-between gap-3">
-                                                    <Label htmlFor={`option-recommended-${v.id}-${optionIndex}`} className="text-sm font-medium text-[#003223]">Recomendar</Label>
-                                                    <Switch
-                                                      id={`option-recommended-${v.id}-${optionIndex}`}
-                                                      checked={optionRaw.recommended}
-                                                      onCheckedChange={(checked) => {
-                                                        handleOptionOverrideFieldChange(v.id, optionName, 'recommended', checked);
-                                                        setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
-                                                      }}
-                                                    />
-                                                  </div>
                                                 </div>
                                               </div>
                                               <div className="mt-3 flex flex-wrap justify-end gap-2">
