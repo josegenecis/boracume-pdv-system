@@ -262,8 +262,8 @@ const CollapsibleSidebar = () => {
                     onClick={handleLinkClick}
                     className={`flex items-center justify-center px-3 py-2 text-sm rounded-xl transition-colors ${
                       isActive
-                        ? 'border-l-4 border-[#FF6400] bg-white/10 text-white shadow-[0_10px_22px_-18px_rgba(255,100,0,0.55)]'
-                        : 'text-[#F5EBE1] hover:bg-[#8CC850]/22 hover:text-white'
+                        ? 'bg-[#FF6400] text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
+                        : 'text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]'
                     }`}
                     title={typeof link.label === 'string' ? link.label : ''}
                   >
@@ -286,8 +286,8 @@ const CollapsibleSidebar = () => {
                       onClick={handleLinkClick}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'border-l-4 border-[#FF6400] bg-white/10 font-medium text-white shadow-[0_10px_22px_-18px_rgba(255,100,0,0.55)]'
-                          : 'text-[#F5EBE1] hover:bg-[#8CC850]/22 hover:text-white'
+                          ? 'bg-[#FF6400] font-medium text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
+                          : 'text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -304,15 +304,15 @@ const CollapsibleSidebar = () => {
                 return (
                   <AccordionItem key={group.id} value={group.id} className="border-none">
                     <AccordionTrigger
-                      className="rounded-xl px-3 py-2 text-sm text-[#F5EBE1] hover:bg-[#8CC850]/22 hover:text-white hover:no-underline data-[state=open]:border-l-4 data-[state=open]:border-[#FF6400] data-[state=open]:bg-white/10 data-[state=open]:text-white"
+                      className="rounded-xl px-3 py-2 text-sm text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223] hover:no-underline data-[state=open]:bg-[#8CC850] data-[state=open]:text-[#003223] data-[state=open]:shadow-[0_12px_24px_-18px_rgba(140,200,80,0.8)]"
                     >
                       <div className="flex items-center gap-3">
                         <Icon size={18} className="flex-shrink-0" />
                         <span className="truncate">{group.label}</span>
                       </div>
                     </AccordionTrigger>
-                    <AccordionContent className="pb-0">
-                      <div className="mt-1 space-y-1 rounded-xl border border-white/8 bg-white/6 p-2 backdrop-blur-sm">
+                    <AccordionContent className="pb-0" style={{ animationDuration: '0.35s' }}>
+                      <div className="mt-1 space-y-1 rounded-xl border border-[#8CC850]/30 bg-[#8CC850]/12 p-2 backdrop-blur-sm">
                         {group.items.map((item) => {
                           const isActive = isActivePath(item.to);
                           return (
@@ -322,8 +322,8 @@ const CollapsibleSidebar = () => {
                               onClick={handleLinkClick}
                               className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                                 isActive
-                                  ? 'border-l-4 border-[#FF6400] bg-white/10 font-medium text-white'
-                                  : 'text-[#F5EBE1]/95 hover:bg-[#8CC850]/22 hover:text-white'
+                                  ? 'bg-[#FF6400] font-medium text-white shadow-[0_10px_20px_-18px_rgba(255,100,0,0.65)]'
+                                  : 'text-[#F5EBE1]/95 hover:bg-[#8CC850] hover:text-[#003223]'
                               }`}
                             >
                               <span className="truncate flex items-center">{item.label}</span>
@@ -348,8 +348,8 @@ const CollapsibleSidebar = () => {
                       onClick={handleLinkClick}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
-                          ? 'border-l-4 border-[#FF6400] bg-white/10 font-medium text-white shadow-[0_10px_22px_-18px_rgba(255,100,0,0.55)]'
-                          : 'text-[#F5EBE1] hover:bg-[#8CC850]/22 hover:text-white'
+                          ? 'bg-[#FF6400] font-medium text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
+                          : 'text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]'
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
@@ -394,7 +394,7 @@ const CollapsibleSidebar = () => {
               </div>
               <Button 
                 variant="ghost" 
-                className="w-full justify-start text-[#F5EBE1] hover:bg-[#8CC850]/18 hover:text-white"
+                className="w-full justify-start text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]"
                 onClick={handleSignOut}
               >
                 <LogOut size={18} className="mr-2" />
@@ -406,7 +406,7 @@ const CollapsibleSidebar = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-10 w-full rounded-none p-0 text-[#F5EBE1]/80 hover:bg-[#8CC850]/18 hover:text-white"
+                className="h-10 w-full rounded-none p-0 text-[#F5EBE1]/80 hover:bg-[#8CC850] hover:text-[#003223]"
                 onClick={() => {
                   if (isMobile) {
                     closeSidebar();
@@ -420,7 +420,7 @@ const CollapsibleSidebar = () => {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-10 w-full rounded-none p-0 text-[#F5EBE1]/80 hover:bg-[#8CC850]/18 hover:text-white"
+                className="h-10 w-full rounded-none p-0 text-[#F5EBE1]/80 hover:bg-[#8CC850] hover:text-[#003223]"
                 onClick={handleSignOut}
                 title="Sair"
               >
