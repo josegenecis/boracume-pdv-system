@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -54,6 +55,22 @@ interface ProductVariant {
 
 type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
 
+type VariationOptionOverride = {
+  price?: number | null;
+  label?: string;
+  hidden?: boolean;
+  display_order?: number | null;
+  recommended?: boolean;
+};
+
+type VariationOptionOverrideRaw = {
+  price: string;
+  label: string;
+  hidden: boolean;
+  order: string;
+  recommended: boolean;
+};
+
 type VariationConfig = {
   required: boolean;
   min_selections: number;
@@ -64,6 +81,7 @@ type VariationConfig = {
   pricing_mode: VariationPricingMode;
   price_multiplier: number | null;
   fixed_option_price: number | null;
+  option_price_overrides: Record<string, VariationOptionOverride>;
 };
 
 type VariationConfigRaw = {
@@ -73,6 +91,7 @@ type VariationConfigRaw = {
   paidMax: string;
   multiplier: string;
   fixedPrice: string;
+  optionOverrides: Record<string, VariationOptionOverrideRaw>;
 };
 
 interface ProductFormProps {
@@ -169,7 +188,37 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     paid_max_selections: null,
     pricing_mode: 'default',
     price_multiplier: 1,
-    fixed_option_price: null
+    fixed_option_price: null,
+    option_price_overrides: {}
+  });
+
+  const normalizeOptionOverride = (value: any): VariationOptionOverride => {
+    if (typeof value === 'number') {
+      return { price: Math.max(0, Number(value) || 0) };
+    }
+    if (!value || typeof value !== 'object') return {};
+    const price = value.price !== undefined && value.price !== null ? Math.max(0, Number(value.price) || 0) : undefined;
+    const label = value.label !== undefined && value.label !== null ? String(value.label).trim() : '';
+    const hidden = Boolean(value.hidden);
+    const recommended = Boolean(value.recommended);
+    const displayOrder = value.display_order !== undefined && value.display_order !== null
+      ? Math.max(0, Math.floor(Number(value.display_order) || 0))
+      : undefined;
+    return {
+      ...(price !== undefined ? { price } : {}),
+      ...(label ? { label } : {}),
+      ...(hidden ? { hidden } : {}),
+      ...(recommended ? { recommended } : {}),
+      ...(displayOrder !== undefined ? { display_order: displayOrder } : {})
+    };
+  };
+
+  const toOptionOverrideRaw = (value?: VariationOptionOverride): VariationOptionOverrideRaw => ({
+    price: String(Number(value?.price ?? 0)),
+    label: String(value?.label || ''),
+    hidden: Boolean(value?.hidden),
+    order: value?.display_order !== undefined && value?.display_order !== null ? String(Number(value.display_order)) : '',
+    recommended: Boolean(value?.recommended)
   });
 
   const syncVariationSettingsRaw = (settings: Record<string, VariationConfig>) => {
@@ -181,7 +230,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         free: String(Math.max(0, Math.floor(Number(s?.free_selections_limit) || 0))),
         paidMax: String(Math.max(1, Math.floor(Number(s?.paid_max_selections) || Number(s?.max_selections) || 1))),
         multiplier: String(Number(s?.price_multiplier ?? 1)),
-        fixedPrice: String(Number(s?.fixed_option_price ?? 0))
+        fixedPrice: String(Number(s?.fixed_option_price ?? 0)),
+        optionOverrides: Object.fromEntries(
+          Object.entries(s?.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+        )
       };
     });
     setVariationSettingsRaw(raw);
@@ -196,7 +248,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         free: String(current.free_selections_limit ?? 0),
         paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1),
         multiplier: String(Number(current.price_multiplier ?? 1)),
-        fixedPrice: String(Number(current.fixed_option_price ?? 0))
+        fixedPrice: String(Number(current.fixed_option_price ?? 0)),
+        optionOverrides: Object.fromEntries(
+          Object.entries(current.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+        )
       };
       const minNum = Math.max(0, Math.floor(raw.min === '' ? 0 : Number(raw.min) || 0));
       const maxNum = Math.max(1, Math.floor(raw.max === '' ? 1 : Number(raw.max) || 1));
@@ -205,6 +260,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       const paidMaxNum = current.allow_paid_excess ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? safeMax : Number(raw.paidMax) || safeMax)) : null;
       const priceMultiplier = Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
       const fixedOptionPrice = Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)));
+      const optionPriceOverrides = Object.fromEntries(
+        Object.entries(raw.optionOverrides || {}).map(([name, value]) => {
+          const currentOverride = current.option_price_overrides?.[name] || {};
+          const normalized = {
+            ...normalizeOptionOverride(currentOverride),
+            price: Math.max(0, parseDecimalField(value?.price ?? '', Number(currentOverride?.price ?? 0))),
+            label: String(value?.label || '').trim(),
+            hidden: Boolean(value?.hidden),
+            recommended: Boolean(value?.recommended),
+            ...(String(value?.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(value.order) || 0)) } : {})
+          };
+          return [name, normalized];
+        })
+      );
 
       setVariationSettingsRaw(prevRaw => ({
         ...prevRaw,
@@ -214,7 +283,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           free: String(Math.min(freeNum, paidMaxNum ?? safeMax)),
           paidMax: String(paidMaxNum ?? safeMax),
           multiplier: String(priceMultiplier),
-          fixedPrice: String(fixedOptionPrice)
+          fixedPrice: String(fixedOptionPrice),
+          optionOverrides: Object.fromEntries(
+            Object.entries(optionPriceOverrides).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+          )
         }
       }));
 
@@ -227,7 +299,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
           paid_max_selections: paidMaxNum,
           price_multiplier: priceMultiplier,
-          fixed_option_price: fixedOptionPrice
+          fixed_option_price: fixedOptionPrice,
+          option_price_overrides: optionPriceOverrides
         }
       };
     });
@@ -247,7 +320,145 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           paidMax: prev[variationId]?.paidMax ?? String(currentSetting.paid_max_selections ?? currentSetting.max_selections ?? 1),
           multiplier: prev[variationId]?.multiplier ?? String(Number(currentSetting.price_multiplier ?? 1)),
           fixedPrice: prev[variationId]?.fixedPrice ?? String(Number(currentSetting.fixed_option_price ?? 0)),
+          optionOverrides: prev[variationId]?.optionOverrides ?? Object.fromEntries(
+            Object.entries(currentSetting.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+          ),
           ...updates
+        }
+      };
+    });
+  };
+
+  const getVariationEffectiveOptionPrice = (variationId: string, option: any) => {
+    const config = getVariationConfig(variationId);
+    const optionName = String(option?.name || '').trim();
+    const override = normalizeOptionOverride(config.option_price_overrides?.[optionName]);
+    if (override.price !== undefined && override.price !== null) return Math.max(0, Number(override.price) || 0);
+    const basePrice = Math.max(0, Number(option?.price) || 0);
+    if (config.pricing_mode === 'free') return 0;
+    if (config.pricing_mode === 'half') return basePrice * 0.5;
+    if (config.pricing_mode === 'multiplier') return basePrice * Math.max(0, Number(config.price_multiplier) || 1);
+    if (config.pricing_mode === 'fixed') return Math.max(0, Number(config.fixed_option_price) || 0);
+    return basePrice;
+  };
+
+  const handleOptionPriceOverrideChange = (variationId: string, optionName: string, rawValue: string) => {
+    updateVariationRaw(variationId, {
+      optionOverrides: {
+        ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+        [optionName]: {
+          ...(variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName])),
+          price: rawValue
+        }
+      }
+    });
+  };
+
+  const commitOptionPriceOverride = (variationId: string, optionName: string) => {
+    const fallback = getVariationEffectiveOptionPrice(variationId, { name: optionName, price: 0 });
+    const currentRaw = variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]);
+    const parsedValue = Math.max(0, parseDecimalField(currentRaw.price, fallback));
+
+    setVariationSettings(prev => ({
+      ...prev,
+      [variationId]: {
+        ...(prev[variationId] || getVariationDefaults()),
+        option_price_overrides: {
+          ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
+          [optionName]: {
+            ...normalizeOptionOverride((prev[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]),
+            price: parsedValue,
+            label: String(currentRaw.label || '').trim(),
+            hidden: Boolean(currentRaw.hidden),
+            recommended: Boolean(currentRaw.recommended),
+            ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})
+          }
+        }
+      }
+    }));
+
+    updateVariationRaw(variationId, {
+      optionOverrides: {
+        ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+        [optionName]: {
+          ...currentRaw,
+          price: String(parsedValue)
+        }
+      }
+    });
+  };
+
+  const handleOptionOverrideFieldChange = (
+    variationId: string,
+    optionName: string,
+    field: keyof VariationOptionOverrideRaw,
+    value: string | boolean
+  ) => {
+    updateVariationRaw(variationId, {
+      optionOverrides: {
+        ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+        [optionName]: {
+          ...(variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName])),
+          [field]: value as never
+        }
+      }
+    });
+  };
+
+  const commitOptionOverride = (variationId: string, optionName: string) => {
+    const currentRaw = variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]);
+    const fallbackPrice = getVariationEffectiveOptionPrice(variationId, { name: optionName, price: 0 });
+    const normalized: VariationOptionOverride = {
+      ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
+      price: Math.max(0, parseDecimalField(currentRaw.price, fallbackPrice)),
+      label: String(currentRaw.label || '').trim(),
+      hidden: Boolean(currentRaw.hidden),
+      recommended: Boolean(currentRaw.recommended),
+      ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})
+    };
+
+    setVariationSettings(prev => ({
+      ...prev,
+      [variationId]: {
+        ...(prev[variationId] || getVariationDefaults()),
+        option_price_overrides: {
+          ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
+          [optionName]: normalized
+        }
+      }
+    }));
+
+    updateVariationRaw(variationId, {
+      optionOverrides: {
+        ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+        [optionName]: toOptionOverrideRaw(normalized)
+      }
+    });
+  };
+
+  const clearOptionPriceOverride = (variationId: string, optionName: string) => {
+    setVariationSettings(prev => {
+      const current = prev[variationId] || getVariationDefaults();
+      const nextOverrides = { ...(current.option_price_overrides || {}) };
+      delete nextOverrides[optionName];
+      return {
+        ...prev,
+        [variationId]: {
+          ...current,
+          option_price_overrides: nextOverrides
+        }
+      };
+    });
+
+    setVariationSettingsRaw(prev => {
+      const current = prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0', optionOverrides: {} };
+      const nextOptionOverrides = { ...(current.optionOverrides || {}) };
+      delete nextOptionOverrides[optionName];
+      return {
+        ...prev,
+        [variationId]: {
+          ...current,
+          optionOverrides: nextOptionOverrides
         }
       };
     });
@@ -632,7 +843,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       try {
         const res = await supabase
           .from('product_global_variation_links')
-          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order, pricing_mode, price_multiplier, fixed_option_price')
+          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order, pricing_mode, price_multiplier, fixed_option_price, option_price_overrides')
           .eq('product_id', productId)
           .order('display_order', { ascending: true });
         data = (res as any).data;
@@ -642,7 +853,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       }
 
       const errMsg = String((error as any)?.message || '');
-      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price'))) {
+      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price') || errMsg.includes('option_price_overrides'))) {
         const res = await supabase
           .from('product_global_variation_links')
           .select('global_variation_id')
@@ -689,7 +900,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           price_multiplier: Math.max(0, Number((link as any).price_multiplier) || 1),
           fixed_option_price: (link as any).fixed_option_price !== undefined && (link as any).fixed_option_price !== null
             ? Math.max(0, Number((link as any).fixed_option_price) || 0)
-            : null
+            : null,
+          option_price_overrides: typeof (link as any).option_price_overrides === 'object' && (link as any).option_price_overrides
+            ? Object.fromEntries(
+                Object.entries((link as any).option_price_overrides).map(([name, value]) => [String(name), normalizeOptionOverride(value)])
+              )
+            : {}
         };
       }
       
@@ -737,7 +953,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           paid_max_selections: null,
           pricing_mode: 'default',
           price_multiplier: 1,
-          fixed_option_price: null
+          fixed_option_price: null,
+          option_price_overrides: {}
         };
       });
       
@@ -1038,6 +1255,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           const fixedOptionPrice = pricingMode === 'fixed'
             ? Math.max(0, Number(s.fixed_option_price) || 0)
             : null;
+          const optionPriceOverrides = Object.keys(s.option_price_overrides || {}).length > 0 ? s.option_price_overrides : null;
           return {
             product_id: productId,
             global_variation_id: variationId,
@@ -1050,7 +1268,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             display_order: idx,
             pricing_mode: pricingMode,
             price_multiplier: priceMultiplier,
-            fixed_option_price: fixedOptionPrice
+            fixed_option_price: fixedOptionPrice,
+            option_price_overrides: optionPriceOverrides
           };
         });
         
@@ -1062,7 +1281,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         error = (first as any).error;
 
         const errMsg = String(error?.message || '');
-        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price'))) {
+        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price') || errMsg.includes('option_price_overrides'))) {
           const minimalLinks = variations.map((variationId) => ({
             product_id: productId,
             global_variation_id: variationId
@@ -1142,7 +1361,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       });
       setVariationSettingsRaw(prev => ({
         ...prev,
-        [variationId]: prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0' }
+        [variationId]: prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0', optionOverrides: {} }
       }));
     } else {
       setVariationSettings(prev => {
@@ -1247,21 +1466,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
 
   return (
-    <div>
-      <div className="flex items-center gap-2 justify-between py-2 px-4">
+    <div className="rounded-[30px] border border-[#FF6400]/15 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/70 shadow-[0_30px_90px_-60px_rgba(255,100,0,0.45)]">
+      <div className="flex items-center gap-2 justify-between py-4 px-5">
         <div className="text-xl font-bold text-boracume-dark-green uppercase tracking-tight">{product?.id ? 'Editar produto' : 'Novo produto'}</div>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-boracume-orange">
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-[#003223]/45 hover:bg-[#F5EBE1] hover:text-boracume-orange">
             <Star className="h-5 w-5" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl text-[#003223]/45 hover:bg-[#F5EBE1]">
             <MoreVertical className="h-5 w-5" />
           </Button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6 mt-2">
-        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start bg-boracume-orange/5 p-4 rounded-2xl border border-boracume-orange/20">
+      <form onSubmit={handleSubmit} className="space-y-4 px-5 pb-6 mt-1">
+        <div className="pt-3 grid grid-cols-[auto,1fr] gap-3 items-start bg-gradient-to-br from-[#F5EBE1] via-white to-[#F5EBE1]/70 p-4 rounded-[26px] border border-[#FF6400]/20 shadow-[0_22px_45px_-35px_rgba(255,100,0,0.35)]">
           <ProductImageUpload
             compact
             onImageUploaded={(url) => setFormData(prev => ({ ...prev, image_url: url }))}
@@ -1293,12 +1512,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="relative" onClick={handleOpenEnhance} disabled={loading}>
+          <Button type="button" variant="outline" className="relative rounded-2xl border-[#FF6400]/20 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]" onClick={handleOpenEnhance} disabled={loading}>
             <Sparkles className="h-4 w-4 mr-2" />
             Melhorar imagem
             <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
           </Button>
-          <Button type="button" variant="outline" className="relative" onClick={handleGenerateDescription} disabled={generatingDescription}>
+          <Button type="button" variant="outline" className="relative rounded-2xl border-[#FF6400]/20 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]" onClick={handleGenerateDescription} disabled={generatingDescription}>
             <Sparkles className="h-4 w-4 mr-2" />
             {generatingDescription ? 'Gerando...' : 'Gerar descrição'}
             <Badge className="absolute -top-2 right-2 bg-boracume-orange">IA</Badge>
@@ -1345,11 +1564,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </DialogContent>
         </Dialog>
 
-        <div className="space-y-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+        <div className="space-y-3 bg-gradient-to-br from-[#F5EBE1] via-white to-[#F5EBE1]/70 p-4 rounded-[26px] border border-[#FF6400]/20 shadow-[0_22px_45px_-35px_rgba(255,100,0,0.25)]">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-boracume-dark-green">Preço</div>
             <Tabs value={priceMode} onValueChange={(v) => setPriceMode(v as any)}>
-              <TabsList className="h-8 bg-white border border-gray-100">
+              <TabsList className="h-8 bg-white border border-[#FF6400]/15">
                 <TabsTrigger value="simple" className="h-7 text-xs">Simples</TabsTrigger>
                 <TabsTrigger value="variants" className="h-7 text-xs">Variantes</TabsTrigger>
               </TabsList>
@@ -1713,6 +1932,149 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                     </div>
                                   </div>
                                 </div>
+                                <Accordion type="single" collapsible className="mt-3 rounded-2xl border border-[#FF6400]/10 bg-white/75 px-2">
+                                  <AccordionItem value={`options-${v.id}`} className="border-b-0">
+                                    <AccordionTrigger className="px-2 py-3 text-sm font-semibold text-[#003223] hover:no-underline">
+                                      Ver e editar cada complemento deste grupo
+                                    </AccordionTrigger>
+                                    <AccordionContent className="px-2 pb-3">
+                                      <div className="space-y-2">
+                                        {Array.isArray(v.options) && v.options.length > 0 ? v.options.map((option: any, optionIndex: number) => {
+                                          const optionName = String(option?.name || '').trim();
+                                          const basePrice = Math.max(0, Number(option?.price) || 0);
+                                          const optionOverride = normalizeOptionOverride(getVariationConfig(v.id).option_price_overrides?.[optionName]);
+                                          const optionRaw = variationSettingsRaw[v.id]?.optionOverrides?.[optionName] || toOptionOverrideRaw(optionOverride);
+                                          const effectivePrice = getVariationEffectiveOptionPrice(v.id, option);
+                                          const hasOverride = getVariationConfig(v.id).option_price_overrides?.[optionName] !== undefined;
+                                          return (
+                                            <div key={`${v.id}-option-${optionIndex}`} className="rounded-2xl border border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1]/55 via-white to-[#F5EBE1]/35 p-3">
+                                              <div className="grid gap-3 xl:grid-cols-[1.2fr_120px_130px_130px]">
+                                                <div className="min-w-0">
+                                                  <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="truncate text-sm font-semibold text-[#003223]">{optionOverride.label || optionName}</div>
+                                                    {optionOverride.recommended && <Badge className="rounded-full bg-[#8CC850]/20 text-[#003223] hover:bg-[#8CC850]/20">Recomendado</Badge>}
+                                                    {optionOverride.hidden && <Badge variant="outline" className="rounded-full border-[#003223]/15 text-[#003223]/70">Oculto neste produto</Badge>}
+                                                  </div>
+                                                  <div className="mt-1 text-xs text-[#003223]/60">Nome original: {optionName}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Base do grupo</div>
+                                                  <div className="mt-1 text-sm font-bold text-[#003223]">
+                                                    R$ {basePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  </div>
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Valor atual</div>
+                                                  <div className="mt-1 text-sm font-bold text-[#FF6400]">
+                                                    R$ {effectivePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  </div>
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Ordem atual</div>
+                                                  <div className="mt-1 text-sm font-bold text-[#003223]">
+                                                    {optionOverride.display_order ?? optionIndex}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="mt-3 grid gap-2 xl:grid-cols-[1.2fr_130px_130px_150px_150px]">
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <Label htmlFor={`option-label-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Nome neste produto</Label>
+                                                  <Input
+                                                    id={`option-label-${v.id}-${optionIndex}`}
+                                                    value={optionRaw.label}
+                                                    onChange={e => handleOptionOverrideFieldChange(v.id, optionName, 'label', e.target.value)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    placeholder={optionName}
+                                                    className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-sm font-medium text-[#003223]"
+                                                  />
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <Label htmlFor={`option-price-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Preço</Label>
+                                                  <Input
+                                                    id={`option-price-${v.id}-${optionIndex}`}
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={optionRaw.price}
+                                                    onChange={e => handleOptionPriceOverrideChange(v.id, optionName, e.target.value)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
+                                                  />
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <Label htmlFor={`option-order-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Ordem</Label>
+                                                  <Input
+                                                    id={`option-order-${v.id}-${optionIndex}`}
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={optionRaw.order}
+                                                    onChange={e => handleOptionOverrideFieldChange(v.id, optionName, 'order', e.target.value)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
+                                                  />
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Visibilidade</div>
+                                                  <div className="mt-2 flex items-center justify-between gap-3">
+                                                    <Label htmlFor={`option-hidden-${v.id}-${optionIndex}`} className="text-sm font-medium text-[#003223]">Ocultar</Label>
+                                                    <Switch
+                                                      id={`option-hidden-${v.id}-${optionIndex}`}
+                                                      checked={optionRaw.hidden}
+                                                      onCheckedChange={(checked) => {
+                                                        handleOptionOverrideFieldChange(v.id, optionName, 'hidden', checked);
+                                                        setTimeout(() => commitOptionOverride(v.id, optionName), 0);
+                                                      }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                                <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
+                                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Destaque</div>
+                                                  <div className="mt-2 flex items-center justify-between gap-3">
+                                                    <Label htmlFor={`option-recommended-${v.id}-${optionIndex}`} className="text-sm font-medium text-[#003223]">Recomendar</Label>
+                                                    <Switch
+                                                      id={`option-recommended-${v.id}-${optionIndex}`}
+                                                      checked={optionRaw.recommended}
+                                                      onCheckedChange={(checked) => {
+                                                        handleOptionOverrideFieldChange(v.id, optionName, 'recommended', checked);
+                                                        setTimeout(() => commitOptionOverride(v.id, optionName), 0);
+                                                      }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-10 rounded-xl border-[#FF6400]/20 bg-white text-[#FF6400] hover:bg-[#F5EBE1]"
+                                                  onClick={() => commitOptionOverride(v.id, optionName)}
+                                                >
+                                                  Salvar ajustes
+                                                </Button>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  disabled={!hasOverride}
+                                                  className="h-10 rounded-xl border-[#003223]/15 bg-white text-[#003223] hover:bg-[#F5EBE1] disabled:opacity-40"
+                                                  onClick={() => clearOptionPriceOverride(v.id, optionName)}
+                                                >
+                                                  Resetar para o grupo
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          );
+                                        }) : (
+                                          <div className="rounded-xl border border-dashed border-[#FF6400]/20 bg-white/90 p-4 text-sm text-[#003223]/55">
+                                            Este grupo ainda não possui opções cadastradas.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </AccordionContent>
+                                  </AccordionItem>
+                                </Accordion>
                               </div>
                             </div>
                           )}
@@ -1766,7 +2128,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </DialogContent>
         </Dialog>
 
-        <div className="space-y-2 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+        <div className="space-y-2 bg-gradient-to-br from-[#F5EBE1] via-white to-[#F5EBE1]/70 p-4 rounded-[26px] border border-[#FF6400]/20 shadow-[0_22px_45px_-35px_rgba(255,100,0,0.25)]">
           <Label htmlFor="category" className="text-boracume-dark-green font-semibold">Categoria</Label>
           <div className="flex gap-2">
             <Select 
@@ -1780,7 +2142,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 }));
               }}
             >
-              <SelectTrigger className="flex-1 bg-white rounded-xl h-11 border-gray-200">
+              <SelectTrigger className="flex-1 bg-white rounded-xl h-11 border-[#FF6400]/20">
                 <SelectValue placeholder="Selecione uma categoria" />
               </SelectTrigger>
               <SelectContent>
@@ -1794,7 +2156,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             
             <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
               <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-boracume-green text-boracume-orange hover:bg-boracume-green/10">
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-[#FF6400]/20 text-boracume-orange hover:bg-[#F5EBE1]">
                   <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
@@ -1843,7 +2205,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-4 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light">
+        <div className="grid grid-cols-2 gap-4 pt-4 bg-gradient-to-br from-[#F5EBE1] via-white to-[#F5EBE1]/70 p-4 rounded-[26px] border border-[#FF6400]/20 shadow-[0_22px_45px_-35px_rgba(255,100,0,0.25)]">
           <div className="flex items-center space-x-2">
             <Switch
               id="available"
@@ -1874,10 +2236,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         </div>
 
         <div className="flex gap-3 pt-6 pb-2">
-          <Button type="button" variant="outline" onClick={onCancel} className="flex-1 rounded-xl h-12 text-boracume-dark-green border-gray-200">
+          <Button type="button" variant="outline" onClick={onCancel} className="flex-1 rounded-2xl h-12 text-boracume-dark-green border-[#FF6400]/20 bg-white/90 hover:bg-[#F5EBE1]">
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading} className="flex-1 rounded-xl font-bold h-12 text-white bg-boracume-green hover:bg-boracume-green/90 transition-transform hover:scale-[1.02]">
+          <Button type="submit" disabled={loading} className="flex-1 rounded-2xl font-bold h-12 text-white bg-gradient-to-r from-[#FF6400] to-[#FF8A3D] hover:from-[#FF6400] hover:to-[#FF7A24] transition-transform hover:scale-[1.02]">
             {loading ? 'Salvando...' : 'Salvar Produto'}
           </Button>
         </div>

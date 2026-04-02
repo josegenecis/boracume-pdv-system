@@ -12,14 +12,39 @@ update public.product_global_variation_links
 set price_multiplier = 1
 where price_multiplier is null or price_multiplier < 0;
 
-alter table public.product_global_variation_links
-  add constraint product_global_variation_links_pricing_mode_check
-  check (pricing_mode in ('default', 'free', 'half', 'multiplier', 'fixed'));
+update public.product_global_variation_links
+set option_price_overrides = '{}'::jsonb
+where option_price_overrides is null;
 
-alter table public.product_global_variation_links
-  add constraint product_global_variation_links_price_multiplier_check
-  check (price_multiplier >= 0);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'product_global_variation_links_pricing_mode_check'
+  ) then
+    alter table public.product_global_variation_links
+      add constraint product_global_variation_links_pricing_mode_check
+      check (pricing_mode in ('default', 'free', 'half', 'multiplier', 'fixed'));
+  end if;
 
-alter table public.product_global_variation_links
-  add constraint product_global_variation_links_fixed_option_price_check
-  check (fixed_option_price is null or fixed_option_price >= 0);
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'product_global_variation_links_price_multiplier_check'
+  ) then
+    alter table public.product_global_variation_links
+      add constraint product_global_variation_links_price_multiplier_check
+      check (price_multiplier >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'product_global_variation_links_fixed_option_price_check'
+  ) then
+    alter table public.product_global_variation_links
+      add constraint product_global_variation_links_fixed_option_price_check
+      check (fixed_option_price is null or fixed_option_price >= 0);
+  end if;
+end $$;

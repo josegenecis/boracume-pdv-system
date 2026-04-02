@@ -5,6 +5,7 @@ import { Minus, Plus } from 'lucide-react';
 interface VariationOption {
   name: string;
   price: number;
+  recommended?: boolean;
 }
 
 interface VariationOptionItemProps {
@@ -35,7 +36,14 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   return (
     <div className={`flex items-center justify-between gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>
       <div className="min-w-0">
-        <div className="text-sm font-medium text-gray-900 truncate">{option.name}</div>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium text-gray-900 truncate">{option.name}</div>
+          {option.recommended && (
+            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+              Recomendado
+            </span>
+          )}
+        </div>
         {priceLabel && (
           <div className="text-xs text-gray-600">{priceLabel}</div>
         )}

@@ -3,8 +3,15 @@ import { supabase } from '../integrations/supabase/client';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { perfStart } from '@/utils/perf';
 
-type VariationOption = { name: string; price: number };
+type VariationOption = { name: string; price: number; recommended?: boolean };
 type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
+type VariationOptionOverride = {
+  price?: number;
+  label?: string;
+  hidden?: boolean;
+  display_order?: number;
+  recommended?: boolean;
+};
 
 export type Variation = {
   id: string;
@@ -22,7 +29,7 @@ export type Variation = {
   pricing_mode: VariationPricingMode;
   price_multiplier?: number;
   fixed_option_price?: number | null;
-  option_price_overrides?: Record<string, number>;
+  option_price_overrides?: Record<string, VariationOptionOverride>;
   options: VariationOption[];
 };
 
@@ -92,7 +99,17 @@ function normalizeVariation(item: any): Variation | null {
     : null;
   const optionPriceOverrides = typeof item.option_price_overrides === 'object' && item.option_price_overrides
     ? Object.fromEntries(
-        Object.entries(item.option_price_overrides).map(([name, value]) => [String(name), Math.max(0, Number(value) || 0)])
+        Object.entries(item.option_price_overrides).map(([name, value]) => {
+          if (typeof value === 'number') return [String(name), { price: Math.max(0, Number(value) || 0) }];
+          if (!value || typeof value !== 'object') return [String(name), {}];
+          return [String(name), {
+            ...(value.price !== undefined && value.price !== null ? { price: Math.max(0, Number(value.price) || 0) } : {}),
+            ...(value.label ? { label: String(value.label).trim() } : {}),
+            ...(value.hidden ? { hidden: true } : {}),
+            ...(value.recommended ? { recommended: true } : {}),
+            ...(value.display_order !== undefined && value.display_order !== null ? { display_order: Math.max(0, Math.floor(Number(value.display_order) || 0)) } : {})
+          }];
+        })
       )
     : {};
   const processedOptions = parseOptions(item.options);
@@ -104,18 +121,32 @@ function normalizeVariation(item: any): Variation | null {
     const optionBasePrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
     const safeBasePrice = Number.isFinite(optionBasePrice) ? Math.max(0, optionBasePrice) : 0;
     let adjustedPrice = safeBasePrice;
-    const overridePrice = optionPriceOverrides[optionName];
-    if (overridePrice !== undefined) {
-      adjustedPrice = overridePrice;
+    const overrideConfig = optionPriceOverrides[optionName] || {};
+    if (overrideConfig.hidden) continue;
+    if (overrideConfig.price !== undefined) {
+      adjustedPrice = overrideConfig.price;
     } else {
       if (pricingMode === 'free') adjustedPrice = 0;
       if (pricingMode === 'half') adjustedPrice = safeBasePrice * 0.5;
       if (pricingMode === 'multiplier') adjustedPrice = safeBasePrice * priceMultiplier;
       if (pricingMode === 'fixed') adjustedPrice = fixedOptionPrice ?? 0;
     }
-    validOptions.push({ name: optionName, price: Number.isFinite(adjustedPrice) ? Math.max(0, adjustedPrice) : 0 });
+    validOptions.push({
+      name: String(overrideConfig.label || optionName).trim() || optionName,
+      price: Number.isFinite(adjustedPrice) ? Math.max(0, adjustedPrice) : 0,
+      ...(overrideConfig.recommended ? { recommended: true } : {}),
+      ...(overrideConfig.display_order !== undefined ? { display_order: overrideConfig.display_order } : {})
+    } as any);
   }
-  if (validOptions.length === 0 || !isActive) return null;
+  const orderedOptions = validOptions
+    .sort((a: any, b: any) => {
+      const orderA = a?.display_order !== undefined ? Number(a.display_order) : Number.POSITIVE_INFINITY;
+      const orderB = b?.display_order !== undefined ? Number(b.display_order) : Number.POSITIVE_INFINITY;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+    })
+    .map(({ display_order, ...option }: any) => option);
+  if (orderedOptions.length === 0 || !isActive) return null;
   const required = Boolean(item.required ?? item.is_required ?? false);
   const minSelections = required ? Math.max(1, minSelectionsRaw) : minSelectionsRaw;
   return {
@@ -135,7 +166,7 @@ function normalizeVariation(item: any): Variation | null {
     price_multiplier: priceMultiplier,
     fixed_option_price: fixedOptionPrice,
     option_price_overrides: optionPriceOverrides,
-    options: validOptions
+    options: orderedOptions
   };
 }
 
