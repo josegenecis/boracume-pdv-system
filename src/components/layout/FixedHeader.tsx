@@ -46,14 +46,14 @@ const FixedHeader = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b">
-      <div className="flex items-center justify-between px-3 sm:px-6 py-3">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/70 shadow-sm">
+      <div className="flex items-center justify-between px-3 py-3 sm:px-6">
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={toggleSidebar}
-            className="p-2"
+            className="h-9 w-9 rounded-xl p-0 text-[#003223] hover:bg-[#F5EBE1]"
           >
             <Menu size={18} />
           </Button>
@@ -67,15 +67,15 @@ const FixedHeader = () => {
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
-          <Button variant="outline" size="sm" className="hidden md:inline-flex h-9" onClick={() => navigate('/relatorios')}>
+          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex" onClick={() => navigate('/relatorios')}>
             Abrir relatório diário
           </Button>
-          <Button size="sm" className="hidden sm:inline-flex h-9 bg-red-600 hover:bg-red-700" onClick={() => navigate('/pdv')}>
+          <Button size="sm" className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex" onClick={() => navigate('/pdv')}>
             + Novo pedido
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="px-3">
+              <Button variant="outline" size="sm" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]">
                 Gerencial
               </Button>
             </DropdownMenuTrigger>
@@ -110,7 +110,7 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="sm" className="p-2" onClick={() => navigate('/pedidos')}>
+          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-[#FF6400]/15 bg-white/85 p-0 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
         </div>

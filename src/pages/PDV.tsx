@@ -1211,36 +1211,36 @@ const PDV = () => {
   const operatorSelected = !!getOperatorSession()?.id;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-gray-50/50">
+    <div className="-mt-4 sm:-mt-6 h-full flex flex-col overflow-hidden rounded-[28px] border border-[#FF6400]/10 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/45 shadow-[0_24px_60px_-42px_rgba(0,50,35,0.22)]">
       <FirstOperatorDialog open={mustCreateOperator} onCreated={async () => { setMustCreateOperator(false); await checkFirstOperator(); }} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col min-h-0">
         {/* Top Header Bar - Consolidated */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-sm shrink-0 z-20 gap-3">
-          <TabsList className="grid w-full md:w-64 grid-cols-2 bg-gray-100/50 p-1 rounded-xl">
-            <TabsTrigger value="products" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-boracume-dark-green data-[state=active]:shadow-sm">Vendas</TabsTrigger>
-            <TabsTrigger value="accounts" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-boracume-dark-green data-[state=active]:shadow-sm">Mesas</TabsTrigger>
+        <div className="flex flex-col gap-3 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 py-2.5 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] shrink-0 z-20 md:flex-row md:items-center md:justify-between">
+          <TabsList className="grid h-9 w-full grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm md:w-64">
+            <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
+            <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
           </TabsList>
 
           {activeTab === 'products' && (
             <div className="flex-1 w-full flex flex-wrap md:flex-nowrap items-center gap-2 md:justify-end">
               <div className="relative flex-1 md:flex-none md:w-80 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#003223]/40 w-4 h-4" />
                 <Input
                   placeholder="Buscar produtos..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-10 bg-gray-50 border-gray-200 focus:bg-white transition-colors w-full rounded-xl text-sm"
+                  className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/85 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
                 />
               </div>
-              <Button variant="ghost" size="icon" onClick={() => fetchData()} className="shrink-0 h-10 w-10 rounded-xl hover:bg-gray-100">
-                <RefreshCw size={18} className="text-gray-600" />
+              <Button variant="outline" size="icon" onClick={() => fetchData()} className="h-9 w-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1]">
+                <RefreshCw size={18} className="text-[#003223]/70" />
               </Button>
               
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 hide-scrollbar w-full md:w-auto">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
+                  className="h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
                   disabled={!cashSession?.id}
                   onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
                 >
@@ -1249,7 +1249,7 @@ const PDV = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 rounded-lg whitespace-nowrap border-gray-200 hover:bg-gray-50"
+                  className="h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
                   disabled={!cashSession?.id}
                   onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
                 >
@@ -1302,7 +1302,7 @@ const PDV = () => {
                               <Store className="text-gray-300 w-8 h-8" />
                             </div>
                           )}
-                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[11px] font-bold shadow-sm border border-gray-100">
+                          <div className="absolute top-2 right-2 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[11px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
                             {formatCurrency(product.price)}
                           </div>
                           {isLowStock && (
@@ -1316,7 +1316,7 @@ const PDV = () => {
                             {product.name}
                           </h3>
                           <Button 
-                            className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white h-6 text-[10px] font-medium"
+                            className="h-6 w-full bg-[#FF6400]/12 text-[#FF6400] hover:bg-[#FF6400] hover:text-white text-[10px] font-semibold"
                             size="sm"
                             variant="ghost"
                           >
