@@ -22,6 +22,7 @@ export type Variation = {
   pricing_mode: VariationPricingMode;
   price_multiplier?: number;
   fixed_option_price?: number | null;
+  option_price_overrides?: Record<string, number>;
   options: VariationOption[];
 };
 
@@ -89,6 +90,11 @@ function normalizeVariation(item: any): Variation | null {
   const fixedOptionPrice = pricingMode === 'fixed'
     ? Math.max(0, Number(item.fixed_option_price) || 0)
     : null;
+  const optionPriceOverrides = typeof item.option_price_overrides === 'object' && item.option_price_overrides
+    ? Object.fromEntries(
+        Object.entries(item.option_price_overrides).map(([name, value]) => [String(name), Math.max(0, Number(value) || 0)])
+      )
+    : {};
   const processedOptions = parseOptions(item.options);
   const validOptions: VariationOption[] = [];
   for (const opt of processedOptions as any[]) {
@@ -98,10 +104,15 @@ function normalizeVariation(item: any): Variation | null {
     const optionBasePrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
     const safeBasePrice = Number.isFinite(optionBasePrice) ? Math.max(0, optionBasePrice) : 0;
     let adjustedPrice = safeBasePrice;
-    if (pricingMode === 'free') adjustedPrice = 0;
-    if (pricingMode === 'half') adjustedPrice = safeBasePrice * 0.5;
-    if (pricingMode === 'multiplier') adjustedPrice = safeBasePrice * priceMultiplier;
-    if (pricingMode === 'fixed') adjustedPrice = fixedOptionPrice ?? 0;
+    const overridePrice = optionPriceOverrides[optionName];
+    if (overridePrice !== undefined) {
+      adjustedPrice = overridePrice;
+    } else {
+      if (pricingMode === 'free') adjustedPrice = 0;
+      if (pricingMode === 'half') adjustedPrice = safeBasePrice * 0.5;
+      if (pricingMode === 'multiplier') adjustedPrice = safeBasePrice * priceMultiplier;
+      if (pricingMode === 'fixed') adjustedPrice = fixedOptionPrice ?? 0;
+    }
     validOptions.push({ name: optionName, price: Number.isFinite(adjustedPrice) ? Math.max(0, adjustedPrice) : 0 });
   }
   if (validOptions.length === 0 || !isActive) return null;
@@ -123,6 +134,7 @@ function normalizeVariation(item: any): Variation | null {
     pricing_mode: pricingMode,
     price_multiplier: priceMultiplier,
     fixed_option_price: fixedOptionPrice,
+    option_price_overrides: optionPriceOverrides,
     options: validOptions
   };
 }
@@ -166,7 +178,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
       withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
-      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
+      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price,option_price_overrides').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
     if (productError) throw productError;
@@ -196,7 +208,8 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
             display_order: link.display_order,
             pricing_mode: (link as any).pricing_mode ?? 'default',
             price_multiplier: (link as any).price_multiplier ?? 1,
-            fixed_option_price: (link as any).fixed_option_price ?? null
+            fixed_option_price: (link as any).fixed_option_price ?? null,
+            option_price_overrides: (link as any).option_price_overrides ?? {}
           };
         })
         .filter(Boolean) as any[];

@@ -1,7 +1,8 @@
 alter table public.product_global_variation_links
   add column if not exists pricing_mode text not null default 'default',
   add column if not exists price_multiplier numeric(10,4) not null default 1,
-  add column if not exists fixed_option_price numeric(10,2);
+  add column if not exists fixed_option_price numeric(10,2),
+  add column if not exists option_price_overrides jsonb not null default '{}'::jsonb;
 
 update public.product_global_variation_links
 set pricing_mode = 'default'
