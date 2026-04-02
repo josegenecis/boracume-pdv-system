@@ -342,6 +342,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     return basePrice;
   };
 
+  const getOptionOverrideRawState = (variationId: string, option: any): VariationOptionOverrideRaw => {
+    const optionName = String(option?.name || '').trim();
+    const configOverride = normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]);
+    const rawOverride = variationSettingsRaw[variationId]?.optionOverrides?.[optionName];
+    const effectivePrice = getVariationEffectiveOptionPrice(variationId, option);
+    return {
+      price: rawOverride?.price ?? (configOverride.price !== undefined && configOverride.price !== null ? String(configOverride.price) : String(effectivePrice)),
+      label: rawOverride?.label ?? String(configOverride.label || ''),
+      hidden: rawOverride?.hidden ?? Boolean(configOverride.hidden),
+      order: rawOverride?.order ?? (configOverride.display_order !== undefined && configOverride.display_order !== null ? String(configOverride.display_order) : ''),
+      recommended: rawOverride?.recommended ?? Boolean(configOverride.recommended)
+    };
+  };
+
   const handleOptionPriceOverrideChange = (variationId: string, optionName: string, rawValue: string) => {
     updateVariationRaw(variationId, {
       optionOverrides: {
@@ -354,9 +368,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
-  const commitOptionPriceOverride = (variationId: string, optionName: string) => {
-    const fallback = getVariationEffectiveOptionPrice(variationId, { name: optionName, price: 0 });
-    const currentRaw = variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]);
+  const commitOptionPriceOverride = (variationId: string, optionName: string, option?: any) => {
+    const fallback = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
+    const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
     const parsedValue = Math.max(0, parseDecimalField(currentRaw.price, fallback));
 
     setVariationSettings(prev => ({
@@ -405,9 +419,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
-  const commitOptionOverride = (variationId: string, optionName: string) => {
-    const currentRaw = variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]);
-    const fallbackPrice = getVariationEffectiveOptionPrice(variationId, { name: optionName, price: 0 });
+  const commitOptionOverride = (variationId: string, optionName: string, option?: any) => {
+    const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
+    const fallbackPrice = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
     const normalized: VariationOptionOverride = {
       ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
       price: Math.max(0, parseDecimalField(currentRaw.price, fallbackPrice)),
@@ -1943,7 +1957,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                           const optionName = String(option?.name || '').trim();
                                           const basePrice = Math.max(0, Number(option?.price) || 0);
                                           const optionOverride = normalizeOptionOverride(getVariationConfig(v.id).option_price_overrides?.[optionName]);
-                                          const optionRaw = variationSettingsRaw[v.id]?.optionOverrides?.[optionName] || toOptionOverrideRaw(optionOverride);
+                                          const optionRaw = getOptionOverrideRawState(v.id, option);
                                           const effectivePrice = getVariationEffectiveOptionPrice(v.id, option);
                                           const hasOverride = getVariationConfig(v.id).option_price_overrides?.[optionName] !== undefined;
                                           return (
@@ -1983,7 +1997,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     id={`option-label-${v.id}-${optionIndex}`}
                                                     value={optionRaw.label}
                                                     onChange={e => handleOptionOverrideFieldChange(v.id, optionName, 'label', e.target.value)}
-                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     placeholder={optionName}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-sm font-medium text-[#003223]"
                                                   />
@@ -1997,7 +2011,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     step="0.01"
                                                     value={optionRaw.price}
                                                     onChange={e => handleOptionPriceOverrideChange(v.id, optionName, e.target.value)}
-                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
                                                   />
                                                 </div>
@@ -2010,7 +2024,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                     step="1"
                                                     value={optionRaw.order}
                                                     onChange={e => handleOptionOverrideFieldChange(v.id, optionName, 'order', e.target.value)}
-                                                    onBlur={() => commitOptionOverride(v.id, optionName)}
+                                                    onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
                                                   />
                                                 </div>
@@ -2023,7 +2037,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                       checked={optionRaw.hidden}
                                                       onCheckedChange={(checked) => {
                                                         handleOptionOverrideFieldChange(v.id, optionName, 'hidden', checked);
-                                                        setTimeout(() => commitOptionOverride(v.id, optionName), 0);
+                                                        setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
                                                       }}
                                                     />
                                                   </div>
@@ -2037,7 +2051,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                       checked={optionRaw.recommended}
                                                       onCheckedChange={(checked) => {
                                                         handleOptionOverrideFieldChange(v.id, optionName, 'recommended', checked);
-                                                        setTimeout(() => commitOptionOverride(v.id, optionName), 0);
+                                                        setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
                                                       }}
                                                     />
                                                   </div>
@@ -2049,7 +2063,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                   variant="outline"
                                                   size="sm"
                                                   className="h-10 rounded-xl border-[#FF6400]/20 bg-white text-[#FF6400] hover:bg-[#F5EBE1]"
-                                                  onClick={() => commitOptionOverride(v.id, optionName)}
+                                                  onClick={() => commitOptionOverride(v.id, optionName, option)}
                                                 >
                                                   Salvar ajustes
                                                 </Button>
