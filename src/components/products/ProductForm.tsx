@@ -478,6 +478,65 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
+  const buildPersistedVariationSettings = (
+    baseSettings: Record<string, VariationConfig> = variationSettings,
+    rawSettings: Record<string, VariationConfigRaw> = variationSettingsRaw
+  ) => {
+    const nextSettings: Record<string, VariationConfig> = { ...baseSettings };
+    const variationIds = new Set([
+      ...Object.keys(baseSettings || {}),
+      ...Object.keys(rawSettings || {}),
+      ...selectedVariations
+    ]);
+
+    variationIds.forEach((variationId) => {
+      const current = nextSettings[variationId] || getVariationDefaults();
+      const raw = rawSettings?.[variationId];
+      if (!raw) {
+        nextSettings[variationId] = current;
+        return;
+      }
+
+      const minNum = Math.max(0, Math.floor(raw.min === '' ? Number(current.min_selections ?? 0) : Number(raw.min) || 0));
+      const maxNum = Math.max(1, Math.floor(raw.max === '' ? Number(current.max_selections ?? 1) : Number(raw.max) || 1));
+      const safeMax = Math.max(maxNum, minNum);
+      const freeNum = Math.max(0, Math.floor(raw.free === '' ? Number(current.free_selections_limit ?? 0) : Number(raw.free) || 0));
+      const allowPaidExcess = Boolean(current.allow_paid_excess);
+      const paidMaxNum = allowPaidExcess
+        ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? Number(current.paid_max_selections ?? safeMax) : Number(raw.paidMax) || safeMax))
+        : null;
+      const priceMultiplier = Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
+      const fixedOptionPrice = Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)));
+      const optionPriceOverrides = Object.fromEntries(
+        Object.entries(raw.optionOverrides || {}).map(([name, value]) => {
+          const currentOverride = current.option_price_overrides?.[name] || {};
+          const normalized = {
+            ...normalizeOptionOverride(currentOverride),
+            price: Math.max(0, parseDecimalField(value?.price ?? '', Number(currentOverride?.price ?? 0))),
+            label: String(value?.label || '').trim(),
+            hidden: Boolean(value?.hidden),
+            recommended: Boolean(value?.recommended),
+            ...(String(value?.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(value.order) || 0)) } : {})
+          };
+          return [name, normalized];
+        })
+      );
+
+      nextSettings[variationId] = {
+        ...current,
+        min_selections: minNum,
+        max_selections: safeMax,
+        free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
+        paid_max_selections: paidMaxNum,
+        price_multiplier: priceMultiplier,
+        fixed_option_price: fixedOptionPrice,
+        option_price_overrides: optionPriceOverrides
+      };
+    });
+
+    return nextSettings;
+  };
+
   const getVariationSummary = (variationId: string) => {
     const config = getVariationConfig(variationId);
     const summary: string[] = [];
@@ -1029,6 +1088,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     try {
       setLoading(true);
+      const persistedVariationSettings = buildPersistedVariationSettings();
+      setVariationSettings(persistedVariationSettings);
+      syncVariationSettingsRaw(persistedVariationSettings);
 
       const baseData = buildBaseData();
       // If using variants, maybe set base price to 0 or min variant price
@@ -1093,7 +1155,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       
       // Salvar vínculos de variações globais
       if (productId) {
-        await saveProductVariations(productId);
+        await saveProductVariations(productId, selectedVariations, { settingsOverride: persistedVariationSettings });
         
         // Salvar variantes de preço
         if (priceMode === 'variants') {
@@ -1227,13 +1289,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const saveProductVariations = async (
     productId: string,
     variations: string[] = selectedVariations,
-    options?: { silent?: boolean }
+    options?: { silent?: boolean; settingsOverride?: Record<string, VariationConfig> }
   ) => {
+    const resolvedSettings = options?.settingsOverride || buildPersistedVariationSettings();
+    if (!options?.settingsOverride) {
+      setVariationSettings(resolvedSettings);
+      syncVariationSettingsRaw(resolvedSettings);
+    }
     console.log('🔄 Iniciando saveProductVariations:', { 
       productId, 
       variations, 
       selectedVariations,
-      variationSettings 
+      variationSettings: resolvedSettings 
     });
     
     try {
@@ -1255,7 +1322,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
         const links = variations.map((variationId, idx) => {
-          const s = variationSettings?.[variationId] || getVariationDefaults();
+          const s = resolvedSettings?.[variationId] || getVariationDefaults();
           const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
           const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
           const allowPaidExcess = Boolean(s.allow_paid_excess);
@@ -1339,7 +1406,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           variant: "destructive"
         });
       }
-
+      throw error;
     }
   };
 
@@ -1348,7 +1415,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (!pid) return;
     if (variationSaveTimerRef.current) window.clearTimeout(variationSaveTimerRef.current);
     variationSaveTimerRef.current = window.setTimeout(() => {
-      void saveProductVariations(pid, selectedVariations, { silent: true });
+      void saveProductVariations(pid, selectedVariations, { silent: true }).catch(() => {});
     }, 900);
     return () => {
       if (variationSaveTimerRef.current) window.clearTimeout(variationSaveTimerRef.current);

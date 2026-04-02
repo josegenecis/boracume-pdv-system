@@ -103,7 +103,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
           flex-1 pt-16 transition-all duration-300 min-w-0 w-full
           ${isMobile 
             ? 'ml-0' 
-            : isOpen && isPinned
+            : isOpen
               ? 'ml-64' 
               : 'ml-16'
           }
