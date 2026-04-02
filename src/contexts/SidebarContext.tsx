@@ -3,9 +3,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 interface SidebarContextType {
   isOpen: boolean;
   isMobile: boolean;
+  isPinned: boolean;
   toggleSidebar: () => void;
   closeSidebar: () => void;
   openSidebar: () => void;
+  setPinned: (value: boolean) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
@@ -25,23 +27,34 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isPinned, setIsPinned] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('sidebar-pinned') === 'true';
+  });
 
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      // Em desktop, a sidebar fica aberta por padrão
-      if (!mobile) {
-        setIsOpen(true);
-      } else {
+      if (mobile) {
         setIsOpen(false);
+      } else {
+        setIsOpen(isPinned);
       }
     };
 
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [isPinned]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('sidebar-pinned', String(isPinned));
+    if (!isMobile) {
+      setIsOpen(isPinned);
+    }
+  }, [isPinned, isMobile]);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
   const closeSidebar = () => setIsOpen(false);
@@ -51,9 +64,11 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) =>
     <SidebarContext.Provider value={{
       isOpen,
       isMobile,
+      isPinned,
       toggleSidebar,
       closeSidebar,
-      openSidebar
+      openSidebar,
+      setPinned: setIsPinned
     }}>
       {children}
     </SidebarContext.Provider>

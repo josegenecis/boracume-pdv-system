@@ -15,7 +15,7 @@ interface DashboardLayoutProps {
 }
 
 const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const { isOpen, isMobile, closeSidebar } = useSidebar();
+  const { isOpen, isMobile, isPinned, closeSidebar } = useSidebar();
   const { user, loading, refreshUser } = useAuth();
   const [showWizard, setShowWizard] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -103,7 +103,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
           flex-1 pt-16 transition-all duration-300 min-w-0 w-full
           ${isMobile 
             ? 'ml-0' 
-            : isOpen 
+            : isOpen && isPinned
               ? 'ml-64' 
               : 'ml-16'
           }

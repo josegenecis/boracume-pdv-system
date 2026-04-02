@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -24,6 +24,8 @@ import {
   ChefHat,
   Utensils,
   Crown,
+  Lock,
+  LockOpen,
   ChevronLeft,
   ChevronRight,
   Bot,
@@ -36,9 +38,10 @@ import {
 } from 'lucide-react';
 
 const CollapsibleSidebar = () => {
-  const { isOpen, isMobile, toggleSidebar, closeSidebar } = useSidebar();
-  const { profile, user, signOut } = useAuth();
+  const { isOpen, isMobile, isPinned, setPinned, toggleSidebar, closeSidebar, openSidebar } = useSidebar();
+  const { profile, subscription, user, signOut } = useAuth();
   const [ifoodStatus, setIfoodStatus] = useState<'online' | 'offline' | 'paused' | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -188,10 +191,19 @@ const CollapsibleSidebar = () => {
     },
   ];
 
+  const currentPlanLabel = useMemo(() => {
+    const status = String(subscription?.status || '').toLowerCase();
+    if (status.includes('trial')) return 'Teste';
+    if ((subscription?.plan_id || 0) >= 3) return 'Elite';
+    if ((subscription?.plan_id || 0) === 2) return 'Pro';
+    if ((subscription?.plan_id || 0) === 1) return 'Essencial';
+    return 'Plano';
+  }, [subscription]);
+
   const standaloneLinks = [
     { to: '/agente', icon: Bot, label: 'Assistente' },
     { to: '/downloads', icon: Download, label: 'App Desktop' },
-    { to: '/subscription', icon: Crown, label: 'Planos' },
+    { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },
   ];
 
 
@@ -240,6 +252,26 @@ const CollapsibleSidebar = () => {
     setOpenGroup(groupForCurrentPath);
   }, [location.pathname, groupForCurrentPath]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const handleMouseEnter = () => {
+    if (isMobile || isPinned) return;
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    openSidebar();
+  };
+
+  const handleMouseLeave = () => {
+    if (isMobile || isPinned) return;
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      closeSidebar();
+    }, 2000);
+  };
+
   return (
     <aside className={`
       fixed left-0 top-16 bottom-0 z-50 border-r border-[#FF6400]/25 bg-gradient-to-b from-[#003223] via-[#003223] to-[#0B5137] shadow-[8px_0_30px_-24px_rgba(0,50,35,0.45)] transition-all duration-300
@@ -247,7 +279,10 @@ const CollapsibleSidebar = () => {
         ? `${isOpen ? 'translate-x-0' : '-translate-x-full'} w-64` 
         : `${isOpen ? 'w-64' : 'w-16'}`
       }
-    `}>
+    `}
+    onMouseEnter={handleMouseEnter}
+    onMouseLeave={handleMouseLeave}
+    >
       <nav className="h-full overflow-y-auto overscroll-contain touch-pan-y px-2 pb-20 pt-4 scrollbar-hide flex flex-col justify-between">
         <div className="flex-1">
         {!isOpen && !isMobile ? (
@@ -263,9 +298,9 @@ const CollapsibleSidebar = () => {
                     className={`flex items-center justify-center px-3 py-2 text-sm rounded-xl transition-colors ${
                       isActive
                         ? 'bg-[#FF6400] text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
-                        : 'text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]'
+                        : `${(link as any).accent ? 'text-[#8CC850]' : 'text-[#F5EBE1]'} hover:bg-[#8CC850] hover:text-[#003223]`
                     }`}
-                    title={typeof link.label === 'string' ? link.label : ''}
+                    title={typeof link.label === 'string' ? `${link.label}${(link as any).detail ? ` - ${(link as any).detail}` : ''}` : ''}
                   >
                     <Icon size={18} className="flex-shrink-0" />
                   </Link>
@@ -349,11 +384,18 @@ const CollapsibleSidebar = () => {
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
                           ? 'bg-[#FF6400] font-medium text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
-                          : 'text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]'
+                          : `${link.accent ? 'text-[#8CC850]' : 'text-[#F5EBE1]'} hover:bg-[#8CC850] hover:text-[#003223]`
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
-                      <span className="truncate">{link.label}</span>
+                      <div className="min-w-0">
+                        <span className="block truncate">{link.label}</span>
+                        {link.detail && (
+                          <span className={`block truncate text-[10px] font-semibold ${isActive ? 'text-white/85' : 'text-[#F5EBE1]/70'}`}>
+                            {link.detail}
+                          </span>
+                        )}
+                      </div>
                     </Link>
                   </li>
                 );
@@ -366,7 +408,7 @@ const CollapsibleSidebar = () => {
         <div className={`mt-auto border-t border-white/10 pt-4 pb-4 ${isOpen ? 'px-2' : 'px-0'}`}>
           {isOpen ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/8 px-3 py-2 shadow-[0_12px_26px_-22px_rgba(0,0,0,0.3)]">
+              <div className="flex items-center gap-3 rounded-xl border border-[#8CC850]/60 bg-white/8 px-3 py-2 shadow-[0_0_0_1px_rgba(140,200,80,0.08),0_0_24px_-14px_rgba(140,200,80,0.8)]">
                 <Avatar className="h-8 w-8 border-2 border-boracume-orange/20 flex-shrink-0">
                   <AvatarImage src={profile?.logo_url} />
                   <AvatarFallback className="bg-boracume-orange/10 text-boracume-orange font-bold text-xs">
@@ -392,6 +434,14 @@ const CollapsibleSidebar = () => {
                   )}
                 </div>
               </div>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-[#8CC850] hover:bg-[#8CC850] hover:text-[#003223]"
+                onClick={() => setPinned(!isPinned)}
+              >
+                {isPinned ? <Lock size={18} className="mr-2" /> : <LockOpen size={18} className="mr-2" />}
+                {isPinned ? 'Sidebar fixa' : 'Fixar sidebar'}
+              </Button>
               <Button 
                 variant="ghost" 
                 className="w-full justify-start text-[#F5EBE1] hover:bg-[#8CC850] hover:text-[#003223]"
@@ -403,6 +453,15 @@ const CollapsibleSidebar = () => {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-10 w-full rounded-none p-0 text-[#8CC850] hover:bg-[#8CC850] hover:text-[#003223]"
+                onClick={() => setPinned(!isPinned)}
+                title={isPinned ? 'Destravar sidebar' : 'Fixar sidebar'}
+              >
+                {isPinned ? <Lock size={18} /> : <LockOpen size={18} />}
+              </Button>
               <Button 
                 variant="ghost" 
                 size="sm" 
