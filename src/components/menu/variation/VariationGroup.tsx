@@ -19,6 +19,9 @@ interface ProductVariation {
   free_selections_limit?: number;
   allow_paid_excess?: boolean;
   paid_max_selections?: number;
+  pricing_mode?: 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
+  price_multiplier?: number;
+  fixed_option_price?: number | null;
   options: VariationOption[];
 }
 
@@ -52,6 +55,16 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
         : maxSel > 1
           ? `Escolha até ${maxSel}`
           : 'Opcional';
+  const pricingHint =
+    variation.pricing_mode === 'free'
+      ? 'Sem custo neste produto'
+      : variation.pricing_mode === 'half'
+        ? 'Itens cobrados pela metade'
+        : variation.pricing_mode === 'multiplier'
+          ? `${Number(variation.price_multiplier || 1).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}x sobre o preço base`
+          : variation.pricing_mode === 'fixed'
+            ? `R$ ${Number(variation.fixed_option_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por item`
+            : '';
 
   return (
     <div className="border rounded-xl p-4 bg-white">
@@ -63,6 +76,11 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
           <div className="text-xs text-muted-foreground mt-0.5">
             {subtitle}
           </div>
+          {pricingHint && (
+            <div className="text-xs text-orange-600 mt-1">
+              {pricingHint}
+            </div>
+          )}
         </div>
         {isValid && minSel > 0 && (
           <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />

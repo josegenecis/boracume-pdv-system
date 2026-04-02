@@ -52,6 +52,29 @@ interface ProductVariant {
   _deleted?: boolean; // internal flag
 }
 
+type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
+
+type VariationConfig = {
+  required: boolean;
+  min_selections: number;
+  max_selections: number;
+  free_selections_limit: number;
+  allow_paid_excess: boolean;
+  paid_max_selections: number | null;
+  pricing_mode: VariationPricingMode;
+  price_multiplier: number | null;
+  fixed_option_price: number | null;
+};
+
+type VariationConfigRaw = {
+  min: string;
+  max: string;
+  free: string;
+  paidMax: string;
+  multiplier: string;
+  fixedPrice: string;
+};
+
 interface ProductFormProps {
   product?: ProductItem;
 
@@ -88,8 +111,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   // Price Variants State
   const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
 
-  const [variationSettings, setVariationSettings] = useState<Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }>>({});
-  const [variationSettingsRaw, setVariationSettingsRaw] = useState<Record<string, { min: string; max: string; free: string; paidMax: string }>>({});
+  const [variationSettings, setVariationSettings] = useState<Record<string, VariationConfig>>({});
+  const [variationSettingsRaw, setVariationSettingsRaw] = useState<Record<string, VariationConfigRaw>>({});
   const [loading, setLoading] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -124,14 +147,41 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const stockColumns = new Set(['track_stock', 'stock_quantity', 'low_stock_threshold']);
 
-  const syncVariationSettingsRaw = (settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }>) => {
-    const raw: Record<string, { min: string; max: string; free: string; paidMax: string }> = {};
+  const parseDecimalField = (value: string, fallback: number) => {
+    const normalized = String(value ?? '').replace(',', '.').trim();
+    if (!normalized) return fallback;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const getDefaultPricingMode = (pricingMode?: string | null): VariationPricingMode => {
+    const value = String(pricingMode || '').trim();
+    if (value === 'free' || value === 'half' || value === 'multiplier' || value === 'fixed') return value;
+    return 'default';
+  };
+
+  const getVariationDefaults = (): VariationConfig => ({
+    required: false,
+    min_selections: 0,
+    max_selections: 1,
+    free_selections_limit: 0,
+    allow_paid_excess: false,
+    paid_max_selections: null,
+    pricing_mode: 'default',
+    price_multiplier: 1,
+    fixed_option_price: null
+  });
+
+  const syncVariationSettingsRaw = (settings: Record<string, VariationConfig>) => {
+    const raw: Record<string, VariationConfigRaw> = {};
     Object.entries(settings || {}).forEach(([id, s]) => {
       raw[id] = {
         min: String(Math.max(0, Math.floor(Number(s?.min_selections) || 0))),
         max: String(Math.max(1, Math.floor(Number(s?.max_selections) || 1))),
         free: String(Math.max(0, Math.floor(Number(s?.free_selections_limit) || 0))),
-        paidMax: String(Math.max(1, Math.floor(Number(s?.paid_max_selections) || Number(s?.max_selections) || 1)))
+        paidMax: String(Math.max(1, Math.floor(Number(s?.paid_max_selections) || Number(s?.max_selections) || 1))),
+        multiplier: String(Number(s?.price_multiplier ?? 1)),
+        fixedPrice: String(Number(s?.fixed_option_price ?? 0))
       };
     });
     setVariationSettingsRaw(raw);
@@ -139,17 +189,33 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const commitVariationMinMax = (variationId: string) => {
     setVariationSettings(prev => {
-      const current = prev?.[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null };
-      const raw = variationSettingsRaw?.[variationId] || { min: String(current.min_selections ?? 0), max: String(current.max_selections ?? 1), free: String(current.free_selections_limit ?? 0), paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1) };
+      const current = prev?.[variationId] || getVariationDefaults();
+      const raw = variationSettingsRaw?.[variationId] || {
+        min: String(current.min_selections ?? 0),
+        max: String(current.max_selections ?? 1),
+        free: String(current.free_selections_limit ?? 0),
+        paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1),
+        multiplier: String(Number(current.price_multiplier ?? 1)),
+        fixedPrice: String(Number(current.fixed_option_price ?? 0))
+      };
       const minNum = Math.max(0, Math.floor(raw.min === '' ? 0 : Number(raw.min) || 0));
       const maxNum = Math.max(1, Math.floor(raw.max === '' ? 1 : Number(raw.max) || 1));
       const safeMax = Math.max(maxNum, minNum);
       const freeNum = Math.max(0, Math.floor(raw.free === '' ? 0 : Number(raw.free) || 0));
       const paidMaxNum = current.allow_paid_excess ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? safeMax : Number(raw.paidMax) || safeMax)) : null;
+      const priceMultiplier = Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
+      const fixedOptionPrice = Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)));
 
       setVariationSettingsRaw(prevRaw => ({
         ...prevRaw,
-        [variationId]: { min: String(minNum), max: String(safeMax), free: String(Math.min(freeNum, paidMaxNum ?? safeMax)), paidMax: String(paidMaxNum ?? safeMax) }
+        [variationId]: {
+          min: String(minNum),
+          max: String(safeMax),
+          free: String(Math.min(freeNum, paidMaxNum ?? safeMax)),
+          paidMax: String(paidMaxNum ?? safeMax),
+          multiplier: String(priceMultiplier),
+          fixedPrice: String(fixedOptionPrice)
+        }
       }));
 
       return {
@@ -159,24 +225,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           min_selections: minNum,
           max_selections: safeMax,
           free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
-          paid_max_selections: paidMaxNum
+          paid_max_selections: paidMaxNum,
+          price_multiplier: priceMultiplier,
+          fixed_option_price: fixedOptionPrice
         }
       };
     });
   };
 
-  const getVariationConfig = (variationId: string) => (
-    variationSettings?.[variationId] || {
-      required: false,
-      min_selections: 0,
-      max_selections: 1,
-      free_selections_limit: 0,
-      allow_paid_excess: false,
-      paid_max_selections: null
-    }
-  );
+  const getVariationConfig = (variationId: string) => variationSettings?.[variationId] || getVariationDefaults();
 
-  const updateVariationRaw = (variationId: string, updates: Partial<{ min: string; max: string; free: string; paidMax: string }>) => {
+  const updateVariationRaw = (variationId: string, updates: Partial<VariationConfigRaw>) => {
     setVariationSettingsRaw(prev => {
       const currentSetting = getVariationConfig(variationId);
       return {
@@ -186,6 +245,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           max: prev[variationId]?.max ?? String(currentSetting.max_selections ?? 1),
           free: prev[variationId]?.free ?? String(currentSetting.free_selections_limit ?? 0),
           paidMax: prev[variationId]?.paidMax ?? String(currentSetting.paid_max_selections ?? currentSetting.max_selections ?? 1),
+          multiplier: prev[variationId]?.multiplier ?? String(Number(currentSetting.price_multiplier ?? 1)),
+          fixedPrice: prev[variationId]?.fixedPrice ?? String(Number(currentSetting.fixed_option_price ?? 0)),
           ...updates
         }
       };
@@ -199,6 +260,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     summary.push(`Máx. ${config.max_selections}`);
     if ((config.free_selections_limit || 0) > 0) summary.push(`${config.free_selections_limit} grátis`);
     if (config.allow_paid_excess) summary.push(`Extras até ${config.paid_max_selections ?? config.max_selections}`);
+    if (config.pricing_mode === 'free') summary.push('Grupo grátis');
+    if (config.pricing_mode === 'half') summary.push('Preço pela metade');
+    if (config.pricing_mode === 'multiplier') summary.push(`${Number(config.price_multiplier || 1).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}x no produto`);
+    if (config.pricing_mode === 'fixed') summary.push(`R$ ${Number(config.fixed_option_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por item`);
     return summary;
   };
 
@@ -567,7 +632,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       try {
         const res = await supabase
           .from('product_global_variation_links')
-          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order')
+          .select('global_variation_id, required, min_selections, max_selections, free_selections_limit, allow_paid_excess, paid_max_selections, display_order, pricing_mode, price_multiplier, fixed_option_price')
           .eq('product_id', productId)
           .order('display_order', { ascending: true });
         data = (res as any).data;
@@ -577,7 +642,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       }
 
       const errMsg = String((error as any)?.message || '');
-      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required'))) {
+      if (error && (errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('required') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price'))) {
         const res = await supabase
           .from('product_global_variation_links')
           .select('global_variation_id')
@@ -603,7 +668,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .in('id', gvIds);
 
       const byId = new Map((gvData || []).map((gv: any) => [String(gv.id), gv]));
-      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }> = {};
+      const settings: Record<string, VariationConfig> = {};
       for (const link of links) {
         const id = String(link.global_variation_id || '');
         if (!id) continue;
@@ -619,7 +684,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           max_selections: Math.max(maxSel, minSel),
           free_selections_limit: Math.max(0, Number((link as any).free_selections_limit) || 0),
           allow_paid_excess: allowPaidExcess,
-          paid_max_selections: paidMax
+          paid_max_selections: paidMax,
+          pricing_mode: getDefaultPricingMode((link as any).pricing_mode),
+          price_multiplier: Math.max(0, Number((link as any).price_multiplier) || 1),
+          fixed_option_price: (link as any).fixed_option_price !== undefined && (link as any).fixed_option_price !== null
+            ? Math.max(0, Number((link as any).fixed_option_price) || 0)
+            : null
         };
       }
       
@@ -656,7 +726,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .from('global_variations')
         .select('id, required, max_selections')
         .in('id', gvIds);
-      const settings: Record<string, { required: boolean; min_selections: number; max_selections: number; free_selections_limit: number; allow_paid_excess: boolean; paid_max_selections: number | null }> = {};
+      const settings: Record<string, VariationConfig> = {};
       (gvData || []).forEach((gv: any) => {
         settings[gv.id] = {
           required: !!gv.required,
@@ -664,7 +734,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           max_selections: gv.max_selections ?? 1,
           free_selections_limit: 0,
           allow_paid_excess: false,
-          paid_max_selections: null
+          paid_max_selections: null,
+          pricing_mode: 'default',
+          price_multiplier: 1,
+          fixed_option_price: null
         };
       });
       
@@ -951,11 +1024,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
         const links = variations.map((variationId, idx) => {
-          const s = variationSettings?.[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null };
+          const s = variationSettings?.[variationId] || getVariationDefaults();
           const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
           const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
           const allowPaidExcess = Boolean(s.allow_paid_excess);
           const paidMax = allowPaidExcess ? Math.max(maxSel, Math.floor(Number(s.paid_max_selections) || maxSel)) : null;
+          const pricingMode = getDefaultPricingMode(s.pricing_mode);
+          const priceMultiplier = pricingMode === 'half'
+            ? 0.5
+            : pricingMode === 'multiplier'
+              ? Math.max(0, Number(s.price_multiplier) || 1)
+              : 1;
+          const fixedOptionPrice = pricingMode === 'fixed'
+            ? Math.max(0, Number(s.fixed_option_price) || 0)
+            : null;
           return {
             product_id: productId,
             global_variation_id: variationId,
@@ -965,7 +1047,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             free_selections_limit: Math.max(0, Math.floor(Number(s.free_selections_limit) || 0)),
             allow_paid_excess: allowPaidExcess,
             paid_max_selections: paidMax,
-            display_order: idx
+            display_order: idx,
+            pricing_mode: pricingMode,
+            price_multiplier: priceMultiplier,
+            fixed_option_price: fixedOptionPrice
           };
         });
         
@@ -977,7 +1062,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         error = (first as any).error;
 
         const errMsg = String(error?.message || '');
-        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections'))) {
+        if (error && (errMsg.includes('required') || errMsg.includes('min_selections') || errMsg.includes('max_selections') || errMsg.includes('display_order') || errMsg.includes('free_selections_limit') || errMsg.includes('allow_paid_excess') || errMsg.includes('paid_max_selections') || errMsg.includes('pricing_mode') || errMsg.includes('price_multiplier') || errMsg.includes('fixed_option_price'))) {
           const minimalLinks = variations.map((variationId) => ({
             product_id: productId,
             global_variation_id: variationId
@@ -1051,13 +1136,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setVariationSettings(prev => {
         const next = {
           ...prev,
-          [variationId]: prev[variationId] || { required: false, min_selections: 0, max_selections: 1, free_selections_limit: 0, allow_paid_excess: false, paid_max_selections: null }
+          [variationId]: prev[variationId] || getVariationDefaults()
         };
         return next;
       });
       setVariationSettingsRaw(prev => ({
         ...prev,
-        [variationId]: prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1' }
+        [variationId]: prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0' }
       }));
     } else {
       setVariationSettings(prev => {
@@ -1073,11 +1158,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
   };
 
-  const handleVariationSettingChange = (variationId: string, field: 'required' | 'min_selections' | 'max_selections' | 'free_selections_limit' | 'allow_paid_excess' | 'paid_max_selections', value: boolean | number | null) => {
+  const handleVariationSettingChange = (variationId: string, field: keyof VariationConfig, value: boolean | number | null | string) => {
     setVariationSettings(prev => ({
       ...prev,
       [variationId]: {
-        ...prev[variationId],
+        ...(prev[variationId] || getVariationDefaults()),
         [field]: value
       }
     }));
@@ -1489,7 +1574,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                 </div>
                               </div>
                               <div className="border-t border-[#FF6400]/10 bg-gradient-to-br from-[#F5EBE1]/70 to-white px-3.5 py-3">
-                                <div className="grid gap-2.5 lg:grid-cols-[1.1fr_1fr_1fr]">
+                                <div className="grid gap-2.5 xl:grid-cols-[1.2fr_1fr_1fr_1.1fr]">
                                   <div className="grid gap-2">
                                     <Button
                                       type="button"
@@ -1509,6 +1594,40 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                     >
                                       {getVariationConfig(v.id).allow_paid_excess ? 'Extras pagos' : 'Sem extras pagos'}
                                     </Button>
+                                  </div>
+                                  <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
+                                    <Label htmlFor={`pricing-mode-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Preço no produto</Label>
+                                    <Select
+                                      value={getVariationConfig(v.id).pricing_mode}
+                                      onValueChange={(value) => {
+                                        const pricingMode = value as VariationPricingMode;
+                                        handleVariationSettingChange(v.id, 'pricing_mode', pricingMode);
+                                        if (pricingMode === 'half') {
+                                          handleVariationSettingChange(v.id, 'price_multiplier', 0.5);
+                                          updateVariationRaw(v.id, { multiplier: '0.5' });
+                                        }
+                                        if (pricingMode === 'default') {
+                                          handleVariationSettingChange(v.id, 'price_multiplier', 1);
+                                          handleVariationSettingChange(v.id, 'fixed_option_price', null);
+                                          updateVariationRaw(v.id, { multiplier: '1', fixedPrice: '0' });
+                                        }
+                                        if (pricingMode === 'free') {
+                                          handleVariationSettingChange(v.id, 'fixed_option_price', 0);
+                                          updateVariationRaw(v.id, { fixedPrice: '0' });
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger id={`pricing-mode-${v.id}`} className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-sm font-semibold text-[#003223]">
+                                        <SelectValue placeholder="Selecione" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="default">Preço normal</SelectItem>
+                                        <SelectItem value="free">Sem cobrar</SelectItem>
+                                        <SelectItem value="half">Metade do valor</SelectItem>
+                                        <SelectItem value="multiplier">Multiplicador</SelectItem>
+                                        <SelectItem value="fixed">Preço fixo por item</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                     <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
@@ -1558,6 +1677,36 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         disabled={!getVariationConfig(v.id).allow_paid_excess}
                                         value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
                                         onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                                    <div className="rounded-xl border border-[#003223]/12 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`price-multiplier-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Multiplicador</Label>
+                                      <Input
+                                        id={`price-multiplier-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        step="0.1"
+                                        disabled={getVariationConfig(v.id).pricing_mode !== 'multiplier'}
+                                        value={variationSettingsRaw[v.id]?.multiplier ?? String(Number(getVariationConfig(v.id).price_multiplier ?? 1))}
+                                        onChange={e => updateVariationRaw(v.id, { multiplier: e.target.value })}
+                                        onBlur={() => commitVariationMinMax(v.id)}
+                                        className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
+                                      />
+                                    </div>
+                                    <div className="rounded-xl border border-[#003223]/12 bg-white/95 px-3 py-2">
+                                      <Label htmlFor={`fixed-price-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Preço fixo</Label>
+                                      <Input
+                                        id={`fixed-price-${v.id}`}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        disabled={getVariationConfig(v.id).pricing_mode !== 'fixed'}
+                                        value={variationSettingsRaw[v.id]?.fixedPrice ?? String(Number(getVariationConfig(v.id).fixed_option_price ?? 0))}
+                                        onChange={e => updateVariationRaw(v.id, { fixedPrice: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />

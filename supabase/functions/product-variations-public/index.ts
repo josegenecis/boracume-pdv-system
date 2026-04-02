@@ -32,7 +32,7 @@ const { searchParams } = new URL(req.url)
         .eq('product_id', productId),
       supabase
         .from('product_global_variation_links')
-        .select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order')
+        .select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price')
         .eq('product_id', productId)
         .order('display_order', { ascending: true })
     ])
@@ -57,7 +57,10 @@ const { searchParams } = new URL(req.url)
           max_selections: Math.max(1, maxSel),
           free_selections_limit: Number(link?.free_selections_limit) || 0,
           allow_paid_excess: !!link?.allow_paid_excess,
-          paid_max_selections: link?.paid_max_selections !== undefined && link?.paid_max_selections !== null ? Number(link.paid_max_selections) || Math.max(1, maxSel) : null
+            paid_max_selections: link?.paid_max_selections !== undefined && link?.paid_max_selections !== null ? Number(link.paid_max_selections) || Math.max(1, maxSel) : null,
+            pricing_mode: (link as any)?.pricing_mode ?? 'default',
+            price_multiplier: (link as any)?.price_multiplier ?? 1,
+            fixed_option_price: (link as any)?.fixed_option_price ?? null
         }
       })
     }

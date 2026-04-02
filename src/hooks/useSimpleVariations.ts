@@ -4,6 +4,7 @@ import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { perfStart } from '@/utils/perf';
 
 type VariationOption = { name: string; price: number };
+type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
 
 export type Variation = {
   id: string;
@@ -18,11 +19,14 @@ export type Variation = {
   free_selections_limit: number;
   allow_paid_excess: boolean;
   paid_max_selections?: number;
+  pricing_mode: VariationPricingMode;
+  price_multiplier?: number;
+  fixed_option_price?: number | null;
   options: VariationOption[];
 };
 
 const TTL_MS = 10 * 60 * 1000;
-const LS_PREFIX = 'boracume_variations_v2:';
+const LS_PREFIX = 'boracume_variations_v3:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 
@@ -74,14 +78,31 @@ function normalizeVariation(item: any): Variation | null {
   const effectiveMaxSelections = paidMaxSelections ?? maxSelections;
   const freeSelectionsLimit = Math.min(effectiveMaxSelections, Math.max(0, Number(item.free_selections_limit) || 0));
   const isActive = item.active !== false;
+  const pricingMode = ['free', 'half', 'multiplier', 'fixed'].includes(String(item.pricing_mode || '').trim())
+    ? String(item.pricing_mode || '').trim() as VariationPricingMode
+    : 'default';
+  const priceMultiplier = pricingMode === 'half'
+    ? 0.5
+    : pricingMode === 'multiplier'
+      ? Math.max(0, Number(item.price_multiplier) || 1)
+      : 1;
+  const fixedOptionPrice = pricingMode === 'fixed'
+    ? Math.max(0, Number(item.fixed_option_price) || 0)
+    : null;
   const processedOptions = parseOptions(item.options);
   const validOptions: VariationOption[] = [];
   for (const opt of processedOptions as any[]) {
     if (!opt?.name) continue;
     const optionName = String(opt.name).trim();
     if (!optionName) continue;
-    const optionPrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
-    validOptions.push({ name: optionName, price: Number.isFinite(optionPrice) ? Math.max(0, optionPrice) : 0 });
+    const optionBasePrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
+    const safeBasePrice = Number.isFinite(optionBasePrice) ? Math.max(0, optionBasePrice) : 0;
+    let adjustedPrice = safeBasePrice;
+    if (pricingMode === 'free') adjustedPrice = 0;
+    if (pricingMode === 'half') adjustedPrice = safeBasePrice * 0.5;
+    if (pricingMode === 'multiplier') adjustedPrice = safeBasePrice * priceMultiplier;
+    if (pricingMode === 'fixed') adjustedPrice = fixedOptionPrice ?? 0;
+    validOptions.push({ name: optionName, price: Number.isFinite(adjustedPrice) ? Math.max(0, adjustedPrice) : 0 });
   }
   if (validOptions.length === 0 || !isActive) return null;
   const required = Boolean(item.required ?? item.is_required ?? false);
@@ -99,6 +120,9 @@ function normalizeVariation(item: any): Variation | null {
     free_selections_limit: freeSelectionsLimit,
     allow_paid_excess: allowPaidExcess,
     paid_max_selections: paidMaxSelections,
+    pricing_mode: pricingMode,
+    price_multiplier: priceMultiplier,
+    fixed_option_price: fixedOptionPrice,
     options: validOptions
   };
 }
@@ -142,7 +166,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
       withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
-      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
+      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
     if (productError) throw productError;
@@ -169,7 +193,10 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
             free_selections_limit: (link as any).free_selections_limit ?? 0,
             allow_paid_excess: Boolean((link as any).allow_paid_excess),
             paid_max_selections: (link as any).paid_max_selections ?? null,
-            display_order: link.display_order
+            display_order: link.display_order,
+            pricing_mode: (link as any).pricing_mode ?? 'default',
+            price_multiplier: (link as any).price_multiplier ?? 1,
+            fixed_option_price: (link as any).fixed_option_price ?? null
           };
         })
         .filter(Boolean) as any[];
