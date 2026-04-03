@@ -1033,6 +1033,37 @@ const Orders = () => {
           </div>
         </div>
 
+        <div className="hidden gap-4 lg:grid lg:grid-cols-4">
+          <Card className="rounded-[28px] border border-yellow-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
+            <CardContent className="p-5">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Novos</div>
+              <div className="mt-3 text-3xl font-bold text-slate-900">{pendingOrders.length}</div>
+              <div className="mt-2 text-sm text-slate-500">Pedidos aguardando aceite ou produção</div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-[28px] border border-blue-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
+            <CardContent className="p-5">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Em preparo</div>
+              <div className="mt-3 text-3xl font-bold text-slate-900">{activeOrders.length}</div>
+              <div className="mt-2 text-sm text-slate-500">Pedidos ativos na operação da cozinha</div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-[28px] border border-purple-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
+            <CardContent className="p-5">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Em entrega</div>
+              <div className="mt-3 text-3xl font-bold text-slate-900">{inDeliveryOrders.length}</div>
+              <div className="mt-2 text-sm text-slate-500">Pedidos já despachados para a rua</div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-[28px] border border-emerald-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
+            <CardContent className="p-5">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Finalizados</div>
+              <div className="mt-3 text-3xl font-bold text-slate-900">{deliveredOrders.length}</div>
+              <div className="mt-2 text-sm text-slate-500">Histórico concluído do turno atual</div>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className="rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
@@ -1072,6 +1103,27 @@ const Orders = () => {
                   <SelectItem value="dine_in">No Local</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="mt-4 hidden items-center justify-between rounded-[22px] border border-[#003223]/8 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/65 px-4 py-3 lg:flex">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Central operacional de pedidos</div>
+                <div className="mt-1 text-xs text-slate-500">Use lista para conferência detalhada e kanban para fluxo rápido da operação.</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]"
+                  onClick={() => {
+                    setDeliveryDialogOpen(true);
+                    setDeliveryDialogTab('in_delivery');
+                  }}
+                >
+                  Entregas e despachados
+                </Button>
+                <Button className="h-10 rounded-xl bg-[#003223] px-4 text-white hover:bg-[#0a4a34]" onClick={fetchOrders}>
+                  Atualizar painel
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
