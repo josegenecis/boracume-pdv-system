@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatBRL } from '@/lib/currency';
 import { Plus, Edit, Trash2, Eye, EyeOff, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -268,7 +269,7 @@ const GlobalVariationManager: React.FC = () => {
                             <div key={index} className="flex justify-between text-sm">
                               <span>{option.name}</span>
                               <span className="text-gray-600">
-                                {option.price > 0 ? `+R$ ${option.price.toFixed(2)}` : 'Grátis'}
+                                {option.price > 0 ? `+${formatBRL(option.price)}` : 'Grátis'}
                               </span>
                             </div>
                           ))}

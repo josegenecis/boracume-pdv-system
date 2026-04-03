@@ -1,11 +1,13 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
+import { formatBRL } from '@/lib/currency';
 import { VariationOptionItem } from './VariationOptionItem';
 import { CheckCircle2 } from 'lucide-react';
 
 interface VariationOption {
   name: string;
   price: number;
+  recommended?: boolean;
 }
 
 interface ProductVariation {
@@ -63,7 +65,7 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
         : variation.pricing_mode === 'multiplier'
           ? `${Number(variation.price_multiplier || 1).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}x sobre o preço base`
           : variation.pricing_mode === 'fixed'
-            ? `R$ ${Number(variation.fixed_option_price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por item`
+            ? `${formatBRL(variation.fixed_option_price || 0)} por item`
             : '';
 
   return (

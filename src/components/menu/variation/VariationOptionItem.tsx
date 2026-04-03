@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
+import { formatBRL } from '@/lib/currency';
 import { Minus, Plus } from 'lucide-react';
 
 interface VariationOption {
@@ -30,8 +31,8 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   const isSelected = selectedCount > 0;
   const priceLabel = option.price > 0
     ? freeSelectionsLimit > 0
-      ? `+ R$ ${option.price.toFixed(2)} por adicional`
-      : `+ R$ ${option.price.toFixed(2)}`
+      ? `+ ${formatBRL(option.price)} por adicional`
+      : `+ ${formatBRL(option.price)}`
     : '';
   return (
     <div className={`flex items-center justify-between gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>

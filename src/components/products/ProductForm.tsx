@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatBRL } from '@/lib/currency';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, Eye, EyeOff } from 'lucide-react';
@@ -2167,13 +2168,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                 <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
                                                   <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Base do grupo</div>
                                                   <div className="mt-1 text-sm font-bold text-[#003223]">
-                                                    R$ {basePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    {formatBRL(basePrice)}
                                                   </div>
                                                 </div>
                                                 <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
                                                   <div className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Valor atual</div>
                                                   <div className="mt-1 text-sm font-bold text-[#FF6400]">
-                                                    R$ {effectivePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    {formatBRL(effectivePrice)}
                                                   </div>
                                                 </div>
                                                 <Button

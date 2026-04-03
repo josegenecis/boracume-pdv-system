@@ -10,6 +10,7 @@ import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, Refres
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { formatBRL } from '@/lib/currency';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
@@ -1189,15 +1190,7 @@ const PDV = () => {
   };
 
   const formatCurrency = (value: number) => {
-    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
-    try {
-      return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }).format(value);
-    } catch (e) {
-      return 'R$ 0,00';
-    }
+    return formatBRL(value);
   };
 
   if (loading) {

@@ -18,6 +18,7 @@ import GlobalVariationManager from '@/components/products/GlobalVariationManager
 import CategoryManager from '@/components/products/CategoryManager';
 import { useSearchParams } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface ProductItem {
@@ -531,10 +532,7 @@ const Products = () => {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
+    return formatBRL(value);
   };
 
   const parseInlinePrice = (raw: string) => {

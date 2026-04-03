@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 interface Product {
@@ -87,15 +88,15 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             ) : product.original_price && product.discount_percentage ? (
               <div className="space-y-1">
                 <div className="flex items-end gap-2">
-                  <span className="font-bold" style={{ color: 'var(--menu-secondary, #063D2E)' }}>R$ {product.price.toFixed(2)}</span>
-                  <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>R$ {Number(product.original_price).toFixed(2)}</span>
+                  <span className="font-bold" style={{ color: 'var(--menu-secondary, #063D2E)' }}>{formatBRL(product.price)}</span>
+                  <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>{formatBRL(product.original_price)}</span>
                 </div>
                 <div className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border" style={{ color: 'var(--menu-primary, #85C441)', backgroundColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 20%, transparent)' }}>
                   -{Math.round(Number(product.discount_percentage))}%
                 </div>
               </div>
             ) : (
-              <span className="font-bold" style={{ color: 'var(--menu-secondary, #063D2E)' }}>R$ {product.price.toFixed(2)}</span>
+              <span className="font-bold" style={{ color: 'var(--menu-secondary, #063D2E)' }}>{formatBRL(product.price)}</span>
             )}
           </div>
         </div>
@@ -127,8 +128,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
           ) : product.original_price && product.discount_percentage ? (
             <div className="space-y-1">
               <div className="flex items-end gap-2">
-                <span className="font-semibold text-base" style={{ color: 'var(--menu-secondary, #063D2E)' }}>R$ {product.price.toFixed(2)}</span>
-                <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>R$ {Number(product.original_price).toFixed(2)}</span>
+                <span className="font-semibold text-base" style={{ color: 'var(--menu-secondary, #063D2E)' }}>{formatBRL(product.price)}</span>
+                <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>{formatBRL(product.original_price)}</span>
               </div>
               <div className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border" style={{ color: 'var(--menu-primary, #85C441)', backgroundColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 20%, transparent)' }}>
                 -{Math.round(Number(product.discount_percentage))}%
@@ -136,7 +137,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             </div>
           ) : (
             <span className="font-semibold text-base" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
-              R$ {product.price.toFixed(2)}
+              {formatBRL(product.price)}
             </span>
           )}
         </div>
