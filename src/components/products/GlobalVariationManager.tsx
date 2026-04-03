@@ -330,9 +330,13 @@ const GlobalVariationManager: React.FC = () => {
                           <Button type="button" variant="outline" size="sm" className="rounded-xl border-[#8CC850]/30 bg-white/85 text-[#003223] hover:bg-[#8CC850]/15" onClick={(event) => { event.preventDefault(); event.stopPropagation(); handleDuplicateVariation(variation); }}>
                             <Copy size={14} className="mr-2" /> Duplicar grupo
                           </Button>
-                          <Button type="button" variant="outline" size="icon" className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50" onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleVariationActive(variation); }}>
-                            {variation.active !== false ? <Eye size={16} /> : <EyeOff size={16} />}
-                          </Button>
+                          <button
+                            type="button"
+                            className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${variation.active !== false ? 'text-[#16a34a] hover:bg-[#16a34a]/10' : 'text-slate-400 hover:bg-slate-200/70'}`}
+                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleVariationActive(variation); }}
+                          >
+                            {variation.active !== false ? <Eye size={18} /> : <EyeOff size={18} />}
+                          </button>
                           <Button type="button" variant="outline" size="sm" className="rounded-xl border-[#FF6400]/15 bg-white/85 text-[#FF6400] hover:bg-[#F5EBE1]" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setEditingVariation(variation); setShowForm(true); }}>
                             <Edit size={14} className="mr-2" /> Editar
                           </Button>
