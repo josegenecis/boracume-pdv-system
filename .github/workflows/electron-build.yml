@@ -19,7 +19,12 @@ jobs:
           node-version: '20.x'
           cache: 'npm'
       - run: npm ci
-      - run: npm run build
+      - run: npm run build:desktop
+      - name: Sync web dist into Electron package
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force electron/dist -ErrorAction SilentlyContinue
+          Copy-Item -Recurse -Force dist electron/dist
       - name: Install Electron deps
         working-directory: electron
         run: |
@@ -60,7 +65,12 @@ jobs:
           node-version: '20.x'
           cache: 'npm'
       - run: npm ci
-      - run: npm run build
+      - run: npm run build:desktop
+      - name: Sync web dist into Electron package
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force electron/dist -ErrorAction SilentlyContinue
+          Copy-Item -Recurse -Force dist electron/dist
       - name: Install Electron deps
         working-directory: electron
         run: |
