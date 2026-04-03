@@ -13,49 +13,57 @@ AS $$
   FROM prepared;
 $$;
 
+CREATE OR REPLACE FUNCTION public.normalize_complement_options_json(input_value jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  options_array jsonb;
+BEGIN
+  IF input_value IS NULL THEN
+    RETURN '[]'::jsonb;
+  END IF;
+
+  IF jsonb_typeof(input_value) = 'array' THEN
+    options_array := input_value;
+  ELSIF jsonb_typeof(input_value) = 'string' THEN
+    BEGIN
+      options_array := (input_value #>> '{}')::jsonb;
+    EXCEPTION WHEN others THEN
+      options_array := '[]'::jsonb;
+    END;
+  ELSE
+    options_array := '[]'::jsonb;
+  END IF;
+
+  IF jsonb_typeof(options_array) <> 'array' THEN
+    RETURN '[]'::jsonb;
+  END IF;
+
+  RETURN COALESCE((
+    SELECT jsonb_agg(
+      CASE
+        WHEN jsonb_typeof(option_item) = 'object' THEN
+          jsonb_set(
+            option_item,
+            '{name}',
+            to_jsonb(public.normalize_complement_option_name(option_item->>'name')),
+            true
+          )
+        ELSE option_item
+      END
+    )
+    FROM jsonb_array_elements(options_array) AS option_item
+  ), '[]'::jsonb);
+END;
+$$;
+
 UPDATE public.global_variations gv
-SET options = COALESCE((
-  SELECT jsonb_agg(
-    CASE
-      WHEN jsonb_typeof(option_item) = 'object' THEN
-        jsonb_set(
-          option_item,
-          '{name}',
-          to_jsonb(public.normalize_complement_option_name(option_item->>'name')),
-          true
-        )
-      ELSE option_item
-    END
-  )
-  FROM jsonb_array_elements(
-    CASE
-      WHEN jsonb_typeof(gv.options) = 'array' THEN gv.options
-      ELSE '[]'::jsonb
-    END
-  ) AS option_item
-), '[]'::jsonb);
+SET options = public.normalize_complement_options_json(gv.options);
 
 UPDATE public.product_variations pv
-SET options = COALESCE((
-  SELECT jsonb_agg(
-    CASE
-      WHEN jsonb_typeof(option_item) = 'object' THEN
-        jsonb_set(
-          option_item,
-          '{name}',
-          to_jsonb(public.normalize_complement_option_name(option_item->>'name')),
-          true
-        )
-      ELSE option_item
-    END
-  )
-  FROM jsonb_array_elements(
-    CASE
-      WHEN jsonb_typeof(pv.options) = 'array' THEN pv.options
-      ELSE '[]'::jsonb
-    END
-  ) AS option_item
-), '[]'::jsonb);
+SET options = public.normalize_complement_options_json(pv.options);
 
 UPDATE public.product_global_variation_links link
 SET option_price_overrides = COALESCE((
