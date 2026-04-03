@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatBRL } from '@/lib/currency';
+import { normalizeComplementOptionName } from '@/lib/text';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, Eye, EyeOff } from 'lucide-react';
@@ -272,7 +273,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           const normalized = {
             ...normalizeOptionOverride(currentOverride),
             price: Math.max(0, parseDecimalField(value?.price ?? '', Number(currentOverride?.price ?? 0))),
-            label: String(value?.label || '').trim(),
+            label: normalizeComplementOptionName(String(value?.label || '')),
             hidden: Boolean(value?.hidden),
             recommended: Boolean(value?.recommended),
             ...(String(value?.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(value.order) || 0)) } : {})
@@ -456,7 +457,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const normalized: VariationOptionOverride = {
       ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
       price: Math.max(0, parseDecimalField(currentRaw.price, fallbackPrice)),
-      label: String(currentRaw.label || '').trim(),
+      label: normalizeComplementOptionName(String(currentRaw.label || '')),
       hidden: Boolean(currentRaw.hidden),
       recommended: Boolean(currentRaw.recommended),
       ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})

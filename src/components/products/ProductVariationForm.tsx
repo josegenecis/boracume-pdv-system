@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { normalizeComplementOptionName } from '@/lib/text';
 import { Trash2, Plus, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyInput } from '@/components/ui/currency-input';
@@ -108,7 +109,12 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
       return;
     }
 
-    const validOptions = formData.options.filter(option => option.name.trim());
+    const validOptions = formData.options
+      .filter(option => option.name.trim())
+      .map(option => ({
+        ...option,
+        name: normalizeComplementOptionName(option.name)
+      }));
     if (validOptions.length === 0) {
       toast({
         title: "Erro",

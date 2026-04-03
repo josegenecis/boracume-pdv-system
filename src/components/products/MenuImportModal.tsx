@@ -9,6 +9,7 @@ import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeComplementOptionName } from '@/lib/text';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import Tesseract from 'tesseract.js';
 
@@ -454,7 +455,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
         const normalized = (arr || [])
           .map((o: any) => ({
-            name: String(o?.name || '').trim(),
+            name: normalizeComplementOptionName(String(o?.name || '')),
             price: Number(o?.price) >= 0 ? Number(o?.price) : 0
           }))
           .filter((o: any) => o.name);
