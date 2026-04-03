@@ -3,8 +3,8 @@ name: electron-build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
   build-windows:
@@ -32,23 +32,26 @@ jobs:
         run: |
           npm run build-win
       - name: Create/Update Release (Windows)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1
         with:
-          tag: latest
-          name: Latest Desktop Builds
+          tag: ${{ github.ref_name }}
+          name: BoraCume Desktop ${{ github.ref_name }}
           allowUpdates: true
-          artifacts: "dist-electron/**"
+          artifacts: "electron/dist-electron/*.exe,electron/dist-electron/*.blockmap,electron/dist-electron/latest.yml"
+          makeLatest: true
           artifactErrorsFailBuild: true
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-windows
-          path: dist-electron/**
+          path: electron/dist-electron/**
 
   build-macos:
     permissions:
       contents: write
     runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,10 +78,10 @@ jobs:
           tag: latest
           name: Latest Desktop Builds
           allowUpdates: true
-          artifacts: "dist-electron/**"
+          artifacts: "electron/dist-electron/**"
           artifactErrorsFailBuild: true
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-macos
-          path: dist-electron/**
+          path: electron/dist-electron/**
