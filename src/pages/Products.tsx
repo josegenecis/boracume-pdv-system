@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload, Eye, EyeOff } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -631,6 +631,77 @@ const Products = () => {
     </div>
   );
 
+  const renderMobileProductCard = (product: ProductItem) => (
+    <Card key={product.id} className={`overflow-hidden rounded-[28px] border bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.22)] ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'border-red-200' : 'border-[#FF6400]/12'}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <button type="button" className="shrink-0" onClick={() => handleEditProduct(product)}>
+            {normalizeImageUrl(product.image_url) ? (
+              <div className="h-20 w-20 overflow-hidden rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]">
+                <img
+                  src={normalizeImageUrl(product.image_url)}
+                  alt={product.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = FALLBACK_PIXEL;
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]">
+                <Package className="h-7 w-7 text-[#FF6400]/55" />
+              </div>
+            )}
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <button type="button" className="min-w-0 text-left" onClick={() => handleEditProduct(product)}>
+                <div className="truncate text-base font-bold text-slate-900">{product.name}</div>
+                <div className="mt-1 text-sm text-slate-500">{product.category || 'Sem categoria'}</div>
+              </button>
+              <Badge variant={product.available ? "default" : "secondary"} className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${product.available ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : 'bg-slate-200 text-slate-600'}`}>
+                {product.available ? 'Ativo' : 'Inativo'}
+              </Badge>
+            </div>
+
+            {product.description && (
+              <div className="mt-2 line-clamp-2 text-sm text-slate-500">{product.description}</div>
+            )}
+
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div onClick={(e) => e.stopPropagation()}>
+                {renderInlinePriceEditor(product)}
+              </div>
+              {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
+                <span className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600">
+                  Estoque baixo
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => toggleProductAvailability(product)}>
+            {product.available ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </Button>
+          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleEditProduct(product)}>
+            <Edit className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center justify-center rounded-2xl border border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]">
+            <ProductVariationsButton productId={product.id} compact />
+          </div>
+          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-red-200 bg-white text-red-500 hover:bg-red-50" onClick={() => handleDeleteProduct(product.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   const handleExportCSV = () => {
     if (products.length === 0) {
       toast({ title: 'Aviso', description: 'Não há produtos para exportar.' });
@@ -780,12 +851,15 @@ const Products = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center space-x-2">
           <Package className="h-6 w-6 text-orange-500" />
-          <h1 className="text-2xl font-bold">Produtos</h1>
+          <div>
+            <h1 className="text-2xl font-bold">Produtos</h1>
+            <p className="mt-1 text-sm text-slate-500 md:hidden">Busque, organize e edite seu cardápio com cara de app.</p>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
           <Button variant="outline" onClick={handleExportCSV} className="hidden h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex">
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
@@ -845,6 +919,19 @@ const Products = () => {
         </TabsList>
         
         <TabsContent value="products" className="space-y-6">
+          <div className="grid gap-3 md:hidden">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[24px] border border-[#FF6400]/12 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produtos</div>
+                <div className="mt-2 text-2xl font-bold text-slate-900">{products.length}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Categorias</div>
+                <div className="mt-2 text-2xl font-bold text-slate-900">{categories.length}</div>
+              </div>
+            </div>
+          </div>
+
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-col gap-3 md:flex-row">
@@ -906,6 +993,35 @@ const Products = () => {
             </CardContent>
           </Card>
 
+          <div className="grid gap-2 md:hidden">
+            <div className="flex gap-2">
+              <Button
+                className="h-11 flex-1 rounded-2xl bg-[#8CC850] text-white hover:bg-[#79b541]"
+                onClick={() => {
+                  setEditingProduct(null);
+                  setShowForm(true);
+                  setIsSheetOpen(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Novo produto
+              </Button>
+              <Button variant="outline" className="h-11 rounded-2xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
+                <Import className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setSelectedCategory('all')}>
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                Todas categorias
+              </Button>
+              <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={handleExportCSV}>
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+              </Button>
+            </div>
+          </div>
+
           {filteredProducts.length === 0 ? (
              <div className="text-center py-10 bg-white rounded-lg border">
                 <Package className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -914,6 +1030,10 @@ const Products = () => {
              </div>
           ) : (
             <div className="space-y-4">
+              <div className="space-y-3 md:hidden">
+                {filteredProducts.map(renderMobileProductCard)}
+              </div>
+              <div className="hidden md:block">
               <DragDropContext onDragEnd={onProductsDragEnd}>
                 {categories.map(category => {
                   const categoryProducts = filteredProducts.filter(p => p.category_id === category.id);
@@ -1222,6 +1342,7 @@ const Products = () => {
                    </div>
                 )}
               </DragDropContext>
+              </div>
             </div>
           )}
         </TabsContent>
@@ -1236,7 +1357,7 @@ const Products = () => {
       </Tabs>
 
       <Sheet open={isSheetOpen} onOpenChange={(o) => { setIsSheetOpen(o); if (!o) { setShowForm(false); setEditingProduct(null) } }}>
-        <SheetContent side="right" className="w-full sm:w-[58vw] sm:max-w-none lg:w-[900px] xl:w-[1020px] 2xl:w-[1100px] border-l border-[#FF6400]/10 bg-gradient-to-b from-[#FFF8F2] via-white to-[#F5EBE1]/75 p-0">
+        <SheetContent side={isMobile ? "bottom" : "right"} className={`${isMobile ? 'h-[94vh] rounded-t-[32px] border-x-0 border-b-0 border-t border-[#FF6400]/10' : 'w-full sm:w-[58vw] sm:max-w-none lg:w-[900px] xl:w-[1020px] 2xl:w-[1100px] border-l border-[#FF6400]/10'} bg-gradient-to-b from-[#FFF8F2] via-white to-[#F5EBE1]/75 p-0`}>
           {showForm && (
             <div className="overflow-y-auto h-full pb-6">
               <ProductForm
