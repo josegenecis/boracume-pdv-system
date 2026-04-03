@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { formatBRL } from '@/lib/currency';
-import { Plus, Edit, Trash2, Eye, EyeOff, Copy } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Copy, Link2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,9 +33,14 @@ interface GlobalVariation {
 
 const GlobalVariationManager: React.FC = () => {
   const [variations, setVariations] = useState<GlobalVariation[]>([]);
+  const [products, setProducts] = useState<Array<{ id: string; name: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingVariation, setEditingVariation] = useState<GlobalVariation | undefined>();
   const [loading, setLoading] = useState(true);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assigningVariation, setAssigningVariation] = useState<GlobalVariation | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [assigningProducts, setAssigningProducts] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const confirm = useConfirmDialog();
@@ -40,6 +48,7 @@ const GlobalVariationManager: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchVariations();
+      fetchProducts();
     }
   }, [user]);
 
@@ -60,6 +69,20 @@ const GlobalVariationManager: React.FC = () => {
       toast({ title: 'Erro', description: 'Erro ao carregar complementos.', variant: 'destructive' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name')
+        .eq('user_id', user?.id)
+        .order('name');
+      if (error) throw error;
+      setProducts(data || []);
+    } catch {
+      toast({ title: 'Erro', description: 'Erro ao carregar produtos para atribuição.', variant: 'destructive' });
     }
   };
 
@@ -200,6 +223,42 @@ const GlobalVariationManager: React.FC = () => {
     }
   };
 
+  const openAssignDialog = (variation: GlobalVariation) => {
+    setAssigningVariation(variation);
+    setSelectedProductIds([]);
+    setAssignDialogOpen(true);
+  };
+
+  const handleAssignProducts = async () => {
+    if (!assigningVariation?.id || selectedProductIds.length === 0) {
+      setAssignDialogOpen(false);
+      return;
+    }
+
+    try {
+      setAssigningProducts(true);
+      const payload = selectedProductIds.map((productId) => ({
+        product_id: productId,
+        global_variation_id: assigningVariation.id
+      }));
+
+      const { error } = await supabase
+        .from('product_global_variation_links')
+        .upsert(payload as any, { onConflict: 'product_id,global_variation_id', ignoreDuplicates: true });
+
+      if (error) throw error;
+
+      toast({ title: 'Sucesso', description: 'Grupo atribuído aos produtos selecionados.' });
+      setAssignDialogOpen(false);
+      setAssigningVariation(null);
+      setSelectedProductIds([]);
+    } catch {
+      toast({ title: 'Erro', description: 'Erro ao atribuir grupo aos produtos.', variant: 'destructive' });
+    } finally {
+      setAssigningProducts(false);
+    }
+  };
+
   if (!user) {
     return (
       <div className="text-center py-8 text-gray-500">É necessário estar autenticado para gerenciar complementos.</div>
@@ -247,22 +306,41 @@ const GlobalVariationManager: React.FC = () => {
                 <AccordionItem key={variation.id} value={String(variation.id)}>
                   <Card className="overflow-hidden rounded-[26px] border border-[#FF6400]/12 bg-gradient-to-br from-white via-[#FFF8F2]/45 to-[#F5EBE1]/45 shadow-[0_20px_50px_-35px_rgba(0,50,35,0.18)] backdrop-blur-md">
                     <CardContent className="p-0">
-                      <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                        <div className="flex-1 text-left">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-medium text-slate-900">{variation.name}</div>
-                            <Badge variant="secondary" className={variation.active !== false ? 'border border-[#8CC850]/40 bg-[#8CC850]/15 text-[#003223]' : 'bg-slate-100 text-slate-500 border border-slate-200'}>
-                              {variation.active !== false ? 'Ativo' : 'Oculto'}
-                            </Badge>
-                            {variation.required && (
-                              <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">Obrigatório</Badge>
+                      <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:justify-between">
+                        <AccordionTrigger className="flex-1 px-0 py-0 hover:no-underline">
+                          <div className="flex-1 text-left">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="font-medium text-slate-900">{variation.name}</div>
+                              <Badge variant="secondary" className={variation.active !== false ? 'border border-[#8CC850]/40 bg-[#8CC850]/15 text-[#003223]' : 'bg-slate-100 text-slate-500 border border-slate-200'}>
+                                {variation.active !== false ? 'Ativo' : 'Oculto'}
+                              </Badge>
+                              {variation.required && (
+                                <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">Obrigatório</Badge>
+                              )}
+                            </div>
+                            {variation.description && (
+                              <div className="mt-1 text-xs text-muted-foreground">{variation.description}</div>
                             )}
                           </div>
-                          {variation.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{variation.description}</div>
-                          )}
+                        </AccordionTrigger>
+                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                          <Button type="button" variant="outline" size="sm" className="rounded-xl border-[#003223]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAssignDialog(variation); }}>
+                            <Link2 size={14} className="mr-2" /> Atribuir produto
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" className="rounded-xl border-[#8CC850]/30 bg-white/85 text-[#003223] hover:bg-[#8CC850]/15" onClick={(event) => { event.preventDefault(); event.stopPropagation(); handleDuplicateVariation(variation); }}>
+                            <Copy size={14} className="mr-2" /> Duplicar grupo
+                          </Button>
+                          <Button type="button" variant="outline" size="icon" className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50" onClick={(event) => { event.preventDefault(); event.stopPropagation(); toggleVariationActive(variation); }}>
+                            {variation.active !== false ? <Eye size={16} /> : <EyeOff size={16} />}
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" className="rounded-xl border-[#FF6400]/15 bg-white/85 text-[#FF6400] hover:bg-[#F5EBE1]" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setEditingVariation(variation); setShowForm(true); }}>
+                            <Edit size={14} className="mr-2" /> Editar
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" className="rounded-xl border-red-200 bg-white/85 text-red-500 hover:bg-red-50" onClick={(event) => { event.preventDefault(); event.stopPropagation(); handleDeleteVariation(variation.id!); }}>
+                            <Trash2 size={14} className="mr-2" /> Excluir
+                          </Button>
                         </div>
-                      </AccordionTrigger>
+                      </div>
                       <AccordionContent className="px-4 pb-4">
                         <div className="space-y-2">
                           {variation.options?.map((option, index) => (
@@ -274,20 +352,6 @@ const GlobalVariationManager: React.FC = () => {
                             </div>
                           ))}
                         </div>
-                        <div className="flex gap-2 justify-end mt-4">
-                          <Button variant="outline" size="sm" className="rounded-xl border-[#8CC850]/30 bg-white/85 text-[#003223] hover:bg-[#8CC850]/15" onClick={() => handleDuplicateVariation(variation)}>
-                            <Copy size={14} className="mr-2" /> Duplicar grupo
-                          </Button>
-                          <Button variant="outline" size="icon" className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50" onClick={() => toggleVariationActive(variation)}>
-                            {variation.active !== false ? <Eye size={16} /> : <EyeOff size={16} />}
-                          </Button>
-                          <Button variant="outline" size="sm" className="rounded-xl border-[#FF6400]/15 bg-white/85 text-[#FF6400] hover:bg-[#F5EBE1]" onClick={() => { setEditingVariation(variation); setShowForm(true); }}>
-                            <Edit size={14} className="mr-2" /> Editar
-                          </Button>
-                          <Button variant="outline" size="sm" className="rounded-xl border-red-200 bg-white/85 text-red-500 hover:bg-red-50" onClick={() => handleDeleteVariation(variation.id!)}>
-                            <Trash2 size={14} className="mr-2" /> Excluir
-                          </Button>
-                        </div>
                       </AccordionContent>
                     </CardContent>
                   </Card>
@@ -297,6 +361,42 @@ const GlobalVariationManager: React.FC = () => {
           )}
         </div>
       )}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-2xl rounded-[28px] border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/65 shadow-[0_28px_70px_-35px_rgba(0,50,35,0.22)]">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900">Atribuir grupo a produtos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-[#003223]/70">
+              {assigningVariation ? `Selecione os produtos que devem receber o grupo ${assigningVariation.name}.` : 'Selecione os produtos.'}
+            </div>
+            <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-2 sm:grid-cols-2">
+              {products.map((product) => (
+                <div key={product.id} className="flex items-start space-x-3 rounded-2xl border border-[#FF6400]/10 bg-white/90 p-4 shadow-sm">
+                  <Checkbox
+                    id={`assign-product-${product.id}`}
+                    checked={selectedProductIds.includes(product.id)}
+                    onCheckedChange={(checked) => {
+                      setSelectedProductIds((prev) => checked ? [...prev, product.id] : prev.filter((id) => id !== product.id));
+                    }}
+                  />
+                  <Label htmlFor={`assign-product-${product.id}`} className="cursor-pointer font-medium text-slate-900">
+                    {product.name}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" className="h-9 rounded-xl border-[#003223]/12 bg-white/85 px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setAssignDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" className="h-9 rounded-xl bg-[#8CC850] px-4 text-[#003223] hover:bg-[#79b541]" disabled={assigningProducts || selectedProductIds.length === 0} onClick={handleAssignProducts}>
+              {assigningProducts ? 'Atribuindo...' : 'Atribuir grupo'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
