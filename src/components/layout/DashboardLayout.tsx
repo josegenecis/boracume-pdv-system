@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import FixedHeader from './FixedHeader';
 import CollapsibleSidebar from './CollapsibleSidebar';
+import MobileBottomNav from './MobileBottomNav';
 import SoundPermissionHelper from '@/components/notifications/SoundPermissionHelper';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -82,7 +83,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-orange-50 w-full overflow-x-hidden relative">
-      {/* Onboarding Overlay */}
       {showWizard && (
         <OnboardingWizard onComplete={handleOnboardingComplete} />
       )}
@@ -108,13 +108,14 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
               : 'ml-16'
           }
         `}>
-          <div className="h-[calc(100vh-64px)] w-full">
-            <div className="w-full max-w-full h-full mobile-safe-x px-4 py-4 sm:px-6 sm:py-6">
+          <div className={`${isMobile ? 'min-h-[calc(100vh-64px)]' : 'h-[calc(100vh-64px)]'} w-full`}>
+            <div className={`mobile-safe-x h-full w-full max-w-full px-4 py-4 sm:px-6 sm:py-6 ${isMobile ? 'pb-28' : ''}`}>
               {children}
             </div>
           </div>
         </main>
       </div>
+      <MobileBottomNav />
       <SoundPermissionHelper />
       <SupportChatProvider>
         <SupportFab />

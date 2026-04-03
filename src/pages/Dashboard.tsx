@@ -5,10 +5,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { CreditCard, Users, Package, TrendingUp, DollarSign, Sparkles, Clock3, ClipboardList } from 'lucide-react';
+import { CreditCard, Users, Package, TrendingUp, DollarSign, Sparkles, Clock3, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardStats {
   todaySales: number;
@@ -70,6 +71,7 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     console.log('🔍 [DASHBOARD] useEffect executado, user:', user?.id);
@@ -342,6 +344,51 @@ const Dashboard = () => {
         </div>
       </div>
 
+      <div className="grid gap-3 md:hidden">
+        <div className="grid grid-cols-2 gap-3">
+          <button type="button" onClick={() => navigate('/pedidos')} className="rounded-[26px] border border-[#FF6400]/12 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+            <div className="flex items-center justify-between">
+              <div className="rounded-2xl bg-[#FF6400]/10 p-2 text-[#FF6400]">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="mt-4 text-sm font-semibold text-slate-900">Pedidos do dia</div>
+            <div className="mt-1 text-xs text-slate-500">acompanhe novos e em preparo</div>
+          </button>
+          <button type="button" onClick={() => navigate('/produtos')} className="rounded-[26px] border border-[#8CC850]/20 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+            <div className="flex items-center justify-between">
+              <div className="rounded-2xl bg-[#8CC850]/15 p-2 text-[#003223]">
+                <ShoppingBag className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="mt-4 text-sm font-semibold text-slate-900">Cardápio</div>
+            <div className="mt-1 text-xs text-slate-500">produtos, categorias e complementos</div>
+          </button>
+          <button type="button" onClick={() => navigate('/configuracoes?tab=whatsapp')} className="rounded-[26px] border border-[#003223]/10 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+            <div className="flex items-center justify-between">
+              <div className="rounded-2xl bg-[#003223]/8 p-2 text-[#003223]">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="mt-4 text-sm font-semibold text-slate-900">WhatsApp</div>
+            <div className="mt-1 text-xs text-slate-500">conexão, QR code e automações</div>
+          </button>
+          <button type="button" onClick={() => navigate('/configuracoes')} className="rounded-[26px] border border-slate-200 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+            <div className="flex items-center justify-between">
+              <div className="rounded-2xl bg-slate-100 p-2 text-slate-700">
+                <Settings className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="mt-4 text-sm font-semibold text-slate-900">Mais ações</div>
+            <div className="mt-1 text-xs text-slate-500">configurações e integrações</div>
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard 
           title="Faturamento Hoje" 
@@ -411,7 +458,33 @@ const Dashboard = () => {
         </div>
       </div>
       
-      <div className="w-full overflow-x-auto rounded-3xl border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+      <div className="grid gap-3 md:hidden">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Pedidos recentes</h2>
+          <button type="button" className="text-sm font-semibold text-[#FF6400]" onClick={() => navigate('/pedidos')}>Ver tudo</button>
+        </div>
+        <div className="space-y-3">
+          {recentOrders.slice(0, 4).map((order) => (
+            <button key={order.id} type="button" onClick={() => navigate('/pedidos')} className="w-full rounded-[26px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.99]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">#{order.id.slice(0, 8)}</div>
+                  <div className="mt-1 text-sm text-slate-600">{order.customer_name || 'Cliente não informado'}</div>
+                </div>
+                <div className="rounded-full bg-[#F5EBE1] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#003223]">
+                  {order.status}
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <div className="text-slate-500">{new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                <div className="font-bold text-slate-900">{formatCurrency(order.total)}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="hidden w-full overflow-x-auto rounded-3xl border border-slate-200/80 bg-white/95 p-4 shadow-sm md:block">
         <h2 className="mb-4 text-xl font-semibold text-slate-900">Pedidos Recentes</h2>
         <RecentOrdersTable orders={recentOrders} />
       </div>

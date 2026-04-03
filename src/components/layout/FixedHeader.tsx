@@ -10,6 +10,7 @@ import { useCashRegister } from '@/contexts/CashRegisterContext';
 import { useState, useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import Logo from '@/components/Logo';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import {
@@ -25,6 +26,7 @@ const FixedHeader = () => {
   const { signOut, user } = useAuth();
   const { isMobile, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Custom hook ou lógica para pegar o estado do caixa globalmente (se não existir um contexto, podemos usar fetch direto, mas o ideal é mover a lógica do PDV para um context)
   // Como não sabemos se existe um CashRegisterContext, vamos usar um estado local com fetch inicial por enquanto para o header.
@@ -45,9 +47,18 @@ const FixedHeader = () => {
     navigate('/login');
   };
 
+  const mobileTitle = (() => {
+    if (location.pathname.startsWith('/dashboard')) return 'Início';
+    if (location.pathname.startsWith('/pedidos')) return 'Pedidos';
+    if (location.pathname.startsWith('/produtos')) return 'Cardápio';
+    if (location.pathname.startsWith('/marketing')) return 'Clientes';
+    if (location.pathname.startsWith('/configuracoes')) return 'Mais';
+    return 'BoraCumê';
+  })();
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/70 shadow-sm">
-      <div className="flex items-center justify-between px-3 py-3 sm:px-6">
+      <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
             variant="ghost" 
@@ -57,11 +68,17 @@ const FixedHeader = () => {
           >
             <Menu size={18} />
           </Button>
-          <Logo size="md" />
+          {isMobile ? (
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400]">BoraCumê</div>
+              <div className="truncate text-base font-bold text-[#003223]">{mobileTitle}</div>
+            </div>
+          ) : (
+            <Logo size="md" />
+          )}
         </div>
 
         <div className="hidden md:flex flex-1 px-4 justify-center items-center gap-4">
-          {/* Espaço reservado para o título da página ou ações globais no futuro */}
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <div className="hidden lg:block">
@@ -75,8 +92,8 @@ const FixedHeader = () => {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]">
-                Gerencial
+              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#FF6400]/15 bg-white/85 font-semibold text-[#003223] hover:bg-[#F5EBE1] ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
+                {isMobile ? <User size={18} /> : 'Gerencial'}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
