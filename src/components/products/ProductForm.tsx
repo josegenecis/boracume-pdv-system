@@ -126,6 +126,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [categories, setCategories] = useState([]);
   const [globalVariations, setGlobalVariations] = useState([]);
   const [selectedVariations, setSelectedVariations] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<Array<{ id: string; name: string; category?: string | null }>>([]);
   
   // Price Variants State
   const [priceVariants, setPriceVariants] = useState<ProductVariant[]>([]);
@@ -151,6 +152,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
+  const [applyVariationDialogOpen, setApplyVariationDialogOpen] = useState(false);
+  const [applyVariationId, setApplyVariationId] = useState<string | null>(null);
+  const [applyTargetProductIds, setApplyTargetProductIds] = useState<string[]>([]);
+  const [applyingVariation, setApplyingVariation] = useState(false);
   const variationSaveTimerRef = useRef<number | null>(null);
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
@@ -883,6 +888,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     if (user?.id) {
       loadCategories();
       loadGlobalVariations();
+      loadAvailableProducts();
       if (product?.id) {
         loadProductVariations(product.id);
         loadPriceVariants(product.id);
@@ -929,6 +935,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
     } catch (error) {
       console.error('Erro ao carregar variações globais:', error);
+    }
+  };
+
+  const loadAvailableProducts = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, category')
+        .eq('user_id', user.id)
+        .order('name');
+
+      if (error) throw error;
+      setAvailableProducts((data || []).filter((item: any) => item?.id));
+    } catch (error) {
+      console.error('Erro ao carregar produtos para replicar complementos:', error);
     }
   };
 
@@ -1314,6 +1337,118 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     setSelectedVariations(items);
   };
 
+  const buildVariationLinkPayload = (
+    productId: string,
+    variationId: string,
+    idx: number,
+    settingsSource: Record<string, VariationConfig>
+  ) => {
+    const s = settingsSource?.[variationId] || getVariationDefaults();
+    const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
+    const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
+    const allowPaidExcess = Boolean(s.allow_paid_excess);
+    const paidMax = allowPaidExcess ? Math.max(maxSel, Math.floor(Number(s.paid_max_selections) || maxSel)) : null;
+    const pricingMode = getDefaultPricingMode(s.pricing_mode);
+    const priceMultiplier = pricingMode === 'half'
+      ? 0.5
+      : pricingMode === 'multiplier'
+        ? Math.max(0, Number(s.price_multiplier) || 1)
+        : 1;
+    const fixedOptionPrice = pricingMode === 'fixed'
+      ? Math.max(0, Number(s.fixed_option_price) || 0)
+      : null;
+    const optionPriceOverrides = Object.keys(s.option_price_overrides || {}).length > 0 ? s.option_price_overrides : null;
+
+    return {
+      product_id: productId,
+      global_variation_id: variationId,
+      required: Boolean(s.required),
+      min_selections: minSel,
+      max_selections: Math.max(maxSel, minSel),
+      free_selections_limit: Math.max(0, Math.floor(Number(s.free_selections_limit) || 0)),
+      allow_paid_excess: allowPaidExcess,
+      paid_max_selections: paidMax,
+      display_order: idx,
+      pricing_mode: pricingMode,
+      price_multiplier: priceMultiplier,
+      fixed_option_price: fixedOptionPrice,
+      option_price_overrides: optionPriceOverrides
+    };
+  };
+
+  const insertVariationLinksWithCompatibility = async (links: Array<Record<string, any>>) => {
+    let data: any = null;
+    let error: any = null;
+    const insertAttempts = [
+      ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order', 'pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
+      ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order'],
+      ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'display_order'],
+      ['product_id', 'global_variation_id']
+    ] as const;
+
+    for (const allowedKeys of insertAttempts) {
+      const payload = links.map((link) => Object.fromEntries(
+        Object.entries(link).filter(([key]) => allowedKeys.includes(key as typeof allowedKeys[number]))
+      ));
+      const res = await supabase.from('product_global_variation_links').insert(payload as any);
+      data = (res as any).data;
+      error = (res as any).error;
+      if (!error) break;
+    }
+
+    return { data, error };
+  };
+
+  const openApplyVariationDialog = (variationId: string) => {
+    setApplyVariationId(variationId);
+    setApplyTargetProductIds([]);
+    setApplyVariationDialogOpen(true);
+  };
+
+  const applyVariationToOtherProducts = async () => {
+    if (!applyVariationId || applyTargetProductIds.length === 0) {
+      setApplyVariationDialogOpen(false);
+      return;
+    }
+
+    try {
+      setApplyingVariation(true);
+      const resolvedSettings = buildPersistedVariationSettings();
+      setVariationSettings(resolvedSettings);
+      syncVariationSettingsRaw(resolvedSettings);
+
+      for (const targetProductId of applyTargetProductIds) {
+        const existingIndex = selectedVariations.findIndex((id) => id === applyVariationId);
+        const payload = buildVariationLinkPayload(targetProductId, applyVariationId, Math.max(existingIndex, 0), resolvedSettings);
+        const { error: deleteError } = await supabase
+          .from('product_global_variation_links')
+          .delete()
+          .eq('product_id', targetProductId)
+          .eq('global_variation_id', applyVariationId);
+
+        if (deleteError) throw deleteError;
+
+        const { error } = await insertVariationLinksWithCompatibility([payload]);
+        if (error) throw error;
+      }
+
+      toast({
+        title: 'Grupo aplicado',
+        description: 'O grupo de complementos foi aplicado aos produtos selecionados.'
+      });
+      setApplyVariationDialogOpen(false);
+      setApplyTargetProductIds([]);
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao aplicar grupo',
+        description: error?.message || 'Não foi possível aplicar este grupo a outros produtos.',
+        variant: 'destructive'
+      });
+    } finally {
+      setApplyingVariation(false);
+    }
+  };
+
   const saveProductVariations = async (
     productId: string,
     variations: string[] = selectedVariations,
@@ -1349,58 +1484,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (variations.length > 0) {
         console.log('📝 Criando novos vínculos para', variations.length, 'variações');
         
-        const links = variations.map((variationId, idx) => {
-          const s = resolvedSettings?.[variationId] || getVariationDefaults();
-          const minSel = Math.max(0, Math.floor(Number(s.min_selections) || 0));
-          const maxSel = Math.max(1, Math.floor(Number(s.max_selections) || 1));
-          const allowPaidExcess = Boolean(s.allow_paid_excess);
-          const paidMax = allowPaidExcess ? Math.max(maxSel, Math.floor(Number(s.paid_max_selections) || maxSel)) : null;
-          const pricingMode = getDefaultPricingMode(s.pricing_mode);
-          const priceMultiplier = pricingMode === 'half'
-            ? 0.5
-            : pricingMode === 'multiplier'
-              ? Math.max(0, Number(s.price_multiplier) || 1)
-              : 1;
-          const fixedOptionPrice = pricingMode === 'fixed'
-            ? Math.max(0, Number(s.fixed_option_price) || 0)
-            : null;
-          const optionPriceOverrides = Object.keys(s.option_price_overrides || {}).length > 0 ? s.option_price_overrides : null;
-          return {
-            product_id: productId,
-            global_variation_id: variationId,
-            required: Boolean(s.required),
-            min_selections: minSel,
-            max_selections: Math.max(maxSel, minSel),
-            free_selections_limit: Math.max(0, Math.floor(Number(s.free_selections_limit) || 0)),
-            allow_paid_excess: allowPaidExcess,
-            paid_max_selections: paidMax,
-            display_order: idx,
-            pricing_mode: pricingMode,
-            price_multiplier: priceMultiplier,
-            fixed_option_price: fixedOptionPrice,
-            option_price_overrides: optionPriceOverrides
-          };
-        });
+        const links = variations.map((variationId, idx) => buildVariationLinkPayload(productId, variationId, idx, resolvedSettings));
         
         console.log('💾 Inserindo vínculos no banco:', links);
-        let data: any = null;
-        let error: any = null;
-        const insertAttempts = [
-          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order', 'pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
-          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order'],
-          ['product_id', 'global_variation_id', 'required', 'min_selections', 'max_selections', 'display_order'],
-          ['product_id', 'global_variation_id']
-        ] as const;
-
-        for (const allowedKeys of insertAttempts) {
-          const payload = links.map((link) => Object.fromEntries(
-            Object.entries(link).filter(([key]) => allowedKeys.includes(key as typeof allowedKeys[number]))
-          ));
-          const res = await supabase.from('product_global_variation_links').insert(payload as any);
-          data = (res as any).data;
-          error = (res as any).error;
-          if (!error) break;
-        }
+        const { data, error } = await insertVariationLinksWithCompatibility(links);
           
         console.log('📊 Resultado da inserção:', { data, error });
         
@@ -1901,6 +1988,17 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                   <div className="mt-1 text-xs text-[#003223]/65">
                                     Ajuste obrigatoriedade, limite grátis e adicionais pagos sem bagunça visual.
                                   </div>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 rounded-xl border-[#8CC850]/30 bg-white/90 px-3 text-xs font-semibold text-[#003223] hover:bg-[#8CC850]/12"
+                                      onClick={() => openApplyVariationDialog(v.id)}
+                                    >
+                                      Aplicar a outros produtos
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                               <div className="border-t border-[#FF6400]/10 bg-gradient-to-br from-[#F5EBE1]/70 to-white px-3.5 py-3">
@@ -2210,6 +2308,52 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             <div className="flex justify-end">
               <Button type="button" onClick={() => setVariationsDialogOpen(false)} className="rounded-2xl bg-boracume-orange text-white hover:bg-orange-600">
                 Concluir
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={applyVariationDialogOpen} onOpenChange={setApplyVariationDialogOpen}>
+          <DialogContent className="max-w-2xl rounded-[28px] border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/65 shadow-[0_28px_70px_-35px_rgba(0,50,35,0.22)]">
+            <DialogHeader>
+              <DialogTitle className="text-slate-900">Aplicar grupo a outros produtos</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="text-sm text-[#003223]/70">
+                Selecione os produtos que também devem receber este grupo de complementos com as mesmas configurações.
+              </div>
+              <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-2 sm:grid-cols-2">
+                {availableProducts
+                  .filter((item) => item.id !== (product?.id || createdProductId))
+                  .map((item) => (
+                    <div key={item.id} className="flex items-start space-x-3 rounded-2xl border border-[#FF6400]/10 bg-white/90 p-4 shadow-sm">
+                      <Checkbox
+                        id={`apply-variation-${item.id}`}
+                        checked={applyTargetProductIds.includes(item.id)}
+                        onCheckedChange={(checked) => {
+                          setApplyTargetProductIds((prev) => checked
+                            ? [...prev, item.id]
+                            : prev.filter((id) => id !== item.id));
+                        }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <Label htmlFor={`apply-variation-${item.id}`} className="cursor-pointer font-medium text-slate-900">
+                          {item.name}
+                        </Label>
+                        {item.category && (
+                          <div className="mt-1 text-xs text-[#003223]/55">{item.category}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" className="h-9 rounded-xl border-[#003223]/12 bg-white/85 px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setApplyVariationDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" className="h-9 rounded-xl bg-[#8CC850] px-4 text-[#003223] hover:bg-[#79b541]" disabled={applyingVariation || applyTargetProductIds.length === 0} onClick={applyVariationToOtherProducts}>
+                {applyingVariation ? 'Aplicando...' : 'Aplicar grupo'}
               </Button>
             </div>
           </DialogContent>

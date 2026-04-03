@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trash2, Plus, Sparkles } from 'lucide-react';
+import { Trash2, Plus, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyInput } from '@/components/ui/currency-input';
 
@@ -79,6 +79,23 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
     }));
   };
 
+  const duplicateOption = (index: number) => {
+    setFormData(prev => {
+      const option = prev.options[index];
+      if (!option) return prev;
+      const duplicated = {
+        ...option,
+        name: option.name ? `${option.name} (cópia)` : ''
+      };
+      const nextOptions = [...prev.options];
+      nextOptions.splice(index + 1, 0, duplicated);
+      return {
+        ...prev,
+        options: nextOptions
+      };
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -116,17 +133,13 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
     });
   };
 
-  const fieldClassName = 'mt-2 rounded-2xl border border-orange-200/80 bg-white/75 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(249,115,22,0.55)] focus-visible:ring-2 focus-visible:ring-boracume-orange focus-visible:ring-offset-0';
-  const softButtonClassName = 'rounded-2xl border-orange-200/80 bg-white/70 backdrop-blur-md text-boracume-orange hover:bg-orange-50 hover:text-orange-600';
-  const selectedButtonClassName = 'rounded-2xl border-boracume-orange bg-boracume-orange text-white hover:bg-orange-600';
+  const fieldClassName = 'mt-2 rounded-2xl border border-[#FF6400]/15 bg-white/85 backdrop-blur-md shadow-[0_10px_26px_-22px_rgba(0,50,35,0.16)] focus-visible:ring-2 focus-visible:ring-[#FF6400]/30 focus-visible:ring-offset-0';
+  const softButtonClassName = 'rounded-2xl border-[#003223]/12 bg-white/80 text-[#003223] hover:bg-[#F5EBE1] hover:text-[#003223]';
+  const selectedButtonClassName = 'rounded-2xl border-[#8CC850] bg-[#8CC850] text-[#003223] hover:bg-[#79b541]';
 
   return (
-    <Card className="overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-orange-50/95 via-white to-amber-50/95 shadow-[0_24px_60px_-35px_rgba(249,115,22,0.45)] backdrop-blur-xl">
-      <CardHeader className="border-b border-orange-100/80 bg-white/65 backdrop-blur-md">
-        <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-semibold text-boracume-orange">
-          <Sparkles className="h-3.5 w-3.5" />
-          Complemento com visual premium
-        </div>
+    <Card className="overflow-hidden rounded-[28px] border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/55 shadow-[0_24px_60px_-35px_rgba(0,50,35,0.18)] backdrop-blur-xl">
+      <CardHeader className="border-b border-[#FF6400]/10 bg-white/75 backdrop-blur-md">
         <CardTitle className="text-slate-900">
           {variation ? 'Editar Variação' : 'Nova Variação'}
         </CardTitle>
@@ -178,7 +191,7 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
             />
           </div>
 
-          <div className="grid gap-3 rounded-[24px] border border-orange-200/70 bg-white/65 p-4 shadow-[0_18px_45px_-30px_rgba(249,115,22,0.6)] backdrop-blur-md">
+          <div className="grid gap-3 rounded-[24px] border border-[#FF6400]/12 bg-[#FFF8F2]/80 p-4 shadow-[0_18px_45px_-30px_rgba(0,50,35,0.16)] backdrop-blur-md">
             <div className="grid gap-2 sm:grid-cols-2">
               <Button
                 type="button"
@@ -261,7 +274,7 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
 
             <div className="space-y-3">
               {formData.options.map((option, index) => (
-                <div key={index} className="flex gap-2 items-end rounded-[22px] border border-orange-100 bg-white/70 p-3 shadow-[0_10px_30px_-24px_rgba(249,115,22,0.5)] backdrop-blur-sm">
+                <div key={index} className="flex gap-2 items-end rounded-[22px] border border-[#FF6400]/10 bg-white/80 p-3 shadow-[0_10px_30px_-24px_rgba(0,50,35,0.14)] backdrop-blur-sm">
                   <div className="flex-1">
                     <Label htmlFor={`option-name-${index}`} className="text-boracume-dark-green font-semibold">Nome</Label>
                     <Input
@@ -281,6 +294,15 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
                       className={fieldClassName}
                     />
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => duplicateOption(index)}
+                    className={softButtonClassName}
+                  >
+                    <Copy size={16} />
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

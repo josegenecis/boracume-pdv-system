@@ -360,14 +360,14 @@ const ProfileSettings = () => {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
+      <Card className="border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/60 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.18)]">
+        <CardHeader className="border-b border-[#FF6400]/10 bg-white/70">
           <CardTitle>Informações Básicas</CardTitle>
           <CardDescription>
             Configure as informações principais do seu restaurante
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-6">
           <div className="flex items-center space-x-4">
             <Avatar className="h-20 w-20">
               <AvatarImage src={profileImage} />
@@ -375,7 +375,7 @@ const ProfileSettings = () => {
             </Avatar>
             <div className="space-y-2">
               <Label htmlFor="logo-upload" className="cursor-pointer">
-                <Button variant="outline" className="cursor-pointer" disabled={uploading} asChild>
+                <Button variant="outline" className="cursor-pointer border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" disabled={uploading} asChild>
                   <span>
                     <Upload size={16} className="mr-2" />
                     {uploading ? 'Enviando...' : 'Alterar Logo'}
@@ -402,7 +402,7 @@ const ProfileSettings = () => {
 
           <div className="space-y-2">
             <Label>Banner do Restaurante</Label>
-            <div className="w-full h-28 md:h-32 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+            <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2] md:h-32">
               {bannerImage ? (
                 <img src={bannerImage} alt="Banner" className="w-full h-full object-cover" />
               ) : (
@@ -411,7 +411,7 @@ const ProfileSettings = () => {
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="banner-upload" className="cursor-pointer">
-                <Button variant="outline" className="cursor-pointer" disabled={uploadingBanner} asChild>
+                <Button variant="outline" className="cursor-pointer border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" disabled={uploadingBanner} asChild>
                   <span>
                     <Upload size={16} className="mr-2" />
                     {uploadingBanner ? 'Enviando...' : 'Alterar Banner'}
@@ -496,8 +496,8 @@ const ProfileSettings = () => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="border border-[#8CC850]/20 bg-gradient-to-br from-[#F5EBE1]/85 via-white to-[#8CC850]/10 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.2)]">
+        <CardHeader className="border-b border-[#8CC850]/15 bg-white/70">
           <CardTitle>Configurações de Delivery</CardTitle>
           <CardDescription>
             Configure horários e valores para delivery
@@ -509,35 +509,35 @@ const ProfileSettings = () => {
               <Clock3 className="h-4 w-4 text-[#FF6400]" />
               <Label>Horário de Funcionamento por Dia</Label>
             </div>
-            <div className="space-y-3 rounded-2xl border border-[#FF6400]/12 bg-[#FFF8F2] p-3">
+            <div className="space-y-3 rounded-2xl border border-[#8CC850]/18 bg-gradient-to-br from-[#FFF8F2] via-white to-[#8CC850]/10 p-3">
               {weekDays.map((day) => {
                 const current = weeklySchedule[day.key];
                 return (
-                  <div key={day.key} className="grid gap-3 rounded-xl border border-[#FF6400]/10 bg-white p-3 md:grid-cols-[120px_1fr_1fr_auto_auto] md:items-center">
+                  <div key={day.key} className="grid gap-3 rounded-xl border border-[#FF6400]/10 bg-white/90 p-3 md:grid-cols-[90px_1fr_1fr_auto_auto] md:items-center">
                     <div className="text-sm font-semibold text-[#003223]">{day.label}</div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`${day.key}-open`} className="text-xs text-muted-foreground">Abre</Label>
+                    <div className="flex items-center gap-2 rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2]/85 px-3 py-2">
+                      <Label htmlFor={`${day.key}-open`} className="shrink-0 text-xs font-semibold text-[#003223]/65">Abre</Label>
                       <Input
                         id={`${day.key}-open`}
                         type="time"
                         value={current.open}
                         disabled={current.closed}
                         onChange={(e) => updateWeeklySchedule(day.key, { open: e.target.value })}
-                        className="h-10"
+                        className="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor={`${day.key}-close`} className="text-xs text-muted-foreground">Fecha</Label>
+                    <div className="flex items-center gap-2 rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2]/85 px-3 py-2">
+                      <Label htmlFor={`${day.key}-close`} className="shrink-0 text-xs font-semibold text-[#003223]/65">Fecha</Label>
                       <Input
                         id={`${day.key}-close`}
                         type="time"
                         value={current.close}
                         disabled={current.closed}
                         onChange={(e) => updateWeeklySchedule(day.key, { close: e.target.value })}
-                        className="h-10"
+                        className="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/35 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#8CC850]/20 bg-[#8CC850]/10 px-3 py-2">
                       <Label htmlFor={`${day.key}-closed`} className="text-sm font-medium text-[#003223]">Fechado</Label>
                       <Switch
                         id={`${day.key}-closed`}
@@ -548,7 +548,7 @@ const ProfileSettings = () => {
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-10 rounded-xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]"
+                      className="h-9 rounded-xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]"
                       onClick={() => copyDayToAll(day.key)}
                     >
                       <Copy className="mr-2 h-4 w-4" />
@@ -587,7 +587,7 @@ const ProfileSettings = () => {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>
+        <Button onClick={handleSave} className="w-full md:w-auto rounded-xl bg-[#8CC850] text-[#003223] hover:bg-[#79b541]" disabled={loading}>
           <Save size={16} className="mr-2" />
           {loading ? 'Salvando...' : 'Salvar Alterações'}
         </Button>

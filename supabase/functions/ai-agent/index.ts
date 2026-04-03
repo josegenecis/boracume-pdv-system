@@ -12,6 +12,60 @@ const corsHeaders = {
 
 console.log("Edge Function ai-agent V1 (Multi-Tool) iniciada!");
 
+async function openAiChatWithTools(params: {
+  apiKey: string;
+  model: string;
+  system: string;
+  messages: any[];
+  tools: any[];
+}) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.apiKey}`
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: params.system },
+        ...params.messages
+      ],
+      tools: params.tools,
+      tool_choice: params.tools?.length ? 'auto' : undefined
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || 'Falha ao consultar OpenAI');
+  }
+
+  const message = payload?.choices?.[0]?.message || {};
+  return {
+    text: String(message?.content || '').trim(),
+    functionCalls: Array.isArray(message?.tool_calls)
+      ? message.tool_calls.map((call: any) => ({
+          id: String(call?.id || crypto.randomUUID()),
+          name: String(call?.function?.name || ''),
+          args: (() => {
+            try {
+              return JSON.parse(String(call?.function?.arguments || '{}'));
+            } catch {
+              return {};
+            }
+          })()
+        }))
+      : [],
+    assistantMessage: {
+      role: 'assistant',
+      content: message?.content || '',
+      tool_calls: message?.tool_calls || []
+    }
+  };
+}
+
 // @ts-ignore
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -53,14 +107,18 @@ Deno.serve(async (req) => {
     // @ts-ignore
     const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-1.5-flash';
     // @ts-ignore
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    // @ts-ignore
+    const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
+    // @ts-ignore
     const PEXELS_API_KEY = Deno.env.get('PEXELS_API_KEY');
     // @ts-ignore
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     // @ts-ignore
     const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!GEMINI_API_KEY) {
-        throw new Error('Secret GEMINI_API_KEY não configurado.');
+    if (!OPENAI_API_KEY && !GEMINI_API_KEY) {
+        throw new Error('Nenhuma chave de IA configurada. Defina OPENAI_API_KEY ou GEMINI_API_KEY.');
     }
     if (!SUPABASE_URL) {
         throw new Error('SUPABASE_URL indisponível no ambiente da Edge Function.');
@@ -464,6 +522,8 @@ Regras:
         parameters: fn.parameters || { type: 'object', properties: {} }
       }))
       .filter((fn: any) => fn.name);
+    const openAiTools = functionDeclarations.map((fn: any) => ({ type: 'function', function: fn }));
+    const aiProvider = OPENAI_API_KEY ? 'openai' : 'gemini';
 
     const historyContents = (Array.isArray(conversationHistory) ? conversationHistory : [])
       .map((m: any) => {
@@ -478,6 +538,16 @@ Regras:
     let currentContents: any[] = [
       ...historyContents
     ];
+    let openAiMessages: any[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
+      .map((m: any) => {
+        const role = String(m?.role || '').toLowerCase();
+        const text = typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content || '');
+        if (!text) return null;
+        if (role === 'assistant' || role === 'model') return { role: 'assistant', content: text };
+        if (role === 'user') return { role: 'user', content: text };
+        return null;
+      })
+      .filter(Boolean);
 
     const userParts: any[] = [];
     if (command) {
@@ -506,38 +576,68 @@ Regras:
     }
 
     currentContents.push({ role: 'user', parts: userParts });
+    openAiMessages.push(
+      imageBase64
+        ? {
+            role: 'user',
+            content: [
+              { type: 'text', text: String(command || 'Analise esta imagem.') },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageBase64.includes(';base64,') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+                }
+              }
+            ]
+          }
+        : { role: 'user', content: String(command || '') }
+    );
 
     const allToolResults: any[] = [];
     let finalMessageText: string | null = null;
 
     for (let step = 0; step < 6; step++) {
-        const ai = await geminiGenerateContent({
-          apiKey: GEMINI_API_KEY,
-          model: GEMINI_MODEL,
-          system: systemPrompt,
-          user: '',
-          tools: functionDeclarations,
-          functionCallingMode: 'AUTO',
-          temperature: 0.2,
-          contents: currentContents
-        });
+        const ai = aiProvider === 'openai'
+          ? await openAiChatWithTools({
+              apiKey: OPENAI_API_KEY!,
+              model: OPENAI_MODEL,
+              system: systemPrompt,
+              messages: openAiMessages,
+              tools: openAiTools
+            })
+          : await geminiGenerateContent({
+              apiKey: GEMINI_API_KEY!,
+              model: GEMINI_MODEL,
+              system: systemPrompt,
+              user: '',
+              tools: functionDeclarations,
+              functionCallingMode: 'AUTO',
+              temperature: 0.2,
+              contents: currentContents
+            });
 
-        const candidateContent = ai.raw?.candidates?.[0]?.content;
-        if (candidateContent?.parts) {
-          currentContents = [...currentContents, { role: 'model', parts: candidateContent.parts }];
+        if (aiProvider === 'openai') {
+          if ((ai as any).assistantMessage) {
+            openAiMessages = [...openAiMessages, (ai as any).assistantMessage];
+          }
+        } else {
+          const candidateContent = (ai as any).raw?.candidates?.[0]?.content;
+          if (candidateContent?.parts) {
+            currentContents = [...currentContents, { role: 'model', parts: candidateContent.parts }];
+          }
         }
 
-        if (!ai.functionCalls || ai.functionCalls.length === 0) {
-            finalMessageText = ai.text || '';
+        if (!(ai as any).functionCalls || (ai as any).functionCalls.length === 0) {
+            finalMessageText = (ai as any).text || '';
             break;
         }
 
         const toolResults: any[] = [];
 
-        for (const call of ai.functionCalls) {
-            const toolCallId = crypto.randomUUID();
-            const fnName = String(call?.name || '');
-            const args: any = call?.args || {};
+        for (const call of (ai as any).functionCalls) {
+            const toolCallId = String((call as any)?.id || crypto.randomUUID());
+            const fnName = String((call as any)?.name || '');
+            const args: any = (call as any)?.args || {};
             let result: any = null;
 
             console.log(`[Agent] Executing tool: ${fnName}`, args);
@@ -1151,10 +1251,21 @@ Regras:
                 content: JSON.stringify(result)
             });
 
-            currentContents = [
-              ...currentContents,
-              { role: 'user', parts: [{ functionResponse: { name: fnName, response: result } }] }
-            ];
+            if (aiProvider === 'openai') {
+              openAiMessages = [
+                ...openAiMessages,
+                {
+                  role: 'tool',
+                  tool_call_id: toolCallId,
+                  content: JSON.stringify(result)
+                }
+              ];
+            } else {
+              currentContents = [
+                ...currentContents,
+                { role: 'user', parts: [{ functionResponse: { name: fnName, response: result } }] }
+              ];
+            }
         }
         allToolResults.push(...toolResults);
     }

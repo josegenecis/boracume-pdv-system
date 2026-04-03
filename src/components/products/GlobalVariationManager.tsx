@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -159,6 +159,46 @@ const GlobalVariationManager: React.FC = () => {
     }
   };
 
+  const handleDuplicateVariation = async (variation: GlobalVariation) => {
+    try {
+      const duplicated = {
+        user_id: user?.id,
+        name: `${variation.name} (cópia)`,
+        options: JSON.stringify(Array.isArray(variation.options) ? variation.options : []),
+        description: variation.description || '',
+        customer_label: variation.customer_label || '',
+        receipt_label: variation.receipt_label || '',
+        required: variation.required ?? false,
+        max_selections: variation.max_selections ?? 1,
+        active: variation.active ?? true
+      };
+
+      const first = await supabase.from('global_variations').insert(duplicated as any);
+      if ((first as any).error) {
+        const msg = String((first as any).error?.message || '');
+        if (msg.includes('customer_label') || msg.includes('receipt_label')) {
+          const fallback = await supabase.from('global_variations').insert({
+            user_id: user?.id,
+            name: `${variation.name} (cópia)`,
+            options: JSON.stringify(Array.isArray(variation.options) ? variation.options : []),
+            description: variation.description || '',
+            required: variation.required ?? false,
+            max_selections: variation.max_selections ?? 1,
+            active: variation.active ?? true
+          } as any);
+          if ((fallback as any).error) throw (fallback as any).error;
+        } else {
+          throw (first as any).error;
+        }
+      }
+
+      toast({ title: 'Sucesso', description: 'Grupo de complementos duplicado com sucesso.' });
+      fetchVariations();
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Erro ao duplicar grupo de complementos.', variant: 'destructive' });
+    }
+  };
+
   if (!user) {
     return (
       <div className="text-center py-8 text-gray-500">É necessário estar autenticado para gerenciar complementos.</div>
@@ -179,13 +219,9 @@ const GlobalVariationManager: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-semibold text-boracume-orange">
-            <Sparkles className="h-3.5 w-3.5" />
-            Complementos globais
-          </div>
           <h3 className="mt-2 text-lg font-semibold text-slate-900">Variações Globais</h3>
         </div>
-        <Button onClick={() => setShowForm(true)} size="sm" className="rounded-2xl bg-boracume-orange text-white hover:bg-orange-600 shadow-[0_18px_35px_-20px_rgba(249,115,22,0.8)]">
+        <Button onClick={() => setShowForm(true)} size="sm" className="h-9 rounded-xl bg-[#8CC850] px-4 text-white hover:bg-[#79b541] shadow-[0_18px_35px_-20px_rgba(140,200,80,0.45)]">
           <Plus size={16} className="mr-1" /> Nova Variação Global
         </Button>
       </div>
@@ -196,10 +232,10 @@ const GlobalVariationManager: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {variations.length === 0 ? (
-            <Card className="rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/80">
+            <Card className="rounded-[28px] border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/60">
               <CardContent className="text-center py-8">
                 <p className="text-gray-500">Nenhuma variação global cadastrada.</p>
-                <Button onClick={() => setShowForm(true)} className="mt-3 rounded-2xl bg-boracume-orange text-white hover:bg-orange-600" size="sm">
+                <Button onClick={() => setShowForm(true)} className="mt-3 h-9 rounded-xl bg-[#8CC850] px-4 text-white hover:bg-[#79b541]" size="sm">
                   <Plus size={16} className="mr-1" /> Criar Nova Variação Global
                 </Button>
               </CardContent>
@@ -208,13 +244,13 @@ const GlobalVariationManager: React.FC = () => {
             <Accordion type="multiple" className="space-y-2">
               {variations.map((variation) => (
                 <AccordionItem key={variation.id} value={String(variation.id)}>
-                  <Card className="overflow-hidden rounded-[26px] border border-orange-200/70 bg-white/80 shadow-[0_20px_50px_-35px_rgba(249,115,22,0.5)] backdrop-blur-md">
+                  <Card className="overflow-hidden rounded-[26px] border border-[#FF6400]/12 bg-gradient-to-br from-white via-[#FFF8F2]/45 to-[#F5EBE1]/45 shadow-[0_20px_50px_-35px_rgba(0,50,35,0.18)] backdrop-blur-md">
                     <CardContent className="p-0">
                       <AccordionTrigger className="px-4 py-3 hover:no-underline">
                         <div className="flex-1 text-left">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="font-medium text-slate-900">{variation.name}</div>
-                            <Badge variant="secondary" className={variation.active !== false ? 'bg-orange-100 text-boracume-orange border border-orange-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}>
+                            <Badge variant="secondary" className={variation.active !== false ? 'border border-[#8CC850]/40 bg-[#8CC850]/15 text-[#003223]' : 'bg-slate-100 text-slate-500 border border-slate-200'}>
                               {variation.active !== false ? 'Ativo' : 'Oculto'}
                             </Badge>
                             {variation.required && (
@@ -238,13 +274,16 @@ const GlobalVariationManager: React.FC = () => {
                           ))}
                         </div>
                         <div className="flex gap-2 justify-end mt-4">
+                          <Button variant="outline" size="sm" className="rounded-xl border-[#8CC850]/30 bg-white/85 text-[#003223] hover:bg-[#8CC850]/15" onClick={() => handleDuplicateVariation(variation)}>
+                            <Copy size={14} className="mr-2" /> Duplicar grupo
+                          </Button>
                           <Button variant="outline" size="icon" className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50" onClick={() => toggleVariationActive(variation)}>
                             {variation.active !== false ? <Eye size={16} /> : <EyeOff size={16} />}
                           </Button>
-                          <Button variant="outline" size="sm" className="rounded-2xl border-orange-200 bg-white/80 text-boracume-orange hover:bg-orange-50" onClick={() => { setEditingVariation(variation); setShowForm(true); }}>
+                          <Button variant="outline" size="sm" className="rounded-xl border-[#FF6400]/15 bg-white/85 text-[#FF6400] hover:bg-[#F5EBE1]" onClick={() => { setEditingVariation(variation); setShowForm(true); }}>
                             <Edit size={14} className="mr-2" /> Editar
                           </Button>
-                          <Button variant="outline" size="sm" className="rounded-2xl border-red-200 bg-white/80 text-red-500 hover:bg-red-50" onClick={() => handleDeleteVariation(variation.id!)}>
+                          <Button variant="outline" size="sm" className="rounded-xl border-red-200 bg-white/85 text-red-500 hover:bg-red-50" onClick={() => handleDeleteVariation(variation.id!)}>
                             <Trash2 size={14} className="mr-2" /> Excluir
                           </Button>
                         </div>
