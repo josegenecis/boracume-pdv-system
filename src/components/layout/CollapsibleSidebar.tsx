@@ -274,7 +274,7 @@ const CollapsibleSidebar = () => {
 
   return (
     <aside className={`
-      fixed left-0 top-0 bottom-0 z-50 border-r border-[#FF6400]/25 bg-gradient-to-b from-[#003223] via-[#003223] to-[#0B5137] shadow-[8px_0_30px_-24px_rgba(0,50,35,0.45)] transition-all duration-300
+      fixed left-0 top-0 bottom-0 z-40 border-r border-[#FF6400]/25 bg-gradient-to-b from-[#003223] via-[#003223] to-[#0B5137] shadow-[8px_0_30px_-24px_rgba(0,50,35,0.45)] transition-all duration-300
       ${isMobile 
         ? `${isOpen ? 'translate-x-0' : '-translate-x-full'} w-64` 
         : `${isOpen ? 'w-64' : 'w-16'}`
