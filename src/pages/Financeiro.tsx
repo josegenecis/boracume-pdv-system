@@ -632,6 +632,18 @@ const Financeiro = () => {
   const sessionCash = sessionSales.filter(o => o.payment_method === 'dinheiro').reduce((sum, o) => sum + Number(o.total || 0), 0);
   const sessionIn = sessionMovements.filter(m => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
   const sessionOut = sessionMovements.filter(m => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
+  const paymentMix = [
+    { name: 'PIX', value: Math.max(pixTotal, 1), color: '#8CC850' },
+    { name: 'Cartão', value: Math.max(cardTotal, 1), color: '#FF6400' },
+    { name: 'Dinheiro', value: Math.max(cashTotal, 1), color: '#7C3AED' },
+  ];
+  const financePulse = [
+    { label: 'Margem', value: Math.max(10, Math.min(96, Math.round(margemOperacional))) },
+    { label: 'Liquidez', value: Math.max(14, Math.min(95, totalIncome > 0 ? Math.round((balance / totalIncome) * 100) + 62 : 22)) },
+    { label: 'Despesas', value: Math.max(12, Math.min(96, totalIncome > 0 ? 100 - Math.round((totalExpenses / totalIncome) * 100) : 18)) },
+    { label: 'Caixa', value: Math.max(16, Math.min(94, currentSession ? 74 : 48)) },
+  ];
+  const topExpenseCards = expenseByCategory.slice(0, 4);
   
   return (
     <div className="space-y-6">
@@ -745,7 +757,209 @@ const Financeiro = () => {
         </CardContent>
       </Card>
       
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="hidden gap-5 md:grid xl:grid-cols-[minmax(0,1.35fr)_360px]">
+        <div className="space-y-5">
+          <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_28px_70px_-36px_rgba(0,50,35,0.32)] dark:border-white/10 dark:bg-[#101a16]/96 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.82)]">
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
+                    <DollarSign className="h-3.5 w-3.5" />
+                    Financial cockpit
+                  </div>
+                  <div className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Visão financeira inteligente</div>
+                  <div className="max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+                    Um layout mais analítico para acompanhar caixa, margem, mix de pagamentos e pressão das despesas no período.
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 xl:w-[340px]">
+                  <div className="rounded-[22px] border border-[#8CC850]/18 bg-gradient-to-br from-white to-[#F5FBED] p-4 dark:border-[#8CC850]/15 dark:from-[#0c1512] dark:to-[#112017]">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receitas</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalIncome)}</div>
+                  </div>
+                  <div className="rounded-[22px] border border-[#FF6400]/18 bg-gradient-to-br from-white to-[#FFF3EA] p-4 dark:border-[#FF6400]/15 dark:from-[#0c1512] dark:to-[#1e1510]">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Despesas</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalExpenses)}</div>
+                  </div>
+                  <div className="rounded-[22px] border border-[#003223]/10 bg-gradient-to-br from-white to-[#F5F8F7] p-4 dark:border-white/10 dark:from-[#0c1512] dark:to-[#141b18]">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Saldo</div>
+                    <div className={`mt-2 text-2xl font-bold ${balance >= 0 ? 'text-boracume-green' : 'text-boracume-orange'}`}>{formatCurrency(balance)}</div>
+                  </div>
+                  <div className="rounded-[22px] border border-violet-200 bg-gradient-to-br from-white to-violet-50 p-4 dark:border-violet-500/20 dark:from-[#0c1512] dark:to-[#171325]">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Margem</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+                <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">Fluxo do período</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {new Intl.DateTimeFormat('pt-BR').format(reportStart)} até {new Intl.DateTimeFormat('pt-BR').format(reportEnd)}
+                      </div>
+                    </div>
+                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#003223] dark:bg-[#101a16] dark:text-slate-300">
+                      DRE viva
+                    </div>
+                  </div>
+                  <div className="h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dailySeries}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d7e1dc" />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                        <YAxis tickLine={false} axisLine={false} width={44} />
+                        <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                        <Legend />
+                        <Line type="monotone" dataKey="income" name="Receitas" stroke="#8CC850" strokeWidth={3} dot={false} />
+                        <Line type="monotone" dataKey="expenses" name="Despesas" stroke="#FF6400" strokeWidth={2.5} dot={false} />
+                        <Line type="monotone" dataKey="profit" name="Lucro" stroke="#7C3AED" strokeWidth={2.5} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="grid gap-4">
+                  <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Mix de pagamentos</div>
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Como as receitas estão distribuídas hoje</div>
+                    <div className="mt-4 h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={paymentMix} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={3}>
+                            {paymentMix.map((item) => (
+                              <Cell key={item.name} fill={item.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="grid gap-2">
+                      {paymentMix.map((item) => (
+                        <div key={item.name} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                            {item.name}
+                          </div>
+                          <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(item.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">Pulso financeiro</div>
+                    <div className="mt-4 space-y-3">
+                      {financePulse.map((item, index) => (
+                        <div key={item.label}>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-slate-500 dark:text-slate-400">{item.label}</span>
+                            <span className="font-semibold text-slate-900 dark:text-white">{item.value}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-200/80 dark:bg-white/10">
+                            <div
+                              className="h-2 rounded-full"
+                              style={{
+                                width: `${item.value}%`,
+                                background: ['#8CC850', '#FF6400', '#7C3AED', '#0EA5E9'][index % 4],
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Pressão por categoria</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Categorias que mais pesam nas despesas</div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {topExpenseCards.length > 0 ? topExpenseCards.map((item, index) => (
+                  <div key={item.name} className="rounded-[22px] border border-[#003223]/8 bg-[#F8FAF8] p-4 dark:border-white/10 dark:bg-[#0c1512]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white">{item.name}</div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">rank #{index + 1}</div>
+                      </div>
+                      <div className="text-lg font-bold text-[#003223] dark:text-white">{formatCurrency(item.value)}</div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="rounded-[22px] border border-dashed border-[#003223]/12 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    Sem despesas suficientes para ranquear categorias.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">Distribuição de despesas</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Leitura visual do peso de cada categoria</div>
+                </div>
+                <div className="rounded-full bg-[#F5EBE1] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#003223] dark:bg-[#1b1510] dark:text-slate-300">
+                  visão estratégica
+                </div>
+              </div>
+              <div className="h-[240px]">
+                {expenseByCategory.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                    Sem despesas no período para plotar o gráfico.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={expenseByCategory}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d7e1dc" />
+                      <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                      <YAxis tickLine={false} axisLine={false} width={44} />
+                      <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+                      <Bar dataKey="value" radius={[10, 10, 0, 0]} fill="#FF6400" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Indicadores rápidos</div>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receita líquida</div>
+                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(dre.receitaLiquida)}</div>
+              </div>
+              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Lucro operacional</div>
+                <div className={`mt-2 text-2xl font-bold ${dre.lucroOperacional >= 0 ? 'text-[#0B5137] dark:text-[#8CC850]' : 'text-[#FF6400]'}`}>
+                  {formatCurrency(dre.lucroOperacional)}
+                </div>
+              </div>
+              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Caixa atual</div>
+                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{currentSession ? 'Aberto' : 'Fechado'}</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{currentSession ? 'Sessão ativa para conferência' : 'Abra um caixa para acompanhar ao vivo'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:hidden md:grid-cols-3">
         <Card className="rounded-[28px] border border-white/70 border-t-4 border-t-boracume-green bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
@@ -792,7 +1006,7 @@ const Financeiro = () => {
         </Card>
       </div>
       
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:hidden md:grid-cols-3">
         <Card className="rounded-[26px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.2)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
