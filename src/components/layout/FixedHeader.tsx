@@ -128,7 +128,7 @@ const FixedHeader = () => {
           </Button>
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[6px] bg-[linear-gradient(180deg,#D9FFB5_0%,#BDFB89_24%,#97EA59_52%,#74CF3D_76%,#C8FFAA_100%)] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_-1px_0_rgba(0,0,0,0.12)_inset,0_0_10px_rgba(151,234,89,0.22)]" />
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-[linear-gradient(90deg,rgba(167,255,106,0.16)_0%,rgba(167,255,106,0.5)_50%,rgba(167,255,106,0.16)_100%)] shadow-[0_0_4px_rgba(151,234,89,0.12)]" />
     </header>
   );
 };
