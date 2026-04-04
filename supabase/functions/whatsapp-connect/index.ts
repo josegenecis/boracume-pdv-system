@@ -9,6 +9,7 @@ const corsHeaders = {
 const EVOLUTION_URL = "https://api.boracume.com";
 const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
 const getInstancesFromPayload = (payload: any) => {
   if (Array.isArray(payload?.data)) return payload.data;
@@ -31,6 +32,25 @@ const extractPhoneFromInstance = (instance: any) => {
   return String(jid).split('@')[0] || null;
 };
 
+const safeFetchJson = async (url: string, init: RequestInit) => {
+  try {
+    const response = await fetch(url, init);
+    let data: any = {};
+    try {
+      data = await response.json();
+    } catch {
+      data = { message: "Could not parse JSON from Evolution API" };
+    }
+    return { ok: true, response, data };
+  } catch (error: any) {
+    return {
+      ok: false,
+      response: null,
+      data: { message: error?.message || 'Network request failed' }
+    };
+  }
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -50,7 +70,7 @@ serve(async (req) => {
     if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: jsonHeaders,
       });
     }
 
@@ -65,24 +85,17 @@ serve(async (req) => {
       .maybeSingle();
     const restaurantName = profileData?.restaurant_name?.trim() || 'Restaurante';
 
-    const allInstancesRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+    const allInstancesResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
       method: 'GET',
       headers: {
         'apikey': EVOLUTION_API_KEY
       }
     });
 
-    let allInstancesData: any = {};
-    try {
-      allInstancesData = await allInstancesRes.json();
-    } catch {
-      allInstancesData = {};
-    }
-
-    let currentInstance = findCurrentInstance(allInstancesData, instanceName, instanceToken);
+    let currentInstance = findCurrentInstance(allInstancesResult.data, instanceName, instanceToken);
 
     if (!currentInstance) {
-      const evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
+      const createResult = await safeFetchJson(`${EVOLUTION_URL}/instance/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,12 +110,7 @@ serve(async (req) => {
         })
       });
 
-      let evoData;
-      try {
-        evoData = await evoRes.json();
-      } catch {
-        evoData = { message: "Could not parse JSON from Evolution API" };
-      }
+      const evoData = createResult.data;
 
       const alreadyExists =
         evoData?.response?.message?.[0] === 'Instance already exists' ||
@@ -110,31 +118,24 @@ serve(async (req) => {
         evoData?.message === 'Instance already exists' ||
         evoData?.error === 'Instance already exists';
 
-      if (!evoRes.ok && !alreadyExists) {
+      if ((!createResult.ok || !createResult.response?.ok) && !alreadyExists) {
         console.error("Evolution API Error:", evoData);
-        return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: createResult.response?.status ?? 500 }), { status: 200, headers: jsonHeaders });
       }
 
       await sleep(1500);
 
-      const refreshedInstancesRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+      const refreshedInstancesResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
         method: 'GET',
         headers: {
           'apikey': EVOLUTION_API_KEY
         }
       });
 
-      let refreshedInstancesData: any = {};
-      try {
-        refreshedInstancesData = await refreshedInstancesRes.json();
-      } catch {
-        refreshedInstancesData = {};
-      }
-
-      currentInstance = findCurrentInstance(refreshedInstancesData, instanceName, instanceToken);
+      currentInstance = findCurrentInstance(refreshedInstancesResult.data, instanceName, instanceToken);
     }
 
-    const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect`, {
+    const connectResult = await safeFetchJson(`${EVOLUTION_URL}/instance/connect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -151,12 +152,7 @@ serve(async (req) => {
       })
     });
 
-    let connectData;
-    try {
-      connectData = await connectRes.json();
-    } catch {
-      connectData = { message: "Could not parse JSON from Evolution API" };
-    }
+    const connectData = connectResult.data;
 
     const connectAlreadyExists =
       connectData?.response?.message?.[0] === 'Instance already exists' ||
@@ -164,9 +160,9 @@ serve(async (req) => {
       connectData?.message === 'Instance already exists' ||
       connectData?.error === 'Instance already exists';
 
-    if (!connectRes.ok && !connectAlreadyExists) {
+    if ((!connectResult.ok || !connectResult.response?.ok) && !connectAlreadyExists) {
       console.error("Evolution API Connect Error:", connectData);
-      return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectResult.response?.status ?? 500 }), { status: 200, headers: jsonHeaders });
     }
 
     // 2. Save in Database using service role to bypass RLS or just use the user client
@@ -177,21 +173,14 @@ serve(async (req) => {
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
 
-    const refreshedStatusRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+    const refreshedStatusResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
       method: 'GET',
       headers: {
         'apikey': EVOLUTION_API_KEY
       }
     });
 
-    let refreshedStatusData: any = {};
-    try {
-      refreshedStatusData = await refreshedStatusRes.json();
-    } catch {
-      refreshedStatusData = {};
-    }
-
-    const connectedInstance = findCurrentInstance(refreshedStatusData, instanceName, instanceToken) || currentInstance;
+    const connectedInstance = findCurrentInstance(refreshedStatusResult.data, instanceName, instanceToken) || currentInstance;
     const isConnected = Boolean(connectedInstance?.connected);
     const hasQr = Boolean(
       connectedInstance?.qrcode ||
@@ -214,9 +203,9 @@ serve(async (req) => {
 
       if (dbError) {
         console.error("Database Error:", dbError);
-        return new Response(JSON.stringify({ error: 'Failed to save instance in database' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(JSON.stringify({ error: true, message: 'Falha ao salvar instância no banco', details: dbError }), {
+          status: 200,
+          headers: jsonHeaders,
         });
       }
     } else {
@@ -229,14 +218,14 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: jsonHeaders,
     });
 
   } catch (error) {
     console.error("Internal Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ error: true, message: error.message || 'Erro interno na conexão WhatsApp' }), {
+      status: 200,
+      headers: jsonHeaders,
     });
   }
 });
