@@ -32,15 +32,15 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
   };
 
   return (
-    <Card className="w-full overflow-hidden border border-gray-200 shadow-sm bg-white">
+    <Card className="w-full overflow-hidden rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.8)]">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-900 sm:text-xl dark:text-white">
               <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
               <span className="truncate">Receita Semanal</span>
             </CardTitle>
-            <CardDescription className="text-sm sm:text-base mt-1">
+            <CardDescription className="mt-1 text-sm sm:text-base dark:text-slate-400">
               Total da semana: <span className="font-semibold text-primary">{formatCurrency(totalRevenue)}</span>
             </CardDescription>
           </div>
@@ -122,7 +122,7 @@ const RevenueChart: React.FC<RevenueChartProps> = ({ data }) => {
         
         {/* Indicador de performance */}
         <div className="flex justify-center mt-4 sm:mt-6">
-          <div className="flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-full bg-white border border-primary/30">
+          <div className="flex items-center space-x-2 rounded-full border border-primary/30 bg-white px-3 py-2 dark:bg-[#0c1512] sm:px-4">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
             <span className="text-xs sm:text-sm font-medium text-primary">Performance de vendas semanal</span>
           </div>

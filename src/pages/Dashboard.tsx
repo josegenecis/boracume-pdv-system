@@ -298,16 +298,41 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Inicial</h1>
-        <p className="max-w-2xl text-sm text-slate-600">
-          Acompanhe vendas, pedidos e clientes em uma visão rápida para tomar decisões com mais agilidade.
-        </p>
+      <div className="rounded-[30px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#101a16]/92 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.8)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
+              Resumo executivo
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Painel Inicial</h1>
+            <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+              Acompanhe vendas, pedidos e clientes em uma visão rápida para tomar decisões com mais agilidade.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[520px]">
+            <div className="rounded-2xl border border-[#8CC850]/20 bg-white px-4 py-3 dark:border-[#8CC850]/15 dark:bg-[#0c1512]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Pedidos</div>
+              <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{stats.todayOrders}</div>
+            </div>
+            <div className="rounded-2xl border border-[#FF6400]/20 bg-white px-4 py-3 dark:border-[#FF6400]/15 dark:bg-[#0c1512]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Pendentes</div>
+              <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{stats.pendingOrders}</div>
+            </div>
+            <div className="rounded-2xl border border-[#003223]/10 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0c1512]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Clientes</div>
+              <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{stats.totalCustomers}</div>
+            </div>
+            <div className="rounded-2xl border border-violet-200 bg-white px-4 py-3 dark:border-violet-500/20 dark:bg-[#0c1512]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Produtos</div>
+              <div className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{stats.productsSold}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-3 md:hidden">
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" onClick={() => navigate('/pedidos')} className="rounded-[26px] border border-[#FF6400]/12 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+          <button type="button" onClick={() => navigate('/pedidos')} className="rounded-[26px] border border-[#FF6400]/12 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98] dark:border-white/10 dark:bg-[#101a16]/95">
             <div className="flex items-center justify-between">
               <div className="rounded-2xl bg-[#FF6400]/10 p-2 text-[#FF6400]">
                 <ClipboardList className="h-5 w-5" />
@@ -317,7 +342,7 @@ const Dashboard = () => {
             <div className="mt-4 text-sm font-semibold text-slate-900">Pedidos do dia</div>
             <div className="mt-1 text-xs text-slate-500">acompanhe novos e em preparo</div>
           </button>
-          <button type="button" onClick={() => navigate('/produtos')} className="rounded-[26px] border border-[#8CC850]/20 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+          <button type="button" onClick={() => navigate('/produtos')} className="rounded-[26px] border border-[#8CC850]/20 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98] dark:border-white/10 dark:bg-[#101a16]/95">
             <div className="flex items-center justify-between">
               <div className="rounded-2xl bg-[#8CC850]/15 p-2 text-[#003223]">
                 <ShoppingBag className="h-5 w-5" />
@@ -327,7 +352,7 @@ const Dashboard = () => {
             <div className="mt-4 text-sm font-semibold text-slate-900">Cardápio</div>
             <div className="mt-1 text-xs text-slate-500">produtos, categorias e complementos</div>
           </button>
-          <button type="button" onClick={() => navigate('/configuracoes?tab=whatsapp')} className="rounded-[26px] border border-[#003223]/10 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+          <button type="button" onClick={() => navigate('/configuracoes?tab=whatsapp')} className="rounded-[26px] border border-[#003223]/10 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98] dark:border-white/10 dark:bg-[#101a16]/95">
             <div className="flex items-center justify-between">
               <div className="rounded-2xl bg-[#003223]/8 p-2 text-[#003223]">
                 <MessageCircle className="h-5 w-5" />
@@ -337,7 +362,7 @@ const Dashboard = () => {
             <div className="mt-4 text-sm font-semibold text-slate-900">WhatsApp</div>
             <div className="mt-1 text-xs text-slate-500">conexão, QR code e automações</div>
           </button>
-          <button type="button" onClick={() => navigate('/configuracoes')} className="rounded-[26px] border border-slate-200 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]">
+          <button type="button" onClick={() => navigate('/configuracoes')} className="rounded-[26px] border border-slate-200 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98] dark:border-white/10 dark:bg-[#101a16]/95">
             <div className="flex items-center justify-between">
               <div className="rounded-2xl bg-slate-100 p-2 text-slate-700">
                 <Settings className="h-5 w-5" />
@@ -394,26 +419,26 @@ const Dashboard = () => {
         <div className="w-full overflow-x-auto">
           <RevenueChart data={revenueData} />
         </div>
-        <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+        <div className="rounded-[30px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:from-[#0d1714] dark:via-[#101a16] dark:to-[#17131a] dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.8)]">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-[#8CC850]">
             <Users className="h-4 w-4" />
             Resumo do dia
           </div>
           <div className="mt-4 grid gap-3">
-            <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Clientes novos</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{stats.newCustomers}</div>
-              <div className="text-xs text-slate-500">base atual: {stats.totalCustomers} clientes</div>
+            <div className="rounded-2xl bg-white/90 p-4 shadow-sm dark:bg-[#0c1512]">
+              <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Clientes novos</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{stats.newCustomers}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">base atual: {stats.totalCustomers} clientes</div>
             </div>
-            <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Produtos vendidos</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{stats.productsSold}</div>
-              <div className="text-xs text-slate-500">itens vendidos hoje</div>
+            <div className="rounded-2xl bg-white/90 p-4 shadow-sm dark:bg-[#0c1512]">
+              <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Produtos vendidos</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{stats.productsSold}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">itens vendidos hoje</div>
             </div>
-            <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Despesas do mês</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(stats.monthlyExpenses)}</div>
-              <div className="text-xs text-slate-500">acompanhe custos e margem</div>
+            <div className="rounded-2xl bg-white/90 p-4 shadow-sm dark:bg-[#0c1512]">
+              <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Despesas do mês</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(stats.monthlyExpenses)}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">acompanhe custos e margem</div>
             </div>
           </div>
         </div>
@@ -426,7 +451,7 @@ const Dashboard = () => {
         </div>
         <div className="space-y-3">
           {recentOrders.slice(0, 4).map((order) => (
-            <button key={order.id} type="button" onClick={() => navigate('/pedidos')} className="w-full rounded-[26px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.99]">
+            <button key={order.id} type="button" onClick={() => navigate('/pedidos')} className="w-full rounded-[26px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.99] dark:border-white/10 dark:bg-[#101a16]/95">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">#{order.id.slice(0, 8)}</div>
@@ -445,8 +470,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="hidden w-full overflow-x-auto rounded-3xl border border-slate-200/80 bg-white/95 p-4 shadow-sm md:block">
-        <h2 className="mb-4 text-xl font-semibold text-slate-900">Pedidos Recentes</h2>
+      <div className="hidden w-full overflow-x-auto rounded-[30px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95 md:block">
+        <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">Pedidos Recentes</h2>
         <RecentOrdersTable orders={recentOrders} />
       </div>
     </div>

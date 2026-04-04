@@ -64,12 +64,12 @@ const RecentOrdersTable: React.FC<RecentOrdersTableProps> = ({ orders }) => {
 
   if (orders.length === 0) {
     return (
-      <Card className="w-full">
+      <Card className="w-full rounded-[28px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
         <CardHeader>
-          <CardTitle className="text-lg sm:text-xl">Pedidos Recentes</CardTitle>
+          <CardTitle className="text-lg text-slate-900 sm:text-xl dark:text-white">Pedidos Recentes</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="py-8 text-center text-muted-foreground dark:text-slate-400">
             Nenhum pedido encontrado
           </div>
         </CardContent>
@@ -78,9 +78,9 @@ const RecentOrdersTable: React.FC<RecentOrdersTableProps> = ({ orders }) => {
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full rounded-[28px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
       <CardHeader>
-        <CardTitle className="text-lg sm:text-xl">Pedidos Recentes</CardTitle>
+        <CardTitle className="text-lg text-slate-900 sm:text-xl dark:text-white">Pedidos Recentes</CardTitle>
       </CardHeader>
       <CardContent className="p-3 sm:p-6">
         <div className="w-full overflow-x-auto">

@@ -603,7 +603,7 @@ const Products = () => {
   };
 
   const renderInlinePriceEditor = (product: ProductItem) => (
-    <div className="flex items-center gap-2 rounded-xl border border-[#FF6400]/15 bg-gradient-to-r from-[#FFF7EF] to-white px-2.5 py-1.5 shadow-[0_8px_20px_-18px_rgba(255,100,0,0.4)]">
+    <div className="flex items-center gap-2 rounded-xl border border-[#FF6400]/12 bg-white px-2.5 py-1 shadow-[0_10px_24px_-22px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#102019]">
       <span className="text-[11px] font-bold uppercase tracking-wide text-[#003223]/75">R$</span>
       <Input
         value={inlinePriceDrafts[product.id] ?? Number(product.price || 0).toFixed(2)}
@@ -624,9 +624,9 @@ const Products = () => {
             e.currentTarget.blur();
           }
         }}
-        className="h-8 w-[88px] border-0 bg-transparent px-0 text-sm font-bold text-[#0B5137] shadow-none focus-visible:ring-0"
+        className="h-7 w-[88px] border-0 bg-transparent px-0 text-sm font-bold text-[#0B5137] shadow-none focus-visible:ring-0 dark:text-[#8CC850]"
       />
-      {product.weight_based && <span className="text-[10px] text-[#003223]/55">/kg</span>}
+      {product.weight_based && <span className="text-[10px] text-[#003223]/55 dark:text-slate-400">/kg</span>}
       {inlinePriceSavingId === product.id && <span className="text-[10px] font-semibold text-[#FF6400]">Salvando</span>}
     </div>
   );

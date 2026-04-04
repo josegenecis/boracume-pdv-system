@@ -635,7 +635,7 @@ const Financeiro = () => {
   
   return (
     <div className="space-y-6">
-      <Card className="border-0 bg-boracume-dark-green text-white">
+      <Card className="overflow-hidden border-0 bg-gradient-to-br from-boracume-dark-green via-[#0b5137] to-[#003223] text-white shadow-[0_26px_60px_-34px_rgba(0,50,35,0.55)] dark:from-[#091510] dark:via-[#101a16] dark:to-[#151223]">
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
@@ -648,7 +648,7 @@ const Financeiro = () => {
             <div className="flex flex-wrap gap-2">
            <Dialog open={isCashDialogOpen} onOpenChange={setIsCashDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-white/15 hover:bg-white/25 text-white border border-white/20" variant="outline" onClick={() => {
+              <Button className="border border-white/20 bg-white/15 text-white hover:bg-white/25" variant="outline" onClick={() => {
                 setCashOperation(currentSession ? 'close' : 'open');
                 setCashAmount('');
               }}>
@@ -703,7 +703,7 @@ const Financeiro = () => {
 
           <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-boracume-orange hover:bg-boracume-orange/90 text-white">
+              <Button className="bg-boracume-orange text-white hover:bg-boracume-orange/90">
                 <ArrowDown className="mr-2 h-4 w-4" />
                 Nova Despesa
               </Button>
@@ -745,14 +745,14 @@ const Financeiro = () => {
         </CardContent>
       </Card>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-t-4 border-t-boracume-green shadow-sm">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="rounded-[28px] border border-white/70 border-t-4 border-t-boracume-green bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
               <ArrowUp className="h-5 w-5 text-boracume-green" />
               Receitas
             </CardTitle>
-            <CardDescription>Total de vendas e entradas</CardDescription>
+            <CardDescription className="dark:text-slate-400">Total de vendas e entradas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-boracume-dark-green">
@@ -761,13 +761,13 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="border-t-4 border-t-boracume-orange shadow-sm">
+        <Card className="rounded-[28px] border border-white/70 border-t-4 border-t-boracume-orange bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
               <ArrowDown className="h-5 w-5 text-boracume-orange" />
               Despesas
             </CardTitle>
-            <CardDescription>Total de custos e saídas</CardDescription>
+            <CardDescription className="dark:text-slate-400">Total de custos e saídas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-boracume-orange">
@@ -776,13 +776,13 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="border-t-4 border-t-boracume-dark-green shadow-sm bg-boracume-green/5">
+        <Card className="rounded-[28px] border border-white/70 border-t-4 border-t-boracume-dark-green bg-boracume-green/5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
               <DollarSign className="h-5 w-5 text-boracume-dark-green" />
               Saldo
             </CardTitle>
-            <CardDescription>Balanço atual</CardDescription>
+            <CardDescription className="dark:text-slate-400">Balanço atual</CardDescription>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${balance >= 0 ? 'text-boracume-green' : 'text-boracume-orange'}`}>
@@ -792,8 +792,8 @@ const Financeiro = () => {
         </Card>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-white">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="rounded-[26px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.2)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
@@ -808,7 +808,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="bg-white">
+        <Card className="rounded-[26px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.2)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
@@ -823,7 +823,7 @@ const Financeiro = () => {
           </CardContent>
         </Card>
         
-        <Card className="bg-white">
+        <Card className="rounded-[26px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.2)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
               <Percent className="h-4 w-4" />
@@ -840,19 +840,19 @@ const Financeiro = () => {
       </div>
       
       <Tabs defaultValue="fluxo-caixa" className="w-full">
-        <TabsList className="bg-muted/60">
+        <TabsList className="bg-muted/60 dark:bg-white/5">
           <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
           <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
         </TabsList>
         
         <TabsContent value="fluxo-caixa" className="space-y-4">
-          <Card className="bg-white">
+          <Card className="rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
                 {currentSession ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                 Sessão de Caixa
               </CardTitle>
-              <CardDescription>Selecione uma sessão para ver o histórico de vendas e movimentações</CardDescription>
+              <CardDescription className="dark:text-slate-400">Selecione uma sessão para ver o histórico de vendas e movimentações</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -893,41 +893,41 @@ const Financeiro = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <Card>
+                <Card className="rounded-[22px] border border-[#8CC850]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Total Vendas</CardTitle></CardHeader>
                   <CardContent><div className="text-xl font-bold">{formatCurrency(sessionTotal)}</div></CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-[22px] border border-[#0ea5e9]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">PIX</CardTitle></CardHeader>
                   <CardContent><div className="text-xl font-bold">{formatCurrency(sessionPix)}</div></CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-[22px] border border-[#FF6400]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Cartão</CardTitle></CardHeader>
                   <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCard)}</div></CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-[22px] border border-[#003223]/10 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Dinheiro</CardTitle></CardHeader>
                   <CardContent><div className="text-xl font-bold">{formatCurrency(sessionCash)}</div></CardContent>
                 </Card>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Card>
+                <Card className="rounded-[22px] border border-[#003223]/10 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Abertura</CardTitle></CardHeader>
                   <CardContent><div className="text-lg font-semibold">{formatCurrency(Number(selectedSession?.initial_amount || 0))}</div></CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-[22px] border border-[#8CC850]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Suprimentos</CardTitle></CardHeader>
                   <CardContent><div className="text-lg font-semibold">{formatCurrency(sessionIn)}</div></CardContent>
                 </Card>
-                <Card>
+                <Card className="rounded-[22px] border border-[#FF6400]/15 bg-white dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Sangrias</CardTitle></CardHeader>
                   <CardContent><div className="text-lg font-semibold">{formatCurrency(sessionOut)}</div></CardContent>
                 </Card>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Card>
+                <Card className="rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader>
                     <CardTitle className="text-base">Vendas da Sessão</CardTitle>
                   </CardHeader>
@@ -966,7 +966,7 @@ const Financeiro = () => {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="rounded-[24px] border border-white/70 bg-white/95 dark:border-white/10 dark:bg-[#0c1512]">
                   <CardHeader>
                     <CardTitle className="text-base">Movimentações (Suprimento/Sangria)</CardTitle>
                   </CardHeader>
@@ -1010,9 +1010,9 @@ const Financeiro = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-white">
+          <Card className="rounded-[30px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
             <CardHeader>
-              <CardTitle className="text-xl">Transações</CardTitle>
+              <CardTitle className="text-xl text-slate-900 dark:text-white">Transações</CardTitle>
               <CardDescription>
                 Gerencie todas as transações financeiras
               </CardDescription>

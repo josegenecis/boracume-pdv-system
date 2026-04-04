@@ -72,17 +72,17 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   // Se estiver carregando auth ou verificando status
   if (loading || checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-emerald-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-emerald-50 dark:from-[#07110d] dark:via-[#0b1512] dark:to-[#101c17]">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-boracume-orange mx-auto mb-4" />
-          <p className="text-gray-500 text-sm">Carregando...</p>
+          <p className="text-gray-500 text-sm dark:text-slate-400">Carregando...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-orange-50 w-full overflow-x-hidden relative">
+    <div className="relative min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-slate-50 via-white to-orange-50 dark:from-[#07110d] dark:via-[#0b1512] dark:to-[#101c17]">
       {showWizard && (
         <OnboardingWizard onComplete={handleOnboardingComplete} />
       )}
