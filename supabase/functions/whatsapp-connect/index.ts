@@ -57,10 +57,17 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || '';
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
+      supabaseUrl,
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    );
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      serviceRoleKey || (Deno.env.get('SUPABASE_ANON_KEY') ?? ''),
+      { auth: { persistSession: false, autoRefreshToken: false } }
     );
 
     const {
@@ -165,14 +172,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectResult.response?.status ?? 500 }), { status: 200, headers: jsonHeaders });
     }
 
-    // 2. Save in Database using service role to bypass RLS or just use the user client
-    // Since user is authenticated, they can insert their own row
-    const { data: existingInstance } = await supabaseClient
-      .from('whatsapp_instances')
-      .select('id')
-      .eq('restaurant_id', restaurant_id)
-      .maybeSingle();
-
     const refreshedStatusResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
       method: 'GET',
       headers: {
@@ -191,29 +190,23 @@ serve(async (req) => {
     const phone = extractPhoneFromInstance(connectedInstance);
     const instanceStatus = isConnected ? 'connected' : hasQr ? 'connecting' : 'disconnected';
 
-    if (!existingInstance) {
-      const { error: dbError } = await supabaseClient
-        .from('whatsapp_instances')
-        .insert({
-          restaurant_id,
-          instance_name: instanceName,
-          status: instanceStatus,
-          phone
-        });
+    const { error: dbError } = await supabaseAdmin
+      .from('whatsapp_instances')
+      .upsert({
+        restaurant_id,
+        instance_name: instanceName,
+        status: instanceStatus,
+        phone
+      }, {
+        onConflict: 'instance_name'
+      });
 
-      if (dbError) {
-        console.error("Database Error:", dbError);
-        return new Response(JSON.stringify({ error: true, message: 'Falha ao salvar instância no banco', details: dbError }), {
-          status: 200,
-          headers: jsonHeaders,
-        });
-      }
-    } else {
-      // Update status to connecting
-      await supabaseClient
-        .from('whatsapp_instances')
-        .update({ status: instanceStatus, phone })
-        .eq('restaurant_id', restaurant_id);
+    if (dbError) {
+      console.error("Database Error:", dbError);
+      return new Response(JSON.stringify({ error: true, message: 'Falha ao salvar instância no banco', details: dbError }), {
+        status: 200,
+        headers: jsonHeaders,
+      });
     }
 
     return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone }), {
