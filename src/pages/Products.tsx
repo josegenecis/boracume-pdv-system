@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Download, Upload, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -702,141 +702,6 @@ const Products = () => {
     </Card>
   );
 
-  const handleExportCSV = () => {
-    if (products.length === 0) {
-      toast({ title: 'Aviso', description: 'Não há produtos para exportar.' });
-      return;
-    }
-    
-    const headers = ['name', 'price', 'category', 'description', 'image_url', 'available'];
-    const csvContent = [
-      headers.join(','),
-      ...products.map(p => {
-        return [
-          `"${(p.name || '').replace(/"/g, '""')}"`,
-          p.price,
-          `"${(p.category || 'Geral').replace(/"/g, '""')}"`,
-          `"${(p.description || '').replace(/"/g, '""')}"`,
-          `"${(p.image_url || '').replace(/"/g, '""')}"`,
-          p.available ? 'TRUE' : 'FALSE'
-        ].join(',');
-      })
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `produtos_boracume_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
-
-  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsLoading(true);
-      const text = await file.text();
-      const lines = text.split('\n');
-      
-      if (lines.length < 2) throw new Error('O arquivo parece estar vazio.');
-      
-      const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
-      const nameIdx = headers.indexOf('name');
-      const priceIdx = headers.indexOf('price');
-      
-      if (nameIdx === -1 || priceIdx === -1) {
-        throw new Error('O arquivo deve conter as colunas "name" e "price". Use o botão de Exportar para pegar o modelo.');
-      }
-
-      const categoryIdx = headers.indexOf('category');
-      const descIdx = headers.indexOf('description');
-      const imgIdx = headers.indexOf('image_url');
-      const availIdx = headers.indexOf('available');
-
-      const toInsert = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        
-        // Simples parser de CSV considerando aspas
-        const values = [];
-        let inQuotes = false;
-        let currentVal = '';
-        
-        for (let char of lines[i]) {
-          if (char === '"') {
-            inQuotes = !inQuotes;
-          } else if (char === ',' && !inQuotes) {
-            values.push(currentVal);
-            currentVal = '';
-          } else {
-            currentVal += char;
-          }
-        }
-        values.push(currentVal);
-
-        const name = values[nameIdx]?.trim().replace(/^"|"$/g, '');
-        const price = parseFloat(values[priceIdx]?.trim() || '0');
-        
-        if (!name || isNaN(price)) continue;
-
-        let rawCat = categoryIdx !== -1 ? values[categoryIdx]?.trim().replace(/^"|"$/g, '') : 'Geral';
-        // Remove aspas e caracteres de interrogação estranhos
-        let catName = rawCat.replace(/[\uFFFD\u00A0]/g, '').trim();
-        if (!catName || catName.toLowerCase() === 'null') catName = 'Geral';
-        
-        // Encontra ou cria categoria (ignorando case)
-        let catObj = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-        let catId = catObj?.id;
-        
-        if (!catId) {
-          const { data: newCat } = await supabase
-            .from('product_categories')
-            .insert({ name: catName, user_id: activeUserIdSync })
-            .select()
-            .single();
-            
-          if (newCat) {
-            catId = newCat.id;
-            setCategories(prev => [...prev, newCat]);
-            // Adiciona localmente para a próxima iteração do loop achar a mesma categoria
-            categories.push(newCat);
-          }
-        }
-
-        toInsert.push({
-          user_id: activeUserIdSync,
-          name,
-          price,
-          category: catName,
-          category_id: catId,
-          description: descIdx !== -1 ? values[descIdx]?.trim().replace(/^"|"$/g, '') : '',
-          image_url: imgIdx !== -1 ? values[imgIdx]?.trim().replace(/^"|"$/g, '') : null,
-          available: availIdx !== -1 ? (values[availIdx]?.trim().toUpperCase() === 'TRUE') : true,
-          show_in_pdv: true,
-          show_in_delivery: true
-        });
-      }
-
-      if (toInsert.length > 0) {
-        const { error } = await supabase.from('products').insert(toInsert);
-        if (error) throw error;
-        toast({ title: 'Sucesso', description: `${toInsert.length} produtos importados!` });
-        fetchData();
-      } else {
-        toast({ title: 'Aviso', description: 'Nenhum produto válido encontrado no arquivo.', variant: 'destructive' });
-      }
-
-    } catch (err: any) {
-      toast({ title: 'Erro na importação', description: err.message || 'Falha ao processar arquivo.', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
-      // Reseta o input
-      event.target.value = '';
-    }
-  };
-
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);
@@ -849,10 +714,6 @@ const Products = () => {
     });
   };
 
-  const activeProductsCount = products.filter(product => product.available).length;
-  const lowStockProductsCount = products.filter(product => product.track_stock && product.stock_quantity <= product.low_stock_threshold).length;
-  const hiddenProductsCount = products.filter(product => !product.available).length;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -862,39 +723,6 @@ const Products = () => {
             <h1 className="text-2xl font-bold">Produtos</h1>
             <p className="mt-1 text-sm text-slate-500 md:hidden">Busque, organize e edite seu cardápio com cara de app.</p>
           </div>
-        </div>
-        <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
-          <Button variant="outline" onClick={handleExportCSV} className="hidden h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex">
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
-          
-          <div className="relative hidden md:inline-block">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleImportCSV}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              title="Importar CSV"
-            />
-            <Button variant="outline" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
-              <Upload className="h-4 w-4 mr-2" />
-              Importar CSV
-            </Button>
-          </div>
-
-          <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white/85 px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
-            <Import className="h-4 w-4 mr-2" />
-            Módulo de Importação
-          </Button>
-          <Button className="h-9 rounded-xl bg-[#8CC850] px-4 text-sm font-semibold text-white hover:bg-[#79b541]" onClick={() => {
-            setEditingProduct(null);
-            setShowForm(true);
-            setIsSheetOpen(true);
-          }}>
-            <Package className="h-4 w-4 mr-2" />
-            Novo Produto
-          </Button>
         </div>
       </div>
 
@@ -916,11 +744,28 @@ const Products = () => {
         }}
         className="w-full"
       >
-        <TabsList className="mb-2 flex h-10 flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-hide rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1">
-          <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
-          <TabsTrigger value="categories" className="h-8 rounded-lg px-4 text-sm font-semibold">Categorias</TabsTrigger>
-          <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
-        </TabsList>
+        <div className="mb-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <TabsList className="flex h-10 w-full justify-start overflow-x-auto rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1 lg:w-auto lg:flex-none">
+            <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
+            <TabsTrigger value="categories" className="h-8 rounded-lg px-4 text-sm font-semibold">Categorias</TabsTrigger>
+            <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
+          </TabsList>
+
+          <div className="hidden items-center justify-end gap-2 lg:flex">
+            <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
+              <Import className="mr-2 h-4 w-4" />
+              Importar produto
+            </Button>
+            <Button className="h-9 rounded-xl bg-[#8CC850] px-4 text-sm font-semibold text-white hover:bg-[#79b541]" onClick={() => {
+              setEditingProduct(null);
+              setShowForm(true);
+              setIsSheetOpen(true);
+            }}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo produto
+            </Button>
+          </div>
+        </div>
         
         <TabsContent value="products" className="space-y-5">
           <Card className="rounded-[24px] border border-[#FF6400]/12 bg-white shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
@@ -981,26 +826,6 @@ const Products = () => {
                   ))}
                 </div>
               </div>
-              <div className="mt-3 hidden items-center justify-between rounded-[18px] border border-[#003223]/8 bg-white px-4 py-2.5 lg:flex">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Operação rápida do cardápio</div>
-                  <div className="mt-0.5 text-xs text-slate-500">Edite preço, disponibilidade e complementos sem abrir várias telas.</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" className="h-10 rounded-xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
-                    <Import className="mr-2 h-4 w-4" />
-                    Importar cardápio
-                  </Button>
-                  <Button className="h-10 rounded-xl bg-[#8CC850] px-4 text-white hover:bg-[#79b541]" onClick={() => {
-                    setEditingProduct(null);
-                    setShowForm(true);
-                    setIsSheetOpen(true);
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Novo produto
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
@@ -1017,18 +842,15 @@ const Products = () => {
                 <Plus className="mr-2 h-4 w-4" />
                 Novo produto
               </Button>
-              <Button variant="outline" className="h-11 rounded-2xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
-                <Import className="h-4 w-4" />
+              <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
+                <Import className="mr-2 h-4 w-4" />
+                Importar produto
               </Button>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setSelectedCategory('all')}>
                 <SlidersHorizontal className="mr-2 h-4 w-4" />
                 Todas categorias
-              </Button>
-              <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={handleExportCSV}>
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
               </Button>
             </div>
           </div>

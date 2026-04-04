@@ -108,9 +108,9 @@ export default function OperatorSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <Badge variant="outline" className="text-xs">Operador</Badge>
+      <Badge variant="outline" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/80 px-3 text-xs font-semibold text-[#003223]">Operador</Badge>
       <Select value={operatorId} onValueChange={handleChange}>
-        <SelectTrigger className="h-8 w-[180px] text-xs">
+        <SelectTrigger className="h-9 w-[180px] rounded-xl border-[#FF6400]/15 bg-white/85 text-xs font-medium text-[#003223]">
           <SelectValue placeholder={operatorName || 'Selecionar operador'} />
         </SelectTrigger>
         <SelectContent>
@@ -123,7 +123,7 @@ export default function OperatorSwitcher() {
       </Select>
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="icon" className="h-8 w-8" title="Criar operador">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" title="Criar operador">
             <Plus className="h-4 w-4" />
           </Button>
         </DialogTrigger>
@@ -159,9 +159,6 @@ export default function OperatorSwitcher() {
           </div>
         </DialogContent>
       </Dialog>
-      <Button variant="outline" size="sm" onClick={() => window.open(`${window.location.origin}/garcons`, '_blank')} className="h-8">
-        Gerenciar
-      </Button>
     </div>
   );
 }
