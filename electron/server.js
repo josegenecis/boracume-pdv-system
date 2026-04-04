@@ -98,6 +98,24 @@ class PrintAgentServer {
     this.server = http.createServer(this.app);
     this.wss = new WebSocket.Server({ server: this.server });
 
+    this.server.on('error', (error) => {
+      if (error?.code === 'EADDRINUSE') {
+        console.warn(`Print Agent já está ativo na porta ${this.port}. Reutilizando instância existente.`);
+        return;
+      }
+
+      console.error('Erro ao iniciar servidor local do Print Agent:', error);
+    });
+
+    this.wss.on('error', (error) => {
+      if (error?.code === 'EADDRINUSE') {
+        console.warn(`WebSocket do Print Agent já está ativo na porta ${this.port}.`);
+        return;
+      }
+
+      console.error('Erro no WebSocket do Print Agent:', error);
+    });
+
     this.wss.on('connection', (ws) => {
       console.log('Cliente PWA conectado via WebSocket');
       

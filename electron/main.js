@@ -26,6 +26,20 @@ let updateWindow;
 // Verificar se deve rodar em modo "Agente" (sem janela principal, apenas Tray)
 // Pode ser passado via linha de comando: --agent-mode
 const isAgentMode = process.argv.includes('--agent-mode');
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+});
 
 function createWindow() {
   // Se for modo agente, não criar janela principal imediatamente, ou criar oculta
