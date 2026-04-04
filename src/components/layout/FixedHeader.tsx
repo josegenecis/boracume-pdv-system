@@ -55,7 +55,7 @@ const FixedHeader = () => {
   })();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#7DFF7A]/18 bg-[#003223] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.55)]">
+    <header className="fixed top-0 left-0 right-0 z-50 overflow-hidden border-b border-[#7DFF7A]/18 bg-[#003223] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.55)]">
       <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
@@ -128,6 +128,7 @@ const FixedHeader = () => {
           </Button>
         </div>
       </div>
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[6px] bg-[linear-gradient(180deg,#D9FFB5_0%,#BDFB89_24%,#97EA59_52%,#74CF3D_76%,#C8FFAA_100%)] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_-1px_0_rgba(0,0,0,0.12)_inset,0_0_10px_rgba(151,234,89,0.22)]" />
     </header>
   );
 };

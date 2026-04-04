@@ -88,7 +88,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
       )}
 
       <FixedHeader />
-      <div className="pointer-events-none fixed left-0 right-0 top-16 z-[45] h-[6px] bg-[linear-gradient(180deg,#D9FFB5_0%,#BDFB89_24%,#97EA59_52%,#74CF3D_76%,#C8FFAA_100%)] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_-1px_0_rgba(0,0,0,0.12)_inset,0_0_10px_rgba(151,234,89,0.28)]" />
       
       {/* Overlay para mobile */}
       {isMobile && isOpen && (
