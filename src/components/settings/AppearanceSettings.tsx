@@ -4,18 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Palette, Save, MonitorSmartphone, Moon, Sun, Monitor } from 'lucide-react';
+import { Palette, Save } from 'lucide-react';
 import { useAppearanceSettings } from '@/hooks/useAppearanceSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/components/theme-provider';
 
 // Cores prontas sugeridas para o cardápio
 const PRESET_COLORS = [
   { id: 'pomar', name: 'Pomar', primary: '#85C441', secondary: '#063D2E', accent: '#EF6C20', background: '#F7EEDF' },
   { id: 'ifood', name: 'Clássico Red', primary: '#EA1D2C', secondary: '#333333', accent: '#EA1D2C', background: '#F7F7F7' },
-  { id: 'dark', name: 'Dark Mode', primary: '#F26522', secondary: '#121212', accent: '#F26522', background: '#1E1E1E' },
   { id: 'ocean', name: 'Ocean', primary: '#0ea5e9', secondary: '#0f172a', accent: '#38bdf8', background: '#f8fafc' },
 ];
 
@@ -23,7 +21,6 @@ const AppearanceSettings = () => {
   const { settings, loading, updateSettings } = useAppearanceSettings();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme();
   
   const [isSaving, setIsSaving] = useState(false);
   const [menuColors, setMenuColors] = useState({
@@ -101,83 +98,8 @@ const AppearanceSettings = () => {
     }
   };
 
-  useEffect(() => {
-    const nextTheme = settings.theme === 'auto' ? 'system' : settings.theme;
-    if (nextTheme === 'light' || nextTheme === 'dark' || nextTheme === 'system') {
-      setTheme(nextTheme);
-    }
-  }, [settings.theme, setTheme]);
-
-  const handleSystemThemeChange = (nextTheme: 'light' | 'dark' | 'system') => {
-    setTheme(nextTheme);
-    updateSettings({ theme: nextTheme === 'system' ? 'auto' : nextTheme });
-  };
-
   return (
     <div className="space-y-6">
-      <Card className="border-[#003223]/10 bg-gradient-to-br from-white via-[#FFF8F2] to-[#F5EBE1] shadow-md dark:border-white/10 dark:from-[#08140f] dark:via-[#0d1f18] dark:to-[#13271f]">
-        <CardHeader className="border-b border-[#003223]/6 pb-4 dark:border-white/10">
-          <CardTitle className="flex items-center gap-2 text-[#003223] dark:text-white">
-            <MonitorSmartphone size={22} className="text-[#FF6400]" />
-            Aparência do Sistema
-          </CardTitle>
-          <CardDescription className="dark:text-slate-300">
-            Teste como o BoraCumê fica no claro, escuro ou acompanhando o sistema operacional.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5 pt-6">
-          <div className="grid gap-3 md:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => handleSystemThemeChange('light')}
-              className={`rounded-2xl border p-4 text-left transition-all ${theme === 'light' ? 'border-[#FF6400] bg-white shadow-[0_18px_40px_-30px_rgba(255,100,0,0.45)]' : 'border-[#003223]/10 bg-white/80 hover:border-[#FF6400]/35'} dark:border-white/10 dark:bg-white/5 dark:hover:border-[#FF6400]/45`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[#FFF1E6] p-2 text-[#FF6400] dark:bg-[#FF6400]/15">
-                  <Sun size={18} />
-                </div>
-                <div>
-                  <div className="font-semibold text-[#003223] dark:text-white">Modo claro</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-300">Visual leve com foco na operação</div>
-                </div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSystemThemeChange('dark')}
-              className={`rounded-2xl border p-4 text-left transition-all ${theme === 'dark' ? 'border-[#8CC850] bg-[#08140f] shadow-[0_18px_40px_-30px_rgba(12,50,35,0.85)]' : 'border-[#003223]/10 bg-white/80 hover:border-[#8CC850]/45'} dark:border-white/10 dark:bg-white/5`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[#003223] p-2 text-[#8CC850] dark:bg-[#8CC850]/15">
-                  <Moon size={18} />
-                </div>
-                <div>
-                  <div className="font-semibold text-[#003223] dark:text-white">Modo escuro</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-300">Mais contraste para uso prolongado</div>
-                </div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSystemThemeChange('system')}
-              className={`rounded-2xl border p-4 text-left transition-all ${theme === 'system' ? 'border-[#003223] bg-[#F5EBE1] shadow-[0_18px_40px_-30px_rgba(0,50,35,0.35)]' : 'border-[#003223]/10 bg-white/80 hover:border-[#003223]/35'} dark:border-white/10 dark:bg-white/5 dark:hover:border-white/25`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[#003223]/10 p-2 text-[#003223] dark:bg-white/10 dark:text-white">
-                  <Monitor size={18} />
-                </div>
-                <div>
-                  <div className="font-semibold text-[#003223] dark:text-white">Automático</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-300">Segue o tema do dispositivo</div>
-                </div>
-              </div>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card className="border-boracume-orange/30 shadow-md">
         <CardHeader className="bg-boracume-light/50 border-b pb-4">
           <CardTitle className="flex items-center gap-2 text-boracume-dark-green">
