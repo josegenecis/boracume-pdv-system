@@ -164,11 +164,11 @@ const WhatsAppIntegration: React.FC = () => {
   const generateQRCode = async () => {
     try {
       setLoading(true);
-      setQrCodeUrl(null); // Limpar QR anterior
+      setQrCodeUrl(null);
+      setSettings(prev => ({ ...prev, qr_code_data: '' }));
 
       console.log("Conectando na EvoGo...");
 
-      // 1. Chamar connect
       const { data: connectData, error: connectError } = await supabase.functions.invoke('whatsapp-connect', {
         method: 'POST'
       });
@@ -179,10 +179,19 @@ const WhatsAppIntegration: React.FC = () => {
         throw new Error(`Falha na API EvoGo (${connectData.status}): ${JSON.stringify(connectData.details)}`);
       }
 
-      // 2. Aguardar um pouco para a instância inicializar
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (connectData?.connected || connectData?.status === 'connected') {
+        setSettings(prev => ({
+          ...prev,
+          connected: true,
+          phone_number: connectData.phone || prev.phone_number,
+          qr_code_data: ''
+        }));
+        toast({ title: "Conectado!", description: "A instância já estava conectada." });
+        return;
+      }
 
-      // 3. Pegar QR Code
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const { data: qrData, error: qrError } = await supabase.functions.invoke('whatsapp-qrcode', {
         method: 'GET'
       });
@@ -193,13 +202,20 @@ const WhatsAppIntegration: React.FC = () => {
         throw new Error(`Falha ao pegar QR (${qrData.status}): ${JSON.stringify(qrData.details)}`);
       }
 
+      if (qrData?.connected) {
+        setSettings(prev => ({ ...prev, connected: true, qr_code_data: '' }));
+        setQrCodeUrl(null);
+        toast({ title: "Conectado!", description: "A instância já estava ativa e pronta para uso." });
+        return;
+      }
+
       if (qrData?.qrcode) {
          setQrCodeUrl(qrData.qrcode); 
          setSettings(prev => ({ ...prev, qr_code_data: qrData.qrcode }));   
          toast({ title: "QR Code gerado", description: "Escaneie o QR Code no seu WhatsApp para conectar." });
          startPolling();
       } else {
-         throw new Error('Não foi possível gerar o QR Code.');       
+         throw new Error('Não foi possível gerar o QR Code. Aguarde alguns segundos e tente novamente.');       
       }
 
     } catch (error: any) {

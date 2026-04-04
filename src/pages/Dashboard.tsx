@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RevenueChart from '@/components/dashboard/RevenueChart';
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { CreditCard, Users, Package, TrendingUp, DollarSign, Sparkles, Clock3, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight } from 'lucide-react';
+import { CreditCard, Users, Package, TrendingUp, DollarSign, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -298,50 +298,11 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="relative overflow-hidden rounded-3xl border border-orange-200/70 bg-gradient-to-br from-orange-50 via-white to-emerald-50 p-6 shadow-sm">
-        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-boracume-orange/15 blur-3xl" />
-        <div className="absolute -left-8 bottom-0 h-28 w-28 rounded-full bg-boracume-green/15 blur-3xl" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-medium text-boracume-orange shadow-sm">
-              <Sparkles className="h-3.5 w-3.5" />
-              Painel BoraCumê
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Inicial</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Acompanhe vendas, pedidos e clientes em uma visão rápida para tomar decisões com mais agilidade.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:w-[520px]">
-            <div className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm backdrop-blur">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-boracume-orange">
-                <CreditCard className="h-4 w-4" />
-                Vendas hoje
-              </div>
-              <div className="text-xl font-bold text-slate-900">{formatCurrency(stats.todaySales)}</div>
-              <div className="mt-1 text-xs text-slate-500">{stats.todayOrders} pedidos confirmados</div>
-            </div>
-            <div className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm backdrop-blur">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-boracume-green">
-                <Clock3 className="h-4 w-4" />
-                Em andamento
-              </div>
-              <div className="text-xl font-bold text-slate-900">{stats.pendingOrders}</div>
-              <div className="mt-1 text-xs text-slate-500">pedidos aguardando ação</div>
-            </div>
-            <div className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm backdrop-blur">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
-                <ClipboardList className="h-4 w-4" />
-                Ticket médio
-              </div>
-              <div className="text-xl font-bold text-slate-900">{formatCurrency(stats.averageTicket)}</div>
-              <div className="mt-1 text-xs text-slate-500">resultado médio por pedido</div>
-            </div>
-          </div>
-        </div>
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Painel Inicial</h1>
+        <p className="max-w-2xl text-sm text-slate-600">
+          Acompanhe vendas, pedidos e clientes em uma visão rápida para tomar decisões com mais agilidade.
+        </p>
       </div>
 
       <div className="grid gap-3 md:hidden">

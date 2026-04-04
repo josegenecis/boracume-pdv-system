@@ -62,9 +62,16 @@ serve(async (req) => {
 
     let newStatus = 'disconnected';
     let phone = null;
+    const hasQr = Boolean(
+      currentInstance?.qrcode ||
+      currentInstance?.Qrcode ||
+      currentInstance?.qr ||
+      currentInstance?.QrCode
+    );
+
     if (currentInstance?.connected) {
       newStatus = 'connected';
-    } else if (currentInstance?.qrcode) {
+    } else if (hasQr) {
       newStatus = 'connecting';
     }
 

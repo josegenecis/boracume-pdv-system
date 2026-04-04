@@ -8,6 +8,28 @@ const corsHeaders = {
 
 const EVOLUTION_URL = "https://api.boracume.com";
 const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getInstancesFromPayload = (payload: any) => {
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload)) return payload;
+  return [];
+};
+
+const findCurrentInstance = (payload: any, instanceName: string, instanceToken: string) => {
+  const instances = getInstancesFromPayload(payload);
+  return instances.find((instance: any) => (
+    instance?.token === instanceToken ||
+    instance?.instanceName === instanceName ||
+    instance?.name === instanceName
+  ));
+};
+
+const extractPhoneFromInstance = (instance: any) => {
+  const jid = instance?.jid || instance?.ownerJid || instance?.number;
+  if (!jid) return null;
+  return String(jid).split('@')[0] || null;
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -43,32 +65,73 @@ serve(async (req) => {
       .maybeSingle();
     const restaurantName = profileData?.restaurant_name?.trim() || 'Restaurante';
 
-    // 1. Call EvoGo to create instance
-    const evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
-      method: 'POST',
+    const allInstancesRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'apikey': EVOLUTION_API_KEY
-      },
-      body: JSON.stringify({
-        name: restaurantName,
-        instanceName: instanceName,
-        token: instanceToken,
-        qrcode: true,
-        integration: "WHATSAPP-BAILEYS"
-      })
+      }
     });
 
-    let evoData;
+    let allInstancesData: any = {};
     try {
-      evoData = await evoRes.json();
-    } catch (e) {
-      evoData = { message: "Could not parse JSON from Evolution API" };
+      allInstancesData = await allInstancesRes.json();
+    } catch {
+      allInstancesData = {};
     }
 
-    if (!evoRes.ok && evoData?.response?.message?.[0] !== 'Instance already exists' && evoData?.error !== 'Instance already exists') {
-      console.error("Evolution API Error:", evoData);
-      return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    let currentInstance = findCurrentInstance(allInstancesData, instanceName, instanceToken);
+
+    if (!currentInstance) {
+      const evoRes = await fetch(`${EVOLUTION_URL}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
+        },
+        body: JSON.stringify({
+          name: restaurantName,
+          instanceName: instanceName,
+          token: instanceToken,
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS"
+        })
+      });
+
+      let evoData;
+      try {
+        evoData = await evoRes.json();
+      } catch {
+        evoData = { message: "Could not parse JSON from Evolution API" };
+      }
+
+      const alreadyExists =
+        evoData?.response?.message?.[0] === 'Instance already exists' ||
+        evoData?.response?.message === 'Instance already exists' ||
+        evoData?.message === 'Instance already exists' ||
+        evoData?.error === 'Instance already exists';
+
+      if (!evoRes.ok && !alreadyExists) {
+        console.error("Evolution API Error:", evoData);
+        return new Response(JSON.stringify({ error: true, message: 'Falha na EvoGo', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      await sleep(1500);
+
+      const refreshedInstancesRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+        method: 'GET',
+        headers: {
+          'apikey': EVOLUTION_API_KEY
+        }
+      });
+
+      let refreshedInstancesData: any = {};
+      try {
+        refreshedInstancesData = await refreshedInstancesRes.json();
+      } catch {
+        refreshedInstancesData = {};
+      }
+
+      currentInstance = findCurrentInstance(refreshedInstancesData, instanceName, instanceToken);
     }
 
     const connectRes = await fetch(`${EVOLUTION_URL}/instance/connect`, {
@@ -91,11 +154,17 @@ serve(async (req) => {
     let connectData;
     try {
       connectData = await connectRes.json();
-    } catch (e) {
+    } catch {
       connectData = { message: "Could not parse JSON from Evolution API" };
     }
 
-    if (!connectRes.ok) {
+    const connectAlreadyExists =
+      connectData?.response?.message?.[0] === 'Instance already exists' ||
+      connectData?.response?.message === 'Instance already exists' ||
+      connectData?.message === 'Instance already exists' ||
+      connectData?.error === 'Instance already exists';
+
+    if (!connectRes.ok && !connectAlreadyExists) {
       console.error("Evolution API Connect Error:", connectData);
       return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -106,7 +175,32 @@ serve(async (req) => {
       .from('whatsapp_instances')
       .select('id')
       .eq('restaurant_id', restaurant_id)
-      .single();
+      .maybeSingle();
+
+    const refreshedStatusRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+      method: 'GET',
+      headers: {
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+
+    let refreshedStatusData: any = {};
+    try {
+      refreshedStatusData = await refreshedStatusRes.json();
+    } catch {
+      refreshedStatusData = {};
+    }
+
+    const connectedInstance = findCurrentInstance(refreshedStatusData, instanceName, instanceToken) || currentInstance;
+    const isConnected = Boolean(connectedInstance?.connected);
+    const hasQr = Boolean(
+      connectedInstance?.qrcode ||
+      connectedInstance?.Qrcode ||
+      connectedInstance?.qr ||
+      connectedInstance?.QrCode
+    );
+    const phone = extractPhoneFromInstance(connectedInstance);
+    const instanceStatus = isConnected ? 'connected' : hasQr ? 'connecting' : 'disconnected';
 
     if (!existingInstance) {
       const { error: dbError } = await supabaseClient
@@ -114,7 +208,8 @@ serve(async (req) => {
         .insert({
           restaurant_id,
           instance_name: instanceName,
-          status: 'connecting'
+          status: instanceStatus,
+          phone
         });
 
       if (dbError) {
@@ -128,11 +223,11 @@ serve(async (req) => {
       // Update status to connecting
       await supabaseClient
         .from('whatsapp_instances')
-        .update({ status: 'connecting' })
+        .update({ status: instanceStatus, phone })
         .eq('restaurant_id', restaurant_id);
     }
 
-    return new Response(JSON.stringify({ success: true, instanceName }), {
+    return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

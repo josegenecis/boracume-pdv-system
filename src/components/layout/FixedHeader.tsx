@@ -1,12 +1,10 @@
 
 import React from 'react';
 
-import { Bell, User, LogOut, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, Lock, Unlock } from 'lucide-react';
+import { Bell, User, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
-import { useCashRegister } from '@/contexts/CashRegisterContext';
 import { useState, useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
@@ -56,13 +54,6 @@ const FixedHeader = () => {
     return 'BoraCumê';
   })();
 
-  const desktopNavItems = [
-    { label: 'Início', path: '/dashboard', active: location.pathname === '/dashboard' },
-    { label: 'Pedidos', path: '/pedidos', active: location.pathname === '/pedidos' },
-    { label: 'Produtos', path: '/produtos', active: location.pathname === '/produtos' },
-    { label: 'Configurações', path: '/configuracoes', active: location.pathname === '/configuracoes' },
-  ];
-
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/70 shadow-sm">
       <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
@@ -85,20 +76,6 @@ const FixedHeader = () => {
           )}
         </div>
 
-        <div className="hidden md:flex flex-1 px-4 justify-center items-center gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-[#FF6400]/12 bg-white/80 px-2 py-1 shadow-[0_10px_30px_-24px_rgba(0,50,35,0.24)]">
-            {desktopNavItems.map((item) => (
-              <button
-                key={item.path}
-                type="button"
-                onClick={() => navigate(item.path)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${item.active ? 'bg-[#003223] text-white' : 'text-[#003223]/72 hover:bg-[#F5EBE1] hover:text-[#003223]'}`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <div className="hidden lg:block">
             <OperatorSwitcher />

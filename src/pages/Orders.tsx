@@ -1033,37 +1033,6 @@ const Orders = () => {
           </div>
         </div>
 
-        <div className="hidden gap-4 lg:grid lg:grid-cols-4">
-          <Card className="rounded-[28px] border border-yellow-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Novos</div>
-              <div className="mt-3 text-3xl font-bold text-slate-900">{pendingOrders.length}</div>
-              <div className="mt-2 text-sm text-slate-500">Pedidos aguardando aceite ou produção</div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-[28px] border border-blue-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Em preparo</div>
-              <div className="mt-3 text-3xl font-bold text-slate-900">{activeOrders.length}</div>
-              <div className="mt-2 text-sm text-slate-500">Pedidos ativos na operação da cozinha</div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-[28px] border border-purple-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Em entrega</div>
-              <div className="mt-3 text-3xl font-bold text-slate-900">{inDeliveryOrders.length}</div>
-              <div className="mt-2 text-sm text-slate-500">Pedidos já despachados para a rua</div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-[28px] border border-emerald-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Finalizados</div>
-              <div className="mt-3 text-3xl font-bold text-slate-900">{deliveredOrders.length}</div>
-              <div className="mt-2 text-sm text-slate-500">Histórico concluído do turno atual</div>
-            </CardContent>
-          </Card>
-        </div>
-
         <Card className="rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row gap-4">
