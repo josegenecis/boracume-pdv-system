@@ -1011,31 +1011,70 @@ const Orders = () => {
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Pedidos</h1>
             <p className="mt-1 text-sm text-slate-500 md:hidden">Acompanhe pedidos por status e aja rápido com uma mão.</p>
           </div>
-          <div className="hidden items-center gap-2 md:flex">
-            <Tabs value={ordersView} onValueChange={(v) => setOrdersView(v as any)}>
-              <TabsList>
-                <TabsTrigger value="list">Lista</TabsTrigger>
-                <TabsTrigger value="kanban">Kanban</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDeliveryDialogOpen(true);
-                setDeliveryDialogTab('in_delivery');
-              }}
-            >
-              Entregas/Despachados
-            </Button>
-            <Button onClick={fetchOrders} variant="outline">
-              Atualizar
-            </Button>
-          </div>
         </div>
 
         <Card className="rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
           <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="hidden md:flex md:flex-wrap md:items-center md:gap-3">
+              <Tabs value={ordersView} onValueChange={(v) => setOrdersView(v as any)}>
+                <TabsList>
+                  <TabsTrigger value="list">Lista</TabsTrigger>
+                  <TabsTrigger value="kanban">Kanban</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="preparing">Preparando</SelectItem>
+                  <SelectItem value="ready">Pronto</SelectItem>
+                  <SelectItem value="in_delivery">Saiu para Entrega</SelectItem>
+                  <SelectItem value="delivered">Finalizado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Tipos</SelectItem>
+                  <SelectItem value="delivery">Entrega</SelectItem>
+                  <SelectItem value="pickup">Retirada</SelectItem>
+                  <SelectItem value="dine_in">No Local</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="relative min-w-[260px] flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Buscar por número, cliente ou telefone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeliveryDialogOpen(true);
+                  setDeliveryDialogTab('in_delivery');
+                }}
+              >
+                Entregas/Despachados
+              </Button>
+              <Button onClick={fetchOrders} variant="outline">
+                Atualizar
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-4 md:hidden">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
@@ -1072,27 +1111,6 @@ const Orders = () => {
                   <SelectItem value="dine_in">No Local</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="mt-4 hidden items-center justify-between rounded-[22px] border border-[#003223]/8 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/65 px-4 py-3 lg:flex">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">Central operacional de pedidos</div>
-                <div className="mt-1 text-xs text-slate-500">Use lista para conferência detalhada e kanban para fluxo rápido da operação.</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="h-10 rounded-xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]"
-                  onClick={() => {
-                    setDeliveryDialogOpen(true);
-                    setDeliveryDialogTab('in_delivery');
-                  }}
-                >
-                  Entregas e despachados
-                </Button>
-                <Button className="h-10 rounded-xl bg-[#003223] px-4 text-white hover:bg-[#0a4a34]" onClick={fetchOrders}>
-                  Atualizar painel
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>

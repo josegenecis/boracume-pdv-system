@@ -55,14 +55,14 @@ const FixedHeader = () => {
   })();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#063D2E] bg-[#003223] shadow-sm">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#7DFF7A]/18 bg-[#003223] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.55)]">
       <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={toggleSidebar}
-            className="h-9 w-9 rounded-xl p-0 text-white hover:bg-white/10"
+            className="h-9 w-9 rounded-xl border border-[#A7FF6A]/22 bg-white/5 p-0 text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/10"
           >
             <Menu size={18} />
           </Button>
@@ -80,7 +80,7 @@ const FixedHeader = () => {
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
-          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-white/15 bg-white/10 px-4 font-semibold text-white hover:bg-white/15 md:inline-flex" onClick={() => navigate('/relatorios')}>
+          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 px-4 font-semibold text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15 md:inline-flex" onClick={() => navigate('/relatorios')}>
             Abrir relatório diário
           </Button>
           <Button size="sm" className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex" onClick={() => navigate('/pdv')}>
@@ -88,7 +88,7 @@ const FixedHeader = () => {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-white/15 bg-white/10 font-semibold text-white hover:bg-white/15 ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
+              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 font-semibold text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15 ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
                 {isMobile ? <User size={18} /> : 'Gerencial'}
               </Button>
             </DropdownMenuTrigger>
@@ -123,7 +123,7 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-white/15 bg-white/10 p-0 text-white hover:bg-white/15" onClick={() => navigate('/pedidos')}>
+          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 p-0 text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
         </div>

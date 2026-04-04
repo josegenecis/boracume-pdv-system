@@ -108,9 +108,9 @@ export default function OperatorSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <Badge variant="outline" className="h-9 rounded-xl border-[#FF6400]/15 bg-white/80 px-3 text-xs font-semibold text-[#003223]">Operador</Badge>
+      <Badge variant="outline" className="h-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 px-3 text-xs font-semibold text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)]">Operador</Badge>
       <Select value={operatorId} onValueChange={handleChange}>
-        <SelectTrigger className="h-9 w-[180px] rounded-xl border-[#FF6400]/15 bg-white/85 text-xs font-medium text-[#003223]">
+        <SelectTrigger className="h-9 w-[180px] rounded-xl border-[#A7FF6A]/22 bg-white/10 text-xs font-medium text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)]">
           <SelectValue placeholder={operatorName || 'Selecionar operador'} />
         </SelectTrigger>
         <SelectContent>
@@ -123,7 +123,7 @@ export default function OperatorSwitcher() {
       </Select>
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" title="Criar operador">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15" title="Criar operador">
             <Plus className="h-4 w-4" />
           </Button>
         </DialogTrigger>

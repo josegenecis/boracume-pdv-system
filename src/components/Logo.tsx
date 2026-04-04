@@ -34,7 +34,7 @@ const Logo: React.FC<LogoProps> = ({ size = 'md', className = '', theme = 'light
           fontSize="28" 
           letterSpacing="-0.5"
         >
-          <tspan fill="#EF6C20">Bora</tspan>
+          <tspan fill="#FF6400">Bora</tspan>
           <tspan fill="#85C441">Cumê</tspan>
         </text>
       </svg>
