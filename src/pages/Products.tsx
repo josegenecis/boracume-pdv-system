@@ -922,53 +922,9 @@ const Products = () => {
           <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="products" className="space-y-6">
-          <div className="hidden gap-4 lg:grid lg:grid-cols-4">
-            <Card className="rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-              <CardContent className="p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Produtos</div>
-                <div className="mt-3 text-3xl font-bold text-slate-900">{products.length}</div>
-                <div className="mt-2 text-sm text-slate-500">Catálogo total disponível para gestão</div>
-              </CardContent>
-            </Card>
-            <Card className="rounded-[28px] border border-[#8CC850]/18 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-              <CardContent className="p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ativos</div>
-                <div className="mt-3 text-3xl font-bold text-slate-900">{activeProductsCount}</div>
-                <div className="mt-2 text-sm text-slate-500">Itens visíveis e liberados para venda</div>
-              </CardContent>
-            </Card>
-            <Card className="rounded-[28px] border border-red-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-              <CardContent className="p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estoque baixo</div>
-                <div className="mt-3 text-3xl font-bold text-slate-900">{lowStockProductsCount}</div>
-                <div className="mt-2 text-sm text-slate-500">Produtos que pedem atenção imediata</div>
-              </CardContent>
-            </Card>
-            <Card className="rounded-[28px] border border-slate-200 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-              <CardContent className="p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ocultos</div>
-                <div className="mt-3 text-3xl font-bold text-slate-900">{hiddenProductsCount}</div>
-                <div className="mt-2 text-sm text-slate-500">Itens desativados sem remover do cadastro</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-3 md:hidden">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-[24px] border border-[#FF6400]/12 bg-white/95 p-4 shadow-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Produtos</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">{products.length}</div>
-              </div>
-              <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Categorias</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900">{categories.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <Card className="rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="pt-4">
+        <TabsContent value="products" className="space-y-5">
+          <Card className="rounded-[24px] border border-[#FF6400]/12 bg-white shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
+            <CardContent className="py-3">
               <div className="flex flex-col gap-3 md:flex-row">
                 <div className="flex-1">
                   <div className="relative">
@@ -1025,10 +981,10 @@ const Products = () => {
                   ))}
                 </div>
               </div>
-              <div className="mt-4 hidden items-center justify-between rounded-[22px] border border-[#003223]/8 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/65 px-4 py-3 lg:flex">
+              <div className="mt-3 hidden items-center justify-between rounded-[18px] border border-[#003223]/8 bg-white px-4 py-2.5 lg:flex">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">Operação rápida do cardápio</div>
-                  <div className="mt-1 text-xs text-slate-500">Edite preço, disponibilidade e complementos sem abrir várias telas.</div>
+                  <div className="mt-0.5 text-xs text-slate-500">Edite preço, disponibilidade e complementos sem abrir várias telas.</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" className="h-10 rounded-xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
