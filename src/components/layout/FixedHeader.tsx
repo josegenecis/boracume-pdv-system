@@ -55,21 +55,21 @@ const FixedHeader = () => {
   })();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 overflow-hidden border-b border-[#7DFF7A]/18 bg-[#003223] shadow-[0_12px_30px_-24px_rgba(0,0,0,0.55)]">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#E7ECE8] bg-white shadow-[0_12px_30px_-24px_rgba(0,50,35,0.16)]">
       <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={toggleSidebar}
-            className="h-9 w-9 rounded-xl border border-[#A7FF6A]/22 bg-white/5 p-0 text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/10"
+            className="h-9 w-9 rounded-xl border border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
           >
             <Menu size={18} />
           </Button>
           {isMobile ? (
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8CC850]">BoraCumê</div>
-              <div className="truncate text-base font-bold text-white">{mobileTitle}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400]">BoraCumê</div>
+              <div className="truncate text-base font-bold text-[#003223]">{mobileTitle}</div>
             </div>
           ) : (
             <Logo size="md" />
@@ -80,7 +80,7 @@ const FixedHeader = () => {
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
-          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 px-4 font-semibold text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15 md:inline-flex" onClick={() => navigate('/relatorios')}>
+          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#DCE6DF] bg-white px-4 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex" onClick={() => navigate('/relatorios')}>
             Abrir relatório diário
           </Button>
           <Button size="sm" className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex" onClick={() => navigate('/pdv')}>
@@ -88,7 +88,7 @@ const FixedHeader = () => {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 font-semibold text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15 ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
+              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
                 {isMobile ? <User size={18} /> : 'Gerencial'}
               </Button>
             </DropdownMenuTrigger>
@@ -123,12 +123,11 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-[#A7FF6A]/22 bg-white/10 p-0 text-white shadow-[0_0_0_1px_rgba(167,255,106,0.04),0_0_14px_rgba(167,255,106,0.08)] hover:bg-white/15" onClick={() => navigate('/pedidos')}>
+          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]" onClick={() => navigate('/pedidos')}>
             <Bell size={18} />
           </Button>
         </div>
       </div>
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-[linear-gradient(90deg,rgba(167,255,106,0.16)_0%,rgba(167,255,106,0.5)_50%,rgba(167,255,106,0.16)_100%)] shadow-[0_0_4px_rgba(151,234,89,0.12)]" />
     </header>
   );
 };
