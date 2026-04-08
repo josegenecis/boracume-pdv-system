@@ -150,7 +150,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-full h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+      <DialogContent className="w-[100dvw] max-w-[100dvw] h-[100dvh] sm:h-auto sm:max-h-[85vh] sm:max-w-md overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
           <div className="relative">
             {product.image_url ? (
@@ -180,7 +180,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               {product.description && (
                 <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
               )}
-              <div className="text-2xl font-extrabold text-gray-900">
+              <div className="text-2xl font-extrabold" style={{ color: 'var(--menu-primary, #85C441)' }}>
                 {formatBRL(product.price)}
               </div>
             </div>
@@ -224,24 +224,24 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </div>
           </div>
 
-          <div className="border-t border-gray-100 p-4 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
+          <div className="border-t border-gray-100 bg-white p-3 sm:p-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-12 w-12 rounded-xl"
+                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                 >
                   -
                 </Button>
-                <div className="w-10 text-center font-bold text-gray-900">{quantity}</div>
+                <div className="w-8 sm:w-10 text-center font-bold text-gray-900">{quantity}</div>
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-12 w-12 rounded-xl"
+                  className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl"
                   onClick={() => setQuantity((q) => q + 1)}
                   disabled={typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) ? quantity >= Math.max(1, Math.floor(maxQuantity)) : false}
                 >
@@ -252,9 +252,10 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               <Button
                 onClick={handleAddToCart}
                 disabled={!isValidSelection() || loadingVariations || submitting}
-                className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-extrabold h-12"
+                className="h-11 min-w-0 flex-1 rounded-xl px-3 text-sm font-extrabold sm:h-12 sm:px-4 sm:text-base"
+                style={{ backgroundColor: 'var(--menu-primary, #85C441)', color: '#ffffff' }}
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : `Adicionar • ${formatBRL(getTotalPrice())}`}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="truncate">Adicionar • {formatBRL(getTotalPrice())}</span>}
               </Button>
             </div>
           </div>

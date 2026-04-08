@@ -46,19 +46,20 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
           )}
         </div>
         {priceLabel && (
-          <div className="text-xs text-gray-600">{priceLabel}</div>
+          <div className="text-xs font-medium" style={{ color: 'var(--menu-primary, #85C441)' }}>{priceLabel}</div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         {isSelected ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-xl text-boracume-orange"
+              className="h-9 w-9 rounded-xl"
               disabled={removeDisabled}
+              style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
@@ -66,13 +67,14 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             >
               <Minus className="h-4 w-4" />
             </Button>
-            <div className="w-6 text-center font-bold text-boracume-orange">{selectedCount}</div>
+            <div className="w-6 text-center text-sm font-bold" style={{ color: 'var(--menu-primary, #85C441)' }}>{selectedCount}</div>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10 rounded-xl text-boracume-orange"
+              className="h-9 w-9 rounded-xl"
               disabled={addDisabled}
+              style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
               onClick={(e) => {
                 e.stopPropagation();
                 onAdd();
@@ -86,8 +88,9 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             type="button"
             variant="outline"
             size="icon"
-            className="h-10 w-10 rounded-xl text-boracume-orange"
+            className="h-9 w-9 rounded-xl"
             disabled={addDisabled}
+            style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
             onClick={(e) => {
               e.stopPropagation();
               onAdd();
