@@ -8,9 +8,9 @@ interface LogoProps {
 }
 
 const logoSizeMap = {
-  sm: { width: 110, height: 28 },
-  md: { width: 160, height: 40 },
-  lg: { width: 220, height: 56 }
+  sm: { width: 100, height: 24 },
+  md: { width: 140, height: 32 },
+  lg: { width: 180, height: 44 }
 };
 
 const Logo: React.FC<LogoProps> = ({ size = 'md', className = '', theme = 'light' }) => {
@@ -24,9 +24,8 @@ const Logo: React.FC<LogoProps> = ({ size = 'md', className = '', theme = 'light
         src={logoSrc}
         alt=""
         aria-label="BoraCumê"
-        width={width}
-        height={height}
-        className={`block h-auto max-h-full w-auto object-contain ${accentClass}`}
+        className={`block shrink-0 object-contain ${accentClass}`}
+        style={{ height: `${height}px`, width: 'auto', maxWidth: `${width}px` }}
       />
     </div>
   );
