@@ -2,6 +2,7 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { notifyOrderStatus } from '../_shared/restaurant-whatsapp.ts'
+import { processLoyaltyForOrder } from '../_shared/loyalty.ts'
 
 export const config = { runtime: 'edge', verify_jwt: false }
 
@@ -202,7 +203,16 @@ Deno.serve(async (req: Request) => {
       whatsappResult = { ok: false, error: String(e?.message || e) }
     }
 
-    return ok({ ok: true, order: updated, stock: stockResult, whatsapp: whatsappResult })
+    let loyaltyResult: any = null
+    try {
+      if (newStatus === 'delivered' || newStatus === 'completed') {
+        loyaltyResult = await processLoyaltyForOrder(supabase, updated)
+      }
+    } catch (e: any) {
+      loyaltyResult = { ok: false, error: String(e?.message || e) }
+    }
+
+    return ok({ ok: true, order: updated, stock: stockResult, whatsapp: whatsappResult, loyalty: loyaltyResult })
   } catch (e: any) {
     return ok({ ok: false, error: 'internal_error', message: String(e?.message || e) })
   }

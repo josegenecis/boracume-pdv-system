@@ -409,9 +409,12 @@ const MenuDigital = () => {
         orderData.customer_id = customerId;
       }
 
+      const loyaltyRewardId = orderData.loyalty_reward_id ? String(orderData.loyalty_reward_id) : null;
+      const { loyalty_reward_id: _loyaltyRewardId, ...dbOrderData } = orderData;
+
       const { data, error } = await supabase
         .from('orders')
-        .insert([orderData])
+        .insert([dbOrderData])
         .select()
         .single();
 
@@ -441,6 +444,20 @@ const MenuDigital = () => {
         }
       } catch (waErr) {
         console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
+      }
+
+      try {
+        if (data?.id && loyaltyRewardId) {
+          await supabase.functions.invoke('loyalty-redeem-reward', {
+            body: {
+              rewardId: loyaltyRewardId,
+              orderId: data.id,
+              userId: orderData.user_id,
+            }
+          });
+        }
+      } catch (loyaltyErr) {
+        console.warn('⚠️ Falha ao marcar recompensa fidelidade como usada:', loyaltyErr);
       }
 
       // Push para o restaurante

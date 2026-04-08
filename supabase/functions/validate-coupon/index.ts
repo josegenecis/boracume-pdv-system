@@ -15,7 +15,13 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, serviceKey)
 
-    const { code, cartTotal, userId, customerId } = await req.json()
+    const normalizePhone = (value: string | null | undefined) => {
+      const digits = String(value || '').replace(/\D/g, '')
+      if (!digits) return ''
+      return digits.startsWith('55') ? digits : `55${digits}`
+    }
+
+    const { code, cartTotal, userId, customerId, customerPhone } = await req.json()
 
     if (!code || !userId) {
       return new Response(JSON.stringify({ valid: false, message: 'Dados incompletos' }), { headers: corsHeaders })
@@ -48,6 +54,25 @@ Deno.serve(async (req) => {
           discount_type: userReward.discount_type,
           discount_value: userReward.discount_value,
           min_purchase: 0 // Recompensas geralmente não têm mínimo, mas poderia ter
+        }
+      }
+    }
+
+    if (!coupon && !reward && customerPhone) {
+      const { data: phoneReward } = await supabase
+        .from('customer_rewards')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('code', cleanCode)
+        .eq('customer_phone', normalizePhone(customerPhone))
+        .eq('status', 'available')
+        .maybeSingle()
+
+      if (phoneReward) {
+        reward = {
+          discount_type: phoneReward.discount_type,
+          discount_value: phoneReward.discount_value,
+          min_purchase: 0
         }
       }
     }

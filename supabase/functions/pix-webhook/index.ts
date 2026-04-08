@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { markLoyaltyRewardUsedForOrder } from '../_shared/loyalty.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -437,6 +438,17 @@ serve(async (req) => {
         .from('pix_checkouts')
         .update({ status: 'PAID', order_id: created.id, updated_at: new Date().toISOString() })
         .eq('id', checkout.id)
+
+      try {
+        const loyaltyRewardId = String(payload?.loyalty_reward_id || '')
+        if (loyaltyRewardId) {
+          await markLoyaltyRewardUsedForOrder(supabase, {
+            rewardId: loyaltyRewardId,
+            orderId: created.id,
+            userId: checkout.restaurant_user_id,
+          })
+        }
+      } catch {}
 
       return new Response(JSON.stringify({ ok: true, orderId: created.id }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

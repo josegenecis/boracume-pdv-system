@@ -96,7 +96,10 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [couponError, setCouponError] = React.useState('');
   const [discount, setDiscount] = React.useState(0);
   const [appliedCoupon, setAppliedCoupon] = React.useState<{ code: string; type: string } | null>(null);
+  const [autoLoyaltyReward, setAutoLoyaltyReward] = React.useState<{ id: string; code: string; type: string; discountAmount: number; message: string } | null>(null);
+  const [loyaltyProgress, setLoyaltyProgress] = React.useState<string[]>([]);
   const [isValidatingCoupon, setIsValidatingCoupon] = React.useState(false);
+  const [isCheckingLoyalty, setIsCheckingLoyalty] = React.useState(false);
 
   const [location, setLocation] = React.useState({
     latitude: null as number | null,
@@ -317,12 +320,76 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const preTotal = total + deliveryFee + computedExtraFee;
   const finalTotal = Math.max(0, preTotal - discount);
 
+  useEffect(() => {
+    const digits = String(customerPhone || '').replace(/\D/g, '');
+
+    if (!isOpen || digits.length < 10 || appliedCoupon) {
+      if (!appliedCoupon) {
+        setAutoLoyaltyReward(null);
+        setLoyaltyProgress([]);
+        if (!couponCode.trim()) {
+          setDiscount(0);
+        }
+      }
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsCheckingLoyalty(true);
+        const { data, error } = await supabase.functions.invoke('loyalty-status', {
+          body: {
+            userId,
+            customerPhone: digits,
+            cartTotal: total,
+            deliveryFee,
+          }
+        });
+
+        if (!active) return;
+        if (error) throw error;
+
+        const reward = data?.reward || null;
+        setLoyaltyProgress(Array.isArray(data?.progress) ? data.progress : []);
+
+        if (reward) {
+          setAutoLoyaltyReward({
+            id: String(reward.id),
+            code: String(reward.code),
+            type: String(reward.discount_type || reward.type || ''),
+            discountAmount: Number(reward.discountAmount || 0),
+            message: String(reward.message || 'Desconto fidelidade aplicado automaticamente.'),
+          });
+          setDiscount(Number(reward.discountAmount || 0));
+          setCouponError('');
+        } else {
+          setAutoLoyaltyReward(null);
+          if (!couponCode.trim()) {
+            setDiscount(0);
+          }
+        }
+      } catch {
+        if (!active) return;
+        setAutoLoyaltyReward(null);
+      } finally {
+        if (active) setIsCheckingLoyalty(false);
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [customerPhone, userId, total, deliveryFee, isOpen, appliedCoupon, couponCode]);
+
   const handleApplyCoupon = async () => {
     if (!couponCode) return;
     setIsValidatingCoupon(true);
     setCouponError('');
     setDiscount(0);
     setAppliedCoupon(null);
+    setAutoLoyaltyReward(null);
 
     try {
       const { data, error } = await supabase.functions.invoke('validate-coupon', {
@@ -330,7 +397,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           code: couponCode, 
           cartTotal: total, 
           userId: userId,
-          // customerId: ??? (Se tivéssemos o ID do cliente logado, passaria aqui)
+          customerPhone: String(customerPhone || '').replace(/\D/g, '')
         }
       });
 
@@ -660,7 +727,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         })),
         delivery_fee: deliveryFee,
         discount: discount,
-        coupon_code: appliedCoupon?.code,
+        coupon_code: appliedCoupon?.code || autoLoyaltyReward?.code || null,
+        loyalty_reward_id: autoLoyaltyReward?.id || null,
         total: finalTotal,
         status: 'pending',
         order_type: 'delivery',
@@ -926,6 +994,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     Cliente encontrado! Dados preenchidos automaticamente.
                   </div>
                 )}
+                {loyaltyProgress.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-[#8CC850]/25 bg-[#F4FAEC] p-2 text-xs text-[#245B2B]">
+                    {loyaltyProgress.map((item) => (
+                      <div key={item}>{item}</div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1182,6 +1257,10 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                  }} className="border-red-200 text-red-600 hover:bg-red-50">
                    Remover
                  </Button>
+               ) : autoLoyaltyReward ? (
+                 <Button variant="outline" disabled className="border-[#8CC850]/30 text-[#245B2B]">
+                   Automático
+                 </Button>
                ) : (
                  <Button onClick={handleApplyCoupon} disabled={!couponCode || isValidatingCoupon}>
                    {isValidatingCoupon ? '...' : 'Aplicar'}
@@ -1190,6 +1269,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
              </div>
              {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
              {appliedCoupon && <p className="text-xs text-green-600 mt-1">Cupom {appliedCoupon.code} aplicado!</p>}
+             {autoLoyaltyReward && <p className="text-xs mt-1 text-[#245B2B]">{autoLoyaltyReward.message}</p>}
+             {isCheckingLoyalty && !appliedCoupon && !autoLoyaltyReward && <p className="text-xs mt-1 text-muted-foreground">Verificando fidelidade...</p>}
           </div>
 
           {/* Resumo */}
@@ -1205,7 +1286,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span className="font-medium">Desconto:</span>
+                  <span className="font-medium">{autoLoyaltyReward ? 'Desconto fidelidade:' : 'Desconto:'}</span>
                   <span className="font-bold">- {formatBRL(discount)}</span>
                 </div>
               )}
