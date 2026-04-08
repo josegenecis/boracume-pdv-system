@@ -17,6 +17,7 @@ interface Ingredient {
   name: string;
   unit: string;
   price: number;
+  cost_price?: number;
   current_stock: number;
   min_stock: number;
   user_id: string;
@@ -78,6 +79,82 @@ export default function Ingredientes() {
     filterIngredients();
   }, [searchTerm, filterStockStatus, ingredients]);
 
+  const normalizeIngredient = (ingredient: any): Ingredient => ({
+    ...ingredient,
+    price: Number(ingredient?.price ?? ingredient?.cost_price ?? 0),
+    cost_price: Number(ingredient?.cost_price ?? ingredient?.price ?? 0),
+    current_stock: Number(ingredient?.current_stock ?? 0),
+    min_stock: Number(ingredient?.min_stock ?? 0),
+  });
+
+  const buildIngredientPayloadVariants = () => {
+    const base = {
+      name: formData.name,
+      unit: formData.unit,
+      user_id: user?.id,
+    };
+
+    return [
+      {
+        ...base,
+        current_stock: Number(formData.current_stock || 0),
+        min_stock: Number(formData.min_stock || 0),
+        cost_price: Number(formData.cost_price || 0),
+      },
+      {
+        ...base,
+        current_stock: Number(formData.current_stock || 0),
+        min_stock: Number(formData.min_stock || 0),
+        price: Number(formData.cost_price || 0),
+      },
+      {
+        ...base,
+        category: 'Insumos',
+        is_active: true,
+        price: Number(formData.cost_price || 0),
+      },
+      {
+        ...base,
+        category: 'Insumos',
+        is_active: true,
+        current_stock: Number(formData.current_stock || 0),
+        min_stock: Number(formData.min_stock || 0),
+        price: Number(formData.cost_price || 0),
+      },
+    ];
+  };
+
+  const persistIngredient = async () => {
+    const payloadVariants = buildIngredientPayloadVariants();
+    let lastError: any = null;
+
+    for (const payload of payloadVariants) {
+      if (editingIngredient) {
+        const { error } = await (supabase.from('ingredients') as any)
+          .update({ ...payload, updated_at: new Date().toISOString() })
+          .eq('id', editingIngredient.id);
+
+        if (!error) {
+          return;
+        }
+
+        lastError = error;
+        continue;
+      }
+
+      const { error } = await (supabase.from('ingredients') as any)
+        .insert([payload]);
+
+      if (!error) {
+        return;
+      }
+
+      lastError = error;
+    }
+
+    throw lastError;
+  };
+
   const loadIngredients = async () => {
     try {
       if (!user) return;
@@ -88,8 +165,9 @@ export default function Ingredientes() {
         .order('name');
         
       if (error) throw error;
-      setIngredients(data || []);
-      setFilteredIngredients(data || []);
+      const normalizedIngredients = (data || []).map(normalizeIngredient);
+      setIngredients(normalizedIngredients);
+      setFilteredIngredients(normalizedIngredients);
     } catch (error) {
       console.error('Error loading ingredients:', error);
       toast({
@@ -107,27 +185,11 @@ export default function Ingredientes() {
     try {
       if (!user) return;
 
-      const payload = {
-        name: formData.name,
-        unit: formData.unit,
-        price: Number(formData.cost_price || 0),
-        current_stock: Number(formData.current_stock || 0),
-        min_stock: Number(formData.min_stock || 0),
-        user_id: user.id
-      };
+      await persistIngredient();
 
       if (editingIngredient) {
-        const { error } = await supabase
-          .from('ingredients')
-          .update({ ...payload, updated_at: new Date().toISOString() })
-          .eq('id', editingIngredient.id);
-        if (error) throw error;
         toast({ title: 'Sucesso', description: 'Insumo atualizado com sucesso.' });
       } else {
-        const { error } = await supabase
-          .from('ingredients')
-          .insert([payload]);
-        if (error) throw error;
         toast({ title: 'Sucesso', description: 'Insumo cadastrado com sucesso.' });
       }
 
