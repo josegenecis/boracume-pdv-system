@@ -197,9 +197,6 @@ const NotificationSettings = () => {
       try {
         await soundNotifications.enableSound();
         try { localStorage.setItem('sound_unlocked', 'true'); } catch {}
-        if (notifications.soundEnabled) {
-          await soundNotifications.playSound(notifications.orderSound);
-        }
       } catch {}
       
       toast({

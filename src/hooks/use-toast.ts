@@ -7,7 +7,7 @@ import type {
 
 const TOAST_LIMIT = 1
 
-const TOAST_REMOVE_DELAY = 5000
+const TOAST_REMOVE_DELAY = 1800
 
 
 type ToasterToast = ToastProps & {

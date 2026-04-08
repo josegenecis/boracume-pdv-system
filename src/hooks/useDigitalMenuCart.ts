@@ -1,6 +1,5 @@
 
 import { useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
 
 interface Product {
   id: string;
@@ -21,7 +20,6 @@ interface CartItem extends Product {
 
 export const useDigitalMenuCart = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const { toast } = useToast();
 
   const addToCart = (product: Product, quantity: number = 1, selectedVariations: any[] = [], notes: string = '') => {
     console.log('🔄 CARDÁPIO DIGITAL - INICIANDO ADIÇÃO AO CARRINHO:', {
@@ -115,10 +113,6 @@ export const useDigitalMenuCart = () => {
       return newCart;
     });
 
-    toast({
-      title: "Produto adicionado",
-      description: `${product.name} foi adicionado ao carrinho.`,
-    });
   };
 
   const updateCartItem = (index: number, quantity: number) => {
@@ -145,10 +139,6 @@ export const useDigitalMenuCart = () => {
 
   const removeFromCart = (index: number) => {
     setCart(prev => prev.filter((_, i) => i !== index));
-    toast({
-      title: "Item removido",
-      description: "O item foi removido do carrinho.",
-    });
   };
 
   const clearCart = () => {

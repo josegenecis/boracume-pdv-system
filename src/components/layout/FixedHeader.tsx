@@ -72,7 +72,7 @@ const FixedHeader = () => {
               <div className="truncate text-base font-bold text-[#003223]">{mobileTitle}</div>
             </div>
           ) : (
-            <Logo size="md" />
+            <Logo size="sm" />
           )}
         </div>
 

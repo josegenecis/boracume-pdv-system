@@ -20,6 +20,8 @@ type UpsellRule = {
   message: string | null;
   active: boolean;
   display_order: number;
+  discount_type: 'percentage' | 'fixed' | null;
+  discount_value: number | null;
 };
 
 type ProductOption = {
@@ -44,7 +46,9 @@ export default function UpsellManager() {
     suggested_product_id: '',
     message: '',
     active: true,
-    display_order: 0
+    display_order: 0,
+    discount_type: 'none',
+    discount_value: 0
   });
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
@@ -79,7 +83,7 @@ export default function UpsellManager() {
 
   const resetForm = () => {
     setEditing(null);
-    setForm({ trigger_product_id: '__any__', suggested_product_id: '', message: '', active: true, display_order: 0 });
+    setForm({ trigger_product_id: '__any__', suggested_product_id: '', message: '', active: true, display_order: 0, discount_type: 'none', discount_value: 0 });
   };
 
   const openCreate = () => {
@@ -94,7 +98,9 @@ export default function UpsellManager() {
       suggested_product_id: rule.suggested_product_id || '',
       message: rule.message || '',
       active: Boolean(rule.active),
-      display_order: Number(rule.display_order || 0)
+      display_order: Number(rule.display_order || 0),
+      discount_type: rule.discount_type || 'none',
+      discount_value: Number(rule.discount_value || 0)
     });
     setOpen(true);
   };
@@ -114,6 +120,8 @@ export default function UpsellManager() {
         message: form.message || null,
         active: Boolean(form.active),
         display_order: Number(form.display_order || 0),
+        discount_type: form.discount_type === 'none' ? null : form.discount_type,
+        discount_value: form.discount_type === 'none' ? null : Number(form.discount_value || 0),
         updated_at: new Date().toISOString()
       };
       if (editing?.id) {
@@ -178,6 +186,7 @@ export default function UpsellManager() {
               <TableRow>
                 <TableHead>Gatilho</TableHead>
                 <TableHead>Sugestão</TableHead>
+                <TableHead>Desconto</TableHead>
                 <TableHead>Mensagem</TableHead>
                 <TableHead className="w-[100px] text-center">Ativo</TableHead>
                 <TableHead className="w-[120px] text-right">Ações</TableHead>
@@ -191,6 +200,9 @@ export default function UpsellManager() {
                   <TableRow key={r.id}>
                     <TableCell>{trigger || <span className="text-muted-foreground">Qualquer produto</span>}</TableCell>
                     <TableCell className="font-medium">{suggested || '-'}</TableCell>
+                    <TableCell>
+                      {r.discount_type === 'percentage' ? `${Number(r.discount_value || 0)}%` : r.discount_type === 'fixed' ? `R$ ${Number(r.discount_value || 0).toFixed(2)}` : '-'}
+                    </TableCell>
                     <TableCell className="max-w-[420px] truncate">{r.message || '-'}</TableCell>
                     <TableCell className="text-center">
                       <Switch
@@ -230,7 +242,7 @@ export default function UpsellManager() {
               })}
               {rules.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
                     Nenhuma regra cadastrada.
                   </TableCell>
                 </TableRow>
@@ -283,6 +295,34 @@ export default function UpsellManager() {
             <div className="space-y-2">
               <Label>Mensagem (opcional)</Label>
               <Input value={form.message} onChange={(e) => setForm((p) => ({ ...p, message: e.target.value }))} placeholder="Ex.: Quer adicionar uma bebida?" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Tipo de desconto</Label>
+                <Select value={form.discount_type} onValueChange={(v) => setForm((p) => ({ ...p, discount_type: v as 'none' | 'percentage' | 'fixed' }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sem desconto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem desconto</SelectItem>
+                    <SelectItem value="percentage">Percentual (%)</SelectItem>
+                    <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{form.discount_type === 'percentage' ? 'Desconto (%)' : 'Desconto (R$)'}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step={form.discount_type === 'percentage' ? '1' : '0.01'}
+                  value={form.discount_value}
+                  disabled={form.discount_type === 'none'}
+                  onChange={(e) => setForm((p) => ({ ...p, discount_value: Number(e.target.value || 0) }))}
+                  placeholder={form.discount_type === 'percentage' ? 'Ex.: 10' : 'Ex.: 5,00'}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

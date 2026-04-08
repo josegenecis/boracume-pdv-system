@@ -34,6 +34,8 @@ type UpsellOffer = {
   ruleId: string;
   triggerProductId: string | null;
   message: string | null;
+  discountType: 'percentage' | 'fixed' | null;
+  discountValue: number | null;
   product: { id: string; name: string; price: number; description?: string; image_url?: string };
 };
 
@@ -85,6 +87,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [upsellOffers, setUpsellOffers] = React.useState<UpsellOffer[]>([]);
   const [pendingOrderData, setPendingOrderData] = React.useState<any | null>(null);
   const [upsellSelectedProduct, setUpsellSelectedProduct] = React.useState<any | null>(null);
+  const [selectedUpsellOffer, setSelectedUpsellOffer] = React.useState<UpsellOffer | null>(null);
   const [upsellVariationOpen, setUpsellVariationOpen] = React.useState(false);
   const [upsellBusy, setUpsellBusy] = React.useState(false);
   
@@ -531,11 +534,34 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     }
   };
 
-  const applyUpsellAndPlace = async (product: any, quantity: number, variations: string[], itemNotes: string, variationPrice: number) => {
+  const getUpsellDiscountAmount = (offer: UpsellOffer | null, unitPrice: number) => {
+    if (!offer) return 0;
+    const safeUnitPrice = Math.max(0, Number(unitPrice || 0));
+    const rawValue = Math.max(0, Number(offer.discountValue || 0));
+    if (!safeUnitPrice || !rawValue) return 0;
+    if (offer.discountType === 'percentage') {
+      return Math.min(safeUnitPrice, safeUnitPrice * Math.min(rawValue, 100) / 100);
+    }
+    if (offer.discountType === 'fixed') {
+      return Math.min(safeUnitPrice, rawValue);
+    }
+    return 0;
+  };
+
+  const getUpsellFinalUnitPrice = (offer: UpsellOffer | null, unitPrice: number) => {
+    return Math.max(0, Number(unitPrice || 0) - getUpsellDiscountAmount(offer, unitPrice));
+  };
+
+  const applyUpsellAndPlace = async (product: any, quantity: number, variations: string[], itemNotes: string, variationPrice: number, offerOverride?: UpsellOffer | null) => {
     const base = pendingOrderData;
     if (!base) return;
+    const selectedOffer = offerOverride || selectedUpsellOffer;
+    const safeQuantity = Math.max(1, Number(quantity || 1));
     const unitPrice = Number(product?.price || 0) + Number(variationPrice || 0);
-    const lineTotal = unitPrice * Math.max(1, Number(quantity || 1));
+    const discountPerUnit = getUpsellDiscountAmount(selectedOffer, unitPrice);
+    const finalUnitPrice = getUpsellFinalUnitPrice(selectedOffer, unitPrice);
+    const lineTotal = finalUnitPrice * safeQuantity;
+    const lineDiscount = discountPerUnit * safeQuantity;
     const next = {
       ...base,
       items: [
@@ -543,19 +569,26 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         {
           product_id: String(product.id),
           product_name: String(product.name || ''),
-          quantity: Math.max(1, Number(quantity || 1)),
-          price: Number(product.price || 0),
+          quantity: safeQuantity,
+          price: finalUnitPrice,
           variations: Array.isArray(variations) ? variations : [],
           notes: String(itemNotes || ''),
-          total: Number(lineTotal || 0)
+          total: Number(lineTotal || 0),
+          original_price: unitPrice,
+          upsell_rule_id: selectedOffer?.ruleId || null,
+          upsell_discount_type: selectedOffer?.discountType || null,
+          upsell_discount_value: selectedOffer?.discountValue || null,
+          upsell_discount_amount: lineDiscount
         }
       ],
-      total: Number(base.total || 0) + Number(lineTotal || 0)
+      total: Number(base.total || 0) + Number(lineTotal || 0),
+      discount: Number(base.discount || 0) + Number(lineDiscount || 0)
     };
     setUpsellOpen(false);
     setUpsellOffers([]);
     setPendingOrderData(null);
     setUpsellSelectedProduct(null);
+    setSelectedUpsellOffer(null);
     setUpsellVariationOpen(false);
     await finalizeOrder(next);
   };
@@ -569,6 +602,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setUpsellOpen(false);
       setUpsellOffers([]);
       setPendingOrderData(null);
+      setSelectedUpsellOffer(null);
       await finalizeOrder(base);
     } finally {
       setUpsellBusy(false);
@@ -582,9 +616,10 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     try {
       const hasVars = await hasProductVariations(String(offer.product.id));
       if (!hasVars) {
-        await applyUpsellAndPlace(offer.product, 1, [], '', 0);
+        await applyUpsellAndPlace(offer.product, 1, [], '', 0, offer);
         return;
       }
+      setSelectedUpsellOffer(offer);
       setUpsellSelectedProduct(offer.product);
       setUpsellVariationOpen(true);
       setUpsellOpen(false);
@@ -636,7 +671,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         try {
           const rulesRes = await supabase
             .from('upsell_rules')
-            .select('id,trigger_product_id,suggested_product_id,message,active,display_order')
+            .select('id,trigger_product_id,suggested_product_id,message,active,display_order,discount_type,discount_value')
             .eq('user_id', userId)
             .eq('active', true)
             .order('display_order', { ascending: true }) as any;
@@ -668,6 +703,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               ruleId: String(r.id),
               triggerProductId: r.trigger_product_id ? String(r.trigger_product_id) : null,
               message: r.message ? String(r.message) : null,
+              discountType: r.discount_type === 'percentage' || r.discount_type === 'fixed' ? r.discount_type : null,
+              discountValue: r.discount_value !== null && r.discount_value !== undefined ? Number(r.discount_value) : null,
               product: {
                 id: String(p.id),
                 name: String(p.name || ''),
@@ -1231,6 +1268,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       ) : null}
                     </div>
                     <div className="flex-1 min-w-0">
+                      {(() => {
+                        const originalPrice = Number(offer.product.price || 0);
+                        const discountedPrice = getUpsellFinalUnitPrice(offer, originalPrice);
+                        const hasDiscount = discountedPrice < originalPrice;
+                        return (
+                          <>
                       <div className="font-bold text-gray-900 truncate">{offer.product.name}</div>
                       {offer.message ? (
                         <div className="text-xs text-muted-foreground mt-1">{offer.message}</div>
@@ -1238,11 +1281,19 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{offer.product.description}</div>
                       ) : null}
                       <div className="flex items-center justify-between mt-2">
-                        <div className="font-extrabold text-boracume-orange">R$ {Number(offer.product.price || 0).toFixed(2)}</div>
+                        <div className="flex flex-col">
+                          <div className="font-extrabold text-boracume-orange">R$ {discountedPrice.toFixed(2)}</div>
+                          {hasDiscount ? (
+                            <div className="text-[11px] text-muted-foreground line-through">R$ {originalPrice.toFixed(2)}</div>
+                          ) : null}
+                        </div>
                         <Button onClick={() => chooseUpsellOffer(offer)} disabled={upsellBusy}>
                           Add oferta
                         </Button>
                       </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </Card>
@@ -1265,6 +1316,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         onClose={() => {
           setUpsellVariationOpen(false);
           setUpsellSelectedProduct(null);
+          setSelectedUpsellOffer(null);
           setUpsellOpen(true);
         }}
         product={upsellSelectedProduct}

@@ -13,8 +13,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-muted-foreground",
+            "group toast rounded-xl border border-[#8CC850]/30 bg-[#F4FAEC] px-3 py-2 text-[#245B2B] shadow-md group-[.toaster]:border-[#8CC850]/30 group-[.toaster]:bg-[#F4FAEC] group-[.toaster]:text-[#245B2B]",
+          title: "text-xs font-semibold tracking-[0.02em]",
+          description: "text-[11px] text-[#245B2B]/80",
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
           cancelButton:

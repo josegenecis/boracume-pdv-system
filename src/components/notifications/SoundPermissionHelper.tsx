@@ -33,13 +33,8 @@ const SoundPermissionHelper: React.FC = () => {
   const enableAudio = async () => {
     try {
       await soundNotifications.enableSound();
-      await soundNotifications.playSound('bell');
-      
-      // Salvar no localStorage que o usuário habilitou o som
       localStorage.setItem('sound_unlocked', 'true');
-      
       setNeedsPermission(false);
-      console.log('✅ Áudio habilitado com sucesso e salvo no localStorage');
     } catch (error) {
       console.error('❌ Erro ao habilitar áudio:', error);
     }
@@ -50,26 +45,26 @@ const SoundPermissionHelper: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm">
-      <Card className="border-2 border-blue-300 bg-blue-50 shadow-lg">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Volume2 className="h-5 w-5 text-blue-600" />
-            <span className="font-medium text-blue-800">
-              Habilitar Som de Notificação
+    <div className="fixed bottom-4 right-4 z-50 w-[260px] max-w-[calc(100vw-2rem)]">
+      <Card className="border border-blue-200 bg-blue-50/95 shadow-md backdrop-blur">
+        <CardContent className="p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Volume2 className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-semibold text-blue-900">
+              Ativar som
             </span>
           </div>
           
-          <p className="text-sm text-blue-700 mb-3">
-            Clique para permitir notificações sonoras quando novos pedidos chegarem.
+          <p className="mb-3 text-xs leading-5 text-blue-700">
+            Habilite o som para novos pedidos. A ativação não reproduz áudio de teste.
           </p>
           
           <Button 
             onClick={enableAudio}
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="h-8 w-full bg-blue-600 text-xs font-semibold hover:bg-blue-700"
             size="sm"
           >
-            Habilitar Som
+            Ativar
           </Button>
         </CardContent>
       </Card>
