@@ -47,7 +47,7 @@ export default async function handler(req: any, res: any) {
 
     const restaurantName = String(profile?.restaurant_name || 'Acompanhar pedido');
     const description = String(profile?.description || 'Acompanhe o andamento do seu pedido.');
-    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-app-site.png');
+    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png');
     const title = orderNumber ? `${restaurantName} • Pedido ${orderNumber}` : `${restaurantName} • Acompanhar pedido`;
     const pageUrl = `https://boracume.com/share/track/${encodeURIComponent(orderId)}`;
     const redirectUrl = `/track/${encodeURIComponent(orderId)}`;

@@ -27,6 +27,7 @@ import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { ensureDefaultTables } from '@/utils/tableDefaults';
 
 interface Product {
   id: string;
@@ -474,17 +475,7 @@ const PDV = () => {
 
   const fetchTables = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('table_number');
-
-      if (error) {
-        console.error('Erro ao carregar mesas:', error);
-        throw error;
-      }
-      
+      const data = await ensureDefaultTables(user?.id);
       setTables(data || []);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
@@ -608,42 +599,7 @@ const PDV = () => {
     }
   };
 
-  const animateFlyToCart = (startRect: DOMRect) => {
-    // Determine target based on viewport (desktop or mobile)
-    const isMobile = window.innerWidth < 1024;
-    const targetEl = isMobile 
-      ? document.getElementById('mobile-cart-btn') 
-      : document.getElementById('cart-container');
-      
-    if (!targetEl) return;
-
-    const endRect = targetEl.getBoundingClientRect();
-    
-    const flyItem = document.createElement('div');
-    flyItem.className = 'fly-item bg-primary shadow-lg z-50 fixed rounded-full flex items-center justify-center';
-    flyItem.style.left = `${startRect.left}px`;
-    flyItem.style.top = `${startRect.top}px`;
-    flyItem.style.width = `${Math.min(startRect.width, 50)}px`;
-    flyItem.style.height = `${Math.min(startRect.height, 50)}px`;
-    
-    // Set variables for CSS animation
-    const tx = endRect.left - startRect.left + (endRect.width / 2) - (Math.min(startRect.width, 50) / 2);
-    const ty = endRect.top - startRect.top + (endRect.height / 2) - (Math.min(startRect.height, 50) / 2);
-    
-    flyItem.style.setProperty('--tx', `${tx}px`);
-    flyItem.style.setProperty('--ty', `${ty}px`);
-    
-    document.body.appendChild(flyItem);
-    
-    setTimeout(() => {
-      document.body.removeChild(flyItem);
-    }, 800);
-  };
-
-  const handleProductClick = async (product: Product, event?: React.MouseEvent) => {
-    // Capture click position for animation if no variations
-    const clickRect = event?.currentTarget.getBoundingClientRect();
-    
+  const handleProductClick = async (product: Product) => {
     const variations = await fetchProductVariations(product.id);
     
     if (variations.length > 0) {
@@ -651,9 +607,6 @@ const PDV = () => {
       setProductVariations(variations);
       setShowVariationModal(true);
     } else {
-      if (clickRect) {
-        animateFlyToCart(clickRect);
-      }
       addToCart(product, 1);
     }
   };
@@ -1303,7 +1256,7 @@ const PDV = () => {
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-6 w-full bg-[#FF6400]/12 text-[#FF6400] hover:bg-[#FF6400] hover:text-white text-[10px] font-semibold"
+                            className="h-6 w-full border border-[#8CC850]/70 bg-white text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white text-[10px] font-semibold"
                             size="sm"
                             variant="ghost"
                           >

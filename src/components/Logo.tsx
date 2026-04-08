@@ -4,40 +4,28 @@ import React from 'react';
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
-  theme?: 'light' | 'dark'; // Adicionado para suportar fundos diferentes, se necessário
+  theme?: 'light' | 'dark';
 }
 
-const svgSizeMap = {
-  sm: { width: 100, height: 24 },
-  md: { width: 140, height: 32 },
-  lg: { width: 180, height: 44 }
+const logoSizeMap = {
+  sm: { width: 110, height: 28 },
+  md: { width: 160, height: 40 },
+  lg: { width: 220, height: 56 }
 };
 
 const Logo: React.FC<LogoProps> = ({ size = 'md', className = '', theme = 'light' }) => {
-  const { width, height } = svgSizeMap[size];
+  const { width, height } = logoSizeMap[size];
+  const accentClass = theme === 'dark' ? 'drop-shadow-[0_4px_14px_rgba(0,0,0,0.28)]' : '';
 
   return (
     <div className={`flex items-center ${className}`}>
-      <svg 
-        width={width} 
-        height={height} 
-        viewBox="0 0 180 44" 
-        fill="none" 
-        xmlns="http://www.w3.org/2000/svg"
-        className="block"
-      >
-        <text 
-          x="0" 
-          y="32" 
-          fontFamily="Sora, system-ui, sans-serif" 
-          fontWeight="800" 
-          fontSize="28" 
-          letterSpacing="-0.5"
-        >
-          <tspan fill="#FF6400">Bora</tspan>
-          <tspan fill="#85C441">Cumê</tspan>
-        </text>
-      </svg>
+      <img
+        src="/LOGOMARCA/logo-sistema.png"
+        alt="BoraCumê"
+        width={width}
+        height={height}
+        className={`block h-auto max-h-full w-auto object-contain ${accentClass}`}
+      />
     </div>
   );
 };

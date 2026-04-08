@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { ensureDefaultTables } from '@/utils/tableDefaults';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
 
@@ -42,20 +43,20 @@ const TableManager: React.FC = () => {
   const confirm = useConfirmDialog();
 
   useEffect(() => {
+    if (!user?.id) {
+      setTables([]);
+      setLoading(false);
+      return;
+    }
+
     fetchTables();
-  }, []);
+  }, [user?.id]);
 
   const fetchTables = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('tables')
-        .select('*')
-        .order('table_number');
-
-      if (error) throw error;
+      const data = await ensureDefaultTables(user?.id);
       
-      // Transform data to ensure proper typing
       const transformedTables = (data || []).map(table => ({
         ...table,
         status: table.status as 'available' | 'occupied' | 'reserved'
@@ -282,49 +283,49 @@ const TableManager: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
         {tables.map((table) => (
           <Card 
             key={table.id} 
-            className={`hover:shadow-md transition-all duration-200 cursor-pointer border-t-4 ${getBorderColor(table.status)}`}
+            className={`cursor-pointer border-t-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${getBorderColor(table.status)}`}
             onClick={() => handleTableClick(table)}
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="space-y-2 px-3 pb-1 pt-3">
               <div className="flex justify-between items-start">
-                <CardTitle className="text-lg">Mesa {table.table_number}</CardTitle>
-                <Badge variant="outline" className={getStatusColor(table.status)}>
+                <CardTitle className="text-base leading-none">Mesa {table.table_number}</CardTitle>
+                <Badge variant="outline" className={`${getStatusColor(table.status)} px-2 py-0 text-[10px]`}>
                   {getStatusLabel(table.status)}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Users size={14} />
+            <CardContent className="px-3 pb-3 pt-0">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <Users size={12} />
                   <span>{table.capacity} pessoas</span>
                 </div>
                 {table.location && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MousePointer size={14} className="opacity-0" />
-                    <span>📍 {table.location}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <MousePointer size={12} className="opacity-0" />
+                    <span className="truncate">📍 {table.location}</span>
                   </div>
                 )}
                 {table.status === 'occupied' && (
-                  <div className="flex items-center gap-2 text-xs text-blue-600 font-medium mt-2">
-                    <MousePointer size={14} />
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-blue-600">
+                    <MousePointer size={12} />
                     <span>Clique para ver detalhes</span>
                   </div>
                 )}
               </div>
-              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+              <div className="mt-3 flex gap-1.5 border-t border-gray-100 pt-3" onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => handleAddProductsClick(table, e)}
-                  className="flex-1 hover:bg-boracume-green/10 hover:text-boracume-green hover:border-boracume-green/50"
+                  className="h-8 flex-1 px-2 hover:bg-boracume-green/10 hover:text-boracume-green hover:border-boracume-green/50"
                   title="Adicionar produtos"
                 >
-                  <ShoppingCart size={16} />
+                  <ShoppingCart size={14} />
                 </Button>
                 <Button
                   variant="outline"
@@ -339,9 +340,9 @@ const TableManager: React.FC = () => {
                     });
                     setShowForm(true);
                   }}
-                  className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                  className="h-8 px-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
                 >
-                  <Edit size={16} />
+                  <Edit size={14} />
                 </Button>
                 <Button
                   variant="outline"
@@ -350,9 +351,9 @@ const TableManager: React.FC = () => {
                     e.stopPropagation();
                     handleDelete(table.id);
                   }}
-                  className="hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                  className="h-8 px-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={14} />
                 </Button>
               </div>
             </CardContent>
