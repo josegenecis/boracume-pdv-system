@@ -61,6 +61,8 @@ electron/BoraCumê - Instalador/
 # Local build logs/artifacts
 build_log*.txt
 test-results/
+evogo_app.js
+evogo_manager.html
 
 # Editor/OS files
 .vscode/*
