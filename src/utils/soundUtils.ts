@@ -12,6 +12,18 @@ export class SoundNotifications {
     this.preloadSounds();
   }
 
+  private normalizeSoundType(soundType: string) {
+    if (soundType === 'chime' || soundType === 'ding' || soundType === 'notification') {
+      return 'chime';
+    }
+    return 'bell';
+  }
+
+  private getDefaultSoundPath(soundType: string) {
+    const normalized = this.normalizeSoundType(soundType);
+    return normalized === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Bell Boracume.mp3';
+  }
+
   setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
     console.log('🔧 SOUND UTILS - Configurando URLs personalizadas:', customUrls);
     this.customSoundUrls.clear();
@@ -37,10 +49,10 @@ export class SoundNotifications {
     this.audioFiles.clear();
     
     const sounds = [
-      { name: 'bell', path: '/sounds/bell.mp3' },
-      { name: 'chime', path: '/sounds/chime.mp3' },
-      { name: 'notification', path: '/sounds/notification.mp3' },
-      { name: 'ding', path: '/sounds/ding.mp3' }
+      { name: 'bell', path: this.getDefaultSoundPath('bell') },
+      { name: 'chime', path: this.getDefaultSoundPath('chime') },
+      { name: 'notification', path: this.getDefaultSoundPath('notification') },
+      { name: 'ding', path: this.getDefaultSoundPath('ding') }
     ];
 
     sounds.forEach(sound => {
@@ -106,7 +118,7 @@ export class SoundNotifications {
       if (audio) {
         const prevVolume = audio.volume
         audio.volume = 0
-        if (!audio.src) audio.src = this.customSoundUrls.get('bell') || '/sounds/bell.mp3'
+        if (!audio.src) audio.src = this.customSoundUrls.get('bell') || this.getDefaultSoundPath('bell')
         try {
           await audio.play()
           audio.pause()
@@ -138,18 +150,14 @@ export class SoundNotifications {
       const audio = this.audioFiles.get(soundType);
       
       if (audio) {
-        // Set the source only when playing to avoid preloading issues
-        const customUrl = this.customSoundUrls.get(soundType);
-        const audioPath = customUrl || `/sounds/${soundType}.mp3`;
-        
+        const normalizedSoundType = this.normalizeSoundType(soundType);
+        const customUrl = this.customSoundUrls.get(normalizedSoundType);
+        const audioPath = customUrl || this.getDefaultSoundPath(normalizedSoundType);
 
-        // Verificar se a URL personalizada é válida antes de usar
         if (customUrl && !this.isValidUrl(customUrl)) {
           console.warn(`⚠️ URL personalizada inválida para ${soundType}: ${customUrl}`);
-          // Usar som padrão em vez da URL inválida
-          audio.src = `/sounds/${soundType}.mp3`;
+          audio.src = this.getDefaultSoundPath(normalizedSoundType);
         } else if (!audio.src) {
-
           audio.src = audioPath;
         }
         

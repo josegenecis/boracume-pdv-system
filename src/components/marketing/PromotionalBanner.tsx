@@ -61,7 +61,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   useEffect(() => {
     const fetchBanners = async () => {
       if (!userId) {
-        setBanners(getDefaultBanners());
+        setBanners([]);
         setIsLoading(false);
         return;
       }
@@ -115,7 +115,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           
           if (marketingError) {
             console.error('Erro ao buscar configurações de marketing:', marketingError);
-            setBanners(getDefaultBanners());
+            setBanners([]);
           } else if (marketingData?.banner_images && Array.isArray(marketingData.banner_images) && marketingData.banner_images.length > 0) {
             const parsedBanners: Banner[] = [];
             
@@ -137,14 +137,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               }
             }
             
-            setBanners(parsedBanners.length > 0 ? parsedBanners : getDefaultBanners());
+            setBanners(parsedBanners);
           } else {
-            setBanners(getDefaultBanners());
+            setBanners([]);
           }
         }
       } catch (error) {
         console.error('Error fetching banners:', error);
-        setBanners(getDefaultBanners());
+        setBanners([]);
       } finally {
         setIsLoading(false);
       }
@@ -153,25 +153,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     fetchBanners();
   }, [userId]);
   
-  const getDefaultBanners = (): Banner[] => {
-    return [
-      {
-        id: '1',
-        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=300&fit=crop',
-        title: 'Promoção Especial',
-        description: 'Peça agora e ganhe 10% de desconto!',
-        bannerType: 'wide'
-      },
-      {
-        id: '2',
-        imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=300&fit=crop',
-        title: 'Prato do Dia',
-        description: 'Experimente nossa nova especialidade da casa',
-        bannerType: 'wide'
-      }
-    ];
-  };
-
   const clickables = useMemo(() => {
     return banners.filter((b) => String(b.imageUrl || '').trim());
   }, [banners]);

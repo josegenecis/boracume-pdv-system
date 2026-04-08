@@ -31,6 +31,7 @@ const Configuracoes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { subscription } = useAuth();
   const { ensureSubscribed } = usePushNotifications();
+  const isDesktopApp = typeof window !== 'undefined' && !!(window as typeof window & { electronAPI?: unknown }).electronAPI;
   
   const hasMarketingFeature = () => {
     if (subscription?.status === 'trial') {
@@ -150,12 +151,14 @@ const Configuracoes: React.FC = () => {
         <TabsContent value="notifications">
           <div className="space-y-4">
             <NotificationSettings />
-            <div className="p-3 border rounded-lg">
-              <p className="text-sm text-muted-foreground">Ative notificações push para receber alertas mesmo com o app fechado.</p>
-              <div className="flex justify-end mt-2">
-                <button className="h-9 px-3 rounded-md border" onClick={() => ensureSubscribed()}>Ativar Push</button>
+            {!isDesktopApp ? (
+              <div className="p-3 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Ative notificações push para receber alertas mesmo com o app fechado.</p>
+                <div className="flex justify-end mt-2">
+                  <button className="h-9 px-3 rounded-md border" onClick={() => ensureSubscribed()}>Ativar Push</button>
+                </div>
               </div>
-            </div>
+            ) : null}
             <div className="p-3 border rounded-lg">
               <p className="text-sm">Teste rápido de push</p>
               <div className="flex justify-end mt-2">

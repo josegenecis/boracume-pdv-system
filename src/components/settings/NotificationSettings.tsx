@@ -12,6 +12,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import SoundUploadManager from './SoundUploadManager';
 import { soundNotifications } from '@/utils/soundUtils';
 
+const normalizeOrderSound = (value: string | null | undefined) => {
+  if (value === 'chime' || value === 'ding' || value === 'notification') {
+    return 'chime';
+  }
+  return 'bell';
+};
+
 const NotificationSettings = () => {
   const [notifications, setNotifications] = useState({
     newOrders: true,
@@ -67,7 +74,7 @@ const NotificationSettings = () => {
           smsNotifications: data.sms_notifications,
           pushNotifications: data.push_notifications,
           soundEnabled: data.sound_enabled,
-          orderSound: data.order_sound,
+          orderSound: normalizeOrderSound(data.order_sound),
           volume: data.volume
         });
 
@@ -405,16 +412,10 @@ const NotificationSettings = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="bell">
-                        Sino {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
+                        Bell Boracume {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
                       </SelectItem>
                       <SelectItem value="chime">
-                        Carrilhão {customSoundUrls.custom_chime_url ? '(personalizado)' : ''}
-                      </SelectItem>
-                      <SelectItem value="ding">
-                        Ding {customSoundUrls.custom_ding_url ? '(personalizado)' : ''}
-                      </SelectItem>
-                      <SelectItem value="notification">
-                        Notificação {customSoundUrls.custom_notification_url ? '(personalizado)' : ''}
+                        Bell Instant {customSoundUrls.custom_chime_url ? '(personalizado)' : ''}
                       </SelectItem>
                     </SelectContent>
                   </Select>

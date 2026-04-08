@@ -414,7 +414,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="hidden gap-5 md:grid xl:grid-cols-[minmax(0,1.4fr)_360px]">
+      <div className="hidden gap-5 md:grid">
         <div className="space-y-5">
           <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_28px_70px_-36px_rgba(0,50,35,0.32)] dark:border-white/10 dark:bg-[#101a16]/96 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.82)]">
             <div className="flex flex-col gap-5">
@@ -618,28 +618,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Resumo rápido</div>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Novos clientes</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{stats.newCustomers}</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">base atual: {stats.totalCustomers}</div>
-              </div>
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Produtos vendidos</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{stats.productsSold}</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">itens liberados hoje</div>
-              </div>
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Despesas do mês</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(stats.monthlyExpenses)}</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{expenseRatio.toFixed(1).replace('.', ',')}% sobre o faturamento do dia</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
       
       <div className="grid gap-3 md:hidden">

@@ -745,11 +745,13 @@ const Products = () => {
         className="w-full"
       >
         <div className="mb-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="flex h-10 w-full justify-start overflow-x-auto rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1 lg:w-auto lg:flex-none">
+          <div className="flex justify-center lg:flex-1">
+            <TabsList className="grid h-10 w-full max-w-[420px] grid-cols-3 rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1">
             <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
             <TabsTrigger value="categories" className="h-8 rounded-lg px-4 text-sm font-semibold">Categorias</TabsTrigger>
             <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
-          </TabsList>
+            </TabsList>
+          </div>
 
           <div className="hidden items-center justify-end gap-2 lg:flex">
             <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">

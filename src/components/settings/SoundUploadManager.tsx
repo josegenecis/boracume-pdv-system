@@ -25,15 +25,11 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
   const fileInputRefs = {
     bell: useRef<HTMLInputElement>(null),
     chime: useRef<HTMLInputElement>(null),
-    ding: useRef<HTMLInputElement>(null),
-    notification: useRef<HTMLInputElement>(null),
   };
 
   const soundTypes = [
-    { key: 'bell', label: 'Sino', urlKey: 'custom_bell_url' as const },
-    { key: 'chime', label: 'Carrilhão', urlKey: 'custom_chime_url' as const },
-    { key: 'ding', label: 'Ding', urlKey: 'custom_ding_url' as const },
-    { key: 'notification', label: 'Notificação', urlKey: 'custom_notification_url' as const },
+    { key: 'bell', label: 'Bell Boracume', urlKey: 'custom_bell_url' as const },
+    { key: 'chime', label: 'Bell Instant', urlKey: 'custom_chime_url' as const },
   ];
 
   // Função para extrair nome do arquivo da URL
@@ -200,7 +196,8 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
     if (!soundTypeData) return;
 
     const customUrl = customUrls[soundTypeData.urlKey];
-    const audio = new Audio(customUrl || `/sounds/${soundType}.mp3`);
+    const defaultUrl = soundType === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Bell Boracume.mp3';
+    const audio = new Audio(customUrl || defaultUrl);
     audio.volume = 0.5;
     audio.play().catch(console.error);
   };
