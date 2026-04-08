@@ -13,6 +13,7 @@ import ProductVariationForm from './ProductVariationForm';
 interface VariationOption {
   name: string;
   price: number;
+  active?: boolean;
 }
 
 interface ProductVariation {
@@ -351,9 +352,9 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
                       <div className="space-y-1">
                         {variation.options?.map((option, index) => (
                           <div key={index} className="flex justify-between text-sm">
-                            <span>{option.name}</span>
+                            <span className={option.active === false ? 'text-gray-400 line-through' : ''}>{option.name}</span>
                             <span className="text-gray-600">
-                              {option.price > 0 ? `+${formatCurrency(option.price)}` : 'Grátis'}
+                              {option.active === false ? 'Oculto' : option.price > 0 ? `+${formatCurrency(option.price)}` : 'Grátis'}
                             </span>
                           </div>
                         ))}

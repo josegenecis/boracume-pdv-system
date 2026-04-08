@@ -3,7 +3,7 @@ import { supabase } from '../integrations/supabase/client';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { perfStart } from '@/utils/perf';
 
-type VariationOption = { name: string; price: number; recommended?: boolean };
+type VariationOption = { name: string; price: number; recommended?: boolean; active?: boolean };
 type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
 type VariationOptionOverride = {
   price?: number;
@@ -118,6 +118,7 @@ function normalizeVariation(item: any): Variation | null {
     if (!opt?.name) continue;
     const optionName = String(opt.name).trim();
     if (!optionName) continue;
+    if (opt.active === false) continue;
     const optionBasePrice = opt.price !== undefined && opt.price !== null ? Number(opt.price) : 0;
     const safeBasePrice = Number.isFinite(optionBasePrice) ? Math.max(0, optionBasePrice) : 0;
     let adjustedPrice = safeBasePrice;

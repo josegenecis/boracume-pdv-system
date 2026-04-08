@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { normalizeComplementOptionName } from '@/lib/text';
-import { Trash2, Plus, Copy } from 'lucide-react';
+import { Trash2, Plus, Copy, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyInput } from '@/components/ui/currency-input';
 
 interface VariationOption {
   name: string;
   price: number;
+  active?: boolean;
 }
 
 interface ProductVariation {
@@ -51,7 +52,7 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
     free_selections_limit: (variation as any)?.free_selections_limit ?? 0,
     allow_paid_excess: (variation as any)?.allow_paid_excess ?? false,
     paid_max_selections: (variation as any)?.paid_max_selections ?? null,
-    options: variation?.options || [{ name: '', price: 0 }],
+    options: variation?.options || [{ name: '', price: 0, active: true }],
     ...variation
   });
   
@@ -60,7 +61,7 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
   const addOption = () => {
     setFormData(prev => ({
       ...prev,
-      options: [...prev.options, { name: '', price: 0 }]
+      options: [...prev.options, { name: '', price: 0, active: true }]
     }));
   };
 
@@ -113,7 +114,8 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
       .filter(option => option.name.trim())
       .map(option => ({
         ...option,
-        name: normalizeComplementOptionName(option.name)
+        name: normalizeComplementOptionName(option.name),
+        active: option.active !== false
       }));
     if (validOptions.length === 0) {
       toast({
@@ -300,6 +302,15 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
                       className={fieldClassName}
                     />
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => updateOption(index, 'active', !(option.active !== false))}
+                    className={softButtonClassName}
+                  >
+                    {option.active !== false ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

@@ -50,6 +50,11 @@ const LoyaltyManager = () => {
     notify_whatsapp: false
   });
 
+  const isNotifyWhatsappSchemaError = (message?: string) =>
+    typeof message === 'string' &&
+    message.toLowerCase().includes('notify_whatsapp') &&
+    message.toLowerCase().includes('loyalty_programs');
+
   // New Coupon State
   const [newCoupon, setNewCoupon] = useState<Partial<Coupon>>({
     code: '',
@@ -87,14 +92,31 @@ const LoyaltyManager = () => {
 
   const createProgram = async () => {
     try {
-      const { data, error } = await supabase.from('loyalty_programs').insert({
+      const payload = {
         user_id: user?.id,
         ...newProgram
-      }).select().single();
+      };
+
+      let result = await supabase.from('loyalty_programs').insert(payload).select().single();
+
+      if (result.error && isNotifyWhatsappSchemaError(result.error.message)) {
+        const { notify_whatsapp, ...fallbackPayload } = payload;
+        result = await supabase.from('loyalty_programs').insert(fallbackPayload).select().single();
+      }
+
+      const { data, error } = result;
 
       if (error) throw error;
-      setPrograms([...programs, data as any]);
+      setPrograms([...programs, { notify_whatsapp: false, ...(data as any) }]);
       toast({ title: 'Programa criado com sucesso!' });
+      setNewProgram({
+        type: 'visits',
+        goal_value: 10,
+        reward_type: 'percent',
+        reward_value: 10,
+        active: true,
+        notify_whatsapp: false
+      });
     } catch (error: any) {
       toast({ 
         title: 'Erro ao criar programa', 

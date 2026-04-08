@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, ImageIcon, Upload, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, ImageIcon, Upload, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -43,8 +43,6 @@ const BannerManager = () => {
     description: '',
     link_url: '',
     product_id: '__none__',
-    start_date: '',
-    end_date: '',
     display_order: 0,
     active: true,
     banner_type: 'wide' as 'wide' | 'tile'
@@ -201,8 +199,8 @@ const BannerManager = () => {
             image_url: imageUrl || null,
             link_url: formData.link_url || null,
             product_id: formData.product_id === '__none__' ? null : formData.product_id,
-            start_date: formData.start_date || null,
-            end_date: formData.end_date || null,
+            start_date: null,
+            end_date: null,
             display_order: formData.display_order,
             active: formData.active,
             banner_type: formData.banner_type
@@ -225,8 +223,8 @@ const BannerManager = () => {
             image_url: imageUrl || null,
             link_url: formData.link_url || null,
             product_id: formData.product_id === '__none__' ? null : formData.product_id,
-            start_date: formData.start_date || null,
-            end_date: formData.end_date || null,
+            start_date: null,
+            end_date: null,
             display_order: formData.display_order,
             active: formData.active,
             banner_type: formData.banner_type
@@ -261,14 +259,36 @@ const BannerManager = () => {
       description: banner.description || '',
       link_url: banner.link_url || '',
       product_id: banner.product_id ? String(banner.product_id) : '__none__',
-      start_date: banner.start_date ? banner.start_date.split('T')[0] : '',
-      end_date: banner.end_date ? banner.end_date.split('T')[0] : '',
       display_order: banner.display_order,
       active: banner.active,
       banner_type: (banner.banner_type || 'wide') as any
     });
     setImagePreview(banner.image_url || '');
     setIsDialogOpen(true);
+  };
+
+  const handleToggleActive = async (banner: Banner) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('promotional_banners')
+        .update({ active: !banner.active })
+        .eq('id', banner.id);
+      if (error) throw error;
+      toast({
+        title: banner.active ? 'Banner desativado' : 'Banner ativado',
+        description: banner.active ? 'O banner foi ocultado.' : 'O banner voltou a ser exibido.',
+      });
+      fetchBanners();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao atualizar banner',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDelete = async (bannerId: string) => {
@@ -314,8 +334,6 @@ const BannerManager = () => {
       description: '',
       link_url: '',
       product_id: '__none__',
-      start_date: '',
-      end_date: '',
       display_order: 0,
       active: true,
       banner_type: 'wide'
@@ -416,25 +434,21 @@ const BannerManager = () => {
                         placeholder="https://..."
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
-                        <Label htmlFor="start_date">Data Início</Label>
-                        <Input
-                          id="start_date"
-                          type="date"
-                          value={formData.start_date}
-                          onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                        />
+                        <Label>Status do banner</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Controle manual para exibir ou ocultar este banner.
+                        </p>
                       </div>
-                      <div>
-                        <Label htmlFor="end_date">Data Fim</Label>
-                        <Input
-                          id="end_date"
-                          type="date"
-                          value={formData.end_date}
-                          onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                        />
-                      </div>
+                      <Button
+                        type="button"
+                        variant={formData.active ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, active: !prev.active }))}
+                      >
+                        {formData.active ? 'Ativo' : 'Inativo'}
+                      </Button>
                     </div>
                     <div>
                       <Label htmlFor="display_order">Ordem</Label>
@@ -529,7 +543,6 @@ const BannerManager = () => {
               <TableRow>
                 <TableHead>Imagem</TableHead>
                 <TableHead>Título</TableHead>
-                <TableHead>Período</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -552,21 +565,19 @@ const BannerManager = () => {
                   </TableCell>
                   <TableCell className="font-medium">{banner.title}</TableCell>
                   <TableCell>
-                    {banner.start_date && banner.end_date ? (
-                      <>
-                        {new Date(banner.start_date).toLocaleDateString()} - {new Date(banner.end_date).toLocaleDateString()}
-                      </>
-                    ) : (
-                      'Sem período definido'
-                    )}
-                  </TableCell>
-                  <TableCell>
                     <span className={`px-2 py-1 rounded text-xs ${banner.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                       {banner.active ? 'Ativo' : 'Inativo'}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleActive(banner)}
+                      >
+                        {banner.active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"

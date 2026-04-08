@@ -17,6 +17,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 interface VariationOption {
   name: string;
   price: number;
+  active?: boolean;
 }
 
 interface GlobalVariation {
@@ -349,9 +350,9 @@ const GlobalVariationManager: React.FC = () => {
                         <div className="space-y-2">
                           {variation.options?.map((option, index) => (
                             <div key={index} className="flex justify-between text-sm">
-                              <span>{option.name}</span>
+                              <span className={option.active === false ? 'text-gray-400 line-through' : ''}>{option.name}</span>
                               <span className="text-gray-600">
-                                {option.price > 0 ? `+${formatBRL(option.price)}` : 'Grátis'}
+                                {option.active === false ? 'Oculto' : option.price > 0 ? `+${formatBRL(option.price)}` : 'Grátis'}
                               </span>
                             </div>
                           ))}
