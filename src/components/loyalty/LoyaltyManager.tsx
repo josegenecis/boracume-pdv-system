@@ -11,6 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import AdminPinDialog from '@/components/security/AdminPinDialog';
+import { verifyAdminPin } from '@/services/adminPin';
 
 interface LoyaltyProgram {
   id: string;
@@ -36,6 +38,8 @@ const LoyaltyManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [adminPinOpen, setAdminPinOpen] = useState(false);
+  const [pendingDeleteProgramId, setPendingDeleteProgramId] = useState<string | null>(null);
   
   const [programs, setPrograms] = useState<LoyaltyProgram[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -153,6 +157,25 @@ const LoyaltyManager = () => {
     } catch (error: any) {
       toast({ title: 'Erro ao remover', description: String(error?.message || ''), variant: 'destructive' });
     }
+  };
+
+  const requestDeleteProgram = (id: string) => {
+    setPendingDeleteProgramId(id);
+    setAdminPinOpen(true);
+  };
+
+  const handleConfirmDeleteProgram = async (pin: string) => {
+    if (!user?.id || !pendingDeleteProgramId) return;
+    const result = await verifyAdminPin({ restaurantUserId: user.id, pin });
+    if (!result.ok) {
+      toast({ title: 'PIN inválido', description: 'Informe a senha do administrador para excluir a regra.', variant: 'destructive' });
+      return;
+    }
+
+    const programId = pendingDeleteProgramId;
+    setAdminPinOpen(false);
+    setPendingDeleteProgramId(null);
+    await deleteProgram(programId);
   };
 
   const createCoupon = async () => {
@@ -305,7 +328,7 @@ const LoyaltyManager = () => {
                                 `R$ ${prog.reward_value} OFF`}
                       </p>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteProgram(prog.id)}>
+                    <Button variant="ghost" size="icon" onClick={() => requestDeleteProgram(prog.id)}>
                       <Trash2 className="h-5 w-5 text-red-500" />
                     </Button>
                   </CardContent>
@@ -422,6 +445,17 @@ const LoyaltyManager = () => {
         </TabsContent>
 
       </Tabs>
+      <AdminPinDialog
+        open={adminPinOpen}
+        title="Excluir regra de fidelidade"
+        description="Digite o PIN do administrador para confirmar a exclusão da regra."
+        confirmLabel="Excluir regra"
+        onCancel={() => {
+          setAdminPinOpen(false);
+          setPendingDeleteProgramId(null);
+        }}
+        onConfirm={handleConfirmDeleteProgram}
+      />
     </div>
   );
 };

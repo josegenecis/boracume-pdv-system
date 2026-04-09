@@ -41,23 +41,43 @@ const calculateRewardDiscount = (reward: any, cartTotal: number, deliveryFee: nu
   return 0
 }
 
-const createProgressLine = (program: any, balance: any, options?: { withStars?: boolean }) => {
+const getCycleProgressValue = (program: any, balance: any, issuedCount = 0) => {
   const goal = Math.max(0, Number(program.goal_value || 0))
-  if (!goal) return ''
-  const withStars = Boolean(options?.withStars)
+  if (!goal) return 0
 
   if (program.type === 'visits') {
     const totalVisits = Math.max(0, Number(balance?.total_visits || 0))
-    const partial = totalVisits % goal || (totalVisits > 0 && totalVisits >= goal ? goal : totalVisits)
-    const count = Math.max(0, Math.min(goal, Math.floor(partial)))
+    const progressAfterRewards = Math.max(0, totalVisits - issuedCount * goal)
+    const partial = progressAfterRewards > goal ? (progressAfterRewards % goal || goal) : progressAfterRewards
+    return Math.max(0, Math.min(goal, Math.floor(partial)))
+  }
+
+  if (program.type === 'spending') {
+    const totalSpent = Math.max(0, Number(balance?.total_spent || 0))
+    const progressAfterRewards = Math.max(0, totalSpent - issuedCount * goal)
+    const partial = progressAfterRewards > goal ? (progressAfterRewards % goal || goal) : progressAfterRewards
+    return Math.max(0, Math.min(goal, partial))
+  }
+
+  return 0
+}
+
+const createProgressLine = (program: any, balance: any, options?: { withStars?: boolean; issuedCount?: number }) => {
+  const goal = Math.max(0, Number(program.goal_value || 0))
+  if (!goal) return ''
+  const withStars = Boolean(options?.withStars)
+  const issuedCount = Math.max(0, Number(options?.issuedCount || 0))
+
+  if (program.type === 'visits') {
+    const count = getCycleProgressValue(program, balance, issuedCount)
     const prefix = withStars ? `${count <= 0 ? '☆' : count <= 10 ? '⭐'.repeat(count) : `⭐x${count}`} ` : ''
     return `${prefix}Fidelidade: ${count} de ${goal} pedidos concluídos.`
   }
 
   if (program.type === 'spending') {
-    const totalSpent = Math.max(0, Number(balance?.total_spent || 0))
-    const partial = totalSpent % goal || (totalSpent > 0 && totalSpent >= goal ? goal : totalSpent)
-    return `⭐ Fidelidade: ${formatBRL(Math.min(goal, partial))} de ${formatBRL(goal)} acumulados.`
+    const progressValue = getCycleProgressValue(program, balance, issuedCount)
+    const prefix = withStars ? '⭐ ' : ''
+    return `${prefix}Fidelidade: ${formatBRL(progressValue)} de ${formatBRL(goal)} acumulados.`
   }
 
   return ''
@@ -111,6 +131,42 @@ const syncRewardUsageFromOrders = async (supabase: any, userId: string, rewards:
   }
 
   return activeRewards
+}
+
+const getIssuedRewardCountsByProgram = async (supabase: any, userId: string, customerPhone: string, programs: any[]) => {
+  const counts = new Map<string, number>()
+  const activePrograms = Array.isArray(programs) ? programs : []
+  if (!userId || !customerPhone || activePrograms.length === 0) return { counts, rewardsSchemaAvailable: true }
+
+  try {
+    const results = await Promise.all(
+      activePrograms.map(async (program) => {
+        const programId = String(program?.id || '')
+        if (!programId) return { programId: '', count: 0 }
+        const result = await supabase
+          .from('customer_rewards')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('program_id', programId)
+          .eq('customer_phone', customerPhone)
+
+        if (result.error) throw result.error
+        return { programId, count: Number(result.count || 0) }
+      })
+    )
+
+    for (const result of results) {
+      if (result.programId) counts.set(result.programId, result.count)
+    }
+
+    return { counts, rewardsSchemaAvailable: true }
+  } catch (error: any) {
+    if (isMissingRewardsSchemaError(error)) {
+      console.warn('[loyalty] customer_rewards indisponível ao consultar progresso', { userId, customerPhone, code: error?.code, message: error?.message })
+      return { counts, rewardsSchemaAvailable: false }
+    }
+    throw error
+  }
 }
 
 const createRewardLine = (program: any) =>
@@ -193,10 +249,13 @@ export async function previewLoyaltyForCustomer(
   ])
 
   const activePrograms = Array.isArray(programs) ? programs : []
+  const { counts: issuedCounts, rewardsSchemaAvailable } = await getIssuedRewardCountsByProgram(supabase, userId, normalizedPhone, activePrograms)
   const progress = Array.from(
     new Set(
       activePrograms
-        .map((program) => createProgressLine(program, balance))
+        .map((program) => createProgressLine(program, balance, {
+          issuedCount: rewardsSchemaAvailable ? Number(issuedCounts.get(String(program?.id || '')) || 0) : 0
+        }))
         .filter(Boolean)
     )
   )
@@ -394,7 +453,8 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
     }
 
     if (program.notify_whatsapp) {
-      const progressLine = createProgressLine(program, balanceAfter, { withStars: true })
+      const effectiveIssuedCount = rewardsSchemaAvailable ? issuedCount + rewardsToIssue : issuedCount
+      const progressLine = createProgressLine(program, balanceAfter, { withStars: true, issuedCount: effectiveIssuedCount })
       if (progressLine) progressLines.push(progressLine)
       if (rewardsToIssue > 0 && rewardsSchemaAvailable) rewardLines.push(createRewardLine(program))
     }

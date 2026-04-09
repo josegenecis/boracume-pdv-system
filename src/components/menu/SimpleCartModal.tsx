@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle } from 'lucide-react';
+import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
@@ -98,6 +98,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [selectedUpsellOffer, setSelectedUpsellOffer] = React.useState<UpsellOffer | null>(null);
   const [upsellVariationOpen, setUpsellVariationOpen] = React.useState(false);
   const [upsellBusy, setUpsellBusy] = React.useState(false);
+  const [upsellLoadingRuleId, setUpsellLoadingRuleId] = React.useState<string | null>(null);
   
   // Coupon State
   const [couponCode, setCouponCode] = React.useState('');
@@ -710,6 +711,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (upsellBusy) return;
     setUpsellBusy(true);
     try {
+      setUpsellLoadingRuleId(null);
       onClose();
       await finalizeOrder(base);
       resetUpsellState();
@@ -722,6 +724,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (!offer?.product?.id) return;
     if (upsellBusy) return;
     setUpsellBusy(true);
+    setUpsellLoadingRuleId(String(offer.ruleId));
     try {
       const hasVars = await hasProductVariations(String(offer.product.id));
       if (!hasVars) {
@@ -734,6 +737,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setUpsellOpen(false);
     } finally {
       setUpsellBusy(false);
+      setUpsellLoadingRuleId(null);
     }
   };
 
@@ -1216,16 +1220,25 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   return (
                     <div
                       key={option.id}
-                      className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${isSelected ? '' : 'border-gray-200 hover:border-gray-300'}`}
+                      className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${isSelected ? '' : 'border-gray-200 hover:border-gray-300'}`}
                       style={isSelected ? { borderColor: menuPrimaryColor, backgroundColor: menuBackgroundColor } : undefined}
                       onClick={() => {
                         setSelectedPaymentMethod(option as any)
                         setPaymentMethod(option.id)
                       }}
                     >
-                      <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />
+                      <RadioGroupItem value={option.id} id={option.id} className="sr-only" />
+                      <div
+                        className="flex h-4 w-4 items-center justify-center rounded-full border flex-shrink-0"
+                        style={{ borderColor: isSelected ? menuPrimaryColor : '#D1D5DB' }}
+                      >
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: isSelected ? menuPrimaryColor : 'transparent' }}
+                        />
+                      </div>
                       <IconComponent className={`h-5 w-5 ${isSelected ? '' : 'text-gray-600'}`} style={isSelected ? { color: menuPrimaryColor } : undefined} />
-                      <Label className={`flex-1 font-medium cursor-pointer ${isSelected ? '' : 'text-gray-900'}`} style={isSelected ? { color: menuPrimaryColor } : undefined}>{option.name}</Label>
+                      <Label className={`flex-1 text-sm font-medium cursor-pointer ${isSelected ? '' : 'text-gray-900'}`} style={isSelected ? { color: menuPrimaryColor } : undefined}>{option.name}</Label>
                       {option.is_card && option.extra_fee_percent > 0 && (
                         <span className="ml-2 text-xs font-bold" style={{ color: menuPrimaryColor }}>+{option.extra_fee_percent}%</span>
                       )}
@@ -1423,7 +1436,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                           ) : null}
                         </div>
                         <Button onClick={() => chooseUpsellOffer(offer)} disabled={upsellBusy}>
-                          Add oferta
+                          {upsellBusy && upsellLoadingRuleId === offer.ruleId ? (
+                            <span className="flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Adicionando...
+                            </span>
+                          ) : 'Add oferta'}
                         </Button>
                       </div>
                           </>
