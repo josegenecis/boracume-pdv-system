@@ -50,6 +50,8 @@ interface SimpleCartModalProps {
   deliveryZones?: any[];
   deliverySettings?: any;
   userId: string;
+  isStoreOpen?: boolean;
+  storeClosedMessage?: string;
 }
 
 export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
@@ -62,7 +64,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   onPlaceOrder,
   deliveryZones = [],
   deliverySettings = null,
-  userId
+  userId,
+  isStoreOpen = true,
+  storeClosedMessage = 'A loja está fechada no momento.'
 }) => {
   const formatBRL = (value: number) =>
     `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -113,13 +117,18 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
-  const isCardSelected = (selectedPaymentMethod as any)?.is_card === true;
-  const requiresMercadoPago = isPixSelected || isCardSelected;
+  const requiresMercadoPago = isPixSelected;
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const phoneLookupTimerRef = useRef<number | null>(null);
   const lastLookupDigitsRef = useRef<string>('');
+  const normalizeNeighborhood = (value: string) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
 
   // Setup Google Places Autocomplete para o endereço do cliente
   useEffect(() => {
@@ -244,9 +253,18 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     }, 0);
   }, [isOpen, step]);
 
+  const storePricingMode = deliverySettings?.pricing?.mode || 'neighborhood';
+  const showNeighborhoodSelect = storePricingMode === 'neighborhood';
+
   useEffect(() => {
     if (!isOpen) return;
     if (!userId) return;
+    if (showNeighborhoodSelect) {
+      setDetectZoneError(null);
+      setDeliveryQuote(null);
+      setIsDetectingZone(false);
+      return;
+    }
 
     const addr = String(customerAddress || '').trim();
     const hasGps = typeof location.latitude === 'number' && typeof location.longitude === 'number';
@@ -295,12 +313,24 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
       detectTimerRef.current = null;
     };
-  }, [isOpen, userId, customerAddress, location.latitude, location.longitude, total, deliveryZoneId]);
+  }, [isOpen, userId, customerAddress, location.latitude, location.longitude, total, deliveryZoneId, showNeighborhoodSelect]);
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
   const quoteMode = String(deliveryQuote?.mode || '');
   const quoteZone = deliveryQuote?.zone || null;
-  const storePricingMode = deliverySettings?.pricing?.mode || 'neighborhood';
-  const showNeighborhoodSelect = storePricingMode === 'neighborhood';
+
+  useEffect(() => {
+    if (!showNeighborhoodSelect) return;
+    const normalizedNeighborhood = normalizeNeighborhood(customerNeighborhood);
+    if (!normalizedNeighborhood) return;
+
+    const matchedZone = deliveryZones.find((zone: any) => normalizeNeighborhood(zone?.name) === normalizedNeighborhood);
+    if (!matchedZone) return;
+    if (String(deliveryZoneId || '') === String(matchedZone.id)) return;
+
+    zoneWasAutoRef.current = true;
+    setDeliveryZoneId(String(matchedZone.id));
+    setDetectZoneError(null);
+  }, [showNeighborhoodSelect, customerNeighborhood, deliveryZones, deliveryZoneId]);
   
   // O valor da entrega depende do modo configurado na loja
   let deliveryFee = 0;
@@ -545,8 +575,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     const { data, status } = await invokeEdgeFunction('pix-start-checkout', {
       restaurantUserId: userId,
       orderPayload: orderData,
-      preferredMethod: isCardSelected ? 'cartao' : 'pix',
-      useCheckoutPro: isCardSelected
+      preferredMethod: 'pix',
+      useCheckoutPro: false
     }, { timeoutMs: 60000 });
 
     if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
@@ -697,6 +727,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const handlePlaceOrder = async () => {
     if (!isFormValid()) return;
+    if (!isStoreOpen) {
+      toast({
+        title: 'Loja fechada',
+        description: storeClosedMessage,
+        variant: 'destructive'
+      });
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -1271,6 +1309,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
              {appliedCoupon && <p className="text-xs text-green-600 mt-1">Cupom {appliedCoupon.code} aplicado!</p>}
              {autoLoyaltyReward && <p className="text-xs mt-1 text-[#245B2B]">{autoLoyaltyReward.message}</p>}
              {isCheckingLoyalty && !appliedCoupon && !autoLoyaltyReward && <p className="text-xs mt-1 text-muted-foreground">Verificando fidelidade...</p>}
+            {!isStoreOpen && <p className="text-xs text-red-500 mt-1">{storeClosedMessage}</p>}
           </div>
 
           {/* Resumo */}
@@ -1304,7 +1343,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </Button>
             <Button 
               onClick={handlePlaceOrder}
-              disabled={!isFormValid() || isLoading}
+              disabled={!isFormValid() || isLoading || !isStoreOpen}
               className="flex-1 rounded-xl font-bold h-12 text-white transition-transform hover:scale-[1.02]"
               style={{ backgroundColor: 'var(--menu-primary, #85C441)' }}
             >
@@ -1319,6 +1358,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <div className="border-t border-gray-100 p-4 bg-white">
               <Button
                 onClick={() => setStep('checkout')}
+                disabled={!isStoreOpen}
                 className="w-full rounded-xl font-bold h-12 text-white transition-transform hover:scale-[1.02]"
                 style={{ backgroundColor: 'var(--menu-primary, #85C441)' }}
               >

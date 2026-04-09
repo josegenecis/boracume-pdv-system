@@ -53,47 +53,41 @@ export const useCustomerLookup = (userId: string) => {
         return Array.from(set).slice(0, 12);
       })();
 
-      // Primeiro tentar buscar na tabela customers
-      const { data: customerData, error: customerError } = await supabase
-        .from('customers')
-        .select('name, phone, address, neighborhood')
-        .eq('user_id', userId)
-        .in('phone', candidates as any)
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const [{ data: customerData, error: customerError }, { data: orderData, error: orderError }] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('name, phone, address, neighborhood')
+          .eq('user_id', userId)
+          .in('phone', candidates as any)
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('orders')
+          .select('customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id')
+          .eq('user_id', userId)
+          .in('customer_phone', candidates as any)
+          .order('created_at', { ascending: false })
+          .limit(1)
+      ]);
 
-      if (!customerError && customerData && customerData.length > 0) {
-        const customer = customerData[0];
-        return {
-          name: customer.name || '',
-          phone: customer.phone || '',
-          address: customer.address || '',
-          neighborhood: customer.neighborhood || ''
-        };
+      if (customerError) {
+        console.error('Erro ao buscar cliente em customers:', customerError);
       }
 
-      // Fallback para buscar nos pedidos
-      const { data, error } = await supabase
-        .from('orders')
-        .select('customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id')
-        .eq('user_id', userId)
-        .in('customer_phone', candidates as any)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.error('Erro ao buscar cliente:', error);
-        return null;
+      if (orderError) {
+        console.error('Erro ao buscar cliente em orders:', orderError);
       }
 
-      if (data && data.length > 0) {
-        const customer = data[0];
+      const customer = customerData?.[0];
+      const lastOrder = orderData?.[0];
+
+      if (customer || lastOrder) {
         return {
-          name: customer.customer_name || '',
-          phone: customer.customer_phone || '',
-          address: customer.customer_address || '',
-          neighborhood: customer.customer_neighborhood || '',
-          deliveryZoneId: customer.delivery_zone_id || null
+          name: customer?.name || lastOrder?.customer_name || '',
+          phone: customer?.phone || lastOrder?.customer_phone || '',
+          address: customer?.address || lastOrder?.customer_address || '',
+          neighborhood: customer?.neighborhood || lastOrder?.customer_neighborhood || '',
+          deliveryZoneId: lastOrder?.delivery_zone_id || null
         };
       }
 

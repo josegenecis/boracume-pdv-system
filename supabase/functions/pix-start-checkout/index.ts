@@ -42,6 +42,44 @@ const randomSecret = () => {
   }
 }
 
+const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+const parseOpeningHours = (value: unknown) => {
+  if (!value) return {}
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return typeof value === 'object' ? value : {}
+}
+
+const parseMinutes = (value?: string) => {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+const isStoreOpenNow = (openingHours: unknown, now = new Date()) => {
+  const schedule = parseOpeningHours(openingHours) as Record<string, any>
+  const currentDay = dayKeys[now.getDay()]
+  const todaySchedule = schedule[currentDay]
+  if (!todaySchedule || todaySchedule.closed) return false
+
+  const openMinutes = parseMinutes(todaySchedule.open)
+  const closeMinutes = parseMinutes(todaySchedule.close)
+  if (openMinutes === null || closeMinutes === null) return true
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  if (closeMinutes <= openMinutes) {
+    return currentMinutes >= openMinutes || currentMinutes < closeMinutes
+  }
+  return currentMinutes >= openMinutes && currentMinutes < closeMinutes
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -80,6 +118,21 @@ Deno.serve(async (req: Request) => {
 
     if (!restaurantUserId || !orderPayload || !Number.isFinite(total) || total <= 0) {
       return ok({ ok: false, error: 'invalid_payload' })
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('opening_hours')
+      .eq('id', restaurantUserId)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error("Database error fetching profile:", profileError)
+      return ok({ ok: false, error: 'profile_fetch_error', details: profileError })
+    }
+
+    if (!isStoreOpenNow(profile?.opening_hours)) {
+      return ok({ ok: false, error: 'store_closed', message: 'A loja está fechada no momento.' })
     }
 
     const { data: pix, error: pixErr } = await supabase

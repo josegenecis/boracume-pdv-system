@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +18,8 @@ import CategoryTabs from '@/components/menu/CategoryTabs';
 import ProductCard from '@/components/menu/ProductCard';
 import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
+import { Badge } from '@/components/ui/badge';
+import { getStoreOpenInfo } from '@/lib/storeHours';
 // import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
@@ -84,6 +86,7 @@ const MenuDigital = () => {
     isLoading: menuLoading,
     error: menuError 
   } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
+  const storeOpenInfo = useMemo(() => getStoreOpenInfo((profile as any)?.opening_hours), [profile]);
 
   // Pré-carregar script do Google Maps se houver chave configurada e o usuário precisar usar mapas
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
@@ -294,6 +297,10 @@ const MenuDigital = () => {
 
   const handlePlaceOrder = async (orderData: any) => {
     try {
+      if (!storeOpenInfo.isOpen) {
+        throw new Error('A loja está fechada no momento. Aguarde o horário de atendimento para finalizar seu pedido.');
+      }
+
       // Validar dados obrigatórios antes de enviar
       if (!orderData.user_id) {
         throw new Error('ID do usuário é obrigatório');
@@ -608,6 +615,12 @@ const MenuDigital = () => {
                 <h1 className="text-lg sm:text-xl font-bold leading-tight" style={{ color: 'var(--menu-secondary, #063D2E)' }}>
                   {profile?.restaurant_name || 'Cardápio'}
                 </h1>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge className={storeOpenInfo.isOpen ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700 hover:bg-red-100'}>
+                    {storeOpenInfo.label}
+                  </Badge>
+                  <span className="text-xs font-medium text-gray-500">{storeOpenInfo.detail}</span>
+                </div>
                 {((profile as any)?.address || (profile as any)?.phone) && (
                   <div className="text-xs mt-1" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.8 }}>
                     {(profile as any)?.address ? String((profile as any).address) : ''}
@@ -730,6 +743,8 @@ const MenuDigital = () => {
         deliveryZones={deliveryZones}
         deliverySettings={deliverySettings}
         userId={finalUserId}
+        isStoreOpen={storeOpenInfo.isOpen}
+        storeClosedMessage={storeOpenInfo.detail}
       />
 
       {/* Clube de Vantagens removido conforme solicitação */}
@@ -738,7 +753,17 @@ const MenuDigital = () => {
       <CartBottomBar
         itemCount={getCartItemCount()}
         total={getCartTotal()}
-        onOpenCart={() => setShowCartModal(true)}
+        onOpenCart={() => {
+          if (!storeOpenInfo.isOpen) {
+            toast({
+              title: 'Loja fechada',
+              description: storeOpenInfo.detail,
+              variant: 'destructive'
+            });
+            return;
+          }
+          setShowCartModal(true);
+        }}
       />
     </div>
   );
