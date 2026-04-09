@@ -1034,8 +1034,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 )}
                 {loyaltyProgress.length > 0 && (
                   <div className="mt-2 rounded-lg border border-[#8CC850]/25 bg-[#F4FAEC] p-2 text-xs text-[#245B2B]">
-                    {loyaltyProgress.map((item) => (
-                      <div key={item}>{item}</div>
+                    {loyaltyProgress.map((item, index) => (
+                      <div key={`${index}-${item}`}>{item}</div>
                     ))}
                   </div>
                 )}

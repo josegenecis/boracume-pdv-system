@@ -48,7 +48,9 @@ const createProgressLine = (program: any, balance: any) => {
   if (program.type === 'visits') {
     const totalVisits = Math.max(0, Number(balance?.total_visits || 0))
     const partial = totalVisits % goal || (totalVisits > 0 && totalVisits >= goal ? goal : totalVisits)
-    return `⭐ Fidelidade: ${Math.min(goal, partial)} de ${goal} pedidos concluídos.`
+    const count = Math.max(0, Math.min(goal, Math.floor(partial)))
+    const stars = count <= 0 ? '☆' : count <= 10 ? '⭐'.repeat(count) : `⭐x${count}`
+    return `${stars} Fidelidade: ${count} de ${goal} pedidos concluídos.`
   }
 
   if (program.type === 'spending') {
@@ -79,12 +81,27 @@ export async function getAvailableLoyaltyReward(supabase: any, userId: string, c
   const normalizedPhone = normalizePhone(customerPhone)
   if (!userId || !normalizedPhone) return null
 
+  const { data: activePrograms, error: activeProgramsError } = await supabase
+    .from('loyalty_programs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('active', true)
+
+  if (activeProgramsError) throw activeProgramsError
+
+  const activeProgramIds = (Array.isArray(activePrograms) ? activePrograms : [])
+    .map((program: any) => String(program?.id || ''))
+    .filter(Boolean)
+
+  if (activeProgramIds.length === 0) return null
+
   const { data, error } = await supabase
     .from('customer_rewards')
     .select('id, code, discount_type, discount_value, status, program_id, awarded_at')
     .eq('user_id', userId)
     .eq('customer_phone', normalizedPhone)
     .eq('status', 'available')
+    .in('program_id', activeProgramIds)
     .order('awarded_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -124,9 +141,13 @@ export async function previewLoyaltyForCustomer(
   ])
 
   const activePrograms = Array.isArray(programs) ? programs : []
-  const progress = activePrograms
-    .map((program) => createProgressLine(program, balance))
-    .filter(Boolean)
+  const progress = Array.from(
+    new Set(
+      activePrograms
+        .map((program) => createProgressLine(program, balance))
+        .filter(Boolean)
+    )
+  )
 
   if (!reward) {
     return { reward: null, progress }
@@ -160,7 +181,7 @@ export async function markLoyaltyRewardUsedForOrder(
   if (reward.status === 'used' && reward.order_id === orderId) return { ok: true, idempotent: true }
   if (reward.status !== 'available') return { ok: false, skipped: true }
 
-  const { error } = await supabase
+  const { data: updatedRows, error } = await supabase
     .from('customer_rewards')
     .update({
       status: 'used',
@@ -170,8 +191,10 @@ export async function markLoyaltyRewardUsedForOrder(
     .eq('id', rewardId)
     .eq('user_id', userId)
     .eq('status', 'available')
+    .select('id')
 
   if (error) throw error
+  if (!Array.isArray(updatedRows) || updatedRows.length === 0) return { ok: false, skipped: true }
   return { ok: true }
 }
 
@@ -326,11 +349,13 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
   }
 
   if (progressLines.length > 0 || rewardLines.length > 0) {
+    const uniqueProgressLines = Array.from(new Set(progressLines))
+    const uniqueRewardLines = Array.from(new Set(rewardLines))
     const message = [
       `Olá, ${String(order?.customer_name || balanceAfter?.customer_name || 'Cliente')}!`,
       'Seu fidelidade foi atualizado:',
-      ...progressLines,
-      ...rewardLines,
+      ...uniqueProgressLines,
+      ...uniqueRewardLines,
     ].join('\n')
 
     try {

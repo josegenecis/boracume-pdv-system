@@ -455,13 +455,18 @@ const MenuDigital = () => {
 
       try {
         if (data?.id && loyaltyRewardId) {
-          await supabase.functions.invoke('loyalty-redeem-reward', {
+          const { data: redeemResult, error: redeemError } = await supabase.functions.invoke('loyalty-redeem-reward', {
             body: {
               rewardId: loyaltyRewardId,
               orderId: data.id,
               userId: orderData.user_id,
             }
           });
+
+          if (redeemError) throw redeemError;
+          if (!redeemResult?.ok) {
+            console.warn('⚠️ Recompensa fidelidade não foi marcada como usada:', redeemResult);
+          }
         }
       } catch (loyaltyErr) {
         console.warn('⚠️ Falha ao marcar recompensa fidelidade como usada:', loyaltyErr);

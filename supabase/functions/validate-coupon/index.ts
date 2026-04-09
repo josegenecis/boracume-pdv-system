@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
       return digits.startsWith('55') ? digits : `55${digits}`
     }
 
-    const { code, cartTotal, userId, customerId, customerPhone } = await req.json()
+    const { code, cartTotal, userId, customerPhone } = await req.json()
 
     if (!code || !userId) {
       return new Response(JSON.stringify({ valid: false, message: 'Dados incompletos' }), { headers: corsHeaders })
@@ -38,41 +38,36 @@ Deno.serve(async (req) => {
       .eq('active', true)
       .maybeSingle()
 
-    // 2. Se não achar Global, buscar Recompensa Pessoal do Cliente
+    // 2. Se não achar Global, buscar Recompensa Pessoal do Cliente (por telefone)
     let reward = null
-    if (!coupon && customerId) {
-      const { data: userReward } = await supabase
-        .from('customer_rewards')
-        .select('*, loyalty_programs(*)')
-        .eq('code', cleanCode)
-        .eq('customer_id', customerId)
-        .eq('status', 'available')
-        .maybeSingle()
-      
-      if (userReward) {
-        reward = {
-          discount_type: userReward.discount_type,
-          discount_value: userReward.discount_value,
-          min_purchase: 0 // Recompensas geralmente não têm mínimo, mas poderia ter
-        }
-      }
-    }
+    if (!coupon && customerPhone) {
+      const { data: programs } = await supabase
+        .from('loyalty_programs')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('active', true)
 
-    if (!coupon && !reward && customerPhone) {
-      const { data: phoneReward } = await supabase
+      const activeProgramIds = (Array.isArray(programs) ? programs : [])
+        .map((p: any) => String(p?.id || ''))
+        .filter(Boolean)
+
+      if (activeProgramIds.length > 0) {
+        const { data: phoneReward } = await supabase
         .from('customer_rewards')
-        .select('*')
+        .select('discount_type,discount_value')
         .eq('user_id', userId)
         .eq('code', cleanCode)
         .eq('customer_phone', normalizePhone(customerPhone))
         .eq('status', 'available')
+        .in('program_id', activeProgramIds)
         .maybeSingle()
 
-      if (phoneReward) {
-        reward = {
-          discount_type: phoneReward.discount_type,
-          discount_value: phoneReward.discount_value,
-          min_purchase: 0
+        if (phoneReward) {
+          reward = {
+            discount_type: phoneReward.discount_type,
+            discount_value: phoneReward.discount_value,
+            min_purchase: 0
+          }
         }
       }
     }
