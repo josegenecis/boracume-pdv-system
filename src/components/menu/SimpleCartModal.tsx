@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Trash2, Plus, Minus, Navigation, MapPin, Phone, User, CreditCard, Banknote, Smartphone, CheckCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
@@ -890,7 +889,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         />
       ) : null}
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+      <DialogContent className="max-w-lg h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
@@ -909,7 +908,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y px-4 py-4 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
             {step === 'bag' ? (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1205,15 +1204,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
               <Label className="text-sm font-semibold mb-3 block" style={{ color: menuSecondaryColor }}>Forma de Pagamento *</Label>
 
-              <RadioGroup 
-                value={selectedPaymentMethod?.id || ''} 
-                onValueChange={(value) => {
-                  const method = paymentMethods.find((m) => m.id === value);
-                  setSelectedPaymentMethod(method);
-                  setPaymentMethod(method?.id || '');
-                }}
-                className="space-y-2"
-              >
+              <div className="space-y-2">
                 {paymentMethods.length > 0 ? paymentMethods.map((option) => {
                   const IconComponent = option.icon === 'cartao_credito' || option.icon === 'cartao_debito' ? CreditCard : Banknote;
                   const isSelected = selectedPaymentMethod?.id === option.id;
@@ -1226,8 +1217,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         setSelectedPaymentMethod(option as any)
                         setPaymentMethod(option.id)
                       }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedPaymentMethod(option as any);
+                          setPaymentMethod(option.id);
+                        }
+                      }}
                     >
-                      <RadioGroupItem value={option.id} id={option.id} className="sr-only" />
                       <div
                         className="flex h-4 w-4 items-center justify-center rounded-full border flex-shrink-0"
                         style={{ borderColor: isSelected ? menuPrimaryColor : '#D1D5DB' }}
@@ -1245,7 +1244,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     </div>
                   );
                 }) : <span className="text-muted-foreground">Nenhuma forma de pagamento cadastrada</span>}
-              </RadioGroup>
+              </div>
 
               {isPixSelected && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
