@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 interface Table {
   id: string;
@@ -217,12 +218,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setLoading(true);
 
       // Atualizar status do pedido
-      const { error: orderError } = await supabase
-        .from('orders')
-        .update({ status: 'completed' })
-        .eq('id', currentOrder.id);
-
-      if (orderError) throw orderError;
+      await updateOrderStatusRemote(currentOrder.id, 'completed');
 
       // Liberar a mesa
       const { error: tableError } = await supabase

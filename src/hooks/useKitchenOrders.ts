@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 export interface OrderItem {
   id: string;
@@ -171,15 +172,7 @@ export const useKitchenOrders = () => {
     try {
       console.log(`🔄 Updating order ${orderId} status to ${newStatus}`);
       
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
-
-      if (error) {
-        console.error('❌ Error updating order status:', error);
-        throw error;
-      }
+      await updateOrderStatusRemote(orderId, newStatus);
 
       // Update local state
       setOrders(prev => prev.map(order => 
@@ -200,16 +193,8 @@ export const useKitchenOrders = () => {
 
     try {
       console.log(`🔄 Updating ${orderIds.length} orders to status ${newStatus}`);
-      
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .in('id', orderIds);
 
-      if (error) {
-        console.error('❌ Error updating multiple orders status:', error);
-        throw error;
-      }
+      await Promise.all(orderIds.map((orderId) => updateOrderStatusRemote(orderId, newStatus)));
 
       // Update local state
       setOrders(prev => prev.map(order => 

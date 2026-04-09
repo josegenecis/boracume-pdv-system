@@ -16,6 +16,7 @@ import OrdersBulkActionButton from '@/components/orders/OrdersBulkActionButton';
 import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { WhatsAppService } from '@/services/WhatsAppService';
 import { PrinterService } from '@/utils/printerService';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
@@ -413,40 +414,10 @@ const Orders = () => {
       let data: any = null;
       let error: any = null;
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token || '';
-
-      const directUpdate = async () => {
-        return await supabase
-          .from('orders')
-          .update(updateData)
-          .eq('id', orderId)
-          .eq('user_id', user?.id)
-          .select()
-          .single();
-      };
-
-      const ef = await supabase.functions
-        .invoke('orders-update-status', {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-          body: { orderId, newStatus, id: orderId, status: newStatus }
-        })
-        .catch((e: any) => ({ data: null, error: e })) as any;
-
-      if (ef?.data?.ok && ef?.data?.order) {
-        data = ef.data.order;
-      } else {
-        const res = await directUpdate();
-        data = (res as any).data;
-        error = (res as any).error;
-        if (!data && !error) {
-          if (ef?.error) {
-            error = ef.error;
-          } else if (ef?.data?.ok === false) {
-            const detailsMsg = ef.data?.details?.message ? `: ${ef.data.details.message}` : '';
-            error = { message: `${ef.data.error || 'edge_function_error'}${detailsMsg}`, code: 'EDGE_FN', details: ef.data };
-          }
-        }
+      try {
+        data = await updateOrderStatusRemote(orderId, newStatus);
+      } catch (e: any) {
+        error = e;
       }
 
       if (error) {

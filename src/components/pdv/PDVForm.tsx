@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from './ProductSelectionModal';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 interface CartItem {
   id: string;
@@ -218,11 +219,17 @@ const PDVForm: React.FC = () => {
         table_id: selectedTable || null
       };
 
-      const { error } = await supabase
+      const { data: createdOrder, error } = await supabase
         .from('orders')
-        .insert([orderData]);
+        .insert([orderData])
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      if (createdOrder?.id) {
+        await updateOrderStatusRemote(createdOrder.id, 'completed');
+      }
 
       await sendToKitchen(orderData);
 

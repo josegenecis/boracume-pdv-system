@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { loadPrinterConfig } from '@/services/printerConfig';
 import { enqueuePrintJob } from '@/services/printRelay';
 import { soundNotifications } from '@/utils/soundUtils';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 export interface KitchenOrder {
   id: string;
@@ -162,12 +163,7 @@ export const useKDS = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
-
-      if (error) throw error;
+      await updateOrderStatusRemote(orderId, newStatus);
 
       // Optimistic update
       if (!['preparing', 'ready'].includes(newStatus)) {
@@ -195,12 +191,7 @@ export const useKDS = () => {
      try {
       // Bring back a completed/delivered order to 'ready' or 'preparing'
       // For simplicity, let's bring it back to 'preparing'
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'preparing' })
-        .eq('id', orderId);
-
-      if (error) throw error;
+      await updateOrderStatusRemote(orderId, 'preparing');
 
       toast({
         title: "Pedido recuperado",

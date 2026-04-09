@@ -28,6 +28,7 @@ import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 interface Product {
   id: string;
@@ -1992,33 +1993,26 @@ const PDV = () => {
         onPaymentConfirmed={async () => {
           if (!pixOrderId) return;
           try {
-            const { data: updatedRows, error: updateError } = await supabase
-              .from('orders')
-              .update({ acceptance_status: 'accepted', status: 'preparing' } as any)
-              .eq('id', pixOrderId)
-              .select();
-            if (!updateError) {
-              const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
-              try {
-                await PrinterService.printOrder(updated || { id: pixOrderId, user_id: user?.id, order_number: 'PIX', created_at: new Date().toISOString(), items: cart, total: pixAmount, delivery_fee: getDeliveryFee(), payment_method: 'pix', customer_name: customerName });
-              } catch (e) {
-                console.warn('Falha ao imprimir automaticamente (PIX):', e);
-              }
-              toast({
-                title: "Pagamento confirmado!",
-                description: "Pedido entrou em preparo e foi enviado para impressão.",
-              });
-              setNfceModalOpen(true);
-              setCart([]);
-              setCustomerName('');
-              setCustomerPhone('');
-              setCustomerAddress('');
-              setSelectedDeliveryZone('');
-              setSelectedTable('');
-              setChangeAmount('');
-              setPaymentMethod('pix');
-              setOrderType('delivery');
+            const updated = await updateOrderStatusRemote(pixOrderId, 'preparing');
+            try {
+              await PrinterService.printOrder(updated || { id: pixOrderId, user_id: user?.id, order_number: 'PIX', created_at: new Date().toISOString(), items: cart, total: pixAmount, delivery_fee: getDeliveryFee(), payment_method: 'pix', customer_name: customerName });
+            } catch (e) {
+              console.warn('Falha ao imprimir automaticamente (PIX):', e);
             }
+            toast({
+              title: "Pagamento confirmado!",
+              description: "Pedido entrou em preparo e foi enviado para impressão.",
+            });
+            setNfceModalOpen(true);
+            setCart([]);
+            setCustomerName('');
+            setCustomerPhone('');
+            setCustomerAddress('');
+            setSelectedDeliveryZone('');
+            setSelectedTable('');
+            setChangeAmount('');
+            setPaymentMethod('pix');
+            setOrderType('delivery');
           } catch (e) {
             console.error(e);
           }
