@@ -54,6 +54,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onPlaceOrder,
   userId
 }) => {
+  const menuPrimaryColor = 'var(--menu-primary, #85C441)';
+  const menuBackgroundColor = 'var(--menu-bg, #F7EEDF)';
   const [customerData, setCustomerData] = useState({
     name: '',
     phone: '',
@@ -674,7 +676,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   {paymentMethods.map((option) => (
                     <div
                       key={option.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === option.id ? 'border-boracume-orange bg-orange-50' : 'border-border hover:bg-accent'}`}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === option.id ? '' : 'border-border hover:bg-accent'}`}
+                      style={paymentMethod === option.id ? { borderColor: menuPrimaryColor, backgroundColor: menuBackgroundColor } : undefined}
                       onClick={() => setPaymentMethod(option.id)}
                     >
                       <RadioGroupItem value={option.id} id={option.id} className="h-5 w-5" />

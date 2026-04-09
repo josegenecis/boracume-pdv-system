@@ -130,11 +130,18 @@ const LoyaltyManager = () => {
 
   const deleteProgram = async (id: string) => {
     try {
-      await supabase.from('loyalty_programs').delete().eq('id', id);
+      const { error, count } = await supabase
+        .from('loyalty_programs')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      if (!count) throw new Error('A regra não foi removida do banco.');
       setPrograms(programs.filter(p => p.id !== id));
       toast({ title: 'Programa removido' });
-    } catch (error) {
-      toast({ title: 'Erro ao remover', variant: 'destructive' });
+      await fetchData();
+    } catch (error: any) {
+      toast({ title: 'Erro ao remover', description: String(error?.message || ''), variant: 'destructive' });
     }
   };
 
@@ -164,11 +171,18 @@ const LoyaltyManager = () => {
 
   const deleteCoupon = async (id: string) => {
     try {
-      await supabase.from('coupons').delete().eq('id', id);
+      const { error, count } = await supabase
+        .from('coupons')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      if (!count) throw new Error('O cupom não foi removido do banco.');
       setCoupons(coupons.filter(c => c.id !== id));
       toast({ title: 'Cupom removido' });
-    } catch (error) {
-      toast({ title: 'Erro ao remover', variant: 'destructive' });
+      await fetchData();
+    } catch (error: any) {
+      toast({ title: 'Erro ao remover', description: String(error?.message || ''), variant: 'destructive' });
     }
   };
 
