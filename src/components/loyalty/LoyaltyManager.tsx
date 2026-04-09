@@ -130,6 +130,16 @@ const LoyaltyManager = () => {
 
   const deleteProgram = async (id: string) => {
     try {
+      const rewardDeleteResult = await supabase
+        .from('customer_rewards')
+        .delete({ count: 'exact' })
+        .eq('program_id', id)
+        .eq('user_id', user?.id);
+
+      if (rewardDeleteResult.error && rewardDeleteResult.error.code !== '42P01') {
+        throw rewardDeleteResult.error;
+      }
+
       const { error, count } = await supabase
         .from('loyalty_programs')
         .delete({ count: 'exact' })
