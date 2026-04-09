@@ -6,6 +6,12 @@ const formatBRL = (value: number) =>
 const buildRewardCode = () =>
   `FID${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
 
+const isMissingRewardsSchemaError = (error: any) => {
+  const code = String(error?.code || '')
+  const message = String(error?.message || '').toLowerCase()
+  return code === '42P01' || code === '42703' || message.includes('customer_rewards')
+}
+
 const mapProgramRewardToDiscountType = (rewardType: string) => {
   if (rewardType === 'percent') return 'percent'
   if (rewardType === 'fixed_amount') return 'fixed'
@@ -83,7 +89,13 @@ export async function getAvailableLoyaltyReward(supabase: any, userId: string, c
     .limit(1)
     .maybeSingle()
 
-  if (error) throw error
+  if (error) {
+    if (isMissingRewardsSchemaError(error)) {
+      console.warn('[loyalty] customer_rewards indisponível ao consultar recompensa', { userId, customerPhone: normalizedPhone, code: error.code, message: error.message })
+      return null
+    }
+    throw error
+  }
   return data || null
 }
 
@@ -169,6 +181,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
   const orderId = String(order?.id || '')
   const status = String(order?.status || '')
 
+  console.log('[loyalty] process start', { orderId, restaurantId, customerPhone, status, loyaltyProcessedAt: order?.loyalty_processed_at || null })
   if (!restaurantId || !orderId || !customerPhone) return { ok: false, skipped: true }
   if (!['delivered', 'completed'].includes(status)) return { ok: false, skipped: true }
   if (order?.loyalty_processed_at) return { ok: true, idempotent: true }
@@ -182,6 +195,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
   if (programsError) throw programsError
 
   const activePrograms = Array.isArray(programs) ? programs : []
+  console.log('[loyalty] active programs', { orderId, count: activePrograms.length })
   const spentAmount = Math.max(0, Number(order?.total || 0) - Math.max(0, Number(order?.delivery_fee || 0)))
 
   const { data: existingBalance, error: balanceError } = await supabase
@@ -233,23 +247,47 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
   const progressLines: string[] = []
   const rewardLines: string[] = []
   const awardedRewards: any[] = []
+  let rewardsSchemaAvailable = true
 
   for (const program of activePrograms) {
     const rewardDiscountType = mapProgramRewardToDiscountType(String(program.reward_type || ''))
     const goalValue = Math.max(0, Number(program.goal_value || 0))
     if (!goalValue) continue
 
-    const { count: issuedCount, error: issuedCountError } = await supabase
-      .from('customer_rewards')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', restaurantId)
-      .eq('program_id', program.id)
-      .eq('customer_phone', customerPhone)
+    let issuedCount = 0
+    if (rewardsSchemaAvailable) {
+      const issuedResult = await supabase
+        .from('customer_rewards')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', restaurantId)
+        .eq('program_id', program.id)
+        .eq('customer_phone', customerPhone)
 
-    if (issuedCountError) throw issuedCountError
+      if (issuedResult.error) {
+        if (isMissingRewardsSchemaError(issuedResult.error)) {
+          rewardsSchemaAvailable = false
+          console.warn('[loyalty] customer_rewards indisponível ao contar recompensas', { orderId, programId: program.id, code: issuedResult.error.code, message: issuedResult.error.message })
+        } else {
+          throw issuedResult.error
+        }
+      } else {
+        issuedCount = Number(issuedResult.count || 0)
+      }
+    }
 
     const cyclesCompleted = getProgramCycles(program, balanceAfter)
-    const rewardsToIssue = Math.max(0, cyclesCompleted - Number(issuedCount || 0))
+    const rewardsToIssue = rewardsSchemaAvailable ? Math.max(0, cyclesCompleted - Number(issuedCount || 0)) : 0
+    console.log('[loyalty] progress snapshot', {
+      orderId,
+      programId: program.id,
+      type: program.type,
+      notifyWhatsapp: program.notify_whatsapp,
+      cyclesCompleted,
+      issuedCount,
+      rewardsToIssue,
+      totalVisits: balanceAfter?.total_visits,
+      totalSpent: balanceAfter?.total_spent,
+    })
 
     if (rewardsToIssue > 0 && rewardDiscountType) {
       const rewardsPayload = Array.from({ length: rewardsToIssue }, () => ({
@@ -268,14 +306,22 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
         .insert(rewardsPayload)
         .select('id,code,discount_type,discount_value,status')
 
-      if (insertRewardError) throw insertRewardError
-      awardedRewards.push(...(Array.isArray(insertedRewards) ? insertedRewards : []))
+      if (insertRewardError) {
+        if (isMissingRewardsSchemaError(insertRewardError)) {
+          rewardsSchemaAvailable = false
+          console.warn('[loyalty] customer_rewards indisponível ao inserir recompensa', { orderId, programId: program.id, code: insertRewardError.code, message: insertRewardError.message })
+        } else {
+          throw insertRewardError
+        }
+      } else {
+        awardedRewards.push(...(Array.isArray(insertedRewards) ? insertedRewards : []))
+      }
     }
 
     if (program.notify_whatsapp) {
       const progressLine = createProgressLine(program, balanceAfter)
       if (progressLine) progressLines.push(progressLine)
-      if (rewardsToIssue > 0) rewardLines.push(createRewardLine(program))
+      if (rewardsToIssue > 0 && rewardsSchemaAvailable) rewardLines.push(createRewardLine(program))
     }
   }
 
@@ -288,8 +334,13 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
     ].join('\n')
 
     try {
-      await sendRestaurantWhatsApp(restaurantId, customerPhone, message)
-    } catch {}
+      const waResult = await sendRestaurantWhatsApp(restaurantId, customerPhone, message)
+      console.log('[loyalty] whatsapp result', { orderId, ok: waResult?.ok, status: waResult?.status, data: waResult?.data || null })
+    } catch (error: any) {
+      console.error('[loyalty] whatsapp send failed', { orderId, message: String(error?.message || error) })
+    }
+  } else {
+    console.log('[loyalty] no whatsapp message generated', { orderId, activePrograms: activePrograms.length, progressLines: progressLines.length, rewardLines: rewardLines.length })
   }
 
   const { error: markProcessedError } = await supabase
