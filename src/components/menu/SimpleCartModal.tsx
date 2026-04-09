@@ -649,6 +649,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     return Math.max(0, Number(unitPrice || 0) - getUpsellDiscountAmount(offer, unitPrice));
   };
 
+  const resetUpsellState = () => {
+    setUpsellOpen(false);
+    setUpsellOffers([]);
+    setPendingOrderData(null);
+    setUpsellSelectedProduct(null);
+    setSelectedUpsellOffer(null);
+    setUpsellVariationOpen(false);
+  };
+
   const applyUpsellAndPlace = async (product: any, quantity: number, variations: string[], itemNotes: string, variationPrice: number, offerOverride?: UpsellOffer | null) => {
     const base = pendingOrderData;
     if (!base) return;
@@ -681,13 +690,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       total: Number(base.total || 0) + Number(lineTotal || 0),
       discount: Number(base.discount || 0) + Number(lineDiscount || 0)
     };
-    setUpsellOpen(false);
-    setUpsellOffers([]);
-    setPendingOrderData(null);
-    setUpsellSelectedProduct(null);
-    setSelectedUpsellOffer(null);
-    setUpsellVariationOpen(false);
-    await finalizeOrder(next);
+    try {
+      onClose();
+      await finalizeOrder(next);
+      resetUpsellState();
+    } catch (error) {
+      setUpsellOpen(true);
+      throw error;
+    }
   };
 
   const skipUpsellAndPlace = async () => {
@@ -696,11 +706,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (upsellBusy) return;
     setUpsellBusy(true);
     try {
-      setUpsellOpen(false);
-      setUpsellOffers([]);
-      setPendingOrderData(null);
-      setSelectedUpsellOffer(null);
+      onClose();
       await finalizeOrder(base);
+      resetUpsellState();
     } finally {
       setUpsellBusy(false);
     }

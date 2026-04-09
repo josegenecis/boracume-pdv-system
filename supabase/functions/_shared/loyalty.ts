@@ -41,16 +41,17 @@ const calculateRewardDiscount = (reward: any, cartTotal: number, deliveryFee: nu
   return 0
 }
 
-const createProgressLine = (program: any, balance: any) => {
+const createProgressLine = (program: any, balance: any, options?: { withStars?: boolean }) => {
   const goal = Math.max(0, Number(program.goal_value || 0))
   if (!goal) return ''
+  const withStars = Boolean(options?.withStars)
 
   if (program.type === 'visits') {
     const totalVisits = Math.max(0, Number(balance?.total_visits || 0))
     const partial = totalVisits % goal || (totalVisits > 0 && totalVisits >= goal ? goal : totalVisits)
     const count = Math.max(0, Math.min(goal, Math.floor(partial)))
-    const stars = count <= 0 ? '☆' : count <= 10 ? '⭐'.repeat(count) : `⭐x${count}`
-    return `${stars} Fidelidade: ${count} de ${goal} pedidos concluídos.`
+    const prefix = withStars ? `${count <= 0 ? '☆' : count <= 10 ? '⭐'.repeat(count) : `⭐x${count}`} ` : ''
+    return `${prefix}Fidelidade: ${count} de ${goal} pedidos concluídos.`
   }
 
   if (program.type === 'spending') {
@@ -60,6 +61,56 @@ const createProgressLine = (program: any, balance: any) => {
   }
 
   return ''
+}
+
+const syncRewardUsageFromOrders = async (supabase: any, userId: string, rewards: any[]) => {
+  const rewardList = Array.isArray(rewards) ? rewards.filter(Boolean) : []
+  if (rewardList.length === 0) return rewardList
+
+  const rewardCodes = rewardList
+    .map((reward) => String(reward?.code || '').trim())
+    .filter(Boolean)
+
+  if (rewardCodes.length === 0) return rewardList
+
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('id,coupon_code,created_at')
+    .eq('user_id', userId)
+    .in('coupon_code', rewardCodes)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+
+  const orderByCoupon = new Map<string, any>()
+  for (const order of Array.isArray(orders) ? orders : []) {
+    const couponCode = String(order?.coupon_code || '').trim()
+    if (!couponCode || orderByCoupon.has(couponCode)) continue
+    orderByCoupon.set(couponCode, order)
+  }
+
+  const activeRewards: any[] = []
+  for (const reward of rewardList) {
+    const order = orderByCoupon.get(String(reward?.code || '').trim())
+    if (!order) {
+      activeRewards.push(reward)
+      continue
+    }
+
+    try {
+      await supabase
+        .from('customer_rewards')
+        .update({
+          status: 'used',
+          used_at: new Date().toISOString(),
+          order_id: order.id,
+        })
+        .eq('id', reward.id)
+        .eq('status', 'available')
+    } catch {}
+  }
+
+  return activeRewards
 }
 
 const createRewardLine = (program: any) =>
@@ -103,8 +154,7 @@ export async function getAvailableLoyaltyReward(supabase: any, userId: string, c
     .eq('status', 'available')
     .in('program_id', activeProgramIds)
     .order('awarded_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+    .limit(20)
 
   if (error) {
     if (isMissingRewardsSchemaError(error)) {
@@ -113,7 +163,9 @@ export async function getAvailableLoyaltyReward(supabase: any, userId: string, c
     }
     throw error
   }
-  return data || null
+
+  const availableRewards = await syncRewardUsageFromOrders(supabase, userId, Array.isArray(data) ? data : [])
+  return availableRewards[0] || null
 }
 
 export async function previewLoyaltyForCustomer(
@@ -342,7 +394,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
     }
 
     if (program.notify_whatsapp) {
-      const progressLine = createProgressLine(program, balanceAfter)
+      const progressLine = createProgressLine(program, balanceAfter, { withStars: true })
       if (progressLine) progressLines.push(progressLine)
       if (rewardsToIssue > 0 && rewardsSchemaAvailable) rewardLines.push(createRewardLine(program))
     }

@@ -53,20 +53,29 @@ Deno.serve(async (req) => {
 
       if (activeProgramIds.length > 0) {
         const { data: phoneReward } = await supabase
-        .from('customer_rewards')
-        .select('discount_type,discount_value')
-        .eq('user_id', userId)
-        .eq('code', cleanCode)
-        .eq('customer_phone', normalizePhone(customerPhone))
-        .eq('status', 'available')
-        .in('program_id', activeProgramIds)
-        .maybeSingle()
+          .from('customer_rewards')
+          .select('discount_type,discount_value')
+          .eq('user_id', userId)
+          .eq('code', cleanCode)
+          .eq('customer_phone', normalizePhone(customerPhone))
+          .eq('status', 'available')
+          .in('program_id', activeProgramIds)
+          .maybeSingle()
 
         if (phoneReward) {
-          reward = {
-            discount_type: phoneReward.discount_type,
-            discount_value: phoneReward.discount_value,
-            min_purchase: 0
+          const { data: usedOrder } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('coupon_code', cleanCode)
+            .maybeSingle()
+
+          if (!usedOrder) {
+            reward = {
+              discount_type: phoneReward.discount_type,
+              discount_value: phoneReward.discount_value,
+              min_purchase: 0
+            }
           }
         }
       }

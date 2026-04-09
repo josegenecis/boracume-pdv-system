@@ -37,6 +37,8 @@ interface Order {
   acceptance_status?: string;
   total: number;
   delivery_fee?: number;
+  discount?: number;
+  coupon_code?: string | null;
   payment_method: string;
   items: any[];
   created_at: string;

@@ -64,6 +64,8 @@ interface Order {
   total: number;
   subtotal?: number;
   delivery_fee?: number;
+  discount?: number;
+  coupon_code?: string | null;
   payment_method: string;
   items: OrderItem[];
   created_at: string;
@@ -169,11 +171,14 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
       : 0;
 
     const deliveryFee = toNumber(order?.delivery_fee);
+    const discountValue = Math.max(0, toNumber(order?.discount));
     const orderTotal = toNumber(order?.total);
     const orderSubtotal = toNumber(order?.subtotal);
     const subtotalValue =
       orderSubtotal > 0 ? orderSubtotal : itemsSubtotal > 0 ? itemsSubtotal : Math.max(0, orderTotal - (deliveryFee > 0 ? deliveryFee : 0));
     const totalValue = orderTotal > 0 ? orderTotal : subtotalValue + (deliveryFee > 0 ? deliveryFee : 0);
+    const couponCode = String(order?.coupon_code || '').trim();
+    const isLoyaltyDiscount = couponCode.startsWith('FID');
 
     const copyLocation = async () => {
       try {
@@ -477,6 +482,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       <span>{formatCurrency(deliveryFee)}</span>
                     </div>
                   )}
+                  {discountValue > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span>{isLoyaltyDiscount ? 'Desconto fidelidade:' : 'Desconto:'}</span>
+                      <span>- {formatCurrency(discountValue)}</span>
+                    </div>
+                  )}
                   <Separator />
                   <div className="flex justify-between font-semibold text-base">
                     <span>Total:</span>
@@ -486,6 +497,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <span>Método de pagamento:</span>
                     <span className="font-medium">{(order?.payment_method || 'N/A').toUpperCase()}</span>
                   </div>
+                  {couponCode && (
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>{isLoyaltyDiscount ? 'Código fidelidade:' : 'Cupom aplicado:'}</span>
+                      <span className="font-medium">{couponCode}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
