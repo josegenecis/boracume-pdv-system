@@ -1,5 +1,6 @@
 {
   "routes": [
+    { "src": "^/menu/(.+)$", "dest": "/api/share/menu?id=$1" },
     { "src": "^/share/menu/(.+)$", "dest": "/api/share/menu?id=$1" },
     { "src": "^/share/track/(.+)$", "dest": "/api/share/track?id=$1" },
     { "handle": "filesystem" },

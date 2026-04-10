@@ -53,8 +53,9 @@ export default async function handler(req: any, res: any) {
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
     const logoUrl = normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png'));
-    const pageUrl = `https://boracume.com/share/menu/${encodeURIComponent(id)}`;
-    const redirectUrl = `/menu/${encodeURIComponent(id)}`;
+    const originalPath = String(req?.url || '').includes(`/menu/${id}`) ? `/menu/${encodeURIComponent(id)}` : `/share/menu/${encodeURIComponent(id)}`;
+    const pageUrl = `https://boracume.com${originalPath}`;
+    const redirectUrl = `/menu-digital?userId=${encodeURIComponent(id)}`;
 
     const html = `<!doctype html>
 <html lang="pt-BR">

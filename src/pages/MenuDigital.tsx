@@ -64,7 +64,7 @@ const MenuDigital = () => {
     clearCart, 
     getCartTotal, 
     getCartItemCount 
-  } = useSimpleCart();
+  } = useSimpleCart(finalUserId);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showVariationModal, setShowVariationModal] = useState(false);

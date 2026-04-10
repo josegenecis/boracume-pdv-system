@@ -17,18 +17,62 @@ interface CartItem {
   uniqueId: string; // Para distinguir mesmo produto com variações diferentes
 }
 
-export const useSimpleCart = () => {
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('boracume_menu_cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
+const MENU_CART_STORAGE_PREFIX = 'boracume_menu_cart';
+const LEGACY_MENU_CART_STORAGE_KEY = 'boracume_menu_cart';
+
+const readCartFromStorage = (storageKey: string) => {
+  try {
+    const scoped = localStorage.getItem(storageKey);
+    if (scoped) return JSON.parse(scoped);
+    if (storageKey !== LEGACY_MENU_CART_STORAGE_KEY) {
+      const legacy = localStorage.getItem(LEGACY_MENU_CART_STORAGE_KEY);
+      if (legacy) return JSON.parse(legacy);
     }
+  } catch {}
+  return [];
+};
+
+export const getMenuCartStorageKey = (scope?: string) => {
+  const normalizedScope = String(scope || '').trim();
+  return normalizedScope ? `${MENU_CART_STORAGE_PREFIX}:${normalizedScope}` : LEGACY_MENU_CART_STORAGE_KEY;
+};
+
+export const clearMenuCartStorage = (scope?: string) => {
+  try {
+    const storageKey = getMenuCartStorageKey(scope);
+    localStorage.removeItem(storageKey);
+    if (storageKey !== LEGACY_MENU_CART_STORAGE_KEY) {
+      localStorage.removeItem(LEGACY_MENU_CART_STORAGE_KEY);
+    }
+  } catch {}
+};
+
+export const clearAllMenuCartStorage = () => {
+  try {
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key) continue;
+      if (key === LEGACY_MENU_CART_STORAGE_KEY || key.startsWith(`${MENU_CART_STORAGE_PREFIX}:`)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+  } catch {}
+};
+
+export const useSimpleCart = (scope?: string) => {
+  const storageKey = useMemo(() => getMenuCartStorageKey(scope), [scope]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    return readCartFromStorage(storageKey);
   });
   
   const persistTimerRef = useRef<number | null>(null);
   const pendingPerfRef = useRef<{ start: ReturnType<typeof perfStart> } | null>(null);
+
+  useEffect(() => {
+    setCart(readCartFromStorage(storageKey));
+  }, [storageKey]);
 
   // Persistir carrinho
   useEffect(() => {
@@ -43,16 +87,22 @@ export const useSimpleCart = () => {
           if (idle) {
             idle(() => {
               try {
-                localStorage.setItem('boracume_menu_cart', payload);
+                localStorage.setItem(storageKey, payload);
+                if (storageKey !== LEGACY_MENU_CART_STORAGE_KEY) {
+                  localStorage.removeItem(LEGACY_MENU_CART_STORAGE_KEY);
+                }
               } catch {}
             }, { timeout: 500 });
           } else {
-            localStorage.setItem('boracume_menu_cart', payload);
+            localStorage.setItem(storageKey, payload);
+            if (storageKey !== LEGACY_MENU_CART_STORAGE_KEY) {
+              localStorage.removeItem(LEGACY_MENU_CART_STORAGE_KEY);
+            }
           }
         } catch {}
       }, 120);
     } catch {}
-  }, [cart]);
+  }, [cart, storageKey]);
 
   useEffect(() => {
     if (pendingPerfRef.current) {
@@ -148,6 +198,13 @@ export const useSimpleCart = () => {
   };
 
   const clearCart = () => {
+    try {
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    } catch {}
+    clearMenuCartStorage(scope);
     setCart([]);
   };
 

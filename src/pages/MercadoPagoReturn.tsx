@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { clearAllMenuCartStorage } from '@/hooks/useSimpleCart';
 
 function useQueryParam(name: string) {
   const location = useLocation();
@@ -32,6 +33,7 @@ export default function MercadoPagoReturn() {
         }
         if (data.status === 'PAID' && data.orderId) {
           setStatus('paid');
+          clearAllMenuCartStorage();
           navigate(`/track/${data.orderId}`, { replace: true });
           return;
         }

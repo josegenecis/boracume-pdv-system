@@ -6,6 +6,7 @@ import { Copy, Check, RefreshCw, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { createClient } from '@supabase/supabase-js';
+import { clearAllMenuCartStorage } from '@/hooks/useSimpleCart';
 
 interface PixCheckoutModalProps {
   isOpen: boolean;
@@ -64,6 +65,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           if (st === 'PAID' && data.order_id) {
             setStatus('PAID');
             const oid = String(data.order_id);
+            clearAllMenuCartStorage();
             if (onPaid) {
               active = false;
               onPaid(oid);
