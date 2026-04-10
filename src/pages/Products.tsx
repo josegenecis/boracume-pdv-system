@@ -43,6 +43,22 @@ interface ProductItem {
 interface Category {
   id: string;
   name: string;
+  active?: boolean;
+  description?: string;
+  display_order?: number;
+}
+
+interface GlobalVariationGroup {
+  id: string;
+  name: string;
+  active?: boolean;
+}
+
+interface InlineProductDraft {
+  name: string;
+  image_url: string;
+  price: string;
+  variationIds: string[];
 }
 
 const Products = () => {
@@ -72,6 +88,10 @@ const Products = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [inlinePriceDrafts, setInlinePriceDrafts] = useState<Record<string, string>>({});
   const [inlinePriceSavingId, setInlinePriceSavingId] = useState<string | null>(null);
+  const [globalVariationGroups, setGlobalVariationGroups] = useState<GlobalVariationGroup[]>([]);
+  const [inlineCreatorCategoryId, setInlineCreatorCategoryId] = useState<string | null>(null);
+  const [inlineProductDraft, setInlineProductDraft] = useState<InlineProductDraft>({ name: '', image_url: '', price: '', variationIds: [] });
+  const [inlineProductSaving, setInlineProductSaving] = useState(false);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -125,7 +145,7 @@ const Products = () => {
   }, [products]);
 
   const fetchData = async () => {
-    await Promise.all([fetchProducts(), fetchCategories()]);
+    await Promise.all([fetchProducts(), fetchCategories(), fetchGlobalVariationGroups()]);
   };
 
   const fetchProducts = async () => {
@@ -237,9 +257,8 @@ const Products = () => {
       if (!activeUserIdSync) return;
       const { data, error } = await supabase
         .from('product_categories')
-        .select('id, name')
+        .select('id, name, active, description, display_order')
         .eq('user_id', activeUserIdSync)
-        .eq('active', true)
         .order('display_order');
 
       if (error) throw error;
@@ -248,6 +267,22 @@ const Products = () => {
       setExpandedCategories(new Set((data || []).map((c: any) => c.id)));
     } catch (error: any) {
       console.error('Erro ao carregar categorias:', error);
+    }
+  };
+
+  const fetchGlobalVariationGroups = async () => {
+    try {
+      if (!activeUserIdSync) return;
+      const { data, error } = await supabase
+        .from('global_variations')
+        .select('id, name, active')
+        .eq('user_id', activeUserIdSync)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setGlobalVariationGroups((data || []) as GlobalVariationGroup[]);
+    } catch (error: any) {
+      console.error('Erro ao carregar complementos globais:', error);
     }
   };
 
@@ -531,6 +566,214 @@ const Products = () => {
     setIsSheetOpen(false);
   };
 
+  const resetInlineProductDraft = () => {
+    setInlineProductDraft({ name: '', image_url: '', price: '', variationIds: [] });
+  };
+
+  const toggleInlineCreator = (categoryId: string) => {
+    setInlineCreatorCategoryId(prev => {
+      const next = prev === categoryId ? null : categoryId;
+      if (next !== categoryId) resetInlineProductDraft();
+      return next;
+    });
+  };
+
+  const toggleCategoryAvailability = async (category: Category) => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase
+        .from('product_categories')
+        .update({ active: !(category.active !== false) })
+        .eq('id', category.id)
+        .eq('user_id', activeUserIdSync);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Categoria atualizada',
+        description: `Categoria ${category.active !== false ? 'ocultada' : 'ativada'} com sucesso.`,
+      });
+
+      await fetchCategories();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao atualizar categoria',
+        description: error?.message || 'Não foi possível alterar a visibilidade da categoria.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInlineVariationToggle = (variationId: string) => {
+    setInlineProductDraft(prev => ({
+      ...prev,
+      variationIds: prev.variationIds.includes(variationId)
+        ? prev.variationIds.filter(id => id !== variationId)
+        : [...prev.variationIds, variationId]
+    }));
+  };
+
+  const handleInlineProductSave = async (category: Category) => {
+    const name = String(inlineProductDraft.name || '').trim();
+    const price = parseInlinePrice(inlineProductDraft.price);
+
+    if (!name) {
+      toast({ title: 'Nome obrigatório', description: 'Informe o nome do produto.', variant: 'destructive' });
+      return;
+    }
+
+    if (price === null) {
+      toast({ title: 'Preço inválido', description: 'Informe um preço válido para o produto.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      setInlineProductSaving(true);
+      const productPayload: any = {
+        user_id: activeUserIdSync,
+        name,
+        category: category.name,
+        category_id: category.id,
+        price,
+        image_url: String(inlineProductDraft.image_url || '').trim() || null,
+        available: true,
+        show_in_delivery: true,
+        show_in_pdv: true
+      };
+
+      const { data: insertedProduct, error: productError } = await supabase
+        .from('products')
+        .insert(productPayload)
+        .select('id')
+        .single();
+
+      if (productError) throw productError;
+
+      if (inlineProductDraft.variationIds.length > 0 && insertedProduct?.id) {
+        const variationLinks = inlineProductDraft.variationIds.map((variationId, index) => ({
+          product_id: insertedProduct.id,
+          global_variation_id: variationId,
+          display_order: index
+        }));
+
+        const { error: variationError } = await supabase
+          .from('product_global_variation_links')
+          .upsert(variationLinks as any, { onConflict: 'product_id,global_variation_id' });
+
+        if (variationError) throw variationError;
+      }
+
+      toast({
+        title: 'Produto criado',
+        description: `Produto adicionado em ${category.name}.`,
+      });
+
+      setExpandedCategories(prev => new Set(prev).add(category.id));
+      setInlineCreatorCategoryId(null);
+      resetInlineProductDraft();
+      await fetchProducts();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao criar produto',
+        description: error?.message || 'Não foi possível criar o produto nesta categoria.',
+        variant: 'destructive',
+      });
+    } finally {
+      setInlineProductSaving(false);
+    }
+  };
+
+  const renderInlineCategoryCreator = (category: Category) => {
+    if (inlineCreatorCategoryId !== category.id) return null;
+
+    const availableVariationGroups = globalVariationGroups.filter(group => group.active !== false);
+
+    return (
+      <div className="mx-2 mt-2 rounded-2xl border border-[#8CC850]/20 bg-white p-4 shadow-[0_20px_50px_-38px_rgba(0,50,35,0.28)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-[#003223]">Novo produto em {category.name}</div>
+            <div className="text-xs text-slate-500">Cadastre rápido e vincule complementos sem sair da categoria.</div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 rounded-xl px-3 text-[#003223] hover:bg-[#F5EBE1]"
+            onClick={() => {
+              setInlineCreatorCategoryId(null);
+              resetInlineProductDraft();
+            }}
+          >
+            Fechar
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <Input
+            placeholder="Nome do produto"
+            value={inlineProductDraft.name}
+            onChange={(e) => setInlineProductDraft(prev => ({ ...prev, name: e.target.value }))}
+            className="h-10 rounded-xl border-[#FF6400]/15 bg-white"
+          />
+          <Input
+            placeholder="Imagem (URL)"
+            value={inlineProductDraft.image_url}
+            onChange={(e) => setInlineProductDraft(prev => ({ ...prev, image_url: e.target.value }))}
+            className="h-10 rounded-xl border-[#FF6400]/15 bg-white"
+          />
+          <Input
+            placeholder="Preço"
+            inputMode="decimal"
+            value={inlineProductDraft.price}
+            onChange={(e) => setInlineProductDraft(prev => ({ ...prev, price: e.target.value }))}
+            className="h-10 rounded-xl border-[#FF6400]/15 bg-white"
+          />
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#003223]/60">Complementos</div>
+          {availableVariationGroups.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#FF6400]/15 bg-[#FFF8F2] px-3 py-4 text-sm text-slate-500">
+              Nenhum grupo de complementos ativo cadastrado.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {availableVariationGroups.map((group) => {
+                const isSelected = inlineProductDraft.variationIds.includes(group.id);
+                return (
+                  <Button
+                    key={group.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`h-9 rounded-xl px-3 ${isSelected ? 'bg-[#8CC850] text-white hover:bg-[#79b541] border-[#8CC850]' : 'border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]'}`}
+                    onClick={() => handleInlineVariationToggle(group.id)}
+                  >
+                    {group.name}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <Button
+            type="button"
+            className="h-10 rounded-xl bg-[#8CC850] px-4 font-semibold text-white hover:bg-[#79b541]"
+            disabled={inlineProductSaving}
+            onClick={() => handleInlineProductSave(category)}
+          >
+            {inlineProductSaving ? 'Salvando...' : 'Salvar produto'}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const formatCurrency = (value: number) => {
     return formatBRL(value);
   };
@@ -744,7 +987,7 @@ const Products = () => {
         }}
         className="w-full"
       >
-        <div className="mb-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex justify-center lg:flex-1">
             <TabsList className="grid h-10 w-full max-w-[420px] grid-cols-3 rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1">
             <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
@@ -769,9 +1012,9 @@ const Products = () => {
           </div>
         </div>
         
-        <TabsContent value="products" className="space-y-5">
+        <TabsContent value="products" className="space-y-5 pt-1">
           <Card className="rounded-[24px] border border-[#FF6400]/12 bg-white shadow-[0_18px_40px_-28px_rgba(0,50,35,0.18)]">
-            <CardContent className="py-3">
+            <CardContent className="py-4">
               <div className="flex flex-col gap-3 md:flex-row">
                 <div className="flex-1">
                   <div className="relative">
@@ -875,17 +1118,40 @@ const Products = () => {
                   if (categoryProducts.length === 0 && searchQuery) return null;
                   
                   const isExpanded = expandedCategories.has(category.id) || searchQuery !== '';
+                  const isCategoryActive = category.active !== false;
 
                   return (
-                    <div key={category.id} className="border rounded-lg bg-white overflow-hidden shadow-sm">
+                    <div key={category.id} className={`border rounded-lg overflow-hidden shadow-sm ${isCategoryActive ? 'bg-white' : 'bg-slate-50/80 border-slate-200'}`}>
                       <div 
-                        className="flex items-center p-3 cursor-pointer hover:bg-gray-50 bg-gray-50 border-b select-none transition-colors"
+                        className={`flex items-center p-3 cursor-pointer border-b select-none transition-colors ${isCategoryActive ? 'hover:bg-gray-50 bg-gray-50' : 'hover:bg-slate-100 bg-slate-100/80'}`}
                         onClick={() => toggleCategory(category.id)}
                       >
                         {isExpanded ? <ChevronDown className="h-4 w-4 mr-2 text-gray-500" /> : <ChevronRight className="h-4 w-4 mr-2 text-gray-500" />}
-                        <Folder className="h-4 w-4 mr-2 text-orange-500" />
-                        <span className="font-medium flex-1 text-gray-700">{category.name}</span>
+                        <Folder className={`h-4 w-4 mr-2 ${isCategoryActive ? 'text-orange-500' : 'text-slate-400'}`} />
+                        <span className={`font-medium flex-1 ${isCategoryActive ? 'text-gray-700' : 'text-slate-500'}`}>{category.name}</span>
+                        <Badge variant="secondary" className={`ml-2 ${isCategoryActive ? '' : 'bg-slate-200 text-slate-600'}`}>{isCategoryActive ? 'Ativa' : 'Inativa'}</Badge>
                         <Badge variant="secondary" className="ml-2">{categoryProducts.length}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="ml-2"
+                          onClick={(e) => { e.stopPropagation(); toggleCategoryAvailability(category); }}
+                        >
+                          {isCategoryActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleInlineCreator(category.id);
+                            setExpandedCategories(prev => new Set(prev).add(category.id));
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Novo produto
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -908,6 +1174,7 @@ const Products = () => {
                       
                       {isExpanded && (
                         <div className="p-2 space-y-2 bg-slate-50/50">
+                          {renderInlineCategoryCreator(category)}
                           {categoryProducts.length === 0 ? (
                             <div className="text-sm text-gray-400 text-center py-4 italic">Nenhum produto nesta categoria</div>
                           ) : (

@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-import { Bell, User, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3 } from 'lucide-react';
+import { User, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, ClipboardList, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -30,6 +30,7 @@ const FixedHeader = () => {
   // Como não sabemos se existe um CashRegisterContext, vamos usar um estado local com fetch inicial por enquanto para o header.
   const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
   const [cashSessionId, setCashSessionId] = useState<string | null>(null);
+  const [whatsAppConnected, setWhatsAppConnected] = useState(false);
 
   useEffect(() => {
     // Escutar eventos de abertura/fechamento de caixa se disparados via evento customizado
@@ -38,6 +39,29 @@ const FixedHeader = () => {
     };
     window.addEventListener('cash-session-changed', handleCashChange);
     return () => window.removeEventListener('cash-session-changed', handleCashChange);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadWhatsAppStatus = async () => {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data } = await supabase.functions.invoke('whatsapp-status', { method: 'GET' });
+        if (!active) return;
+        setWhatsAppConnected(data?.status === 'connected');
+      } catch {
+        if (!active) return;
+        setWhatsAppConnected(false);
+      }
+    };
+
+    loadWhatsAppStatus();
+    const timer = window.setInterval(loadWhatsAppStatus, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   const handleSignOut = async () => {
@@ -123,8 +147,18 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]" onClick={() => navigate('/pedidos')}>
-            <Bell size={18} />
+          <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'px-3' : 'px-4'}`} onClick={() => navigate('/pedidos')}>
+            <ClipboardList size={18} className={isMobile ? '' : 'mr-2'} />
+            {!isMobile && 'Pedidos'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="relative h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
+            onClick={() => navigate('/configuracoes?tab=whatsapp')}
+          >
+            <MessageCircle size={18} />
+            <span className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} />
           </Button>
         </div>
       </div>

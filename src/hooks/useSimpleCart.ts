@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
 import { perfStart } from '@/utils/perf';
 
 interface CartProduct {
@@ -28,7 +27,6 @@ export const useSimpleCart = () => {
     }
   });
   
-  const { toast } = useToast();
   const persistTimerRef = useRef<number | null>(null);
   const pendingPerfRef = useRef<{ start: ReturnType<typeof perfStart> } | null>(null);
 
@@ -108,11 +106,6 @@ export const useSimpleCart = () => {
         updated[existingIndex].totalPrice = 
           (basePrice + extraPrice) * updated[existingIndex].quantity;
         
-        toast({
-          title: "Produto atualizado",
-          description: `${product.name} - quantidade: ${updated[existingIndex].quantity}`,
-        });
-
         return updated;
       } else {
         // Adicionar novo item
@@ -124,11 +117,6 @@ export const useSimpleCart = () => {
           totalPrice,
           uniqueId
         };
-
-        toast({
-          title: "Adicionado ao carrinho",
-          description: `${product.name} - ${quantity}x`,
-        });
 
         return [...prev, newItem];
       }
@@ -157,10 +145,6 @@ export const useSimpleCart = () => {
 
   const removeFromCart = (uniqueId: string) => {
     setCart(prev => prev.filter(item => item.uniqueId !== uniqueId));
-    toast({
-      title: "Item removido",
-      description: "O item foi removido do carrinho.",
-    });
   };
 
   const clearCart = () => {

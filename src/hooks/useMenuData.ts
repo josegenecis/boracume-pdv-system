@@ -120,6 +120,7 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
           .from('product_categories')
           .select('id, name, description, display_order')
           .eq('user_id', userId)
+          .eq('active', true)
           .order('display_order', { ascending: true }) as any,
         supabase
           .from('delivery_zones')

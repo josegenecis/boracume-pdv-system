@@ -453,14 +453,43 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
 
   const commitOptionOverride = (variationId: string, optionName: string, option?: any) => {
     const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
-    const fallbackPrice = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
-    const normalized: VariationOptionOverride = {
-      ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
-      price: Math.max(0, parseDecimalField(currentRaw.price, fallbackPrice)),
-      label: normalizeComplementOptionName(String(currentRaw.label || '')),
-      hidden: Boolean(currentRaw.hidden),
-      recommended: Boolean(currentRaw.recommended),
-      ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})
+    const persistRaw = (rawValue: VariationOptionOverrideRaw) => {
+      const fallbackPrice = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
+      const normalized: VariationOptionOverride = {
+        ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
+        price: Math.max(0, parseDecimalField(rawValue.price, fallbackPrice)),
+        label: normalizeComplementOptionName(String(rawValue.label || '')),
+        hidden: Boolean(rawValue.hidden),
+        recommended: Boolean(rawValue.recommended),
+        ...(String(rawValue.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(rawValue.order) || 0)) } : {})
+      };
+
+      setVariationSettings(prev => ({
+        ...prev,
+        [variationId]: {
+          ...(prev[variationId] || getVariationDefaults()),
+          option_price_overrides: {
+            ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
+            [optionName]: normalized
+          }
+        }
+      }));
+
+      updateVariationRaw(variationId, {
+        optionOverrides: {
+          ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+          [optionName]: toOptionOverrideRaw(normalized)
+        }
+      });
+    };
+    persistRaw(currentRaw);
+  };
+
+  const toggleOptionHidden = (variationId: string, optionName: string, option?: any) => {
+    const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
+    const nextRaw: VariationOptionOverrideRaw = {
+      ...currentRaw,
+      hidden: !currentRaw.hidden
     };
 
     setVariationSettings(prev => ({
@@ -469,7 +498,14 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         ...(prev[variationId] || getVariationDefaults()),
         option_price_overrides: {
           ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
-          [optionName]: normalized
+          [optionName]: {
+            ...normalizeOptionOverride((prev[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]),
+            price: Math.max(0, parseDecimalField(nextRaw.price, getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 }))),
+            label: normalizeComplementOptionName(String(nextRaw.label || '')),
+            hidden: Boolean(nextRaw.hidden),
+            recommended: Boolean(nextRaw.recommended),
+            ...(String(nextRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(nextRaw.order) || 0)) } : {})
+          }
         }
       }
     }));
@@ -477,7 +513,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     updateVariationRaw(variationId, {
       optionOverrides: {
         ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
-        [optionName]: toOptionOverrideRaw(normalized)
+        [optionName]: nextRaw
       }
     });
   };
@@ -2184,8 +2220,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                   size="icon"
                                                   className={`h-12 w-12 rounded-xl border-[#003223]/15 bg-white ${optionRaw.hidden ? 'text-[#FF6400]' : 'text-[#003223]'} hover:bg-[#F5EBE1]`}
                                                   onClick={() => {
-                                                    handleOptionOverrideFieldChange(v.id, optionName, 'hidden', !optionRaw.hidden);
-                                                    setTimeout(() => commitOptionOverride(v.id, optionName, option), 0);
+                                                    toggleOptionHidden(v.id, optionName, option);
                                                   }}
                                                 >
                                                   {optionRaw.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
