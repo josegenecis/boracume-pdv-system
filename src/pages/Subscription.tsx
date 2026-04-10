@@ -193,9 +193,6 @@ const Subscription = () => {
             <div>
               <h3 className="font-bold text-2xl text-slate-900">{display.name}</h3>
               <p className="text-sm text-slate-600">{display.description}</p>
-              {display.audience ? (
-                <p className="mt-2 text-sm text-slate-500">{display.audience}</p>
-              ) : null}
             </div>
             <div className="text-left md:text-right">
               <span className="text-3xl font-bold text-slate-900">
@@ -214,11 +211,11 @@ const Subscription = () => {
               <p className="text-sm text-slate-600">R$ {currentPlan.price.toFixed(2)}</p>
             </div>
           </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {display.modules.map((module) => (
-              <span key={module} className={`rounded-full px-3 py-1 text-xs font-semibold ${display.palette.chip}`}>
-                {module}
-              </span>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {display.features.slice(0, 3).map((feature) => (
+              <div key={feature} className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-700">
+                {feature}
+              </div>
             ))}
           </div>
         </CardContent>
@@ -230,37 +227,24 @@ const Subscription = () => {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
       <div className="mx-auto max-w-6xl">
         <div className="mb-10 overflow-hidden rounded-[32px] border border-[#FF6400]/10 bg-white shadow-[0_35px_90px_-55px_rgba(0,50,35,0.35)]">
-          <div className="grid gap-8 px-6 py-8 md:grid-cols-[1.3fr,0.9fr] md:px-10 md:py-10">
-            <div>
-              <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos BoraCumê</Badge>
+          <div className="px-6 py-8 md:px-10 md:py-10">
+            <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos BoraCumê</Badge>
+            <div className="max-w-3xl">
               <h1 className="text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
-                Planos mais claros, mais bonitos e pensados para cada fase do restaurante.
+                Escolha o plano certo para o seu restaurante crescer sem complicação.
               </h1>
-              <p className="mt-4 max-w-2xl text-base text-slate-600 md:text-lg">
-                Organizei o que o sistema já oferece em três níveis objetivos: vender bem, operar com controle e escalar com automação.
+              <p className="mt-4 text-base text-slate-600 md:text-lg">
+                Mantive a nova identidade visual, mas deixei a página mais direta: três opções objetivas, preços atualizados e uma leitura mais limpa.
               </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                {PLAN_CATALOG.map((plan) => (
-                  <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{plan.shortName}</div>
-                    <div className="mt-1 text-xl font-bold text-slate-900">R$ {plan.monthlyPrice.toFixed(2)}</div>
-                  </div>
-                ))}
-              </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-3 md:grid-cols-1">
-              <div className="rounded-3xl bg-[#003223] p-5 text-white">
-                <div className="text-sm font-semibold text-white/70">Essencial</div>
-                <div className="mt-2 text-sm leading-6 text-white/90">Cardápio, pedidos, PDV e delivery para a operação funcionar sem travar.</div>
-              </div>
-              <div className="rounded-3xl bg-[#FF6400] p-5 text-white">
-                <div className="text-sm font-semibold text-white/70">Profissional</div>
-                <div className="mt-2 text-sm leading-6 text-white/90">Cozinha, estoque, financeiro, marketing e WhatsApp para acelerar crescimento.</div>
-              </div>
-              <div className="rounded-3xl bg-gradient-to-br from-purple-600 to-fuchsia-500 p-5 text-white">
-                <div className="text-sm font-semibold text-white/70">Elite</div>
-                <div className="mt-2 text-sm leading-6 text-white/90">IA, fiscal, desktop e camada premium para usar o BoraCumê no máximo.</div>
-              </div>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {PLAN_CATALOG.map((plan) => (
+                <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{plan.shortName}</div>
+                  <div className="mt-2 text-2xl font-bold text-slate-900">R$ {plan.monthlyPrice.toFixed(2)}</div>
+                  <div className="mt-1 text-sm text-slate-500">{plan.description}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -305,19 +289,12 @@ const Subscription = () => {
                       R$ {plan.price.toFixed(2)}
                     </span>
                     <span className="text-sm text-white/80">/mês</span>
-                    <div className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-white/70">
-                      {display.audience}
-                    </div>
                   </div>
                 </CardHeader>
                 
                 <CardContent className="flex-grow px-6 pt-6">
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    {display.modules.map((module) => (
-                      <span key={module} className={`rounded-full px-3 py-1 text-xs font-semibold ${display.palette.chip}`}>
-                        {module}
-                      </span>
-                    ))}
+                  <div className={`mb-5 rounded-2xl px-4 py-3 text-sm font-medium ${display.palette.soft} ${display.palette.icon}`}>
+                    {display.audience}
                   </div>
                   <ul className="space-y-3">
                     {display.features.map((feature, index) => (
@@ -350,31 +327,6 @@ const Subscription = () => {
               </Card>
             );
           })}
-        </div>
-
-        <div className="mb-8 rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-[0_30px_80px_-55px_rgba(15,23,42,0.35)] md:px-8">
-          <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h3 className="text-2xl font-bold text-slate-900">Como os recursos foram divididos</h3>
-              <p className="text-sm text-slate-500">Organizei os módulos do sistema em uma escada comercial simples e direta.</p>
-            </div>
-            <Badge variant="outline" className="w-fit border-slate-300 text-slate-600">Tudo já existente no sistema</Badge>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {PLAN_CATALOG.map((plan) => (
-              <div key={plan.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <div className="text-lg font-bold text-slate-900">{plan.name}</div>
-                <div className="mt-1 text-sm text-slate-500">{plan.audience}</div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {plan.modules.map((module) => (
-                    <span key={module} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
-                      {module}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {subscription?.status === 'trial' && (
