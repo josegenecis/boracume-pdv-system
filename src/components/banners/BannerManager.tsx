@@ -150,7 +150,7 @@ const BannerManager = () => {
 
           const processedVideo = await prepareBannerVideoFile(file, {
             maxBytes: 2 * 1024 * 1024,
-            maxDurationSeconds: 5,
+            maxDurationSeconds: 20,
             maxSourceBytes: 40 * 1024 * 1024
           });
 
@@ -451,7 +451,7 @@ const BannerManager = () => {
                       </div>
                       {formData.banner_type === 'tile' ? (
                         <div className="text-xs text-muted-foreground mt-1">
-                          O banner vertical aceita imagem ou vídeo. Vídeos ficam limitados a 5 segundos e 2MB após processamento.
+                          O banner vertical aceita imagem ou vídeo. Vídeos ficam limitados a 20 segundos e 2MB após processamento.
                         </div>
                       ) : null}
                     </div>
