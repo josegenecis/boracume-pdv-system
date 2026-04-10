@@ -191,14 +191,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   
   if (variant === 'tile') {
     return (
-      <div className="w-full overflow-x-auto">
-        <div className="flex gap-3 min-w-max">
+      <div className="w-full">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3">
           {clickables.map((b) => (
             <button
               key={b.id}
               type="button"
               onClick={() => handleBannerClick(b)}
-              className="block w-[84px] sm:w-[94px] rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
+              className="block w-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
             >
               <div className="aspect-[2/3] w-full bg-gray-100 relative">
                 {isVideoAsset(b.imageUrl) ? (

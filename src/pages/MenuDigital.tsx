@@ -654,15 +654,6 @@ const MenuDigital = () => {
             </div>
           </div>
 
-          <div className="bg-transparent sticky top-0 z-40 mt-3 pb-2">
-            {categories.length > 0 && (
-              <CategoryTabs
-                categories={categories}
-                activeCategory={activeCategory}
-                onCategoryChange={setActiveCategory}
-              />
-            )}
-          </div>
         </div>
       </div>
 
@@ -675,6 +666,16 @@ const MenuDigital = () => {
               if (p) void handleProductClick(p as any);
             }}
           />
+        </div>
+
+        <div className="bg-transparent sticky top-0 z-40 mt-3 pb-2">
+          {categories.length > 0 && (
+            <CategoryTabs
+              categories={categories}
+              activeCategory={activeCategory}
+              onCategoryChange={setActiveCategory}
+            />
+          )}
         </div>
 
         <div className="h-3" />

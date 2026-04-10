@@ -26,7 +26,7 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({
   };
 
   return (
-    <div className="flex overflow-x-auto py-3 px-4 space-x-6 bg-white">
+    <div className="scrollbar-hide flex overflow-x-auto py-3 px-4 space-x-6 bg-white">
       {categories.map((category) => (
         <button
           key={category.id}
