@@ -425,8 +425,16 @@ ipcMain.handle('disconnect-scale', async (event, deviceId) => {
 
 ipcMain.handle('show-notification', async (event, title, body) => {
   try {
+    if (mainWindow && (mainWindow.isMinimized() || !mainWindow.isFocused())) {
+      mainWindow.flashFrame(true);
+      mainWindow.once('focus', () => {
+        try {
+          mainWindow.flashFrame(false);
+        } catch {}
+      });
+    }
     if (Notification.isSupported()) {
-      new Notification({ title, body, icon: path.join(__dirname, '../assets/icon.png') }).show();
+      new Notification({ title, body, icon: path.join(__dirname, '../assets/icon.png'), silent: false }).show();
     }
     return { success: true };
   } catch (error) {

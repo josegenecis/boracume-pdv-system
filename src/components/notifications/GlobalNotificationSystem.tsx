@@ -93,6 +93,40 @@ const GlobalNotificationSystem: React.FC = () => {
     } catch {}
   };
 
+  const showBackgroundOrderNotification = async (order: PendingOrder) => {
+    const title = 'Novo pedido recebido'
+    const body = `Pedido ${order.order_number} - ${order.customer_name || 'Cliente'}`
+
+    try {
+      if ((document.visibilityState !== 'visible' || !document.hasFocus()) && window.electronAPI?.showNotification) {
+        await window.electronAPI.showNotification(title, body)
+        return
+      }
+    } catch {}
+
+    try {
+      if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body })
+      }
+    } catch {}
+  }
+
+  const handleIncomingOrderAlert = async (order: PendingOrder) => {
+    await playOrderSound()
+    await showBackgroundOrderNotification(order)
+    if (navigator.vibrate) {
+      navigator.vibrate([200, 100, 200])
+    }
+    if (isOnOrdersPageRef.current) return
+    setIsAnimatingOut(false)
+    setIsVisible(true)
+    toast({
+      title: "🔔 Novo Pedido Recebido!",
+      description: `Pedido ${order.order_number} - ${order.customer_name || 'Cliente'}`,
+      duration: 5000,
+    })
+  }
+
   useEffect(() => {
     try {
       if (localStorage.getItem('sound_unlocked') === 'true') return;
@@ -102,6 +136,11 @@ const GlobalNotificationSystem: React.FC = () => {
       try {
         await soundNotifications.enableSound();
         try { localStorage.setItem('sound_unlocked', 'true'); } catch {}
+      } catch {}
+      try {
+        if ('Notification' in window && Notification.permission === 'default') {
+          await Notification.requestPermission()
+        }
       } catch {}
     };
 
@@ -191,18 +230,7 @@ const GlobalNotificationSystem: React.FC = () => {
             (newOrder as any).status === 'pending';
           if (!showForInsert) return;
           setPendingOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-          await playOrderSound();
-          if (isOnOrdersPageRef.current) return;
-          setIsAnimatingOut(false);
-          setIsVisible(true);
-          if (navigator.vibrate) {
-            navigator.vibrate([200, 100, 200]);
-          }
-          toast({
-            title: "🔔 Novo Pedido Recebido!",
-            description: `Pedido ${newOrder.order_number} - ${newOrder.customer_name || 'Cliente'}`,
-            duration: 5000,
-          });
+          await handleIncomingOrderAlert(newOrder);
         }
       )
       .on(
@@ -220,18 +248,7 @@ const GlobalNotificationSystem: React.FC = () => {
             || (updatedOrder as any).status === 'pending';
           if (isPendingLike) {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
-            await playOrderSound();
-            if (isOnOrdersPageRef.current) return;
-            setIsAnimatingOut(false);
-            setIsVisible(true);
-            if (navigator.vibrate) {
-              navigator.vibrate([200, 100, 200]);
-            }
-            toast({
-              title: "🔔 Novo Pedido Recebido!",
-              description: `Pedido ${updatedOrder.order_number} - ${updatedOrder.customer_name || 'Cliente'}`,
-              duration: 5000,
-            });
+            await handleIncomingOrderAlert(updatedOrder);
           } else {
             soundNotifications.stopAllSounds();
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
@@ -274,21 +291,12 @@ const GlobalNotificationSystem: React.FC = () => {
     if (pollingRef.current) window.clearInterval(pollingRef.current);
     pollingRef.current = window.setInterval(async () => {
       if (!user?.id) return;
-      if (document.visibilityState !== 'visible') return;
       const next = await loadPendingOrders();
       const prev = pendingOrdersRef.current || [];
       const prevIds = new Set(prev.map(o => o.id));
       const newOnes = next.filter(o => !prevIds.has(o.id));
       if (newOnes.length === 0) return;
-      await playOrderSound();
-      if (isOnOrdersPageRef.current) return;
-      setIsAnimatingOut(false);
-      setIsVisible(true);
-      toast({
-        title: "🔔 Novo Pedido Recebido!",
-        description: `Você tem ${newOnes.length} novo${newOnes.length > 1 ? 's' : ''} pedido${newOnes.length > 1 ? 's' : ''}.`,
-        duration: 5000,
-      });
+      await handleIncomingOrderAlert(newOnes[0]);
     }, 8000);
 
     return () => {
@@ -304,8 +312,6 @@ const GlobalNotificationSystem: React.FC = () => {
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
     if (isOnOrdersPage) {
-      // Parar sons quando navegar para página de pedidos
-      soundNotifications.stopAllSounds();
       setIsVisible(false);
     } else if (pendingOrders.length > 0) {
       setIsVisible(true);
