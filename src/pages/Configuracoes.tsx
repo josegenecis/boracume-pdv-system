@@ -38,7 +38,7 @@ const Configuracoes: React.FC = () => {
       return true;
     }
     
-    if (subscription?.status === 'active' && subscription?.plan_id === 2) {
+    if (subscription?.status === 'active' && (subscription?.plan_id || 0) >= 2) {
       return true;
     }
     

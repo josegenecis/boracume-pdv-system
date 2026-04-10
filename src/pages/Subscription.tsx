@@ -3,13 +3,14 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Clock, AlertTriangle, Crown, Zap } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Crown, Zap, Rocket, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
+import { PLAN_CATALOG, getPlanCatalogItem } from '@/data/planCatalog';
 
 const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
@@ -65,12 +66,63 @@ const Subscription = () => {
     }
   };
 
+  const getPlanDisplay = (plan: { id: number; name: string; description: string; price: number; features: string[] }) => {
+    const catalog = getPlanCatalogItem(plan.id, plan.name);
+    const accent = catalog?.accent || 'green';
+    const palette = accent === 'orange'
+      ? {
+          border: 'border-[#FF6400]/40',
+          glow: 'shadow-[0_30px_80px_-45px_rgba(255,100,0,0.55)]',
+          header: 'from-[#FF6400] to-[#FF8A3D]',
+          chip: 'bg-[#FFF1E8] text-[#C14E00]',
+          icon: 'text-[#FF6400]',
+          check: 'text-[#FF6400]',
+          button: 'bg-[#FF6400] hover:bg-[#e55a00]',
+          soft: 'bg-[#FFF7F2]'
+        }
+      : accent === 'purple'
+        ? {
+            border: 'border-purple-300',
+            glow: 'shadow-[0_30px_80px_-45px_rgba(124,58,237,0.55)]',
+            header: 'from-purple-600 to-fuchsia-500',
+            chip: 'bg-purple-100 text-purple-700',
+            icon: 'text-purple-600',
+            check: 'text-purple-600',
+            button: 'bg-purple-600 hover:bg-purple-700',
+            soft: 'bg-purple-50'
+          }
+        : {
+            border: 'border-[#8CC850]/35',
+            glow: 'shadow-[0_30px_80px_-45px_rgba(140,200,80,0.55)]',
+            header: 'from-[#003223] to-[#166534]',
+            chip: 'bg-[#EEF7E4] text-[#4E8A1F]',
+            icon: 'text-[#4E8A1F]',
+            check: 'text-[#4E8A1F]',
+            button: 'bg-[#003223] hover:bg-[#0b4733]',
+            soft: 'bg-[#F8FCF3]'
+          };
+
+    const Icon = plan.id === 1 ? Rocket : plan.id === 2 ? Crown : Sparkles;
+
+    return {
+      name: catalog?.name || plan.name,
+      description: catalog?.description || plan.description,
+      audience: catalog?.audience || '',
+      features: plan.features?.length ? plan.features : (catalog?.features || []),
+      modules: catalog?.modules || [],
+      badge: catalog?.badge || '',
+      featured: Boolean(catalog?.featured),
+      palette,
+      Icon
+    };
+  };
+
   const renderTrialInfo = () => {
     if (!subscription?.trial_end) return null;
     
     const days = daysLeft(subscription.trial_end);
     return (
-      <Card className="mb-6 border-amber-200 bg-amber-50">
+      <Card className="mb-8 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 shadow-[0_24px_60px_-40px_rgba(245,158,11,0.45)]">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -82,7 +134,7 @@ const Subscription = () => {
             </Badge>
           </div>
           <CardDescription>
-            Experimente todas as funcionalidades do BoraCumê por 7 dias
+            Você está no período de avaliação com acesso liberado para explorar a plataforma.
           </CardDescription>
         </CardHeader>
         <CardContent className="pb-2">
@@ -121,224 +173,176 @@ const Subscription = () => {
     
     const currentPlan = plans.find(p => p.id === subscription.plan_id);
     if (!currentPlan) return null;
+    const display = getPlanDisplay(currentPlan);
 
     return (
-      <Card className="mb-6 border-boracume-green bg-green-50">
-        <CardHeader className="pb-2 border-b border-green-200">
+      <Card className={`mb-8 overflow-hidden border-2 ${display.palette.border} ${display.palette.glow}`}>
+        <CardHeader className={`pb-4 text-white bg-gradient-to-r ${display.palette.header}`}>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Crown size={20} className="text-green-600" />
+              <display.Icon size={20} />
               Seu Plano Atual
             </CardTitle>
-            <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+            <Badge variant="outline" className="border-white/30 bg-white/15 text-white">
               Ativo
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="pt-4">
-          <div className="flex justify-between items-start mb-4">
+        <CardContent className={`pt-5 ${display.palette.soft}`}>
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="font-bold text-xl text-green-800">{currentPlan.name}</h3>
-              <p className="text-sm text-green-600">{currentPlan.description}</p>
+              <h3 className="font-bold text-2xl text-slate-900">{display.name}</h3>
+              <p className="text-sm text-slate-600">{display.description}</p>
+              {display.audience ? (
+                <p className="mt-2 text-sm text-slate-500">{display.audience}</p>
+              ) : null}
             </div>
-            <div className="text-right">
-              <span className="text-2xl font-bold text-green-700">
+            <div className="text-left md:text-right">
+              <span className="text-3xl font-bold text-slate-900">
                 R$ {currentPlan.price.toFixed(2)}
               </span>
-              <p className="text-xs text-green-600">por mês</p>
+              <p className="text-xs text-slate-500">por mês</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="grid grid-cols-1 gap-4 mt-5 sm:grid-cols-2">
             <div>
-              <p className="text-sm font-medium text-green-800">Válido até:</p>
-              <p className="text-sm text-green-600">{formatDate(subscription.current_period_end)}</p>
+              <p className="text-sm font-medium text-slate-700">Válido até</p>
+              <p className="text-sm text-slate-600">{formatDate(subscription.current_period_end)}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-green-800">Próxima cobrança:</p>
-              <p className="text-sm text-green-600">R$ {currentPlan.price.toFixed(2)}</p>
+              <p className="text-sm font-medium text-slate-700">Próxima cobrança</p>
+              <p className="text-sm text-slate-600">R$ {currentPlan.price.toFixed(2)}</p>
             </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {display.modules.map((module) => (
+              <span key={module} className={`rounded-full px-3 py-1 text-xs font-semibold ${display.palette.chip}`}>
+                {module}
+              </span>
+            ))}
           </div>
         </CardContent>
       </Card>
     );
   };
 
-  const getPlanFeatures = (planName: string) => {
-    switch (planName) {
-
-      case 'Essencial':
-        return [
-          'Cardápio digital',
-          'PDV básico',
-          'Gestão de Pedidos',
-          'Até 100 Produtos',
-          'Relatórios Básicos',
-          '1 Usuário'
-        ];
-      case 'Profissional':
-        return [
-          'Tudo do Essencial',
-          'Produtos Ilimitados',
-          'Gestão de Entregadores',
-          'KDS (Tela de Cozinha)',
-          'Controle de Estoque',
-          'Gestão Financeira',
-          'Até 5 Usuários',
-          'WhatsApp Bot (Cardápio)'
-        ];
-      case 'Enterprise':
-        return [
-          'Tudo do Profissional',
-          'Múltiplas Lojas',
-          'API de Integração',
-          'Suporte Prioritário',
-          'Gerente de Contas',
-          'Customização de Marca',
-          'Agente de Voz IA',
-          'Importação de Cardápio com IA'
-        ];
-      case 'Basic':
-        return [
-          'Cardápio digital',
-          'PDV básico',
-          'Recebimento de pedidos',
-          'Gestão de produtos',
-          'Relatórios básicos',
-          'Suporte por email'
-        ];
-      case 'Pro':
-        return [
-          'Tudo do plano Basic',
-          'Gestão de entregadores',
-          'Sistema KDS (Cozinha)',
-          'Relatórios avançados',
-          'Sistema financeiro completo',
-          'Marketing e promoções',
-          'Integração com balanças',
-          'QR Code personalizado',
-          'Suporte prioritário',
-          'Backup automático',
-          'Multi-usuários'
-        ];
-      default:
-        return [];
-    }
-  };
-
-  const getPlanIcon = (planName: string) => {
-
-    return planName === 'Pro' || planName === 'Profissional' ? <Crown size={20} /> : <Zap size={20} />;
-
-  };
-
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Assinatura</h1>
-          <p className="text-muted-foreground">Escolha o plano ideal para o seu restaurante</p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-10 overflow-hidden rounded-[32px] border border-[#FF6400]/10 bg-white shadow-[0_35px_90px_-55px_rgba(0,50,35,0.35)]">
+          <div className="grid gap-8 px-6 py-8 md:grid-cols-[1.3fr,0.9fr] md:px-10 md:py-10">
+            <div>
+              <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos BoraCumê</Badge>
+              <h1 className="text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
+                Planos mais claros, mais bonitos e pensados para cada fase do restaurante.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base text-slate-600 md:text-lg">
+                Organizei o que o sistema já oferece em três níveis objetivos: vender bem, operar com controle e escalar com automação.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {PLAN_CATALOG.map((plan) => (
+                  <div key={plan.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{plan.shortName}</div>
+                    <div className="mt-1 text-xl font-bold text-slate-900">R$ {plan.monthlyPrice.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3 md:grid-cols-1">
+              <div className="rounded-3xl bg-[#003223] p-5 text-white">
+                <div className="text-sm font-semibold text-white/70">Essencial</div>
+                <div className="mt-2 text-sm leading-6 text-white/90">Cardápio, pedidos, PDV e delivery para a operação funcionar sem travar.</div>
+              </div>
+              <div className="rounded-3xl bg-[#FF6400] p-5 text-white">
+                <div className="text-sm font-semibold text-white/70">Profissional</div>
+                <div className="mt-2 text-sm leading-6 text-white/90">Cozinha, estoque, financeiro, marketing e WhatsApp para acelerar crescimento.</div>
+              </div>
+              <div className="rounded-3xl bg-gradient-to-br from-purple-600 to-fuchsia-500 p-5 text-white">
+                <div className="text-sm font-semibold text-white/70">Elite</div>
+                <div className="mt-2 text-sm leading-6 text-white/90">IA, fiscal, desktop e camada premium para usar o BoraCumê no máximo.</div>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        {/* Trial Info */}
+
         {subscription?.status === 'trial' && renderTrialInfo()}
-        
-        {/* Current Plan */}
+
         {subscription?.status === 'active' && renderCurrentPlan()}
-        
-        {/* Available Plans */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+
+        <div className="mb-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {plans.map((plan) => {
             const isCurrentPlan = subscription?.plan_id === plan.id;
-            const isProfessional = plan.name === 'Profissional';
-            const isEnterprise = plan.name === 'Enterprise';
-            const isEssencial = plan.name === 'Essencial';
-
-            let borderColor = "border-gray-200";
-            let bgColor = "bg-white";
-            let headerColor = "";
-            let buttonVariant = "outline" as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
-
-            if (isProfessional) {
-               borderColor = "border-amber-400";
-               bgColor = "bg-gradient-to-b from-amber-50 to-white";
-               headerColor = "bg-amber-500 text-white";
-               buttonVariant = "default";
-            } else if (isEnterprise) {
-               borderColor = "border-purple-400";
-               bgColor = "bg-gradient-to-b from-purple-50 to-white";
-               headerColor = "bg-purple-600 text-white";
-               buttonVariant = "default";
-            }
-
-            if (isCurrentPlan) {
-                borderColor = "border-boracume-green";
-                buttonVariant = "outline";
-            }
+            const display = getPlanDisplay(plan);
 
             return (
-              <Card 
+              <Card
                 key={plan.id} 
-                className={`relative flex flex-col h-full border-2 ${borderColor} ${bgColor} transition-all duration-200 hover:shadow-lg`}
+                className={`relative flex h-full flex-col overflow-hidden border-2 bg-white transition-all duration-300 hover:-translate-y-1 ${display.palette.border} ${display.palette.glow}`}
               >
                 {isCurrentPlan && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-boracume-green text-white px-4 py-1 rounded-full text-xs font-bold z-10">
+                  <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full bg-[#003223] px-4 py-1 text-xs font-bold text-white">
                     Plano Atual
                   </div>
                 )}
 
-                {isProfessional && !isCurrentPlan && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-amber-500 text-white px-4 py-1 rounded-full text-xs font-bold z-10 flex items-center gap-1 shadow-md">
+                {display.featured && !isCurrentPlan && (
+                  <div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#FF6400] px-4 py-1 text-xs font-bold text-white shadow-md">
                     <Crown size={12} />
-                    Mais Popular
+                    {display.badge}
                   </div>
                 )}
                 
-                <CardHeader className={`rounded-t-lg pb-6 ${headerColor}`}>
-                  <CardTitle className="flex items-center justify-center gap-2 text-xl">
-                    {isProfessional && <Crown size={24} />}
-                    {isEnterprise && <Zap size={24} />}
-                    {isEssencial && <Clock size={24} />}
-                    {plan.name}
+                <CardHeader className={`bg-gradient-to-br px-6 pb-6 pt-14 text-white ${display.palette.header}`}>
+                  <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+                    <display.Icon size={24} />
+                    {display.name}
                   </CardTitle>
-                  <CardDescription className={`text-center ${isProfessional || isEnterprise ? "text-white/90" : ""}`}>
-                    {plan.description}
+                  <CardDescription className="text-center text-white/90">
+                    {display.description}
                   </CardDescription>
-                  <div className="mt-4 text-center">
-                    <span className={`text-4xl font-bold ${!headerColor ? "text-boracume-orange" : "text-white"}`}>
+                  <div className="mt-5 text-center">
+                    <span className="text-4xl font-bold">
                       R$ {plan.price.toFixed(2)}
                     </span>
-                    <span className={`text-sm ${!headerColor ? "text-muted-foreground" : "text-white/80"}`}>
-                      /mês
-                    </span>
+                    <span className="text-sm text-white/80">/mês</span>
+                    <div className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-white/70">
+                      {display.audience}
+                    </div>
                   </div>
                 </CardHeader>
                 
-                <CardContent className="pt-6 space-y-4 flex-grow">
-                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider text-center mb-4">O que está incluído</h4>
+                <CardContent className="flex-grow px-6 pt-6">
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {display.modules.map((module) => (
+                      <span key={module} className={`rounded-full px-3 py-1 text-xs font-semibold ${display.palette.chip}`}>
+                        {module}
+                      </span>
+                    ))}
+                  </div>
                   <ul className="space-y-3">
-                    {getPlanFeatures(plan.name).map((feature, index) => (
+                    {display.features.map((feature, index) => (
                       <li key={index} className="flex items-start">
-                        <Check className={`h-5 w-5 mr-3 mt-0.5 flex-shrink-0 ${isProfessional ? "text-amber-500" : isEnterprise ? "text-purple-500" : "text-green-500"}`} />
-                        <span className="text-sm text-gray-700">{feature}</span>
+                        <Check className={`mr-3 mt-0.5 h-5 w-5 flex-shrink-0 ${display.palette.check}`} />
+                        <span className="text-sm leading-6 text-slate-700">{feature}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
                 
-                <CardFooter className="pt-2 pb-6">
+                <CardFooter className="pb-6 pt-4">
                   <Button
-                    className={`w-full ${isProfessional ? "bg-amber-600 hover:bg-amber-700" : isEnterprise ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                    className={`w-full rounded-2xl text-base font-semibold text-white ${display.palette.button}`}
                     onClick={() => handleSubscribeStripe(plan.id)}
                     disabled={loading || isCurrentPlan}
-                    variant={isCurrentPlan ? "outline" : buttonVariant}
+                    variant={isCurrentPlan ? "outline" : "default"}
                     size="lg"
                   >
                     {isCurrentPlan ? (
                       "Plano Atual"
                     ) : (
                       <>
-                        {isProfessional && <Crown size={16} className="mr-2" />}
-                        {loading ? "Processando..." : `Assinar ${plan.name}`}
+                        {loading ? "Processando..." : `Assinar ${display.name}`}
+                        <ArrowRight size={16} className="ml-2" />
                       </>
                     )}
                   </Button>
@@ -348,12 +352,36 @@ const Subscription = () => {
           })}
         </div>
 
-        {/* Upgrade CTA */}
+        <div className="mb-8 rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-[0_30px_80px_-55px_rgba(15,23,42,0.35)] md:px-8">
+          <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="text-2xl font-bold text-slate-900">Como os recursos foram divididos</h3>
+              <p className="text-sm text-slate-500">Organizei os módulos do sistema em uma escada comercial simples e direta.</p>
+            </div>
+            <Badge variant="outline" className="w-fit border-slate-300 text-slate-600">Tudo já existente no sistema</Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {PLAN_CATALOG.map((plan) => (
+              <div key={plan.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="text-lg font-bold text-slate-900">{plan.name}</div>
+                <div className="mt-1 text-sm text-slate-500">{plan.audience}</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {plan.modules.map((module) => (
+                    <span key={module} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+                      {module}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {subscription?.status === 'trial' && (
-          <Card className="bg-gradient-to-r from-boracume-orange to-amber-500 text-white">
+          <Card className="border-0 bg-gradient-to-r from-[#FF6400] to-[#ff8d4d] text-white shadow-[0_25px_80px_-40px_rgba(255,100,0,0.7)]">
             <CardContent className="pt-6">
               <div className="text-center">
-                <h3 className="text-xl font-bold mb-2">Pronto para crescer?</h3>
+                <h3 className="mb-2 text-2xl font-bold">Pronto para crescer?</h3>
                 <p className="mb-4 text-orange-100">
                   Mantenha todas as funcionalidades ativas escolhendo um plano hoje mesmo.
                 </p>

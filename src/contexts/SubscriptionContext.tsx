@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import { PLAN_CATALOG, getPlanCatalogItem } from '@/data/planCatalog';
 
 interface Plan {
   id: number;
@@ -18,6 +19,29 @@ interface SubscriptionContextType {
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
+
+const getFallbackPlans = (): Plan[] => {
+  return PLAN_CATALOG.map((plan) => ({
+    id: plan.id,
+    name: plan.name,
+    description: plan.description,
+    price: plan.monthlyPrice,
+    features: plan.features
+  }));
+};
+
+const normalizePlans = (rows: any[]): Plan[] => {
+  return rows.map((row) => {
+    const catalog = getPlanCatalogItem(row?.id, row?.name);
+    return {
+      id: Number(row?.id),
+      name: String(row?.name || catalog?.name || 'Plano'),
+      description: String(row?.description || catalog?.description || ''),
+      price: Number(row?.price ?? catalog?.monthlyPrice ?? 0),
+      features: Array.isArray(row?.features) && row.features.length > 0 ? row.features : (catalog?.features || [])
+    };
+  });
+};
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -43,58 +67,14 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // FALLBACK SE O BANCO ESTIVER VAZIO
         if (!data || data.length === 0) {
             console.warn('⚠️ Banco de dados vazio. Usando planos padrão locais.');
-            setPlans([
-              {
-                  id: 1,
-                  name: 'Essencial',
-                  description: 'Para quem está começando',
-                  price: 89.00,
-                  features: ["Cardápio Digital", "PDV Frente de Caixa", "Gestão de Pedidos", "Até 100 Produtos", "Relatórios Básicos", "1 Usuário"]
-              },
-              {
-                  id: 2,
-                  name: 'Profissional',
-                  description: 'Para restaurantes em crescimento',
-                  price: 169.00,
-                  features: ["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários", "WhatsApp Bot (Cardápio)"]
-              },
-              {
-                  id: 3,
-                  name: 'Enterprise',
-                  description: 'Para redes e franquias',
-                  price: 229.00,
-                  features: ["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca", "Agente de Voz IA", "Importação de Cardápio com IA"]
-              }
-            ]);
+            setPlans(getFallbackPlans());
         } else {
-            setPlans(data);
+            setPlans(normalizePlans(data));
         }
       } catch (error) {
         console.error('Error fetching plans:', error);
         // Fallback em caso de erro de conexão também
-        setPlans([
-              {
-                  id: 1,
-                  name: 'Essencial',
-                  description: 'Para quem está começando',
-                  price: 89.00,
-                  features: ["Cardápio Digital", "PDV Frente de Caixa", "Gestão de Pedidos", "Até 100 Produtos", "Relatórios Básicos", "1 Usuário"]
-              },
-              {
-                  id: 2,
-                  name: 'Profissional',
-                  description: 'Para restaurantes em crescimento',
-                  price: 169.00,
-                  features: ["Tudo do Essencial", "Produtos Ilimitados", "Gestão de Entregadores", "KDS (Tela de Cozinha)", "Controle de Estoque", "Gestão Financeira", "Até 5 Usuários", "WhatsApp Bot (Cardápio)"]
-              },
-              {
-                  id: 3,
-                  name: 'Enterprise',
-                  description: 'Para redes e franquias',
-                  price: 229.00,
-                  features: ["Tudo do Profissional", "Múltiplas Lojas", "API de Integração", "Suporte Prioritário", "Gerente de Contas", "Customização de Marca", "Agente de Voz IA", "Importação de Cardápio com IA"]
-              }
-        ]);
+        setPlans(getFallbackPlans());
       } finally {
         setIsLoading(false);
       }

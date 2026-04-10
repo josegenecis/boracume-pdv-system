@@ -195,7 +195,7 @@ const CollapsibleSidebar = () => {
     const status = String(subscription?.status || '').toLowerCase();
     if (status.includes('trial')) return 'Teste';
     if ((subscription?.plan_id || 0) >= 3) return 'Elite';
-    if ((subscription?.plan_id || 0) === 2) return 'Pro';
+    if ((subscription?.plan_id || 0) === 2) return 'Profissional';
     if ((subscription?.plan_id || 0) === 1) return 'Essencial';
     return 'Plano';
   }, [subscription]);
