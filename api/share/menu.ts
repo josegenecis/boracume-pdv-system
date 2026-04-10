@@ -13,6 +13,15 @@ function escHtml(v: string) {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeAbsoluteUrl(value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('//')) return `https:${raw}`;
+  if (raw.startsWith('/')) return `https://boracume.com${raw}`;
+  return raw;
+}
+
 async function fetchProfile(userId: string) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/profiles`);
   url.searchParams.set('select', 'restaurant_name,description,logo_url,banner_url');
@@ -43,7 +52,7 @@ export default async function handler(req: any, res: any) {
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
-    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png');
+    const logoUrl = normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png'));
     const pageUrl = `https://boracume.com/share/menu/${encodeURIComponent(id)}`;
     const redirectUrl = `/menu/${encodeURIComponent(id)}`;
 
@@ -58,11 +67,15 @@ export default async function handler(req: any, res: any) {
     <meta property="og:title" content="${escHtml(restaurantName)}" />
     <meta property="og:description" content="${escHtml(description)}" />
     <meta property="og:image" content="${escHtml(logoUrl)}" />
+    <meta property="og:image:secure_url" content="${escHtml(logoUrl)}" />
+    <meta property="og:image:alt" content="${escHtml(`Logo do restaurante ${restaurantName}`)}" />
+    <meta property="og:site_name" content="${escHtml(restaurantName)}" />
     <meta property="og:url" content="${escHtml(pageUrl)}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escHtml(restaurantName)}" />
     <meta name="twitter:description" content="${escHtml(description)}" />
     <meta name="twitter:image" content="${escHtml(logoUrl)}" />
+    <meta name="twitter:image:alt" content="${escHtml(`Logo do restaurante ${restaurantName}`)}" />
     <meta http-equiv="refresh" content="0; url=${escHtml(redirectUrl)}" />
   </head>
   <body>

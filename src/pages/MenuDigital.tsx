@@ -149,10 +149,13 @@ const MenuDigital = () => {
     };
     upsert('property', 'og:title', name);
     upsert('name', 'twitter:title', name);
-    const image = String((profile as any)?.banner_url || (profile as any)?.logo_url || '').trim();
+    const image = String((profile as any)?.logo_url || (profile as any)?.banner_url || '').trim();
     if (image) {
       upsert('property', 'og:image', image);
+      upsert('property', 'og:image:secure_url', image);
+      upsert('property', 'og:image:alt', `Logo do restaurante ${name}`);
       upsert('name', 'twitter:image', image);
+      upsert('name', 'twitter:image:alt', `Logo do restaurante ${name}`);
     }
   }, [profile]);
 
