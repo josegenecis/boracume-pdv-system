@@ -13,6 +13,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
+import { prepareBannerVideoFile } from '@/utils/videoCompression';
 
 interface Banner {
   id: string;
@@ -28,6 +30,8 @@ interface Banner {
   banner_type?: 'wide' | 'tile';
 }
 
+const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
+
 const BannerManager = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; price: number }>>([]);
@@ -36,6 +40,8 @@ const BannerManager = () => {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [assetKind, setAssetKind] = useState<'image' | 'video'>('image');
+  const [assetDurationSeconds, setAssetDurationSeconds] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [formData, setFormData] = useState({
@@ -99,30 +105,75 @@ const BannerManager = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
+      const isTileBanner = formData.banner_type === 'tile';
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+
+      if (!isImage && !isVideo) {
         toast({
           title: "Erro",
-          description: "Por favor, selecione apenas arquivos de imagem.",
+          description: "Selecione uma imagem ou vídeo válido.",
           variant: "destructive"
         });
         return;
       }
 
-      if (file.size > 5 * 1024 * 1024) {
+      if (isVideo && !isTileBanner) {
         toast({
           title: "Erro",
-          description: "A imagem deve ter no máximo 5MB.",
+          description: "Vídeos são permitidos apenas no banner vertical.",
           variant: "destructive"
         });
         return;
       }
 
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
+      const prepareFile = async () => {
+        try {
+          if (isImage) {
+            if (file.size > 12 * 1024 * 1024) {
+              throw new Error('A imagem está muito grande. Use um arquivo de até 12MB.');
+            }
+            const processedImage = file.size > 2 * 1024 * 1024
+              ? await compressImageFileToMaxBytes(file, { maxBytes: 2 * 1024 * 1024, maxDimension: isTileBanner ? 1080 : 1600 })
+              : file;
+
+            setAssetKind('image');
+            setAssetDurationSeconds(null);
+            setImageFile(processedImage);
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              setImagePreview(event.target?.result as string);
+            };
+            reader.readAsDataURL(processedImage);
+            return;
+          }
+
+          const processedVideo = await prepareBannerVideoFile(file, {
+            maxBytes: 2 * 1024 * 1024,
+            maxDurationSeconds: 5,
+            maxSourceBytes: 40 * 1024 * 1024
+          });
+
+          setAssetKind('video');
+          setAssetDurationSeconds(processedVideo.durationSeconds);
+          setImageFile(processedVideo.file);
+          setImagePreview(URL.createObjectURL(processedVideo.file));
+          toast({
+            title: processedVideo.compressed ? 'Vídeo compactado' : 'Vídeo pronto',
+            description: processedVideo.compressed
+              ? 'O vídeo foi compactado automaticamente para caber no banner vertical.'
+              : 'Vídeo validado com sucesso.',
+          });
+        } catch (error: any) {
+          toast({
+            title: 'Erro no arquivo',
+            description: error?.message || 'Não foi possível processar a mídia selecionada.',
+            variant: 'destructive'
+          });
+        }
       };
-      reader.readAsDataURL(file);
+
+      void prepareFile();
     }
   };
 
@@ -253,6 +304,7 @@ const BannerManager = () => {
   };
 
   const handleEdit = (banner: Banner) => {
+    const nextKind = isVideoAsset(banner.image_url) ? 'video' : 'image';
     setEditingBanner(banner);
     setFormData({
       title: banner.title,
@@ -263,6 +315,8 @@ const BannerManager = () => {
       active: banner.active,
       banner_type: (banner.banner_type || 'wide') as any
     });
+    setAssetKind(nextKind);
+    setAssetDurationSeconds(null);
     setImagePreview(banner.image_url || '');
     setIsDialogOpen(true);
   };
@@ -341,11 +395,15 @@ const BannerManager = () => {
     setEditingBanner(null);
     setImageFile(null);
     setImagePreview('');
+    setAssetKind('image');
+    setAssetDurationSeconds(null);
   };
 
   const removeImage = () => {
     setImageFile(null);
     setImagePreview('');
+    setAssetKind('image');
+    setAssetDurationSeconds(null);
   };
 
   return (
@@ -374,7 +432,12 @@ const BannerManager = () => {
                   <div className="space-y-4">
                     <div>
                       <Label>Tipo de banner</Label>
-                      <Select value={formData.banner_type} onValueChange={(v: any) => setFormData(prev => ({ ...prev, banner_type: v }))}>
+                      <Select value={formData.banner_type} onValueChange={(v: any) => {
+                        setFormData(prev => ({ ...prev, banner_type: v }));
+                        if (v !== 'tile' && assetKind === 'video') {
+                          removeImage();
+                        }
+                      }}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -386,6 +449,11 @@ const BannerManager = () => {
                       <div className="text-xs text-muted-foreground mt-1">
                         Horizontal recomendado: 800x260 • 10x15 recomendado: 600x900
                       </div>
+                      {formData.banner_type === 'tile' ? (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          O banner vertical aceita imagem ou vídeo. Vídeos ficam limitados a 5 segundos e 2MB após processamento.
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <Label>Vincular a um produto (opcional)</Label>
@@ -462,15 +530,26 @@ const BannerManager = () => {
                     </div>
                   </div>
                   <div>
-                    <Label>Imagem do Banner</Label>
+                    <Label>{formData.banner_type === 'tile' ? 'Mídia do Banner' : 'Imagem do Banner'}</Label>
                     <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center h-[250px] bg-muted/50 relative">
                       {imagePreview ? (
                         <div className="relative w-full h-full">
-                          <img 
-                            src={imagePreview} 
-                            alt="Preview" 
-                            className="w-full h-full object-cover rounded"
-                          />
+                          {assetKind === 'video' ? (
+                            <video
+                              src={imagePreview}
+                              className="w-full h-full object-cover rounded"
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                            />
+                          ) : (
+                            <img 
+                              src={imagePreview} 
+                              alt="Preview" 
+                              className="w-full h-full object-cover rounded"
+                            />
+                          )}
                           <Button
                             type="button"
                             variant="destructive"
@@ -480,16 +559,23 @@ const BannerManager = () => {
                           >
                             <X className="w-4 h-4" />
                           </Button>
+                          {assetKind === 'video' ? (
+                            <div className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[11px] text-white">
+                              Vídeo{assetDurationSeconds ? ` • ${assetDurationSeconds.toFixed(1)}s` : ''}
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <>
                           <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
                           <div className="text-sm text-center text-muted-foreground mb-4">
-                            Selecione uma imagem para o banner
+                            {formData.banner_type === 'tile'
+                              ? 'Selecione uma imagem ou vídeo para o banner vertical'
+                              : 'Selecione uma imagem para o banner'}
                           </div>
                           <Input
                             type="file"
-                            accept="image/*"
+                            accept={formData.banner_type === 'tile' ? 'image/*,video/*' : 'image/*'}
                             onChange={handleImageChange}
                             className="hidden"
                             id="banner-upload"
@@ -504,7 +590,7 @@ const BannerManager = () => {
                             onClick={() => fileInputRef.current?.click()}
                           >
                             <Upload className="w-4 h-4 mr-2" />
-                            {uploading ? 'Enviando...' : 'Selecionar Imagem'}
+                            {uploading ? 'Enviando...' : formData.banner_type === 'tile' ? 'Selecionar Mídia' : 'Selecionar Imagem'}
                           </Button>
                         </>
                       )}
@@ -552,11 +638,20 @@ const BannerManager = () => {
                 <TableRow key={banner.id}>
                   <TableCell>
                     {banner.image_url ? (
-                      <img 
-                        src={banner.image_url} 
-                        alt={banner.title}
-                        className="w-16 h-10 object-cover rounded"
-                      />
+                      isVideoAsset(banner.image_url) ? (
+                        <video
+                          src={banner.image_url}
+                          className="w-16 h-10 object-cover rounded"
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <img 
+                          src={banner.image_url} 
+                          alt={banner.title}
+                          className="w-16 h-10 object-cover rounded"
+                        />
+                      )
                     ) : (
                       <div className="w-16 h-10 bg-gray-200 rounded flex items-center justify-center">
                         <ImageIcon className="w-4 h-4 text-gray-400" />

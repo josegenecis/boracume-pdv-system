@@ -15,6 +15,8 @@ interface Banner {
   productId?: string | null;
 }
 
+const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
+
 interface PromotionalBannerProps {
   autoPlay?: boolean;
   interval?: number;
@@ -187,8 +189,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
   };
   
-  const currentBanner = clickables[currentIndex % clickables.length];
-
   if (variant === 'tile') {
     return (
       <div className="w-full overflow-x-auto">
@@ -198,10 +198,21 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               key={b.id}
               type="button"
               onClick={() => handleBannerClick(b)}
-              className="block w-32 sm:w-36 rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
+              className="block w-[84px] sm:w-[94px] rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
             >
               <div className="aspect-[2/3] w-full bg-gray-100 relative">
-                <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
+                {isVideoAsset(b.imageUrl) ? (
+                  <video
+                    src={b.imageUrl}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
+                )}
               </div>
             </button>
           ))}
@@ -213,16 +224,24 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   return (
     <div className="relative w-full h-24 sm:h-28 overflow-hidden rounded-lg shadow-sm border border-gray-100">
       <div
-        className="absolute inset-0 bg-cover bg-center transition-transform duration-500"
-        style={{ backgroundImage: `url(${currentBanner.imageUrl})` }}
-      />
-
-      <button
-        type="button"
-        className="absolute inset-0"
-        onClick={() => handleBannerClick(currentBanner)}
-        aria-label="Banner promocional"
-      />
+        className="flex h-full w-full transition-transform duration-700 ease-in-out"
+        style={{ transform: `translateX(-${(currentIndex % clickables.length) * 100}%)` }}
+      >
+        {clickables.map((banner) => (
+          <button
+            key={banner.id}
+            type="button"
+            className="relative block h-full min-w-full"
+            onClick={() => handleBannerClick(banner)}
+            aria-label={`Banner promocional ${banner.title}`}
+          >
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${banner.imageUrl})` }}
+            />
+          </button>
+        ))}
+      </div>
 
       {clickables.length > 1 ? (
         <>

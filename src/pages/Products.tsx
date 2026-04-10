@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import ProductForm from '@/components/products/ProductForm';
+import ProductImageUpload from '@/components/products/ProductImageUpload';
 import MenuImportModal from '@/components/products/MenuImportModal';
 import ProductVariationsButton from '@/components/products/ProductVariationsButton';
 import GlobalVariationManager from '@/components/products/GlobalVariationManager';
@@ -711,17 +712,18 @@ const Products = () => {
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-[auto,1fr,220px]">
+          <div className="flex items-center">
+            <ProductImageUpload
+              currentImageUrl={inlineProductDraft.image_url}
+              onImageUploaded={(imageUrl) => setInlineProductDraft(prev => ({ ...prev, image_url: imageUrl }))}
+              compact
+            />
+          </div>
           <Input
             placeholder="Nome do produto"
             value={inlineProductDraft.name}
             onChange={(e) => setInlineProductDraft(prev => ({ ...prev, name: e.target.value }))}
-            className="h-10 rounded-xl border-[#FF6400]/15 bg-white"
-          />
-          <Input
-            placeholder="Imagem (URL)"
-            value={inlineProductDraft.image_url}
-            onChange={(e) => setInlineProductDraft(prev => ({ ...prev, image_url: e.target.value }))}
             className="h-10 rounded-xl border-[#FF6400]/15 bg-white"
           />
           <Input
