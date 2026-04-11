@@ -17,6 +17,23 @@ const Index = () => {
   // Lógica de roteamento baseada em domínio/subdomínio
   useEffect(() => {
     const resolveDomain = async () => {
+      try {
+        const search = new URLSearchParams(location.search || '');
+        const code = search.get('code') || '';
+        const typeFromQuery = search.get('type') || '';
+        const hash = window.location.hash || '';
+        const isRecovery =
+          typeFromQuery.toLowerCase() === 'recovery' ||
+          /type=recovery/i.test(hash) ||
+          /recovery/i.test(hash) ||
+          Boolean(code);
+
+        if (location.pathname === '/' && isRecovery) {
+          navigate(`/reset-password${location.search || ''}${hash || ''}`, { replace: true });
+          return;
+        }
+      } catch {}
+
       const hostname = window.location.hostname;
       
       // 1. Domínios que DEVEM mostrar a Landing Page (sistema principal)
@@ -41,7 +58,7 @@ const Index = () => {
     };
 
     resolveDomain();
-  }, [location.pathname, userId]);
+  }, [location.pathname, location.search, navigate, userId]);
 
   // Se a rota tem userId explícito (ex: /cardapio/:userId), renderiza o Menu
   if (userId) {

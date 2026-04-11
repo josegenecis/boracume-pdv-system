@@ -17,6 +17,7 @@ interface Waiter {
   id: string;
   name: string;
   email?: string;
+  cpf?: string;
   password?: string;
   pin: string;
   active: boolean;
@@ -85,6 +86,7 @@ const Garcons = () => {
   const [formData, setFormData] = useState<Partial<Waiter>>({
     name: '',
     email: '',
+    cpf: '',
     password: '',
     pin: '',
     role: 'cashier',
@@ -118,6 +120,7 @@ const Garcons = () => {
       setFormData({
         name: '',
         email: '',
+        cpf: '',
         password: '',
         pin: '',
         role: 'cashier',
@@ -130,8 +133,9 @@ const Garcons = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.name?.trim() || !formData.pin?.trim()) {
-      toast({ title: 'Campos obrigatórios', description: 'Nome e PIN são obrigatórios.', variant: 'destructive' });
+    const normalizedCpf = String(formData.cpf || '').replace(/\D/g, '');
+    if (!formData.name?.trim() || !formData.pin?.trim() || normalizedCpf.length !== 11) {
+      toast({ title: 'Campos obrigatórios', description: 'Nome, PIN e CPF válido são obrigatórios.', variant: 'destructive' });
       return;
     }
 
@@ -147,6 +151,7 @@ const Garcons = () => {
         user_id: user?.id,
         name: formData.name,
         email: formData.email,
+        cpf: normalizedCpf,
         pin: formData.pin,
         role: formData.role,
         active: formData.active,
@@ -231,6 +236,7 @@ const Garcons = () => {
               <TableRow className="bg-gray-50/50">
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>CPF</TableHead>
                 <TableHead>Perfil</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -248,6 +254,7 @@ const Garcons = () => {
                     </div>
                   </TableCell>
                   <TableCell>{waiter.email || '-'}</TableCell>
+                  <TableCell>{waiter.cpf ? waiter.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : '-'}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       waiter.role === 'admin' 
@@ -281,7 +288,7 @@ const Garcons = () => {
               ))}
               {waiters.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado.
                   </TableCell>
                 </TableRow>
@@ -350,6 +357,20 @@ const Garcons = () => {
                         placeholder="joao@email.com"
                         value={formData.email}
                         onChange={e => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cpf">CPF para Login Web</Label>
+                      <Input
+                        id="cpf"
+                        placeholder="000.000.000-00"
+                        value={String(formData.cpf || '')
+                          .replace(/\D/g, '')
+                          .slice(0, 11)
+                          .replace(/^(\d{3})(\d)/, '$1.$2')
+                          .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+                          .replace(/\.(\d{3})(\d)/, '.$1-$2')}
+                        onChange={e => setFormData({ ...formData, cpf: e.target.value })}
                       />
                     </div>
                   </div>

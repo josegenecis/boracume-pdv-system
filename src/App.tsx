@@ -57,6 +57,7 @@ import MpCallback from '@/pages/MpCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
+import WaiterSession from '@/pages/WaiterSession';
 import KDSView from '@/pages/KDSView';
 import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
@@ -93,6 +94,7 @@ function AppContent() {
       {/* Rotas do Garçom */}
       <Route path="/waiter-login" element={<WaiterLogin />} />
       <Route path="/waiter-dashboard" element={<WaiterDashboard />} />
+      <Route path="/waiter-session/:sessionId" element={<WaiterSession />} />
 
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />
