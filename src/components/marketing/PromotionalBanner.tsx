@@ -1,19 +1,12 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, ShoppingBag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import BannerStoryViewer, { StoryBanner, StoryLinkedProduct } from '@/components/marketing/BannerStoryViewer';
 
-interface Banner {
-  id: string;
-  imageUrl: string;
-  title: string;
-  description?: string;
-  link?: string;
-  bannerType?: 'wide' | 'tile';
-  productId?: string | null;
-}
+interface Banner extends StoryBanner {}
 
 const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
 
@@ -23,6 +16,8 @@ interface PromotionalBannerProps {
   restaurantId?: string;
   variant?: 'wide' | 'tile';
   onSelectProductId?: (productId: string) => void;
+  onQuickAddProduct?: (productId: string) => Promise<void> | void;
+  linkedProducts?: Record<string, StoryLinkedProduct>;
 }
 
 const PromotionalBanner: React.FC<PromotionalBannerProps> = ({ 
@@ -30,11 +25,15 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   interval = 5000,
   restaurantId,
   variant = 'wide',
-  onSelectProductId
+  onSelectProductId,
+  onQuickAddProduct,
+  linkedProducts
 }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [storyIndex, setStoryIndex] = useState(0);
+  const [storyOpen, setStoryOpen] = useState(false);
   const { user } = useAuth();
   
   const userId = restaurantId || user?.id;
@@ -50,14 +49,9 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
     window.open(url, '_blank', 'noreferrer');
   };
 
-  const handleBannerClick = (b: Banner) => {
-    const pid = String(b.productId || '').trim();
-    if (pid && typeof onSelectProductId === 'function') {
-      onSelectProductId(pid);
-      return;
-    }
-    const href = String(b.link || '').trim();
-    if (href) openLink(href);
+  const handleBannerClick = (index: number) => {
+    setStoryIndex(index);
+    setStoryOpen(true);
   };
   
   useEffect(() => {
@@ -160,14 +154,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   }, [banners]);
   
   useEffect(() => {
-    if (!autoPlay || banners.length <= 1) return;
+    if (!autoPlay || clickables.length <= 1) return;
     
     const timer = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % clickables.length);
     }, interval);
     
     return () => clearInterval(timer);
-  }, [autoPlay, interval, banners.length]);
+  }, [autoPlay, interval, clickables.length]);
   
   if (isLoading) {
     return (
@@ -182,25 +176,28 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   }
   
   const handlePrevious = () => {
-    setCurrentIndex((prevIndex) => (prevIndex - 1 + banners.length) % banners.length);
+    setCurrentIndex((prevIndex) => (prevIndex - 1 + clickables.length) % clickables.length);
   };
   
   const handleNext = () => {
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % banners.length);
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % clickables.length);
   };
   
   if (variant === 'tile') {
     return (
-      <div className="w-full">
-        <div className="grid grid-cols-4 gap-2 sm:gap-3">
-          {clickables.map((b) => (
+      <>
+        <div className="w-full">
+          <div className="grid grid-cols-4 gap-2 sm:gap-3">
+            {clickables.map((b, index) => {
+              const linkedProduct = b.productId ? linkedProducts?.[String(b.productId)] : undefined;
+              return (
             <button
               key={b.id}
               type="button"
-              onClick={() => handleBannerClick(b)}
-              className="block w-full rounded-lg overflow-hidden shadow-sm border border-gray-100 bg-white"
+              onClick={() => handleBannerClick(index)}
+              className="group block w-full overflow-hidden rounded-[22px] border border-white/80 bg-white shadow-[0_16px_36px_-22px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-1"
             >
-              <div className="aspect-[2/3] w-full bg-gray-100 relative">
+              <div className="relative aspect-[2/3] w-full bg-gray-100">
                 {isVideoAsset(b.imageUrl) ? (
                   <video
                     src={b.imageUrl}
@@ -213,78 +210,130 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 ) : (
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
                 )}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/80" />
+                <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
+                  <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-900">
+                    {isVideoAsset(b.imageUrl) ? 'Vídeo' : 'Story'}
+                  </span>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
+                    <Play className="h-4 w-4 fill-current" />
+                  </span>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
+                  <div className="line-clamp-2 text-sm font-bold leading-tight">{b.title}</div>
+                  {linkedProduct ? (
+                    <div className="mt-2 inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur">
+                      <ShoppingBag className="mr-1.5 h-3 w-3" />
+                      Comprar
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </button>
-          ))}
+              );
+            })}
+          </div>
         </div>
-      </div>
+        <BannerStoryViewer
+          open={storyOpen}
+          banners={clickables}
+          initialIndex={storyIndex}
+          linkedProducts={linkedProducts}
+          onClose={() => setStoryOpen(false)}
+          onOpenProduct={onSelectProductId}
+          onQuickAddProduct={onQuickAddProduct}
+          onOpenLink={openLink}
+        />
+      </>
     );
   }
 
   return (
-    <div className="relative w-full h-24 sm:h-28 overflow-hidden rounded-lg shadow-sm border border-gray-100">
-      <div
-        className="flex h-full w-full transition-transform duration-700 ease-in-out"
-        style={{ transform: `translateX(-${(currentIndex % clickables.length) * 100}%)` }}
-      >
-        {clickables.map((banner) => (
-          <button
-            key={banner.id}
-            type="button"
-            className="relative block h-full min-w-full"
-            onClick={() => handleBannerClick(banner)}
-            aria-label={`Banner promocional ${banner.title}`}
-          >
-            <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${banner.imageUrl})` }}
-            />
-          </button>
-        ))}
-      </div>
-
-      {clickables.length > 1 ? (
-        <>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-7 w-7"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePrevious();
-            }}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white hover:bg-black/50 rounded-full h-7 w-7"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNext();
-            }}
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      ) : null}
-
-      {clickables.length > 1 ? (
-        <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-1">
-          {clickables.map((_, index) => (
+    <>
+      <div className="relative w-full h-24 overflow-hidden rounded-[24px] border border-white/80 shadow-[0_16px_36px_-22px_rgba(15,23,42,0.45)] sm:h-28">
+        <div
+          className="flex h-full w-full transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${(currentIndex % clickables.length) * 100}%)` }}
+        >
+          {clickables.map((banner, index) => (
             <button
-              key={index}
-              className={`w-1.5 h-1.5 rounded-full ${currentIndex === index ? 'bg-white' : 'bg-white/50'}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentIndex(index);
-              }}
-            />
+              key={banner.id}
+              type="button"
+              className="relative block h-full min-w-full"
+              onClick={() => handleBannerClick(index)}
+              aria-label={`Banner promocional ${banner.title}`}
+            >
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${banner.imageUrl})` }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
+              <div className="absolute inset-y-0 left-0 flex max-w-[72%] flex-col justify-center p-4 text-left text-white">
+                <div className="inline-flex w-fit items-center rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] backdrop-blur">
+                  Story promocional
+                </div>
+                <div className="mt-2 line-clamp-2 text-sm font-black sm:text-base">{banner.title}</div>
+                {banner.description ? (
+                  <div className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">{banner.description}</div>
+                ) : null}
+              </div>
+            </button>
           ))}
         </div>
-      ) : null}
-    </div>
+
+        {clickables.length > 1 ? (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute left-2 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-black/30 text-white hover:bg-black/50 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrevious();
+              }}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-black/30 text-white hover:bg-black/50 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNext();
+              }}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </>
+        ) : null}
+
+        {clickables.length > 1 ? (
+          <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-1">
+            {clickables.map((_, index) => (
+              <button
+                key={index}
+                className={`h-1.5 rounded-full transition-all ${currentIndex === index ? 'w-5 bg-white' : 'w-1.5 bg-white/50'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentIndex(index);
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <BannerStoryViewer
+        open={storyOpen}
+        banners={clickables}
+        initialIndex={storyIndex}
+        linkedProducts={linkedProducts}
+        onClose={() => setStoryOpen(false)}
+        onOpenProduct={onSelectProductId}
+        onQuickAddProduct={onQuickAddProduct}
+        onOpenLink={openLink}
+      />
+    </>
   );
 };
 

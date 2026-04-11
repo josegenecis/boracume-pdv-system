@@ -298,6 +298,64 @@ const MenuDigital = () => {
     setSelectedProduct(null);
   };
 
+  const linkedProducts = useMemo(() => {
+    return (products as Product[]).reduce<Record<string, { id: string; name: string; description?: string; price: number; imageUrl?: string }>>((acc, product) => {
+      acc[String(product.id)] = {
+        id: String(product.id),
+        name: String(product.name || ''),
+        description: String(product.description || ''),
+        price: Number(product.price || 0),
+        imageUrl: String((product as any).image_url || ''),
+      };
+      return acc;
+    }, {});
+  }, [products]);
+
+  const handleQuickAddFromBanner = async (productId: string) => {
+    const product = (products as Product[]).find((item) => String(item.id) === String(productId));
+    if (!product) {
+      toast({
+        title: 'Produto não encontrado',
+        description: 'Este item não está disponível no cardápio no momento.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const track = Boolean((product as any).track_stock);
+    const stock = Number((product as any).stock_quantity);
+    const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);
+    if (track && Number.isFinite(stock)) {
+      const remaining = Math.max(0, Math.floor(stock) - inCart);
+      if (remaining <= 0) {
+        toast({
+          title: 'Produto sem estoque',
+          description: 'Este item está indisponível no momento.',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
+
+    const variations = await prefetchSimpleVariations(product.id);
+    const requiresSelection = variations.some((variation) => Boolean((variation as any)?.required) || Number((variation as any)?.min_selections || 0) > 0);
+
+    if (requiresSelection) {
+      toast({
+        title: 'Escolha as opções',
+        description: 'Este produto precisa que você selecione os complementos antes de adicionar.',
+      });
+      await handleProductClick(product);
+      return;
+    }
+
+    addToCart(product, 1, [], '', 0);
+    toast({
+      title: 'Adicionado ao carrinho',
+      description: `${product.name} foi adicionado com sucesso.`,
+    });
+  };
+
   const handlePlaceOrder = async (orderData: any) => {
     try {
       if (!storeOpenInfo.isOpen) {
@@ -678,6 +736,8 @@ const MenuDigital = () => {
         <div className="mt-4">
           <MarketingBanners
             restaurantId={finalUserId}
+            linkedProducts={linkedProducts}
+            onQuickAddProduct={handleQuickAddFromBanner}
             onSelectProductId={(productId) => {
               const p = (products as any[]).find((x: any) => String(x?.id) === String(productId));
               if (p) void handleProductClick(p as any);
