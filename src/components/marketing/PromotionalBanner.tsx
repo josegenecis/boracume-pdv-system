@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Play, ShoppingBag } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import BannerStoryViewer, { StoryBanner, StoryLinkedProduct } from '@/components/marketing/BannerStoryViewer';
@@ -189,7 +189,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         <div className="w-full">
           <div className="grid grid-cols-4 gap-2 sm:gap-3">
             {clickables.map((b, index) => {
-              const linkedProduct = b.productId ? linkedProducts?.[String(b.productId)] : undefined;
               return (
             <button
               key={b.id}
@@ -210,24 +209,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 ) : (
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/80" />
-                <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
-                  <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-900">
-                    {isVideoAsset(b.imageUrl) ? 'Vídeo' : 'Story'}
-                  </span>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur">
-                    <Play className="h-4 w-4 fill-current" />
-                  </span>
-                </div>
-                <div className="absolute inset-x-0 bottom-0 p-3 text-left text-white">
-                  <div className="line-clamp-2 text-sm font-bold leading-tight">{b.title}</div>
-                  {linkedProduct ? (
-                    <div className="mt-2 inline-flex items-center rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold backdrop-blur">
-                      <ShoppingBag className="mr-1.5 h-3 w-3" />
-                      Comprar
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </button>
               );
@@ -267,16 +248,6 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: `url(${banner.imageUrl})` }}
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
-              <div className="absolute inset-y-0 left-0 flex max-w-[72%] flex-col justify-center p-4 text-left text-white">
-                <div className="inline-flex w-fit items-center rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] backdrop-blur">
-                  Story promocional
-                </div>
-                <div className="mt-2 line-clamp-2 text-sm font-black sm:text-base">{banner.title}</div>
-                {banner.description ? (
-                  <div className="mt-1 line-clamp-1 text-xs text-white/75 sm:text-sm">{banner.description}</div>
-                ) : null}
-              </div>
             </button>
           ))}
         </div>

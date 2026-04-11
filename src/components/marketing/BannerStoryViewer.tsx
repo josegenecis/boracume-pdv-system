@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, ShoppingBag, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Plus, X } from 'lucide-react';
 
 export interface StoryBanner {
   id: string;
@@ -35,9 +35,6 @@ interface BannerStoryViewerProps {
 const IMAGE_STORY_DURATION = 5000;
 
 const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
-
-const formatBRL = (value: number) =>
-  `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   open,
@@ -234,68 +231,23 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
             aria-label="Próximo story"
           />
 
-          <div className="absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">
-            <div className="mx-auto max-w-2xl rounded-[28px] border border-white/10 bg-black/45 p-4 backdrop-blur-xl sm:p-5">
-              {currentBanner.description ? (
-                <p className="text-sm leading-6 text-white/80 sm:text-base">{currentBanner.description}</p>
-              ) : null}
-              {linkedProduct ? (
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/8 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">Produto vinculado</div>
-                      <div className="mt-1 truncate text-lg font-bold">{linkedProduct.name}</div>
-                      {linkedProduct.description ? (
-                        <div className="mt-1 line-clamp-2 text-sm text-white/70">{linkedProduct.description}</div>
-                      ) : null}
-                    </div>
-                    <div className="whitespace-nowrap rounded-full bg-white/10 px-3 py-1.5 text-sm font-semibold text-white">
-                      {formatBRL(linkedProduct.price)}
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      type="button"
-                      className="h-11 flex-1 rounded-2xl bg-white text-slate-900 hover:bg-white/90"
-                      onClick={handleQuickAdd}
-                      disabled={runningAction !== null}
-                    >
-                      {runningAction === 'quick-add' ? (
-                        'Adicionando...'
-                      ) : (
-                        <>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Adicionar ao carrinho
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 flex-1 rounded-2xl border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                      onClick={handleOpenProduct}
-                      disabled={runningAction !== null}
-                    >
-                      <ShoppingBag className="mr-2 h-4 w-4" />
-                      Ver produto
-                    </Button>
-                  </div>
-                </div>
-              ) : currentBanner.link ? (
-                <div className="mt-4">
-                  <Button
-                    type="button"
-                    className="h-11 w-full rounded-2xl bg-white text-slate-900 hover:bg-white/90"
-                    onClick={handleOpenLink}
-                    disabled={runningAction !== null}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Abrir oferta
-                  </Button>
-                </div>
-              ) : null}
+          {(linkedProduct || currentBanner.link) ? (
+            <div className="absolute bottom-5 right-5 z-20 sm:bottom-6 sm:right-6">
+              <Button
+                type="button"
+                className="h-11 rounded-full bg-white/92 px-4 text-sm font-semibold text-slate-900 shadow-[0_18px_45px_-18px_rgba(0,0,0,0.75)] hover:bg-white"
+                onClick={linkedProduct ? handleQuickAdd : handleOpenLink}
+                disabled={runningAction !== null}
+              >
+                {linkedProduct ? <Plus className="mr-2 h-4 w-4" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+                {runningAction === 'quick-add'
+                  ? 'Adicionando...'
+                  : linkedProduct
+                    ? 'Adicionar'
+                    : 'Abrir'}
+              </Button>
             </div>
-          </div>
+          ) : null}
 
           {totalStories > 1 ? (
             <>
