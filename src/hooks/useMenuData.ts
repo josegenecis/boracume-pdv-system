@@ -75,7 +75,7 @@ interface UseMenuDataOptions {
   cacheTTL?: number;
 }
 
-const CACHE_PREFIX = 'boracume_menu_data_v2';
+const CACHE_PREFIX = 'boracume_menu_data_v3';
 
 function safeParse<T>(value: string | null): T | null {
   if (!value) return null;

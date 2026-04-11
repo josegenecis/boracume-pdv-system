@@ -535,10 +535,20 @@ const MenuDigital = () => {
   });
 
   // Agrupar produtos por categoria
-  const productsByCategory = categories.map(category => ({
-    ...category,
-    products: filteredProducts.filter(product => product.category_id === category.id)
-  })).filter(category => category.products.length > 0);
+  const productsByCategory = categories.length > 0
+    ? categories.map(category => ({
+        ...category,
+        products: filteredProducts.filter(product => product.category_id === category.id)
+      })).filter(category => category.products.length > 0)
+    : (filteredProducts.length > 0
+        ? [{
+            id: 'all-products',
+            name: 'Cardápio',
+            description: '',
+            display_order: 0,
+            products: filteredProducts
+          }]
+        : []);
 
   if (menuLoading) {
     return (
@@ -648,11 +658,15 @@ const MenuDigital = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                    placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 h-11 w-full rounded-full border-gray-200 bg-boracume-light focus:ring-2 focus:ring-boracume-green focus:border-boracume-green text-sm transition-all"
-                  />
+                  placeholder={`Buscar em ${profile?.restaurant_name || 'Cardápio'}...`}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 h-11 w-full rounded-full bg-white text-sm transition-all focus:ring-2"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 40%, #d1d5db)',
+                    boxShadow: '0 1px 0 rgba(0,0,0,0.02)'
+                  }}
+                />
               </div>
             </div>
           </div>
