@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useDigitalMenuCart } from '@/hooks/useDigitalMenuCart';
@@ -33,6 +34,15 @@ export const useProductVariations = () => {
   const [showVariationModal, setShowVariationModal] = useState(false);
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
+    const queryClient = useQueryClient();
+
+    // Retorna cache se já pré-carregado
+    const cached = queryClient.getQueryData<ProductVariation[]>(['productVariations', productId]);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      console.log('🔁 CARDÁPIO DIGITAL - Usando variações em cache para produto:', productId);
+      return cached;
+    }
+
     console.log('🔄 CARDÁPIO DIGITAL - Iniciando busca de variações para produto:', productId);
     
     try {

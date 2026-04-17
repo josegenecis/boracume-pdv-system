@@ -66,7 +66,8 @@ export class SoundNotifications {
         
         const audio = new Audio();
         audio.volume = this.volume;
-        audio.preload = 'none'; // Changed to 'none' to avoid loading issues
+        // Preload minimal metadata so play() can start quickly when needed
+        audio.preload = 'metadata';
         audio.loop = false;
         
         // Only set src when we need to play
@@ -164,6 +165,8 @@ export class SoundNotifications {
           audio.src = audioPath;
         }
         
+        // Ensure src is set and try to play; if blocked, fallback to WebAudio persistent alert
+        if (!audio.src) audio.src = audioPath;
         audio.currentTime = 0;
         audio.volume = this.volume;
         this.currentlyPlaying.add(audio);
@@ -176,7 +179,17 @@ export class SoundNotifications {
         };
         
 
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (err) {
+          console.warn('⚠️ play() blocked, using WebAudio fallback for persistent alerts', err);
+          // If play is blocked (autoplay policies), use fallback and start persistent alert
+          this.createFallbackSound();
+          // Start persistent alert if not already running
+          if (this.persistentAlertTimer === null) {
+            this.startPersistentAlert(normalizedSoundType, this.persistentAlertIntervalMs);
+          }
+        }
       } else {
         this.createFallbackSound();
       }
