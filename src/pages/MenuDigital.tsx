@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
-import { prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
+import { prefetchSimpleVariations, prefetchSimpleVariationsBulk } from '@/hooks/useSimpleVariations';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
@@ -209,7 +209,7 @@ const MenuDigital = () => {
     if (!finalUserId) return;
     const ids = Array.from(
       new Set(
-        [...highlights, ...products.slice(0, 12)]
+        [...highlights, ...(products as any[]).slice(0, 40)]
           .map((p: any) => String(p?.id || '').trim())
           .filter(Boolean)
       )
@@ -217,11 +217,20 @@ const MenuDigital = () => {
     if (ids.length === 0) return;
     let cancelled = false;
     const run = async () => {
-      for (const id of ids) {
-        if (cancelled) break;
-        void prefetchSimpleVariations(id);
-        await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => window.setTimeout(r, 120));
+      if (cancelled) return;
+      if ('requestIdleCallback' in window) {
+        await new Promise<void>((resolve) => {
+          (window as any).requestIdleCallback(async () => {
+            if (!cancelled) {
+              await prefetchSimpleVariationsBulk(ids, 8);
+            }
+            resolve();
+          }, { timeout: 1500 });
+        });
+        return;
       }
+      await prefetchSimpleVariationsBulk(ids, 8);
     };
     void run();
     return () => {

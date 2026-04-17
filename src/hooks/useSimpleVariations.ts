@@ -198,6 +198,19 @@ function saveToLocalStorage(productId: string, data: Variation[]) {
   } catch {}
 }
 
+export function getCachedSimpleVariations(productId: string): Variation[] {
+  const key = String(productId || '').trim();
+  if (!key) return [];
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.ts < TTL_MS) return cached.data;
+  const local = loadFromLocalStorage(key);
+  if (local && Date.now() - local.ts < TTL_MS) {
+    cache.set(key, local);
+    return local.data;
+  }
+  return [];
+}
+
 async function fetchVariationsUncached(productId: string): Promise<Variation[]> {
   const span = perfStart('menu.variations.fetch', { productId });
   try {
@@ -269,13 +282,8 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
 export function prefetchSimpleVariations(productId: string) {
   const key = String(productId || '').trim();
   if (!key) return Promise.resolve([] as Variation[]);
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.ts < TTL_MS) return Promise.resolve(cached.data);
-  const local = loadFromLocalStorage(key);
-  if (local && Date.now() - local.ts < TTL_MS) {
-    cache.set(key, local);
-    return Promise.resolve(local.data);
-  }
+  const immediate = getCachedSimpleVariations(key);
+  if (immediate.length > 0) return Promise.resolve(immediate);
   const running = inflight.get(key);
   if (running) return running;
   const p = fetchVariationsUncached(key)
@@ -291,6 +299,24 @@ export function prefetchSimpleVariations(productId: string) {
   return p;
 }
 
+export async function prefetchSimpleVariationsBulk(productIds: string[], concurrency = 6) {
+  const uniqueIds = Array.from(new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) return;
+
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < uniqueIds.length) {
+      const current = uniqueIds[cursor++];
+      try {
+        await prefetchSimpleVariations(current);
+      } catch {}
+    }
+  };
+
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, uniqueIds.length)) }, () => worker());
+  await Promise.all(workers);
+}
+
 export function useSimpleVariations() {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -298,14 +324,8 @@ export function useSimpleVariations() {
     const key = String(productId || '').trim();
     if (!key) return [];
 
-    const cached = cache.get(key);
-    if (cached && Date.now() - cached.ts < TTL_MS) return cached.data;
-
-    const local = loadFromLocalStorage(key);
-    if (local && Date.now() - local.ts < TTL_MS) {
-      cache.set(key, local);
-      return local.data;
-    }
+    const immediate = getCachedSimpleVariations(key);
+    if (immediate.length > 0) return immediate;
 
     const running = inflight.get(key);
     if (running) return running;

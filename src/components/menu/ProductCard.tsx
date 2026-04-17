@@ -3,6 +3,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
 
 interface Product {
   id: string;
@@ -26,6 +27,7 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAdding, layout = 'list' }) => {
   const [imageError, setImageError] = useState(false);
+  const prefetchedRef = React.useRef(false);
 
   const imageUrl = useMemo(() => {
     return normalizeImageUrlForDisplay(product.image_url);
@@ -36,10 +38,19 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
     onProductClick(product);
   };
 
+  const prefetchOnIntent = () => {
+    if (prefetchedRef.current) return;
+    prefetchedRef.current = true;
+    void prefetchSimpleVariations(product.id);
+  };
+
   if (layout === 'grid') {
     return (
       <div
         onClick={() => onProductClick(product)}
+        onPointerEnter={prefetchOnIntent}
+        onPointerDown={prefetchOnIntent}
+        onTouchStart={prefetchOnIntent}
         className="bg-white rounded-2xl shadow-sm border border-boracume-light overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
       >
         <div className="relative">
@@ -107,6 +118,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
   return (
     <div
       onClick={() => onProductClick(product)}
+      onPointerEnter={prefetchOnIntent}
+      onPointerDown={prefetchOnIntent}
+      onTouchStart={prefetchOnIntent}
       className="bg-white rounded-2xl shadow-sm border border-boracume-light px-3 py-3 cursor-pointer hover:shadow-md transition-all group"
     >
       <div className="flex gap-4 items-start">

@@ -70,9 +70,11 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle()).data
 
+    // Webhook de provedor externo (Mercado Pago) pode chegar sem `secret/cid` em eventos de teste/validação.
+    // Nunca retornamos 401 aqui, porque o MP marca como erro e continua tentando.
     if (!providedSecret) {
       if (!cidFromQuery && !paymentId) {
-        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       const checkout = cidFromQuery
         ? await prefetchCheckoutByCorrelation(cidFromQuery)
@@ -81,7 +83,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       if (String(checkout.provider).toLowerCase() !== 'mercadopago') {
-        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       checkoutPrefetched = checkout
     } else if (!cidFromQuery && paymentId) {

@@ -78,6 +78,36 @@ export default function PixSetup() {
     }
   };
 
+  const disconnectMercadoPago = async () => {
+    if (!activeUserId) return;
+    setLoading(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('pix_settings')
+        .upsert({
+          user_id: activeUserId,
+          enabled: false,
+          mp_pdv_enabled: false,
+          mp_access_token: null,
+          mp_refresh_token: null,
+          mp_expires_at: null,
+          client_id: null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      setEnabled(false);
+      setMpPdvEnabled(false);
+      setMpConnected(false);
+      setMpExpiresAt('');
+      toast({ title: 'Mercado Pago desconectado', description: 'A conta foi removida do sistema com sucesso.' });
+    } catch (e: any) {
+      toast({ title: 'Erro ao desconectar', description: e?.message || 'Não foi possível desconectar.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const save = async () => {
     if (!activeUserId) {
       toast({ title: 'Faça login', description: 'Entre no sistema para salvar a chave PIX.', variant: 'destructive' });
@@ -185,6 +215,18 @@ export default function PixSetup() {
                 <p className="text-xs text-blue-700 mt-2">
                   Conectado. {mpExpiresAt ? `Token expira em: ${new Date(mpExpiresAt).toLocaleString('pt-BR')}` : ''}
                 </p>
+              ) : null}
+              {mpConnected ? (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto border-red-200 text-red-700 hover:bg-red-50"
+                    onClick={disconnectMercadoPago}
+                    disabled={loading}
+                  >
+                    Desconectar Mercado Pago
+                  </Button>
+                </div>
               ) : null}
             </div>
 

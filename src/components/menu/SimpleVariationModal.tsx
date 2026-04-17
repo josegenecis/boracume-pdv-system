@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { useSimpleVariations } from '@/hooks/useSimpleVariations';
+import { getCachedSimpleVariations, useSimpleVariations } from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
 
@@ -53,7 +53,14 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     if (!product) return;
     
     try {
-      setLoadingVariations(true);
+      const cachedVariations = getCachedSimpleVariations(product.id);
+      if (cachedVariations.length > 0) {
+        setVariations(cachedVariations);
+        setSelectedVariations({});
+        setLoadingVariations(false);
+      } else {
+        setLoadingVariations(true);
+      }
       const productVariations = await fetchVariations(product.id);
       setVariations(productVariations);
       setSelectedVariations({});

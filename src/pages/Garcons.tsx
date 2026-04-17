@@ -23,6 +23,7 @@ interface Waiter {
   active: boolean;
   role: 'admin' | 'cashier';
   permissions: Record<string, boolean>;
+  waiter_access?: boolean;
 }
 
 const PERMISSIONS_GROUPS = [
@@ -91,8 +92,30 @@ const Garcons = () => {
     pin: '',
     role: 'cashier',
     active: true,
-    permissions: {}
+    permissions: {},
+    waiter_access: false
   });
+
+  const hasMissingColumnError = (error: any, columnName: string) => {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes(`could not find the '${columnName.toLowerCase()}' column`) || message.includes(`column "${columnName.toLowerCase()}"`);
+  };
+
+  const getWaiterAppAccess = (waiter?: Partial<Waiter>) => {
+    if (!waiter) return false;
+    return Boolean(waiter.waiter_access ?? waiter.permissions?.waiter_app);
+  };
+
+  const buildPermissions = () => {
+    const basePermissions = formData.role === 'admin'
+      ? PERMISSIONS_GROUPS.flatMap(g => g.permissions).reduce((acc, p) => ({ ...acc, [p.id]: true }), {})
+      : (formData.permissions || {});
+
+    return {
+      ...basePermissions,
+      waiter_app: Boolean(formData.waiter_access)
+    };
+  };
 
   useEffect(() => {
     if (user) loadWaiters();
@@ -115,7 +138,7 @@ const Garcons = () => {
 
   const handleOpenDialog = (waiter?: Waiter) => {
     if (waiter) {
-      setFormData({ ...waiter, password: '' }); // Don't show existing password
+      setFormData({ ...waiter, password: '', waiter_access: getWaiterAppAccess(waiter) });
     } else {
       setFormData({
         name: '',
@@ -125,7 +148,8 @@ const Garcons = () => {
         pin: '',
         role: 'cashier',
         active: true,
-        permissions: { pos_access: true }
+        permissions: { pos_access: true },
+        waiter_access: false
       });
     }
     setActiveTab('data');
@@ -141,16 +165,12 @@ const Garcons = () => {
 
     try {
       setLoading(true);
-      
-      // If admin, grant all permissions
-      const permissions = formData.role === 'admin' 
-        ? PERMISSIONS_GROUPS.flatMap(g => g.permissions).reduce((acc, p) => ({ ...acc, [p.id]: true }), {})
-        : formData.permissions;
+      const permissions = buildPermissions();
 
-      const payload = {
+      const emailValue = String(formData.email || '').trim();
+      const basePayload = {
         user_id: user?.id,
         name: formData.name,
-        email: formData.email,
         cpf: normalizedCpf,
         pin: formData.pin,
         role: formData.role,
@@ -160,23 +180,45 @@ const Garcons = () => {
         ...(formData.password ? { password: formData.password } : {})
       };
 
-      let error;
-      if (formData.id) {
-        const { error: updateError } = await supabase
-          .from('waiters')
-          .update(payload)
-          .eq('id', formData.id);
-        error = updateError;
-      } else {
-        const { error: insertError } = await supabase
+      const savePayload = async (includeEmail: boolean) => {
+        const payload = includeEmail && emailValue
+          ? { ...basePayload, email: emailValue }
+          : basePayload;
+
+        if (formData.id) {
+          return supabase
+            .from('waiters')
+            .update(payload)
+            .eq('id', formData.id);
+        }
+
+        return supabase
           .from('waiters')
           .insert(payload);
-        error = insertError;
+      };
+
+      let { error } = await savePayload(true);
+
+      if (error && hasMissingColumnError(error, 'email')) {
+        const retry = await savePayload(false);
+        error = retry.error;
+        if (!error) {
+          toast({
+            title: 'Usuário salvo',
+            description: 'O acesso foi criado sem gravar o e-mail, porque essa coluna ainda não existe no banco.',
+          });
+        }
       }
 
       if (error) throw error;
 
-      toast({ title: 'Sucesso!', description: 'Usuário salvo com sucesso.' });
+      if (!(emailValue && false)) {
+        if (!hasMissingColumnError(undefined, 'email')) {
+        }
+      }
+      if (!(emailValue && false)) {
+        toast({ title: 'Sucesso!', description: 'Usuário salvo com sucesso.' });
+      }
       setIsDialogOpen(false);
       loadWaiters();
     } catch (e: any) {
@@ -256,13 +298,20 @@ const Garcons = () => {
                   <TableCell>{waiter.email || '-'}</TableCell>
                   <TableCell>{waiter.cpf ? waiter.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : '-'}</TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      waiter.role === 'admin' 
-                        ? 'bg-purple-100 text-purple-800' 
-                        : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {waiter.role === 'admin' ? 'Administrador' : 'Operador'}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        waiter.role === 'admin' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {waiter.role === 'admin' ? 'Administrador' : 'Operador'}
+                      </span>
+                      {getWaiterAppAccess(waiter) ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Garçom App
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -452,6 +501,22 @@ const Garcons = () => {
                         {formData.active ? 'Ativo - Pode acessar' : 'Inativo - Acesso bloqueado'}
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Acesso ao App Garçom</Label>
+                  <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div>
+                      <div className="font-medium text-sm text-gray-900">Permitir login no app garçom</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Quando ativado, este membro poderá entrar com CPF e senha no app do garçom.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={Boolean(formData.waiter_access)}
+                      onCheckedChange={(checked) => setFormData({ ...formData, waiter_access: checked })}
+                    />
                   </div>
                 </div>
               </div>

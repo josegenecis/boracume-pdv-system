@@ -71,6 +71,18 @@ const GlobalNotificationSystem: React.FC = () => {
     soundNotifications.setVolume(volume);
   }, [soundEnabled, soundType, volume]);
 
+  useEffect(() => {
+    const hasPending = pendingOrders.length > 0;
+    if (hasPending && soundEnabled) {
+      soundNotifications.startPersistentAlert(soundType, 4000);
+      return;
+    }
+    soundNotifications.stopPersistentAlert();
+    if (!soundEnabled || !hasPending) {
+      soundNotifications.stopAllSounds();
+    }
+  }, [pendingOrders.length, soundEnabled, soundType]);
+
   const playOrderSound = async () => {
     if (!soundEnabledRef.current) return;
     try {
@@ -250,7 +262,6 @@ const GlobalNotificationSystem: React.FC = () => {
             setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
             await handleIncomingOrderAlert(updatedOrder);
           } else {
-            soundNotifications.stopAllSounds();
             setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
             setDismissedOrders(prev => {
               const newDismissed = new Set([...prev, updatedOrder.id]);
@@ -301,7 +312,6 @@ const GlobalNotificationSystem: React.FC = () => {
 
     return () => {
       supabase.removeChannel(channel);
-      // Parar todos os sons quando o componente for desmontado
       soundNotifications.stopAllSounds();
       document.removeEventListener('visibilitychange', handleVisibility);
       if (pollingRef.current) window.clearInterval(pollingRef.current);
@@ -319,9 +329,6 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [isOnOrdersPage, pendingOrders.length]);
 
   const handleGoToOrders = () => {
-    // Parar todos os sons que estão tocando
-    soundNotifications.stopAllSounds();
-    
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
@@ -337,9 +344,6 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleDismiss = () => {
-    // Parar todos os sons que estão tocando
-    soundNotifications.stopAllSounds();
-    
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
@@ -357,7 +361,6 @@ const GlobalNotificationSystem: React.FC = () => {
     const order = visibleOrders[0];
     if (!order) return;
     try {
-      soundNotifications.stopAllSounds();
       const { data } = await invokeEdgeFunction('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
       if (!data?.ok) throw new Error(data?.error || 'Falha ao aceitar');
 

@@ -7,6 +7,9 @@ export class SoundNotifications {
   private currentlyPlaying: Set<HTMLAudioElement> = new Set();
   private audioContext: AudioContext | null = null;
   private unlocked: boolean = false;
+  private persistentAlertTimer: number | null = null;
+  private persistentAlertSoundType: string = 'bell';
+  private persistentAlertIntervalMs: number = 4000;
 
   constructor() {
     this.preloadSounds();
@@ -186,6 +189,24 @@ export class SoundNotifications {
     }
   }
 
+  startPersistentAlert(soundType: string = 'bell', intervalMs: number = 4000) {
+    this.persistentAlertSoundType = soundType;
+    this.persistentAlertIntervalMs = Math.max(1500, intervalMs);
+    if (this.persistentAlertTimer !== null) return;
+
+    void this.playSound(this.persistentAlertSoundType);
+    this.persistentAlertTimer = window.setInterval(() => {
+      void this.playSound(this.persistentAlertSoundType);
+    }, this.persistentAlertIntervalMs);
+  }
+
+  stopPersistentAlert() {
+    if (this.persistentAlertTimer !== null) {
+      window.clearInterval(this.persistentAlertTimer);
+      this.persistentAlertTimer = null;
+    }
+  }
+
   private getAudioContext() {
     if (this.audioContext) return this.audioContext
     this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
@@ -266,6 +287,7 @@ export class SoundNotifications {
 
   stopAllSounds() {
     console.log(`🔇 SOUND UTILS - Parando todos os sons (${this.currentlyPlaying.size} ativos)`);
+    this.stopPersistentAlert();
     
     this.currentlyPlaying.forEach(audio => {
       audio.pause();

@@ -74,6 +74,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
   const [selectedZone, setSelectedZone] = useState<string>('');
+  const [manualZoneSelection, setManualZoneSelection] = useState(false);
   const [isDetectingZone, setIsDetectingZone] = useState(false);
   const [detectZoneError, setDetectZoneError] = useState<string | null>(null);
   const [deliveryQuote, setDeliveryQuote] = useState<any | null>(null);
@@ -205,6 +206,30 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const { lookupCustomer, isLoading: isLookingUp } = useCustomerLookup(userId || '');
 
+  const handleLookupCustomer = async () => {
+    const found = await lookupCustomer(customerData.phone);
+    if (!found) {
+      setIsExistingCustomer(false);
+      alert('Nenhum cadastro encontrado para este telefone.');
+      return;
+    }
+
+    setIsExistingCustomer(true);
+    setCustomerData((prev) => ({
+      ...prev,
+      name: found.name || prev.name,
+      phone: found.phone || prev.phone,
+      address: found.address || prev.address,
+      neighborhood: found.neighborhood || prev.neighborhood,
+    }));
+
+    if (found.deliveryZoneId) {
+      zoneWasAutoRef.current = false;
+      setManualZoneSelection(true);
+      setSelectedZone(String(found.deliveryZoneId));
+    }
+  };
+
   const paymentOptions = [
     { value: 'pix', label: 'PIX', icon: Smartphone },
     { value: 'cartao_credito', label: 'Cartão de Crédito', icon: CreditCard },
@@ -285,12 +310,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           setDeliveryQuote(data);
           const mode = String(data?.mode || '');
           if (mode === 'neighborhood' && data?.zone?.id) {
-            if (!selectedZone || zoneWasAutoRef.current) {
+            if (!manualZoneSelection && (!selectedZone || zoneWasAutoRef.current)) {
               zoneWasAutoRef.current = true;
               setSelectedZone(String(data.zone.id));
             }
           } else {
-            if (zoneWasAutoRef.current) setSelectedZone('');
+            if (!manualZoneSelection && zoneWasAutoRef.current) setSelectedZone('');
           }
           return;
         }
@@ -310,7 +335,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
       detectTimerRef.current = null;
     };
-  }, [isOpen, userId, customerData.address, location.latitude, location.longitude, total, selectedZone]);
+  }, [isOpen, userId, customerData.address, location.latitude, location.longitude, total, selectedZone, manualZoneSelection]);
 
   const generateGoogleMapsLink = (lat: number, lng: number) => {
     return `https://maps.google.com/maps?q=${lat},${lng}`;
@@ -508,12 +533,17 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => lookupCustomer(customerData.phone)}
+                  onClick={handleLookupCustomer}
                   disabled={!customerData.phone || isLookingUp}
                 >
                   {isLookingUp ? 'Buscando...' : 'Buscar Cliente'}
                 </Button>
               </div>
+              {isExistingCustomer ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  Cliente encontrado. Você pode editar nome, endereço e bairro antes de finalizar.
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -566,19 +596,34 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     id="neighborhood"
                     placeholder="Nome do bairro"
                     value={customerData.neighborhood}
-                    onChange={(e) => setCustomerData(prev => ({ ...prev, neighborhood: e.target.value }))}
+                    onChange={(e) => {
+                      zoneWasAutoRef.current = false;
+                      setManualZoneSelection(true);
+                      setCustomerData(prev => ({ ...prev, neighborhood: e.target.value }));
+                    }}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="delivery-zone">Área de Entrega *</Label>
-                  {quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
+                  {quoteMode !== 'neighborhood' && deliveryQuote?.ok && !manualZoneSelection ? (
                     <div className="p-3 border rounded-lg bg-gray-50">
                       <div className="text-sm font-medium">Frete calculado automaticamente</div>
                       <div className="text-sm text-muted-foreground">
                         R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
                         {typeof deliveryQuote?.distanceKm === 'number' ? ` • ${Number(deliveryQuote.distanceKm).toFixed(2)} km` : ''}
                       </div>
+                      {deliveryZones.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={() => setManualZoneSelection(true)}
+                        >
+                          Trocar bairro manualmente
+                        </Button>
+                      ) : null}
                     </div>
                   ) : (
                     <>
@@ -586,6 +631,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         value={selectedZone}
                         onValueChange={(v) => {
                           zoneWasAutoRef.current = false;
+                          setManualZoneSelection(true);
                           setDeliveryQuote(null);
                           setSelectedZone(v);
                         }}
@@ -606,6 +652,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           Detectando bairro automaticamente...
                         </p>
                       )}
+                      {quoteMode !== 'neighborhood' && deliveryQuote?.ok && manualZoneSelection ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="px-0 text-xs"
+                          onClick={() => {
+                            setManualZoneSelection(false);
+                            setSelectedZone('');
+                          }}
+                        >
+                          Voltar para frete automático
+                        </Button>
+                      ) : null}
                       {detectZoneError && (
                         <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
                           ❌ {detectZoneError}
