@@ -320,7 +320,7 @@ const MenuDigital = () => {
         }
       }
 
-      if (variationPresence === 'none' || (cachedVariationsReady && cachedVariations.length === 0)) {
+      if (variationPresence === 'none') {
         addToCart(product, 1, [], '', 0);
         toast({
           title: 'Adicionado ao carrinho',
@@ -333,6 +333,15 @@ const MenuDigital = () => {
         setSelectedProduct(product);
         setShowVariationModal(true);
         return;
+      }
+
+      if (variationPresence === 'has' && cachedVariationsReady && cachedVariations.length === 0) {
+        const variations = await prefetchSimpleVariations(product.id);
+        if (variations.length > 0) {
+          setSelectedProduct(product);
+          setShowVariationModal(true);
+          return;
+        }
       }
 
       if (variationPresence === 'has' && !cachedVariationsReady) {

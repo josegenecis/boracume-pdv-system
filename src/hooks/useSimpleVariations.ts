@@ -249,6 +249,11 @@ function sortVariations(variations: Variation[]) {
 function storeVariationResult(productId: string, data: Variation[]) {
   const key = String(productId || '').trim();
   if (!key) return;
+  const currentPresence = getSimpleVariationPresence(key);
+  if (data.length === 0 && currentPresence === 'has') {
+    setVariationPresence(key, 'has');
+    return;
+  }
   cache.set(key, { ts: Date.now(), data });
   saveToLocalStorage(key, data);
   setVariationPresence(key, data.length > 0 ? 'has' : 'none');
