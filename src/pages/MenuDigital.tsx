@@ -278,8 +278,9 @@ const MenuDigital = () => {
     const cachedVariations = cachedVariationsReady ? getCachedSimpleVariations(product.id) : [];
     const variationPresence = cachedVariations.length > 0 ? 'has' : getSimpleVariationPresence(product.id);
     const needsVariationFetch = variationPresence !== 'none' && !cachedVariationsReady;
+    const shouldOpenModalImmediately = variationPresence === 'has';
 
-    if (needsVariationFetch) {
+    if (needsVariationFetch && !shouldOpenModalImmediately) {
       setOpeningProductId(product.id);
     }
 
@@ -297,6 +298,15 @@ const MenuDigital = () => {
           });
           return;
         }
+      }
+
+      if (shouldOpenModalImmediately) {
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+        if (!cachedVariationsReady) {
+          void prefetchSimpleVariations(product.id);
+        }
+        return;
       }
 
       if (variationPresence === 'none') {

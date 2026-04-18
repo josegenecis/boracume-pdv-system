@@ -39,6 +39,10 @@ async function fetchProfile(userId: string) {
   return Array.isArray(data) && data.length > 0 ? data[0] : null;
 }
 
+function isCrawler(userAgent: string) {
+  return /facebookexternalhit|facebot|whatsapp|telegrambot|twitterbot|slackbot|discordbot|linkedinbot|googlebot|bingbot|meta-externalagent|meta-externalfetcher|skypeuripreview|crawler|spider|bot/i.test(userAgent);
+}
+
 export default async function handler(req: any, res: any) {
   try {
     const id = String(req?.query?.id || '').trim();
@@ -49,13 +53,22 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    const redirectUrl = `/menu-digital?userId=${encodeURIComponent(id)}`;
+    const userAgent = String(req?.headers?.['user-agent'] || '');
+    if (!isCrawler(userAgent)) {
+      res.statusCode = 307;
+      res.setHeader('location', redirectUrl);
+      res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
+      res.end();
+      return;
+    }
+
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
     const logoUrl = normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png'));
     const originalPath = String(req?.url || '').includes(`/menu/${id}`) ? `/menu/${encodeURIComponent(id)}` : `/share/menu/${encodeURIComponent(id)}`;
     const pageUrl = `https://boracume.com${originalPath}`;
-    const redirectUrl = `/menu-digital?userId=${encodeURIComponent(id)}`;
 
     const html = `<!doctype html>
 <html lang="pt-BR">

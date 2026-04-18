@@ -373,12 +373,19 @@ export function getSimpleVariationPresence(productId: string): VariationPresence
 async function fetchVariationsUncached(productId: string): Promise<Variation[]> {
   const span = perfStart('menu.variations.fetch', { productId });
   try {
+    const presenceBeforeFetch = getSimpleVariationPresence(productId);
     try {
       const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }, { timeoutMs: 7000 }).then((r) => r as any), 2);
       if (status === 200 && j?.ok && Array.isArray(j.variations)) {
         const normalized = (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
-        setVariationPresence(productId, normalized.length > 0 ? 'has' : 'none');
-        return normalized;
+        if (normalized.length > 0) {
+          setVariationPresence(productId, 'has');
+          return normalized;
+        }
+        if (presenceBeforeFetch === 'none') {
+          setVariationPresence(productId, 'none');
+          return normalized;
+        }
       }
     } catch {}
 
