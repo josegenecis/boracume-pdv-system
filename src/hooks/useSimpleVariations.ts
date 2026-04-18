@@ -229,6 +229,15 @@ function savePresenceToLocalStorage(productId: string, status: Exclude<Variation
   } catch {}
 }
 
+function clearVariationCache(productId: string) {
+  const key = String(productId || '').trim();
+  if (!key) return;
+  cache.delete(key);
+  try {
+    localStorage.removeItem(lsKey(key));
+  } catch {}
+}
+
 function setVariationPresence(productId: string, status: Exclude<VariationPresence, 'unknown'>) {
   const key = String(productId || '').trim();
   if (!key) return;
@@ -351,10 +360,14 @@ export function hasCachedSimpleVariationsResult(productId: string) {
   return hasFreshVariationCache(productId);
 }
 
-export function isSimpleVariationReady(productId: string) {
+export function hasDefinitiveSimpleVariationsResult(productId: string) {
   const status = getSimpleVariationPresence(productId);
   if (status === 'none') return true;
-  return hasCachedSimpleVariationsResult(productId);
+  return getCachedSimpleVariations(productId).length > 0;
+}
+
+export function isSimpleVariationReady(productId: string) {
+  return hasDefinitiveSimpleVariationsResult(productId);
 }
 
 export function getSimpleVariationPresence(productId: string): VariationPresence {
@@ -397,6 +410,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     if (productError) throw productError;
     if (globalError) throw globalError;
 
+    const specificRows = Array.isArray(productVariations) ? productVariations : [];
     const linkRows = Array.isArray(globalLinks) ? globalLinks : [];
     const linkIds = linkRows.map((l: any) => l.global_variation_id).filter(Boolean);
     let globalVariations: any[] = [];
@@ -410,13 +424,20 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
         .filter(Boolean) as any[];
     }
 
-    const normalized = [...(Array.isArray(productVariations) ? productVariations : []), ...globalVariations]
+    const normalized = [...specificRows, ...globalVariations]
       .map((item: any) => normalizeVariation(item))
       .filter(Boolean) as Variation[];
 
     const sorted = sortVariations(normalized);
 
-    setVariationPresence(productId, sorted.length > 0 ? 'has' : 'none');
+    if (sorted.length > 0) {
+      setVariationPresence(productId, 'has');
+    } else if (presenceBeforeFetch === 'has') {
+      clearVariationCache(productId);
+      setVariationPresence(productId, 'has');
+    } else {
+      setVariationPresence(productId, 'none');
+    }
     return sorted;
   } catch {
     return [];
@@ -481,8 +502,16 @@ async function fetchVariationsBulkUncached(productIds: string[]) {
           .filter(Boolean) as Variation[]
       );
 
-      setVariationPresence(id, normalized.length > 0 ? 'has' : 'none');
-      storeVariationResult(id, normalized);
+      if (normalized.length > 0) {
+        setVariationPresence(id, 'has');
+        storeVariationResult(id, normalized);
+      } else if (getSimpleVariationPresence(id) === 'has') {
+        clearVariationCache(id);
+        setVariationPresence(id, 'has');
+      } else {
+        setVariationPresence(id, 'none');
+        storeVariationResult(id, normalized);
+      }
       results.set(id, normalized);
     }
 
@@ -550,7 +579,7 @@ export function prefetchSimpleVariations(productId: string) {
   if (!key) return Promise.resolve([] as Variation[]);
   if (getSimpleVariationPresence(key) === 'none') return Promise.resolve([] as Variation[]);
   const immediate = getCachedSimpleVariations(key);
-  if (immediate.length > 0 || hasCachedSimpleVariationsResult(key)) return Promise.resolve(immediate);
+  if (immediate.length > 0 || hasDefinitiveSimpleVariationsResult(key)) return Promise.resolve(immediate);
   const running = inflight.get(key);
   if (running) return running;
   const p = fetchVariationsUncached(key)
@@ -571,7 +600,7 @@ export async function prefetchSimpleVariationsBulk(productIds: string[], concurr
 
   const pendingIds = uniqueIds.filter((id) => {
     if (getSimpleVariationPresence(id) === 'none') return false;
-    return !hasFreshVariationCache(id);
+    return !hasDefinitiveSimpleVariationsResult(id);
   });
   if (pendingIds.length === 0) return;
 
@@ -603,7 +632,7 @@ export function useSimpleVariations() {
     if (getSimpleVariationPresence(key) === 'none') return [];
 
     const immediate = getCachedSimpleVariations(key);
-    if (immediate.length > 0 || hasCachedSimpleVariationsResult(key)) return immediate;
+    if (immediate.length > 0 || hasDefinitiveSimpleVariationsResult(key)) return immediate;
 
     const running = inflight.get(key);
     if (running) return running;

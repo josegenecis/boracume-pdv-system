@@ -8,7 +8,6 @@ import { useScrollSpy } from '@/hooks/useScrollSpy';
 import {
   getCachedSimpleVariations,
   getSimpleVariationPresence,
-  hasCachedSimpleVariationsResult,
   isSimpleVariationReady,
   prefetchSimpleVariations,
   prefetchSimpleVariationsBulk,
@@ -274,7 +273,7 @@ const MenuDigital = () => {
       return;
     }
 
-    const cachedVariationsReady = hasCachedSimpleVariationsResult(product.id);
+    const cachedVariationsReady = isSimpleVariationReady(product.id);
     const cachedVariations = cachedVariationsReady ? getCachedSimpleVariations(product.id) : [];
     const variationPresence = cachedVariations.length > 0 ? 'has' : getSimpleVariationPresence(product.id);
     const needsVariationFetch = variationPresence !== 'none' && !cachedVariationsReady;

@@ -6,8 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   getCachedSimpleVariations,
+  hasDefinitiveSimpleVariationsResult,
   getSimpleVariationPresence,
-  hasCachedSimpleVariationsResult,
   useSimpleVariations
 } from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
@@ -59,7 +59,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
     try {
       const cachedVariations = getCachedSimpleVariations(product.id);
-      if (cachedVariations.length > 0 || hasCachedSimpleVariationsResult(product.id)) {
+      if (cachedVariations.length > 0 || hasDefinitiveSimpleVariationsResult(product.id)) {
         setVariations(cachedVariations);
         setSelectedVariations({});
         setLoadingVariations(false);
