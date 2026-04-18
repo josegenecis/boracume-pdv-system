@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { soundNotifications } from '@/utils/soundUtils';
-import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { PrinterService } from '@/utils/printerService';
 
 interface PendingOrder {
@@ -54,6 +54,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
   const warnedUnlockRef = useRef(false);
+  const visibleOrders = pendingOrders.filter(order => !dismissedOrders.has(order.id));
 
   useEffect(() => {
     isOnOrdersPageRef.current = isOnOrdersPage;
@@ -72,16 +73,14 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [soundEnabled, soundType, volume]);
 
   useEffect(() => {
-    const hasPending = pendingOrders.length > 0;
-    if (hasPending && soundEnabled) {
+    const shouldLoopAlert = soundEnabled && visibleOrders.length > 0 && !isOnOrdersPage;
+    if (shouldLoopAlert) {
       soundNotifications.startPersistentAlert(soundType, 4000);
       return;
     }
     soundNotifications.stopPersistentAlert();
-    if (!soundEnabled || !hasPending) {
-      soundNotifications.stopAllSounds();
-    }
-  }, [pendingOrders.length, soundEnabled, soundType]);
+    soundNotifications.stopAllSounds();
+  }, [visibleOrders.length, soundEnabled, soundType, isOnOrdersPage]);
 
   const playOrderSound = async () => {
     if (!soundEnabledRef.current) return;
@@ -322,13 +321,15 @@ const GlobalNotificationSystem: React.FC = () => {
   // Atualizar visibilidade quando muda a página
   useEffect(() => {
     if (isOnOrdersPage) {
+      soundNotifications.stopAllSounds();
       setIsVisible(false);
-    } else if (pendingOrders.length > 0) {
+    } else if (visibleOrders.length > 0) {
       setIsVisible(true);
     }
-  }, [isOnOrdersPage, pendingOrders.length]);
+  }, [isOnOrdersPage, visibleOrders.length]);
 
   const handleGoToOrders = () => {
+    soundNotifications.stopAllSounds();
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
@@ -344,6 +345,7 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleDismiss = () => {
+    soundNotifications.stopAllSounds();
     // Adicionar todos os pedidos atuais aos dispensados
     const currentOrderIds = pendingOrders.map(order => order.id);
     setDismissedOrders(prev => {
@@ -361,8 +363,7 @@ const GlobalNotificationSystem: React.FC = () => {
     const order = visibleOrders[0];
     if (!order) return;
     try {
-      const { data } = await invokeEdgeFunction('orders-update-status', { orderId: order.id, newStatus: 'preparing' });
-      if (!data?.ok) throw new Error(data?.error || 'Falha ao aceitar');
+      await updateOrderStatusRemote(order.id, 'preparing');
 
       try {
         const { data: fullOrder } = await supabase
@@ -376,11 +377,25 @@ const GlobalNotificationSystem: React.FC = () => {
         }
       } catch {}
 
-      setIsAnimatingOut(true);
-      window.setTimeout(() => {
-        setPendingOrders(prev => prev.filter(o => o.id !== order.id));
-        setIsVisible(false);
-      }, 220);
+      soundNotifications.stopAllSounds();
+      setDismissedOrders(prev => {
+        const newDismissed = new Set([...prev, order.id]);
+        localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
+        return newDismissed;
+      });
+      setPendingOrders(prev => prev.filter(o => o.id !== order.id));
+
+      const remainingVisibleOrders = visibleOrders.filter(candidate => candidate.id !== order.id);
+      if (remainingVisibleOrders.length === 0) {
+        setIsAnimatingOut(true);
+        window.setTimeout(() => {
+          setIsVisible(false);
+          setIsAnimatingOut(false);
+        }, 220);
+      } else {
+        setIsAnimatingOut(false);
+        setIsVisible(true);
+      }
     } catch (e: any) {
       toast({ title: 'Erro', description: e?.message || 'Falha ao aceitar pedido', variant: 'destructive' });
     }
@@ -412,9 +427,6 @@ const GlobalNotificationSystem: React.FC = () => {
       minute: '2-digit'
     });
   };
-
-  // Filtrar pedidos que não foram dispensados
-  const visibleOrders = pendingOrders.filter(order => !dismissedOrders.has(order.id));
 
   if (!isVisible || visibleOrders.length === 0 || isOnOrdersPage || isDigitalMenu) {
     return null;

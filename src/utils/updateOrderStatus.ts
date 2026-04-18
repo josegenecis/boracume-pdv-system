@@ -1,15 +1,17 @@
-import { supabase } from '@/integrations/supabase/client'
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction'
 
 export const updateOrderStatus = async (orderId: string, newStatus: string) => {
-  const { data: sessionData } = await supabase.auth.getSession()
-  const accessToken = sessionData?.session?.access_token || ''
-
-  const { data, error } = await supabase.functions.invoke('orders-update-status', {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    body: { orderId, newStatus, id: orderId, status: newStatus }
+  const { data, status } = await invokeEdgeFunction('orders-update-status', {
+    orderId,
+    newStatus,
+    id: orderId,
+    status: newStatus
   })
 
-  if (error) throw error
+  if (status >= 400) {
+    throw new Error(String(data?.error || `http_${status}`))
+  }
+
   if (!data?.ok || !data?.order) {
     const detailsMsg = data?.details?.message ? `: ${data.details.message}` : ''
     throw new Error(`${data?.error || 'edge_function_error'}${detailsMsg}`)
