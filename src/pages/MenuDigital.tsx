@@ -215,7 +215,7 @@ const MenuDigital = () => {
     if (!finalUserId) return;
     const ids = Array.from(
       new Set(
-        [...highlights, ...(products as any[]).slice(0, 40)]
+        [...highlights, ...(products as any[])]
           .map((p: any) => String(p?.id || '').trim())
           .filter(Boolean)
       )
