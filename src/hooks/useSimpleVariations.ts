@@ -41,6 +41,9 @@ const LS_PRESENCE_PREFIX = 'boracume_variations_presence_v1:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 const presenceCache = new Map<string, { ts: number; status: Exclude<VariationPresence, 'unknown'> }>();
+const PRODUCT_VARIATION_SELECT = 'product_id,id,name,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at';
+const GLOBAL_LINK_SELECT = 'product_id,global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price,option_price_overrides';
+const GLOBAL_VARIATION_SELECT = 'id,name,required,min_selections,max_selections,active,options,customer_label,receipt_label';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -234,6 +237,51 @@ function setVariationPresence(productId: string, status: Exclude<VariationPresen
   savePresenceToLocalStorage(key, status);
 }
 
+function sortVariations(variations: Variation[]) {
+  return variations.sort((a, b) => {
+    const ao = a.display_order !== undefined ? a.display_order : 10_000;
+    const bo = b.display_order !== undefined ? b.display_order : 10_000;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name, 'pt-BR');
+  });
+}
+
+function storeVariationResult(productId: string, data: Variation[]) {
+  const key = String(productId || '').trim();
+  if (!key) return;
+  cache.set(key, { ts: Date.now(), data });
+  saveToLocalStorage(key, data);
+  setVariationPresence(key, data.length > 0 ? 'has' : 'none');
+}
+
+function buildLinkedGlobalVariation(link: any, globalVariation: any) {
+  if (!link || !globalVariation) return null;
+  const required = link.required !== undefined && link.required !== null ? Boolean(link.required) : Boolean(globalVariation.required);
+  const minSelections = link.min_selections !== undefined && link.min_selections !== null
+    ? Number(link.min_selections) || 0
+    : Number(globalVariation.min_selections) || 0;
+  const maxSelections = link.max_selections !== undefined && link.max_selections !== null
+    ? Number(link.max_selections) || 1
+    : Number(globalVariation.max_selections) || 1;
+
+  return {
+    ...globalVariation,
+    required,
+    min_selections: Math.max(0, minSelections),
+    max_selections: Math.max(1, maxSelections),
+    free_selections_limit: Number(link.free_selections_limit) || 0,
+    allow_paid_excess: Boolean(link.allow_paid_excess),
+    paid_max_selections: link.paid_max_selections !== undefined && link.paid_max_selections !== null
+      ? Number(link.paid_max_selections) || Math.max(1, maxSelections)
+      : null,
+    display_order: link.display_order,
+    pricing_mode: link.pricing_mode ?? 'default',
+    price_multiplier: link.price_multiplier ?? 1,
+    fixed_option_price: link.fixed_option_price ?? null,
+    option_price_overrides: link.option_price_overrides ?? {}
+  };
+}
+
 function hasFreshVariationCache(productId: string) {
   const key = String(productId || '').trim();
   if (!key) return false;
@@ -264,6 +312,12 @@ export function hasCachedSimpleVariationsResult(productId: string) {
   return hasFreshVariationCache(productId);
 }
 
+export function isSimpleVariationReady(productId: string) {
+  const status = getSimpleVariationPresence(productId);
+  if (status === 'none') return true;
+  return hasCachedSimpleVariationsResult(productId);
+}
+
 export function getSimpleVariationPresence(productId: string): VariationPresence {
   const key = String(productId || '').trim();
   if (!key) return 'unknown';
@@ -290,8 +344,8 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     } catch {}
 
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
-      withRetry(() => supabase.from('product_variations').select('id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at').eq('product_id', productId) as any, 2),
-      withRetry(() => supabase.from('product_global_variation_links').select('global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price,option_price_overrides').eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
+      withRetry(() => supabase.from('product_variations').select(PRODUCT_VARIATION_SELECT).eq('product_id', productId) as any, 2),
+      withRetry(() => supabase.from('product_global_variation_links').select(GLOBAL_LINK_SELECT).eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)
     ]);
 
     if (productError) throw productError;
@@ -301,30 +355,12 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
     const linkIds = linkRows.map((l: any) => l.global_variation_id).filter(Boolean);
     let globalVariations: any[] = [];
     if (linkIds.length > 0) {
-      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select('id,name,required,max_selections,active,options,customer_label,receipt_label').in('id', linkIds as any) as any, 2);
+      const { data: globalVars, error: globalVarError } = await withRetry(() => supabase.from('global_variations').select(GLOBAL_VARIATION_SELECT).in('id', linkIds as any) as any, 2);
       if (globalVarError) throw globalVarError;
       const base = Array.isArray(globalVars) ? globalVars : [];
-      const byId = new Map(linkRows.map((l: any) => [String(l.global_variation_id), l]));
       const baseById = new Map(base.map((gv: any) => [String(gv.id), gv]));
       globalVariations = linkRows
-        .map((link: any) => {
-          const gv = baseById.get(String(link.global_variation_id));
-          if (!gv) return null;
-          return {
-            ...gv,
-            required: link.required !== undefined && link.required !== null ? Boolean(link.required) : gv.required,
-            min_selections: link.min_selections ?? 0,
-            max_selections: link.max_selections ?? gv.max_selections,
-            free_selections_limit: (link as any).free_selections_limit ?? 0,
-            allow_paid_excess: Boolean((link as any).allow_paid_excess),
-            paid_max_selections: (link as any).paid_max_selections ?? null,
-            display_order: link.display_order,
-            pricing_mode: (link as any).pricing_mode ?? 'default',
-            price_multiplier: (link as any).price_multiplier ?? 1,
-            fixed_option_price: (link as any).fixed_option_price ?? null,
-            option_price_overrides: (link as any).option_price_overrides ?? {}
-          };
-        })
+        .map((link: any) => buildLinkedGlobalVariation(link, baseById.get(String(link.global_variation_id))))
         .filter(Boolean) as any[];
     }
 
@@ -332,17 +368,78 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
       .map((item: any) => normalizeVariation(item))
       .filter(Boolean) as Variation[];
 
-    const sorted = normalized.sort((a, b) => {
-      const ao = a.display_order !== undefined ? a.display_order : 10_000;
-      const bo = b.display_order !== undefined ? b.display_order : 10_000;
-      if (ao !== bo) return ao - bo;
-      return a.name.localeCompare(b.name, 'pt-BR');
-    });
+    const sorted = sortVariations(normalized);
 
     setVariationPresence(productId, sorted.length > 0 ? 'has' : 'none');
     return sorted;
   } catch {
     return [];
+  } finally {
+    span.end();
+  }
+}
+
+async function fetchVariationsBulkUncached(productIds: string[]) {
+  const ids = Array.from(new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+  const results = new Map<string, Variation[]>();
+  if (ids.length === 0) return results;
+
+  const span = perfStart('menu.variations.bulk.fetch', { count: ids.length });
+  try {
+    const [{ data: productRows, error: productError }, { data: linkRows, error: linkError }] = await Promise.all([
+      withRetry(() => supabase.from('product_variations').select(PRODUCT_VARIATION_SELECT).in('product_id', ids as any) as any, 2),
+      withRetry(() => supabase.from('product_global_variation_links').select(GLOBAL_LINK_SELECT).in('product_id', ids as any).order('display_order', { ascending: true }) as any, 2)
+    ]);
+
+    if (productError) throw productError;
+    if (linkError) throw linkError;
+
+    const specificByProduct = new Map<string, any[]>();
+    for (const row of Array.isArray(productRows) ? productRows : []) {
+      const productId = String((row as any)?.product_id || '').trim();
+      if (!productId) continue;
+      const current = specificByProduct.get(productId) || [];
+      current.push(row);
+      specificByProduct.set(productId, current);
+    }
+
+    const linksByProduct = new Map<string, any[]>();
+    const globalIds = new Set<string>();
+    for (const row of Array.isArray(linkRows) ? linkRows : []) {
+      const productId = String((row as any)?.product_id || '').trim();
+      const globalId = String((row as any)?.global_variation_id || '').trim();
+      if (productId) {
+        const current = linksByProduct.get(productId) || [];
+        current.push(row);
+        linksByProduct.set(productId, current);
+      }
+      if (globalId) globalIds.add(globalId);
+    }
+
+    let globalById = new Map<string, any>();
+    if (globalIds.size > 0) {
+      const { data: globalRows, error: globalError } = await withRetry(() => supabase.from('global_variations').select(GLOBAL_VARIATION_SELECT).in('id', Array.from(globalIds) as any) as any, 2);
+      if (globalError) throw globalError;
+      globalById = new Map((Array.isArray(globalRows) ? globalRows : []).map((row: any) => [String(row.id), row]));
+    }
+
+    for (const id of ids) {
+      const specificRows = specificByProduct.get(id) || [];
+      const linkedGlobals = (linksByProduct.get(id) || [])
+        .map((link: any) => buildLinkedGlobalVariation(link, globalById.get(String(link.global_variation_id))))
+        .filter(Boolean);
+
+      const normalized = sortVariations(
+        [...specificRows, ...linkedGlobals]
+          .map((item: any) => normalizeVariation(item))
+          .filter(Boolean) as Variation[]
+      );
+
+      storeVariationResult(id, normalized);
+      results.set(id, normalized);
+    }
+
+    return results;
   } finally {
     span.end();
   }
@@ -426,17 +523,28 @@ export async function prefetchSimpleVariationsBulk(productIds: string[], concurr
   const uniqueIds = Array.from(new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
   if (uniqueIds.length === 0) return;
 
+  const pendingIds = uniqueIds.filter((id) => {
+    if (getSimpleVariationPresence(id) === 'none') return false;
+    return !hasFreshVariationCache(id);
+  });
+  if (pendingIds.length === 0) return;
+
+  try {
+    await fetchVariationsBulkUncached(pendingIds);
+    return;
+  } catch {}
+
   let cursor = 0;
   const worker = async () => {
-    while (cursor < uniqueIds.length) {
-      const current = uniqueIds[cursor++];
+    while (cursor < pendingIds.length) {
+      const current = pendingIds[cursor++];
       try {
         await prefetchSimpleVariations(current);
       } catch {}
     }
   };
 
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, uniqueIds.length)) }, () => worker());
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, pendingIds.length)) }, () => worker());
   await Promise.all(workers);
 }
 

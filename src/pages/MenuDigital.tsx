@@ -6,8 +6,10 @@ import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import {
+  getCachedSimpleVariations,
   getSimpleVariationPresence,
   hasCachedSimpleVariationsResult,
+  isSimpleVariationReady,
   prefetchSimpleVariations,
   prefetchSimpleVariationsBulk,
   primeSimpleVariationPresence
@@ -78,6 +80,7 @@ const MenuDigital = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [openingProductId, setOpeningProductId] = useState<string | null>(null);
+  const [variationWarmupDone, setVariationWarmupDone] = useState(false);
   const warnedStockRef = useRef<Set<string>>(new Set());
   const navigate = useNavigate();
 
@@ -93,6 +96,19 @@ const MenuDigital = () => {
     error: menuError 
   } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
   const storeOpenInfo = useMemo(() => getStoreOpenInfo((profile as any)?.opening_hours), [profile]);
+  const menuProductIds = useMemo(() => {
+    return Array.from(
+      new Set(
+        [...highlights, ...(products as any[])]
+          .map((p: any) => String(p?.id || '').trim())
+          .filter(Boolean)
+      )
+    );
+  }, [highlights, products]);
+  const variationsReadyFromCache = useMemo(() => {
+    if (menuProductIds.length === 0) return true;
+    return menuProductIds.every((id) => isSimpleVariationReady(id));
+  }, [menuProductIds]);
 
   // Pré-carregar script do Google Maps se houver chave configurada e o usuário precisar usar mapas
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_BROWSER_API_KEY;
@@ -212,58 +228,47 @@ const MenuDigital = () => {
   }, [highlights]);
 
   useEffect(() => {
-    if (!finalUserId) return;
-    const ids = Array.from(
-      new Set(
-        [...highlights, ...(products as any[])]
-          .map((p: any) => String(p?.id || '').trim())
-          .filter(Boolean)
-      )
-    );
-    if (ids.length === 0) return;
+    if (!finalUserId) {
+      setVariationWarmupDone(false);
+      return;
+    }
+    if (menuLoading) {
+      setVariationWarmupDone(false);
+      return;
+    }
+    if (menuError || menuProductIds.length === 0 || variationsReadyFromCache) {
+      setVariationWarmupDone(true);
+      return;
+    }
+
     let cancelled = false;
     const run = async () => {
-      const idsWithVariations = await primeSimpleVariationPresence(ids);
+      const idsWithVariations = await primeSimpleVariationPresence(menuProductIds);
       if (cancelled) return;
 
-      const knownIds = idsWithVariations.length > 0 ? idsWithVariations : ids.filter((id) => getSimpleVariationPresence(id) !== 'none');
-      if (knownIds.length === 0) return;
+      const idsToWarm = idsWithVariations.length > 0
+        ? idsWithVariations
+        : menuProductIds.filter((id) => getSimpleVariationPresence(id) !== 'none');
 
-      const priorityIds = Array.from(
-        new Set(
-          [...highlights, ...(products as any[]).slice(0, 18)]
-            .map((p: any) => String(p?.id || '').trim())
-            .filter((id) => id && knownIds.includes(id))
-        )
-      );
-      const prioritySet = new Set(priorityIds);
-      const deferredIds = knownIds.filter((id) => !prioritySet.has(id));
-
-      if (priorityIds.length > 0) {
-        await prefetchSimpleVariationsBulk(priorityIds, 10);
+      if (idsToWarm.length > 0) {
+        await prefetchSimpleVariationsBulk(idsToWarm, 12);
       }
-      if (cancelled || deferredIds.length === 0) return;
 
-      await new Promise((r) => window.setTimeout(r, 120));
-      if (cancelled) return;
-      if ('requestIdleCallback' in window) {
-        await new Promise<void>((resolve) => {
-          (window as any).requestIdleCallback(async () => {
-            if (!cancelled) {
-              await prefetchSimpleVariationsBulk(deferredIds, 8);
-            }
-            resolve();
-          }, { timeout: 1500 });
-        });
-        return;
+      if (!cancelled) {
+        setVariationWarmupDone(true);
       }
-      await prefetchSimpleVariationsBulk(deferredIds, 8);
     };
-    void run();
+
+    setVariationWarmupDone(false);
+    void run().catch(() => {
+      if (!cancelled) {
+        setVariationWarmupDone(true);
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [finalUserId, highlights, products]);
+  }, [finalUserId, menuLoading, menuError, menuProductIds, variationsReadyFromCache]);
 
   // Configurar scroll spy para tabs
   const categoryIds = categories.map(cat => `category-${cat.id}`);
@@ -290,7 +295,15 @@ const MenuDigital = () => {
       return;
     }
 
-    setOpeningProductId(product.id);
+    const cachedVariationsReady = hasCachedSimpleVariationsResult(product.id);
+    const cachedVariations = cachedVariationsReady ? getCachedSimpleVariations(product.id) : [];
+    const variationPresence = cachedVariations.length > 0 ? 'has' : getSimpleVariationPresence(product.id);
+    const needsVariationFetch = variationPresence !== 'none' && !cachedVariationsReady;
+
+    if (needsVariationFetch) {
+      setOpeningProductId(product.id);
+    }
+
     try {
       const track = Boolean((product as any).track_stock);
       const stock = Number((product as any).stock_quantity);
@@ -306,8 +319,8 @@ const MenuDigital = () => {
           return;
         }
       }
-      const variationPresence = getSimpleVariationPresence(product.id);
-      if (variationPresence === 'none') {
+
+      if (variationPresence === 'none' || (cachedVariationsReady && cachedVariations.length === 0)) {
         addToCart(product, 1, [], '', 0);
         toast({
           title: 'Adicionado ao carrinho',
@@ -316,7 +329,13 @@ const MenuDigital = () => {
         return;
       }
 
-      if (variationPresence === 'has' && !hasCachedSimpleVariationsResult(product.id)) {
+      if (cachedVariations.length > 0) {
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+        return;
+      }
+
+      if (variationPresence === 'has' && !cachedVariationsReady) {
         const variations = await prefetchSimpleVariations(product.id);
         if (variations.length > 0) {
           setSelectedProduct(product);
@@ -329,12 +348,6 @@ const MenuDigital = () => {
           title: 'Adicionado ao carrinho',
           description: `${product.name} foi adicionado com sucesso.`,
         });
-        return;
-      }
-
-      if (hasCachedSimpleVariationsResult(product.id)) {
-        setSelectedProduct(product);
-        setShowVariationModal(true);
         return;
       }
 
@@ -351,7 +364,9 @@ const MenuDigital = () => {
         description: `${product.name} foi adicionado com sucesso.`,
       });
     } finally {
-      window.setTimeout(() => setOpeningProductId(null), 60);
+      if (needsVariationFetch) {
+        setOpeningProductId((current) => (current === product.id ? null : current));
+      }
     }
   };
 
@@ -694,12 +709,21 @@ const MenuDigital = () => {
           }]
         : []);
 
-  if (menuLoading) {
+  const isPreparingMenuInteractions = Boolean(finalUserId)
+    && !menuLoading
+    && !menuError
+    && menuProductIds.length > 0
+    && !variationWarmupDone
+    && !variationsReadyFromCache;
+
+  if (menuLoading || isPreparingMenuInteractions) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Carregando cardápio...</p>
+          <p className="text-lg text-gray-600">
+            {menuLoading ? 'Carregando cardápio...' : 'Preparando cardápio...'}
+          </p>
         </div>
       </div>
     );
