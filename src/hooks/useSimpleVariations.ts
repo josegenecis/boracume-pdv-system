@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { perfStart } from '@/utils/perf';
 
 type VariationOption = { name: string; price: number; recommended?: boolean; active?: boolean };
@@ -41,9 +40,9 @@ const LS_PRESENCE_PREFIX = 'boracume_variations_presence_v2:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 const presenceCache = new Map<string, { ts: number; status: Exclude<VariationPresence, 'unknown'> }>();
-const PRODUCT_VARIATION_SELECT = 'product_id,id,name,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at';
+const PRODUCT_VARIATION_SELECT = 'product_id,id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at';
 const GLOBAL_LINK_SELECT = 'product_id,global_variation_id,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,display_order,pricing_mode,price_multiplier,fixed_option_price,option_price_overrides';
-const GLOBAL_VARIATION_SELECT = 'id,name,required,min_selections,max_selections,active,options,customer_label,receipt_label';
+const GLOBAL_VARIATION_SELECT = 'id,name,required,max_selections,active,options,customer_label,receipt_label';
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -387,21 +386,6 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
   const span = perfStart('menu.variations.fetch', { productId });
   try {
     const presenceBeforeFetch = getSimpleVariationPresence(productId);
-    try {
-      const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }, { timeoutMs: 7000 }).then((r) => r as any), 2);
-      if (status === 200 && j?.ok && Array.isArray(j.variations)) {
-        const normalized = (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
-        if (normalized.length > 0) {
-          setVariationPresence(productId, 'has');
-          return normalized;
-        }
-        if (presenceBeforeFetch === 'none') {
-          setVariationPresence(productId, 'none');
-          return normalized;
-        }
-      }
-    } catch {}
-
     const [{ data: productVariations, error: productError }, { data: globalLinks, error: globalError }] = await Promise.all([
       withRetry(() => supabase.from('product_variations').select(PRODUCT_VARIATION_SELECT).eq('product_id', productId) as any, 2),
       withRetry(() => supabase.from('product_global_variation_links').select(GLOBAL_LINK_SELECT).eq('product_id', productId).order('display_order', { ascending: true }) as any, 2)

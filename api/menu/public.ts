@@ -127,7 +127,7 @@ async function fetchMenuPayload(userId: string) {
     const [specificResult, linkResult] = await Promise.all([
       supabase
         .from('product_variations')
-        .select('product_id,id,name,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at')
+        .select('product_id,id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order,created_at')
         .in('product_id', productIds as any),
       supabase
         .from('product_global_variation_links')
@@ -169,7 +169,7 @@ async function fetchMenuPayload(userId: string) {
     if (globalIds.length > 0) {
       const globalResult = await supabase
         .from('global_variations')
-        .select('id,name,required,min_selections,max_selections,active,options,customer_label,receipt_label')
+        .select('id,name,required,max_selections,active,options,customer_label,receipt_label')
         .in('id', globalIds as any);
 
       if (globalResult.error) throw globalResult.error;

@@ -28,7 +28,7 @@ const { searchParams } = new URL(req.url)
     const [{ data: productVars }, { data: links }] = await Promise.all([
       supabase
         .from('product_variations')
-        .select('id,name,required,min_selections,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order')
+        .select('id,name,required,max_selections,free_selections_limit,allow_paid_excess,paid_max_selections,active,options,customer_label,receipt_label,display_order')
         .eq('product_id', productId),
       supabase
         .from('product_global_variation_links')
@@ -42,7 +42,7 @@ const { searchParams } = new URL(req.url)
       const ids = links.map(l => l.global_variation_id)
       const { data: globalVars } = await supabase
         .from('global_variations')
-        .select('id,name,required,min_selections,max_selections,active,options,customer_label,receipt_label')
+        .select('id,name,required,max_selections,active,options,customer_label,receipt_label')
         .in('id', ids)
       const byId = new Map((links || []).map((l: any) => [String(l.global_variation_id), l]))
       globals = (globalVars || []).map((v: any) => {
