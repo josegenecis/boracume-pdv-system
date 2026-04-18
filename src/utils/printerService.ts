@@ -293,6 +293,46 @@ function safeJsonParse<T>(value: string | null): T | null {
   }
 }
 
+function formatCurrencyValue(value: number) {
+  return `R$ ${Number(value || 0).toFixed(2)}`;
+}
+
+function padRight(value: string, width: number) {
+  const text = String(value || '');
+  if (text.length >= width) return text;
+  return text + ' '.repeat(width - text.length);
+}
+
+function wrapTextLine(value: string, width: number) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return [''];
+  const lines: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > width) {
+    let cut = remaining.lastIndexOf(' ', width);
+    if (cut <= 0) cut = width;
+    lines.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+
+  if (remaining) lines.push(remaining);
+  return lines;
+}
+
+function formatColumns(left: string, right: string, width: number) {
+  const safeRight = String(right || '').trim();
+  const safeLeft = String(left || '').trim();
+  const maxLeft = Math.max(8, width - safeRight.length - 1);
+  const leftLines = wrapTextLine(safeLeft, maxLeft);
+  const lines = leftLines.map((line, index) => {
+    if (index !== leftLines.length - 1) return line;
+    const spacing = Math.max(1, width - line.length - safeRight.length);
+    return `${line}${' '.repeat(spacing)}${safeRight}`;
+  });
+  return lines;
+}
+
 function resolveElectronTarget(): ElectronTarget | null {
   try {
     const mode = (localStorage.getItem('hw.receipt.mode') || '').trim();
@@ -341,7 +381,7 @@ function resolveElectronTarget(): ElectronTarget | null {
 
 function buildOrderHtml(order: any, config: any, store?: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-  const bodyWidth = config.paper_width === '58mm' ? '210px' : '280px';
+  const bodyWidth = config.paper_width === '58mm' ? '190px' : '260px';
   const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
   const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
   const storeDesc = escapeHtml(store?.description || '');
@@ -358,26 +398,64 @@ function buildOrderHtml(order: any, config: any, store?: any) {
         <meta charset="utf-8" />
         <title>Imprimir Pedido #${order.order_number}</title>
         <style>
-          @page { margin: 0; size: auto; }
+          @page { margin: 0; size: ${width} auto; }
+          * { box-sizing: border-box; }
           body {
             font-family: 'Courier New', Courier, monospace;
             width: ${width};
             margin: 0;
-            padding: 5px;
+            padding: 6px 4px;
             font-size: ${fontSize};
             color: #000;
             line-height: 1.2;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .container {
             width: 100%;
             max-width: ${bodyWidth};
+            margin: 0 auto;
+            overflow: hidden;
           }
           .center { text-align: center; }
           .bold { font-weight: bold; }
           .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .flex { display: flex; justify-content: space-between; }
-          .item-row { margin-bottom: 4px; }
-          .notes { font-size: 0.9em; font-style: italic; margin-left: 10px; }
+          .flex { display: flex; justify-content: space-between; gap: 8px; }
+          .item-row { margin-bottom: 8px; }
+          .item-title {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+          }
+          .item-meta,
+          .total-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+          }
+          .item-meta-left,
+          .total-label {
+            min-width: 0;
+            flex: 1;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+          }
+          .item-meta-right,
+          .total-value {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            text-align: right;
+          }
+          .notes {
+            font-size: 0.9em;
+            font-style: italic;
+            margin-left: 10px;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+          }
           .total-row { font-size: 1.2em; margin-top: 10px; }
           .muted { color: #333; font-size: 0.95em; }
         </style>
@@ -411,10 +489,10 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           <div class="bold" style="margin-bottom: 5px;">ITENS:</div>
           ${(order.items || []).map((item: any) => `
             <div class="item-row">
-              <div class="flex">
-                <span style="width: 10%;">${item.quantity}x</span>
-                <span style="width: 65%;">${item.product_name || item.name}</span>
-                <span style="width: 25%; text-align: right;">${(item.total || item.subtotal || item.price * item.quantity).toFixed(2)}</span>
+              <div class="item-title bold">${item.quantity}x ${escapeHtml(item.product_name || item.name || 'Produto')}</div>
+              <div class="item-meta">
+                <span class="item-meta-left">${formatCurrencyValue(Number(item.price || item.unit_price || 0))} x ${Number(item.quantity || 1)}</span>
+                <span class="item-meta-right">${formatCurrencyValue(Number(item.total || item.subtotal || item.price * item.quantity || 0))}</span>
               </div>
               ${item.variations && item.variations.length ? item.variations.map((v: any) => {
                 const parsed = splitLabelValue(String(v || ''));
@@ -427,26 +505,26 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           
           <div class="divider"></div>
           
-          <div class="flex">
-            <span>Subtotal:</span>
-            <span>R$ ${(order.total - (order.delivery_fee || 0)).toFixed(2)}</span>
+          <div class="total-line">
+            <span class="total-label">Subtotal:</span>
+            <span class="total-value">${formatCurrencyValue(order.total - (order.delivery_fee || 0))}</span>
           </div>
           ${order.delivery_fee ? `
-          <div class="flex">
-            <span>Taxa Entrega:</span>
-            <span>R$ ${order.delivery_fee.toFixed(2)}</span>
+          <div class="total-line">
+            <span class="total-label">Taxa Entrega:</span>
+            <span class="total-value">${formatCurrencyValue(order.delivery_fee)}</span>
           </div>` : ''}
           ${order.discount ? `
-          <div class="flex">
-            <span>Desconto:</span>
-            <span>- R$ ${order.discount.toFixed(2)}</span>
+          <div class="total-line">
+            <span class="total-label">Desconto:</span>
+            <span class="total-value">- ${formatCurrencyValue(order.discount)}</span>
           </div>` : ''}
           
           <div class="divider"></div>
           
-          <div class="flex total-row bold">
-            <span>TOTAL:</span>
-            <span>R$ ${order.total.toFixed(2)}</span>
+          <div class="total-line total-row bold">
+            <span class="total-label">TOTAL:</span>
+            <span class="total-value">${formatCurrencyValue(order.total)}</span>
           </div>
           
           <div style="margin-top: 5px;">Pagamento: ${order.payment_method?.toUpperCase().replace('_', ' ') || 'N/A'}</div>
@@ -800,13 +878,14 @@ export const PrinterService = {
 
     const encoder = new TextEncoder();
     let commands = '';
+    const lineWidth = config.paper_width === '58mm' ? 32 : 48;
 
     // Helpers
     const text = (str: string) => str + '\n';
     const center = () => commands += ALIGN_CENTER;
     const left = () => commands += ALIGN_LEFT;
     const bold = (enabled: boolean) => commands += (enabled ? BOLD_ON : BOLD_OFF);
-    const line = () => commands += '--------------------------------\n'; // Ajustar para 58mm/80mm se quiser
+    const line = () => commands += `${'-'.repeat(lineWidth)}\n`;
     
     // Init
     commands += INIT;
@@ -851,38 +930,79 @@ export const PrinterService = {
     commands += text('ITENS:');
     bold(false);
     order.items.forEach((item: any) => {
-      commands += text(`${item.quantity}x ${item.product_name || item.name}`);
+      const quantity = Number(item.quantity || 1);
+      const productName = item.product_name || item.name || 'Produto';
+      const unitPrice = Number(item.price || item.unit_price || 0);
+      const itemTotal = Number(item.total || item.subtotal || unitPrice * quantity || 0);
+
+      wrapTextLine(`${quantity}x ${productName}`, lineWidth).forEach((value) => {
+        commands += text(value);
+      });
       // Preço e total alinhar à direita é chato em ESC/POS puro sem tabelas, vou deixar simples
-      commands += text(`   R$ ${(item.total || item.price * item.quantity).toFixed(2)}`);
+      formatColumns(
+        `${formatCurrencyValue(unitPrice)} x ${quantity}`,
+        formatCurrencyValue(itemTotal),
+        lineWidth
+      ).forEach((value) => {
+        commands += text(value);
+      });
       if (item.variations && item.variations.length) {
         for (const v of item.variations) {
           if (!v) continue;
           const parsed = splitLabelValue(String(v));
           if (!parsed) {
-            commands += text(`   ${String(v)}`);
+            wrapTextLine(`   ${String(v)}`, lineWidth).forEach((value) => {
+              commands += text(value);
+            });
             continue;
           }
           const label = String(parsed.label || '').trim();
           const value = String(parsed.value || '').trim();
-          commands += `   ${BOLD_ON}${label}:${BOLD_OFF}${value ? ` ${value}` : ''}\n`;
+          wrapTextLine(`   ${label}:${value ? ` ${value}` : ''}`, lineWidth).forEach((lineValue) => {
+            commands += text(lineValue);
+          });
         }
       }
-      if (item.notes) commands += `   ${BOLD_ON}Obs:${BOLD_OFF} ${String(item.notes)}\n`;
+      if (item.notes) {
+        wrapTextLine(`   Obs: ${String(item.notes)}`, lineWidth).forEach((value) => {
+          commands += text(value);
+        });
+      }
       commands += '\n';
     });
     line();
 
     // Totais
-    commands += text(`Subtotal: R$ ${(order.total - (order.delivery_fee || 0)).toFixed(2)}`);
-    if (order.delivery_fee) commands += text(`Taxa Entrega: R$ ${order.delivery_fee.toFixed(2)}`);
-    if (order.discount) commands += text(`Desconto: - R$ ${order.discount.toFixed(2)}`);
+    formatColumns(
+      'Subtotal',
+      formatCurrencyValue(Number(order.total || 0) - Number(order.delivery_fee || 0)),
+      lineWidth
+    ).forEach((value) => {
+      commands += text(value);
+    });
+    if (order.delivery_fee) {
+      formatColumns('Taxa Entrega', formatCurrencyValue(Number(order.delivery_fee || 0)), lineWidth).forEach((value) => {
+        commands += text(value);
+      });
+    }
+    if (order.discount) {
+      formatColumns('Desconto', `- ${formatCurrencyValue(Number(order.discount || 0))}`, lineWidth).forEach((value) => {
+        commands += text(value);
+      });
+    }
     
     bold(true);
-    commands += text(`TOTAL: R$ ${order.total.toFixed(2)}`);
+    formatColumns('TOTAL', formatCurrencyValue(Number(order.total || 0)), lineWidth).forEach((value) => {
+      commands += text(value);
+    });
     bold(false);
     
     commands += text(`Pagamento: ${order.payment_method?.toUpperCase() || 'N/A'}`);
-    if (order.change_amount) commands += text(`Troco para: R$ ${order.change_amount.toFixed(2)}`);
+    if (order.change_amount) {
+      formatColumns('Troco para', formatCurrencyValue(Number(order.change_amount || 0)), lineWidth).forEach((value) => {
+        commands += text(value);
+      });
+    }
     
     line();
     center();

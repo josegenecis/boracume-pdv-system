@@ -178,33 +178,111 @@ class PrinterService extends EventEmitter {
 
   async applyTemplate(printer, template, data) {
     for (const section of template.sections) {
+      const sectionConfig = {
+        ...section,
+        width: section.width || template.width
+      };
+
       switch (section.type) {
         case 'header':
-          await this.printHeader(printer, data, section);
+          await this.printHeader(printer, data, sectionConfig);
           break;
         case 'order_info':
-          await this.printOrderInfo(printer, data, section);
+          await this.printOrderInfo(printer, data, sectionConfig);
           break;
         case 'items':
-          await this.printItems(printer, data, section);
+          await this.printItems(printer, data, sectionConfig);
           break;
         case 'totals':
-          await this.printTotals(printer, data, section);
+          await this.printTotals(printer, data, sectionConfig);
           break;
         case 'footer':
-          await this.printFooter(printer, data, section);
+          await this.printFooter(printer, data, sectionConfig);
           break;
         case 'product_name':
-          await this.printProductName(printer, data, section);
+          await this.printProductName(printer, data, sectionConfig);
           break;
         case 'barcode':
-          await this.printBarcode(printer, data, section);
+          await this.printBarcode(printer, data, sectionConfig);
           break;
         case 'price':
-          await this.printPrice(printer, data, section);
+          await this.printPrice(printer, data, sectionConfig);
           break;
       }
     }
+  }
+
+  getSectionWidth(section) {
+    const width = Number(section?.width || section?.charsPerLine || 48);
+    return Number.isFinite(width) && width > 0 ? width : 48;
+  }
+
+  formatCurrency(value) {
+    const amount = Number(value || 0);
+    return `R$ ${amount.toFixed(2)}`;
+  }
+
+  wrapText(text, width) {
+    const content = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!content) return [''];
+
+    const safeWidth = Math.max(8, Number(width) || 48);
+    const words = content.split(' ');
+    const lines = [];
+    let current = '';
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length <= safeWidth) {
+        current = candidate;
+        continue;
+      }
+
+      if (current) {
+        lines.push(current);
+      }
+
+      if (word.length <= safeWidth) {
+        current = word;
+        continue;
+      }
+
+      let remaining = word;
+      while (remaining.length > safeWidth) {
+        lines.push(remaining.slice(0, safeWidth));
+        remaining = remaining.slice(safeWidth);
+      }
+      current = remaining;
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+
+    return lines.length ? lines : [''];
+  }
+
+  formatColumns(left, right, width) {
+    const safeWidth = Math.max(8, Number(width) || 48);
+    const leftText = String(left || '').trim();
+    const rightText = String(right || '').trim();
+
+    if (!rightText) {
+      return this.wrapText(leftText, safeWidth);
+    }
+
+    const minGap = 2;
+    const maxLeftWidth = Math.max(8, safeWidth - rightText.length - minGap);
+    const leftLines = this.wrapText(leftText, maxLeftWidth);
+    const lastLeftLine = leftLines[leftLines.length - 1] || '';
+
+    if (lastLeftLine.length + minGap + rightText.length <= safeWidth) {
+      const gap = Math.max(minGap, safeWidth - lastLeftLine.length - rightText.length);
+      leftLines[leftLines.length - 1] = `${lastLeftLine}${' '.repeat(gap)}${rightText}`;
+      return leftLines;
+    }
+
+    return [...leftLines, rightText.padStart(safeWidth)];
   }
 
   async printHeader(printer, data, section) {
@@ -268,6 +346,7 @@ class PrinterService extends EventEmitter {
     printer.alignLeft();
     printer.bold(false);
     printer.setTextNormal();
+    const width = this.getSectionWidth(section);
     
     if (!data.items || data.items.length === 0) {
       printer.println('Nenhum item encontrado');
@@ -277,15 +356,23 @@ class PrinterService extends EventEmitter {
     for (const item of data.items) {
       // Nome do produto
       const productName = item.product_name || item.name || 'Produto';
-      printer.println(`${item.quantity}x ${productName}`);
+      const quantity = Number(item.quantity || 1);
+
+      this.wrapText(`${quantity}x ${productName}`, width).forEach((line) => {
+        printer.println(line);
+      });
       
       // Preço unitário e subtotal
-      const unitPrice = item.price || item.unit_price || 0;
-      const subtotal = item.subtotal || (item.quantity * unitPrice);
-      
-      printer.alignRight();
-      printer.println(`${unitPrice.toFixed(2)} = R$ ${subtotal.toFixed(2)}`);
-      printer.alignLeft();
+      const unitPrice = Number(item.price || item.unit_price || 0);
+      const subtotal = Number(item.subtotal || item.total || (quantity * unitPrice) || 0);
+
+      this.formatColumns(
+        `${this.formatCurrency(unitPrice)} x ${quantity}`,
+        this.formatCurrency(subtotal),
+        width
+      ).forEach((line) => {
+        printer.println(line);
+      });
       
       if (Array.isArray(item.variations) && item.variations.length > 0) {
         for (const v of item.variations) {
@@ -293,19 +380,21 @@ class PrinterService extends EventEmitter {
           const raw = String(v);
           const idx = raw.indexOf(':');
           if (idx > 0) {
-            printer.bold(true);
-            printer.println(`  ${raw.slice(0, idx).trim()}: ${raw.slice(idx + 1).trim()}`);
-            printer.bold(false);
+            this.wrapText(`  ${raw.slice(0, idx).trim()}: ${raw.slice(idx + 1).trim()}`, width).forEach((line) => {
+              printer.println(line);
+            });
           } else {
-            printer.println(`  ${raw}`);
+            this.wrapText(`  ${raw}`, width).forEach((line) => {
+              printer.println(line);
+            });
           }
         }
       }
 
       if (item.notes || item.observations) {
-        printer.bold(true);
-        printer.println(`Obs: ${item.notes || item.observations}`);
-        printer.bold(false);
+        this.wrapText(`Obs: ${item.notes || item.observations}`, width).forEach((line) => {
+          printer.println(line);
+        });
       }
       
       printer.newLine();
@@ -314,27 +403,36 @@ class PrinterService extends EventEmitter {
 
   async printTotals(printer, data, section) {
     printer.drawLine();
-    printer.alignRight();
+    printer.alignLeft();
+    const width = this.getSectionWidth(section);
     
     // Subtotal
     if (data.subtotal && data.subtotal !== data.total) {
-      printer.println(`Subtotal: R$ ${data.subtotal.toFixed(2)}`);
+      this.formatColumns('Subtotal', this.formatCurrency(data.subtotal), width).forEach((line) => {
+        printer.println(line);
+      });
     }
     
     // Desconto
     if (data.discount && data.discount > 0) {
-      printer.println(`Desconto: R$ ${data.discount.toFixed(2)}`);
+      this.formatColumns('Desconto', `- ${this.formatCurrency(data.discount)}`, width).forEach((line) => {
+        printer.println(line);
+      });
     }
     
     // Taxa de entrega
     if (data.delivery_fee && data.delivery_fee > 0) {
-      printer.println(`Taxa Entrega: R$ ${data.delivery_fee.toFixed(2)}`);
+      this.formatColumns('Taxa Entrega', this.formatCurrency(data.delivery_fee), width).forEach((line) => {
+        printer.println(line);
+      });
     }
     
     // Total
     printer.bold(true);
     printer.setTextSize(1, 1);
-    printer.println(`TOTAL: R$ ${data.total.toFixed(2)}`);
+    this.formatColumns('TOTAL', this.formatCurrency(data.total), width).forEach((line) => {
+      printer.println(line);
+    });
     printer.bold(false);
     printer.setTextNormal();
   }
