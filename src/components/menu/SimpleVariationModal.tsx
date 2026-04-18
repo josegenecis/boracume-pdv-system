@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { useEffect, useState } from 'react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { getCachedSimpleVariations, useSimpleVariations } from '@/hooks/useSimpleVariations';
+import {
+  getCachedSimpleVariations,
+  getSimpleVariationPresence,
+  hasCachedSimpleVariationsResult,
+  useSimpleVariations
+} from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
 
@@ -45,26 +50,34 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   useEffect(() => {
     if (product && isOpen) {
-      loadVariations();
+      void loadVariations();
     }
   }, [product, isOpen]);
 
   const loadVariations = async () => {
     if (!product) return;
-    
+
     try {
       const cachedVariations = getCachedSimpleVariations(product.id);
-      if (cachedVariations.length > 0) {
+      if (cachedVariations.length > 0 || hasCachedSimpleVariationsResult(product.id)) {
         setVariations(cachedVariations);
         setSelectedVariations({});
         setLoadingVariations(false);
-      } else {
-        setLoadingVariations(true);
+        return;
       }
+
+      if (getSimpleVariationPresence(product.id) === 'none') {
+        setVariations([]);
+        setSelectedVariations({});
+        setLoadingVariations(false);
+        return;
+      }
+
+      setLoadingVariations(true);
       const productVariations = await fetchVariations(product.id);
       setVariations(productVariations);
       setSelectedVariations({});
-    } catch (error) {
+    } catch {
       setVariations([]);
     } finally {
       setLoadingVariations(false);
@@ -72,44 +85,43 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   };
 
   const handleVariationChange = (variationId: string, optionName: string, isSelected: boolean) => {
-    const variation = variations.find(v => v.id === variationId);
+    const variation = variations.find((item) => item.id === variationId);
     if (!variation) return;
 
-    setSelectedVariations(prev => {
+    setSelectedVariations((prev) => {
       const current = prev[variationId] || [];
-      
+
       if (variation.max_selections === 1) {
-        // Radio: apenas uma seleção
         return {
           ...prev,
           [variationId]: isSelected ? [optionName] : []
         };
-      } else {
-        if (isSelected) {
-          if (current.length < variation.max_selections) {
-            return {
-              ...prev,
-              [variationId]: [...current, optionName]
-            };
-          }
-        } else {
-          const removeIndex = current.lastIndexOf(optionName);
-          if (removeIndex === -1) return prev;
-          const next = [...current];
-          next.splice(removeIndex, 1);
+      }
+
+      if (isSelected) {
+        if (current.length < variation.max_selections) {
           return {
             ...prev,
-            [variationId]: next
+            [variationId]: [...current, optionName]
           };
         }
+      } else {
+        const removeIndex = current.lastIndexOf(optionName);
+        if (removeIndex === -1) return prev;
+        const next = [...current];
+        next.splice(removeIndex, 1);
+        return {
+          ...prev,
+          [variationId]: next
+        };
       }
-      
+
       return prev;
     });
   };
 
   const isValidSelection = () => {
-    return variations.every(variation => {
+    return variations.every((variation) => {
       const selected = selectedVariations[variation.id] || [];
       const minSel = Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
       if (selected.length < minSel) {
@@ -127,19 +139,18 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     if (typeof maxQuantity === 'number' && Number.isFinite(maxQuantity) && quantity > Math.max(1, Math.floor(maxQuantity))) {
       toast({
         title: 'Estoque insuficiente',
-        description: `Quantidade máxima disponível: ${Math.max(1, Math.floor(maxQuantity))}.`,
+        description: `Quantidade maxima disponivel: ${Math.max(1, Math.floor(maxQuantity))}.`,
         variant: 'destructive'
       });
       return;
     }
-    
+
     const variationPrice = calculateVariationPrice(selectedVariations, variations);
     const variationTexts = getSelectedVariationsTextWithReceiptLabels(selectedVariations, variations);
-    
+
     setSubmitting(true);
     onAddToCart(product, quantity, variationTexts, notes, variationPrice);
-    
-    // Reset
+
     setQuantity(1);
     setNotes('');
     setSelectedVariations({});
@@ -195,7 +206,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             {(loadingVariations || isLoading) && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando opções...
+                Carregando opcoes...
               </div>
             )}
 
@@ -211,20 +222,14 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                   />
                 ))}
               </div>
-            ) : !loadingVariations && !isLoading ? (
-              <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
-                ⚠️ Nenhuma variação disponível para este produto.
-                <br />
-                <span className="text-xs">Você ainda pode ajustar a quantidade e adicionar observações.</span>
-              </div>
             ) : null}
 
             <div>
-              <Label className="text-sm font-semibold text-gray-900">Alguma observação?</Label>
+              <Label className="text-sm font-semibold text-gray-900">Alguma observacao?</Label>
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Ex: tirar a cebola, maionese à parte..."
+                placeholder="Ex: tirar a cebola, maionese a parte..."
                 rows={2}
                 className="mt-2 bg-gray-50 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
               />
@@ -262,7 +267,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                 className="h-11 min-w-0 flex-1 rounded-xl px-3 text-sm font-extrabold sm:h-12 sm:px-4 sm:text-base"
                 style={{ backgroundColor: 'var(--menu-primary, #85C441)', color: '#ffffff' }}
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="truncate">Adicionar • {formatBRL(getTotalPrice())}</span>}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="truncate">Adicionar - {formatBRL(getTotalPrice())}</span>}
               </Button>
             </div>
           </div>

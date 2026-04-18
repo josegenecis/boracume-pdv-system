@@ -33,10 +33,14 @@ export type Variation = {
   options: VariationOption[];
 };
 
+export type VariationPresence = 'unknown' | 'none' | 'has';
+
 const TTL_MS = 10 * 60 * 1000;
 const LS_PREFIX = 'boracume_variations_v3:';
+const LS_PRESENCE_PREFIX = 'boracume_variations_presence_v1:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
+const presenceCache = new Map<string, { ts: number; status: Exclude<VariationPresence, 'unknown'> }>();
 
 async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
@@ -175,6 +179,10 @@ function lsKey(productId: string) {
   return `${LS_PREFIX}${String(productId || '').trim()}`;
 }
 
+function lsPresenceKey(productId: string) {
+  return `${LS_PRESENCE_PREFIX}${String(productId || '').trim()}`;
+}
+
 function loadFromLocalStorage(productId: string): { ts: number; data: Variation[] } | null {
   try {
     const raw = localStorage.getItem(lsKey(productId));
@@ -190,12 +198,53 @@ function loadFromLocalStorage(productId: string): { ts: number; data: Variation[
   }
 }
 
+function loadPresenceFromLocalStorage(productId: string): { ts: number; status: Exclude<VariationPresence, 'unknown'> } | null {
+  try {
+    const raw = localStorage.getItem(lsPresenceKey(productId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as any;
+    if (!parsed || typeof parsed.ts !== 'number') return null;
+    const status = parsed.status === 'has' || parsed.status === 'none' ? parsed.status : null;
+    if (!status) return null;
+    return { ts: Number(parsed.ts), status };
+  } catch {
+    return null;
+  }
+}
+
 function saveToLocalStorage(productId: string, data: Variation[]) {
   try {
     const key = lsKey(productId);
     const payload = JSON.stringify({ ts: Date.now(), data });
     localStorage.setItem(key, payload);
   } catch {}
+}
+
+function savePresenceToLocalStorage(productId: string, status: Exclude<VariationPresence, 'unknown'>) {
+  try {
+    localStorage.setItem(lsPresenceKey(productId), JSON.stringify({ ts: Date.now(), status }));
+  } catch {}
+}
+
+function setVariationPresence(productId: string, status: Exclude<VariationPresence, 'unknown'>) {
+  const key = String(productId || '').trim();
+  if (!key) return;
+  const next = { ts: Date.now(), status };
+  presenceCache.set(key, next);
+  savePresenceToLocalStorage(key, status);
+}
+
+function hasFreshVariationCache(productId: string) {
+  const key = String(productId || '').trim();
+  if (!key) return false;
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.ts < TTL_MS) return true;
+  const local = loadFromLocalStorage(key);
+  if (local && Date.now() - local.ts < TTL_MS) {
+    cache.set(key, local);
+    return true;
+  }
+  return false;
 }
 
 export function getCachedSimpleVariations(productId: string): Variation[] {
@@ -211,13 +260,32 @@ export function getCachedSimpleVariations(productId: string): Variation[] {
   return [];
 }
 
+export function hasCachedSimpleVariationsResult(productId: string) {
+  return hasFreshVariationCache(productId);
+}
+
+export function getSimpleVariationPresence(productId: string): VariationPresence {
+  const key = String(productId || '').trim();
+  if (!key) return 'unknown';
+  const cached = presenceCache.get(key);
+  if (cached && Date.now() - cached.ts < TTL_MS) return cached.status;
+  const local = loadPresenceFromLocalStorage(key);
+  if (local && Date.now() - local.ts < TTL_MS) {
+    presenceCache.set(key, local);
+    return local.status;
+  }
+  return 'unknown';
+}
+
 async function fetchVariationsUncached(productId: string): Promise<Variation[]> {
   const span = perfStart('menu.variations.fetch', { productId });
   try {
     try {
       const { data: j, status } = await withRetry(() => invokeEdgeFunction<any>('product-variations-public', { productId }, { timeoutMs: 7000 }).then((r) => r as any), 2);
       if (status === 200 && j?.ok && Array.isArray(j.variations)) {
-        return (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
+        const normalized = (j.variations || []).map((item: any) => normalizeVariation(item)).filter(Boolean) as Variation[];
+        setVariationPresence(productId, normalized.length > 0 ? 'has' : 'none');
+        return normalized;
       }
     } catch {}
 
@@ -271,6 +339,7 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
       return a.name.localeCompare(b.name, 'pt-BR');
     });
 
+    setVariationPresence(productId, sorted.length > 0 ? 'has' : 'none');
     return sorted;
   } catch {
     return [];
@@ -279,11 +348,65 @@ async function fetchVariationsUncached(productId: string): Promise<Variation[]> 
   }
 }
 
+export async function primeSimpleVariationPresence(productIds: string[], chunkSize = 80) {
+  const ids = Array.from(new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+  if (ids.length === 0) return [] as string[];
+
+  const statuses = new Map<string, Exclude<VariationPresence, 'unknown'>>();
+  const unknownIds: string[] = [];
+
+  for (const id of ids) {
+    const status = getSimpleVariationPresence(id);
+    if (status === 'unknown') unknownIds.push(id);
+    else statuses.set(id, status);
+  }
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < unknownIds.length; index += chunkSize) {
+    chunks.push(unknownIds.slice(index, index + chunkSize));
+  }
+
+  for (const chunk of chunks) {
+    try {
+      const [{ data: productRows, error: productError }, { data: globalRows, error: globalError }] = await Promise.all([
+        withRetry(() => supabase.from('product_variations').select('product_id').in('product_id', chunk as any) as any, 2),
+        withRetry(() => supabase.from('product_global_variation_links').select('product_id').in('product_id', chunk as any) as any, 2)
+      ]);
+
+      if (productError) throw productError;
+      if (globalError) throw globalError;
+
+      const hasSet = new Set<string>();
+      for (const row of Array.isArray(productRows) ? productRows : []) {
+        const id = String((row as any)?.product_id || '').trim();
+        if (id) hasSet.add(id);
+      }
+      for (const row of Array.isArray(globalRows) ? globalRows : []) {
+        const id = String((row as any)?.product_id || '').trim();
+        if (id) hasSet.add(id);
+      }
+
+      for (const id of chunk) {
+        const status: Exclude<VariationPresence, 'unknown'> = hasSet.has(id) ? 'has' : 'none';
+        setVariationPresence(id, status);
+        statuses.set(id, status);
+        if (status === 'none' && !hasFreshVariationCache(id)) {
+          cache.set(id, { ts: Date.now(), data: [] });
+          saveToLocalStorage(id, []);
+        }
+      }
+    } catch {}
+  }
+
+  return ids.filter((id) => statuses.get(id) === 'has');
+}
+
 export function prefetchSimpleVariations(productId: string) {
   const key = String(productId || '').trim();
   if (!key) return Promise.resolve([] as Variation[]);
+  if (getSimpleVariationPresence(key) === 'none') return Promise.resolve([] as Variation[]);
   const immediate = getCachedSimpleVariations(key);
-  if (immediate.length > 0) return Promise.resolve(immediate);
+  if (immediate.length > 0 || hasCachedSimpleVariationsResult(key)) return Promise.resolve(immediate);
   const running = inflight.get(key);
   if (running) return running;
   const p = fetchVariationsUncached(key)
@@ -323,9 +446,10 @@ export function useSimpleVariations() {
   const fetchVariations = async (productId: string): Promise<Variation[]> => {
     const key = String(productId || '').trim();
     if (!key) return [];
+    if (getSimpleVariationPresence(key) === 'none') return [];
 
     const immediate = getCachedSimpleVariations(key);
-    if (immediate.length > 0) return immediate;
+    if (immediate.length > 0 || hasCachedSimpleVariationsResult(key)) return immediate;
 
     const running = inflight.get(key);
     if (running) return running;

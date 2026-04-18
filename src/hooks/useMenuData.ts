@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
+import { primeSimpleVariationPresence } from '@/hooks/useSimpleVariations';
 
 interface Product {
   id: string;
@@ -238,78 +239,14 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     });
   }, [userId, query.isSuccess, query.data, queryClient, initialData, refetch]);
 
-  // Prefetch product variations for faster UX when user opens product modal
   useEffect(() => {
     if (!userId) return;
     if (!query.isSuccess) return;
     const products: any[] = query.data?.products || [];
     if (!Array.isArray(products) || products.length === 0) return;
-
-    const fetchAndCache = async (productId: string) => {
-      try {
-        // Fetch product-specific variations
-        const { data: productVariations } = await (supabase.from('product_variations') as any)
-          .select('*')
-          .eq('product_id', productId);
-
-        // Fetch global variation links
-        const { data: globalLinks } = await (supabase.from('product_global_variation_links') as any)
-          .select('global_variation_id, required, min_selections, max_selections')
-          .eq('product_id', productId);
-
-        let globalVariations: any[] = [];
-        if (globalLinks && globalLinks.length > 0) {
-          const ids = globalLinks.map((l: any) => l.global_variation_id);
-          const { data: gvars } = await (supabase.from('global_variations') as any)
-            .select('*')
-            .in('id', ids);
-          if (gvars) {
-            globalVariations = gvars.map((gv: any) => {
-              const link = (globalLinks || []).find((l: any) => l.global_variation_id === gv.id);
-              return {
-                ...gv,
-                required: link?.required ?? false,
-                min_selections: link?.min_selections ?? 0,
-                max_selections: link?.max_selections ?? 1
-              };
-            });
-          }
-        }
-
-        const all = [ ...(productVariations || []), ...globalVariations ];
-        // Basic formatting similar to product hook
-        const formatted = (all || []).map((item: any) => {
-          let options = item.options;
-          if (typeof options === 'string') {
-            try { options = JSON.parse(options); } catch { options = []; }
-          }
-          const validOptions = (options || []).filter((o: any) => o && (o.name || o.label)).map((o: any) => ({ name: String(o.name || o.label || '').trim(), price: Number(o.price || 0) }));
-          return {
-            id: item.id,
-            name: String(item.name || item.label || '').trim(),
-            options: validOptions,
-            max_selections: Math.max(1, Number(item.max_selections) || 1),
-            required: Boolean(item.required)
-          };
-        }).filter((v: any) => Array.isArray(v.options) && v.options.length > 0);
-
-        queryClient.setQueryData(['productVariations', productId], formatted);
-      } catch (e) {
-        // ignore per-product failures
-        console.warn('Prefetch variations failed for', productId, e);
-      }
-    };
-
-    // Iterate with small delay to avoid burst
-    let idx = 0;
-    for (const p of products) {
-      const id = String(p.id || '');
-      if (!id) continue;
-      window.setTimeout(() => void fetchAndCache(id), idx * 80);
-      idx += 1;
-      if (idx >= 80) break; // limit prefetch to first 80 products
-    }
-  }, [userId, query.isSuccess, query.data, queryClient]);
+    const ids = products.map((p: any) => String(p?.id || '').trim()).filter(Boolean);
+    void primeSimpleVariationPresence(ids);
+  }, [userId, query.isSuccess, query.data]);
 
   useEffect(() => {
     if (!userId) return;

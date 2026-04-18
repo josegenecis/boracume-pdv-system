@@ -3,7 +3,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
-import { prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
+import { getSimpleVariationPresence, prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
 
 interface Product {
   id: string;
@@ -40,6 +40,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
 
   const prefetchOnIntent = () => {
     if (prefetchedRef.current) return;
+    if (getSimpleVariationPresence(product.id) === 'none') return;
     prefetchedRef.current = true;
     void prefetchSimpleVariations(product.id);
   };

@@ -5,7 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { useSimpleCart } from '@/hooks/useSimpleCart';
 import { useMenuData } from '@/hooks/useMenuData';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
-import { prefetchSimpleVariations, prefetchSimpleVariationsBulk } from '@/hooks/useSimpleVariations';
+import {
+  getSimpleVariationPresence,
+  hasCachedSimpleVariationsResult,
+  prefetchSimpleVariations,
+  prefetchSimpleVariationsBulk,
+  primeSimpleVariationPresence
+} from '@/hooks/useSimpleVariations';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import { SimpleCartModal } from '@/components/menu/SimpleCartModal';
 import CartBottomBar from '@/components/menu/CartBottomBar';
@@ -217,20 +223,41 @@ const MenuDigital = () => {
     if (ids.length === 0) return;
     let cancelled = false;
     const run = async () => {
+      const idsWithVariations = await primeSimpleVariationPresence(ids);
+      if (cancelled) return;
+
+      const knownIds = idsWithVariations.length > 0 ? idsWithVariations : ids.filter((id) => getSimpleVariationPresence(id) !== 'none');
+      if (knownIds.length === 0) return;
+
+      const priorityIds = Array.from(
+        new Set(
+          [...highlights, ...(products as any[]).slice(0, 18)]
+            .map((p: any) => String(p?.id || '').trim())
+            .filter((id) => id && knownIds.includes(id))
+        )
+      );
+      const prioritySet = new Set(priorityIds);
+      const deferredIds = knownIds.filter((id) => !prioritySet.has(id));
+
+      if (priorityIds.length > 0) {
+        await prefetchSimpleVariationsBulk(priorityIds, 10);
+      }
+      if (cancelled || deferredIds.length === 0) return;
+
       await new Promise((r) => window.setTimeout(r, 120));
       if (cancelled) return;
       if ('requestIdleCallback' in window) {
         await new Promise<void>((resolve) => {
           (window as any).requestIdleCallback(async () => {
             if (!cancelled) {
-              await prefetchSimpleVariationsBulk(ids, 8);
+              await prefetchSimpleVariationsBulk(deferredIds, 8);
             }
             resolve();
           }, { timeout: 1500 });
         });
         return;
       }
-      await prefetchSimpleVariationsBulk(ids, 8);
+      await prefetchSimpleVariationsBulk(deferredIds, 8);
     };
     void run();
     return () => {
@@ -265,7 +292,6 @@ const MenuDigital = () => {
 
     setOpeningProductId(product.id);
     try {
-      void prefetchSimpleVariations(product.id);
       const track = Boolean((product as any).track_stock);
       const stock = Number((product as any).stock_quantity);
       const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);
@@ -280,8 +306,50 @@ const MenuDigital = () => {
           return;
         }
       }
-      setSelectedProduct(product);
-      setShowVariationModal(true);
+      const variationPresence = getSimpleVariationPresence(product.id);
+      if (variationPresence === 'none') {
+        addToCart(product, 1, [], '', 0);
+        toast({
+          title: 'Adicionado ao carrinho',
+          description: `${product.name} foi adicionado com sucesso.`,
+        });
+        return;
+      }
+
+      if (variationPresence === 'has' && !hasCachedSimpleVariationsResult(product.id)) {
+        const variations = await prefetchSimpleVariations(product.id);
+        if (variations.length > 0) {
+          setSelectedProduct(product);
+          setShowVariationModal(true);
+          return;
+        }
+
+        addToCart(product, 1, [], '', 0);
+        toast({
+          title: 'Adicionado ao carrinho',
+          description: `${product.name} foi adicionado com sucesso.`,
+        });
+        return;
+      }
+
+      if (hasCachedSimpleVariationsResult(product.id)) {
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+        return;
+      }
+
+      const variations = await prefetchSimpleVariations(product.id);
+      if (variations.length > 0) {
+        setSelectedProduct(product);
+        setShowVariationModal(true);
+        return;
+      }
+
+      addToCart(product, 1, [], '', 0);
+      toast({
+        title: 'Adicionado ao carrinho',
+        description: `${product.name} foi adicionado com sucesso.`,
+      });
     } finally {
       window.setTimeout(() => setOpeningProductId(null), 60);
     }
@@ -344,6 +412,15 @@ const MenuDigital = () => {
         });
         return;
       }
+    }
+
+    if (getSimpleVariationPresence(product.id) === 'none') {
+      addToCart(product, 1, [], '', 0);
+      toast({
+        title: 'Adicionado ao carrinho',
+        description: `${product.name} foi adicionado com sucesso.`,
+      });
+      return;
     }
 
     const variations = await prefetchSimpleVariations(product.id);
