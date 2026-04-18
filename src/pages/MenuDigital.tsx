@@ -80,7 +80,6 @@ const MenuDigital = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [openingProductId, setOpeningProductId] = useState<string | null>(null);
-  const [variationWarmupDone, setVariationWarmupDone] = useState(false);
   const warnedStockRef = useRef<Set<string>>(new Set());
   const navigate = useNavigate();
 
@@ -228,18 +227,7 @@ const MenuDigital = () => {
   }, [highlights]);
 
   useEffect(() => {
-    if (!finalUserId) {
-      setVariationWarmupDone(false);
-      return;
-    }
-    if (menuLoading) {
-      setVariationWarmupDone(false);
-      return;
-    }
-    if (menuError || menuProductIds.length === 0 || variationsReadyFromCache) {
-      setVariationWarmupDone(true);
-      return;
-    }
+    if (!finalUserId || menuLoading || menuError || menuProductIds.length === 0 || variationsReadyFromCache) return;
 
     let cancelled = false;
     const run = async () => {
@@ -253,18 +241,9 @@ const MenuDigital = () => {
       if (idsToWarm.length > 0) {
         await prefetchSimpleVariationsBulk(idsToWarm, 12);
       }
-
-      if (!cancelled) {
-        setVariationWarmupDone(true);
-      }
     };
 
-    setVariationWarmupDone(false);
-    void run().catch(() => {
-      if (!cancelled) {
-        setVariationWarmupDone(true);
-      }
-    });
+    void run().catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -718,21 +697,12 @@ const MenuDigital = () => {
           }]
         : []);
 
-  const isPreparingMenuInteractions = Boolean(finalUserId)
-    && !menuLoading
-    && !menuError
-    && menuProductIds.length > 0
-    && !variationWarmupDone
-    && !variationsReadyFromCache;
-
-  if (menuLoading || isPreparingMenuInteractions) {
+  if (menuLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">
-            {menuLoading ? 'Carregando cardápio...' : 'Preparando cardápio...'}
-          </p>
+          <p className="text-lg text-gray-600">Carregando cardápio...</p>
         </div>
       </div>
     );

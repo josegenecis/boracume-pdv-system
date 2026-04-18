@@ -36,8 +36,8 @@ export type Variation = {
 export type VariationPresence = 'unknown' | 'none' | 'has';
 
 const TTL_MS = 10 * 60 * 1000;
-const LS_PREFIX = 'boracume_variations_v3:';
-const LS_PRESENCE_PREFIX = 'boracume_variations_presence_v1:';
+const LS_PREFIX = 'boracume_variations_v4:';
+const LS_PRESENCE_PREFIX = 'boracume_variations_presence_v2:';
 const cache = new Map<string, { ts: number; data: Variation[] }>();
 const inflight = new Map<string, Promise<Variation[]>>();
 const presenceCache = new Map<string, { ts: number; status: Exclude<VariationPresence, 'unknown'> }>();
@@ -250,13 +250,47 @@ function storeVariationResult(productId: string, data: Variation[]) {
   const key = String(productId || '').trim();
   if (!key) return;
   const currentPresence = getSimpleVariationPresence(key);
-  if (data.length === 0 && currentPresence === 'has') {
-    setVariationPresence(key, 'has');
+  if (data.length === 0 && currentPresence !== 'none') {
+    if (currentPresence === 'has') {
+      setVariationPresence(key, 'has');
+    }
     return;
   }
   cache.set(key, { ts: Date.now(), data });
   saveToLocalStorage(key, data);
   setVariationPresence(key, data.length > 0 ? 'has' : 'none');
+}
+
+export function hydrateSimpleVariationsCache(
+  variationPayloadByProduct?: Record<string, any[] | null | undefined> | null,
+  variationPresenceByProduct?: Record<string, Exclude<VariationPresence, 'unknown'> | null | undefined> | null
+) {
+  const ids = new Set<string>([
+    ...Object.keys(variationPayloadByProduct || {}),
+    ...Object.keys(variationPresenceByProduct || {})
+  ]);
+
+  for (const id of ids) {
+    const rawPayload = variationPayloadByProduct?.[id];
+    if (Array.isArray(rawPayload)) {
+      const normalized = sortVariations(
+        rawPayload
+          .map((item: any) => normalizeVariation(item))
+          .filter(Boolean) as Variation[]
+      );
+      storeVariationResult(id, normalized);
+      continue;
+    }
+
+    const status = variationPresenceByProduct?.[id];
+    if (status === 'has' || status === 'none') {
+      setVariationPresence(id, status);
+      if (status === 'none' && !hasFreshVariationCache(id)) {
+        cache.set(id, { ts: Date.now(), data: [] });
+        saveToLocalStorage(id, []);
+      }
+    }
+  }
 }
 
 function buildLinkedGlobalVariation(link: any, globalVariation: any) {
@@ -440,6 +474,7 @@ async function fetchVariationsBulkUncached(productIds: string[]) {
           .filter(Boolean) as Variation[]
       );
 
+      setVariationPresence(id, normalized.length > 0 ? 'has' : 'none');
       storeVariationResult(id, normalized);
       results.set(id, normalized);
     }
@@ -513,8 +548,7 @@ export function prefetchSimpleVariations(productId: string) {
   if (running) return running;
   const p = fetchVariationsUncached(key)
     .then((data) => {
-      cache.set(key, { ts: Date.now(), data });
-      saveToLocalStorage(key, data);
+      storeVariationResult(key, data);
       return data;
     })
     .finally(() => {
@@ -570,8 +604,7 @@ export function useSimpleVariations() {
     setIsLoading(true);
     const p = fetchVariationsUncached(key)
       .then((data) => {
-        cache.set(key, { ts: Date.now(), data });
-        saveToLocalStorage(key, data);
+        storeVariationResult(key, data);
         return data;
       })
       .finally(() => {

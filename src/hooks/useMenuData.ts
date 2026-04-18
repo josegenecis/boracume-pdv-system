@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
-import { primeSimpleVariationPresence } from '@/hooks/useSimpleVariations';
+import { hydrateSimpleVariationsCache, primeSimpleVariationPresence } from '@/hooks/useSimpleVariations';
 
 interface Product {
   id: string;
@@ -76,7 +76,7 @@ interface UseMenuDataOptions {
   cacheTTL?: number;
 }
 
-const CACHE_PREFIX = 'boracume_menu_data_v3';
+const CACHE_PREFIX = 'boracume_menu_data_v4';
 
 function safeParse<T>(value: string | null): T | null {
   if (!value) return null;
@@ -107,7 +107,38 @@ function writeCache(userId: string, data: MenuPayload) {
   } catch {}
 }
 
-async function fetchMenuData(userId: string): Promise<MenuPayload> {
+async function fetchMenuDataFromApi(userId: string): Promise<MenuPayload | null> {
+  const span = perfStart('menu.data.api', { userId });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(`/api/menu/public?userId=${encodeURIComponent(userId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`menu_api_${res.status}`);
+
+    const json = await res.json();
+    if (!json?.ok) throw new Error(String(json?.error || 'menu_api_invalid'));
+
+    hydrateSimpleVariationsCache(json?.variationPayloadByProduct, json?.variationPresenceByProduct);
+
+    return {
+      products: Array.isArray(json?.products) ? json.products : [],
+      categories: Array.isArray(json?.categories) ? json.categories : [],
+      profile: json?.profile || null,
+      deliveryZones: Array.isArray(json?.deliveryZones) ? json.deliveryZones : [],
+      deliverySettings: json?.deliverySettings || null
+    };
+  } finally {
+    window.clearTimeout(timeoutId);
+    span.end();
+  }
+}
+
+async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
   const span = perfStart('menu.data.fetch', { userId });
   try {
     const [{ data: profileArr, error: profileError }, { data: categoriesData, error: categoriesError }, { data: deliveryZonesData, error: deliveryZonesError }, { data: deliverySettingsData }] =
@@ -192,6 +223,15 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
   } finally {
     span.end();
   }
+}
+
+async function fetchMenuData(userId: string): Promise<MenuPayload> {
+  try {
+    const fromApi = await fetchMenuDataFromApi(userId);
+    if (fromApi) return fromApi;
+  } catch {}
+
+  return fetchMenuDataDirect(userId);
 }
 
 export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMenuDataOptions): MenuData => {
