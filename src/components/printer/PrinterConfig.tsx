@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Printer, Save } from 'lucide-react';
+import { Printer, Save, Upload, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -14,13 +14,15 @@ export const PrinterConfig = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [settings, setSettings] = useState({
     paper_width: '80mm',
     font_size: 'normal',
     print_header: '',
     print_footer: 'Obrigado pela preferência!',
     auto_print: false,
-    copies: 1
+    copies: 1,
+    receipt_logo_url: ''
   });
 
   useEffect(() => {
@@ -58,6 +60,61 @@ export const PrinterConfig = () => {
       toast({ title: 'Erro ao salvar', variant: 'destructive' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo invÃ¡lido',
+        description: 'Selecione apenas imagens para a logomarca do cupom.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'A logomarca deve ter no mÃ¡ximo 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const fileExt = file.name.split('.').pop() || 'png';
+      const filePath = `${user.id}/receipt-logo-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+
+      setSettings((prev) => ({ ...prev, receipt_logo_url: publicUrl }));
+      toast({
+        title: 'Logomarca carregada',
+        description: 'Agora Ã© sÃ³ salvar para usar essa logo no cupom.',
+      });
+    } catch (error) {
+      console.error('Erro ao enviar logomarca do cupom:', error);
+      toast({
+        title: 'Erro no upload',
+        description: 'NÃ£o foi possÃ­vel carregar a logomarca do cupom.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingLogo(false);
+      event.target.value = '';
     }
   };
 
@@ -117,6 +174,57 @@ export const PrinterConfig = () => {
             onChange={e => setSettings({...settings, print_footer: e.target.value})}
             placeholder="Mensagem final"
           />
+        </div>
+
+        <div className="space-y-3 rounded-lg border p-4">
+          <div className="space-y-1">
+            <Label>Logomarca do Cupom</Label>
+            <p className="text-sm text-gray-500">
+              Use uma imagem limpa, preferencialmente PNG com fundo transparente. Se deixar vazio, o sistema usa a logo do perfil.
+            </p>
+          </div>
+
+          {settings.receipt_logo_url ? (
+            <div className="rounded-lg border bg-white p-4">
+              <img
+                src={settings.receipt_logo_url}
+                alt="Logomarca do cupom"
+                className="mx-auto max-h-24 w-auto object-contain"
+              />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-gray-500">
+              Nenhuma logomarca especÃ­fica configurada para o cupom.
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Label
+              htmlFor="receipt-logo-upload"
+              className="inline-flex cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {uploadingLogo ? 'Enviando...' : 'Enviar logomarca'}
+            </Label>
+            <input
+              id="receipt-logo-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+              disabled={uploadingLogo}
+            />
+            {settings.receipt_logo_url ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSettings((prev) => ({ ...prev, receipt_logo_url: '' }))}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remover logo do cupom
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex items-center justify-between p-4 border rounded-lg">

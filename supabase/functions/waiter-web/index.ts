@@ -80,6 +80,24 @@ const buildProductVariationGroups = (productId: string, specificRows: any[], lin
   return [...directGroups, ...globalGroups]
 }
 
+async function requireOpenCashSession(supabase: any, restaurantId: string) {
+  const { data, error } = await supabase
+    .from('cash_register_sessions')
+    .select('id')
+    .eq('user_id', restaurantId)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data?.id) {
+    return fail('Abra o caixa antes de operar mesas.', 400)
+  }
+
+  return null
+}
+
 async function refreshAccountTotal(supabase: any, accountId: string) {
   const { data: itemRows, error: itemError } = await supabase
     .from('order_items')
@@ -412,6 +430,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'open_session') {
+      const cashGuard = await requireOpenCashSession(supabase, waiterSession.profile.restaurantId)
+      if (cashGuard) return cashGuard
       const tableId = String(body?.tableId || '')
       const tableNumber = Number(body?.tableNumber || 0)
       const guestCount = Math.max(1, Number(body?.guestCount || 1))
@@ -531,6 +551,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'add_item') {
+      const cashGuard = await requireOpenCashSession(supabase, waiterSession.profile.restaurantId)
+      if (cashGuard) return cashGuard
       const sessionId = String(body?.sessionId || '')
       const accountId = String(body?.accountId || '')
       const productId = String(body?.productId || '')
@@ -701,6 +723,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'record_payment') {
+      const cashGuard = await requireOpenCashSession(supabase, waiterSession.profile.restaurantId)
+      if (cashGuard) return cashGuard
       const sessionId = String(body?.sessionId || '')
       const accountId = body?.accountId ? String(body.accountId) : null
       const amount = Number(body?.amount || 0)

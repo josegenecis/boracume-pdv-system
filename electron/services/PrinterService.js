@@ -313,6 +313,9 @@ class PrinterService extends EventEmitter {
       printer.println(`CNPJ: ${data.store.cnpj}`);
     }
     
+    printer.bold(true);
+    printer.println(new Date(data.created_at || data.date || Date.now()).toLocaleString('pt-BR'));
+    printer.bold(false);
     printer.drawLine();
     printer.newLine();
   }
@@ -332,6 +335,28 @@ class PrinterService extends EventEmitter {
     
     if (data.customer_phone) {
       printer.println(`Telefone: ${data.customer_phone}`);
+    }
+
+    const customerAddress = String(data.customer_address_display || data.customer_address || '').trim();
+    if (customerAddress) {
+      this.wrapText(`End: ${customerAddress}`, this.getSectionWidth(section)).forEach((line) => {
+        printer.println(line);
+      });
+    }
+
+    if (data.delivery_zone_name && String(customerAddress).toLowerCase().includes(String(data.delivery_zone_name).toLowerCase()) === false) {
+      printer.println(`Bairro: ${data.delivery_zone_name}`);
+    }
+
+    if (data.order_type) {
+      const label = data.order_type === 'delivery'
+        ? 'Delivery'
+        : data.order_type === 'pickup'
+          ? 'Retirada'
+          : data.order_type === 'dine_in'
+            ? 'Mesa'
+            : 'BalcÃ£o';
+      printer.println(`Tipo: ${label}`);
     }
     
     if (data.date) {

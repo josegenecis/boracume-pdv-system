@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
+import { getOpenCashRegisterSession } from '@/utils/cashSession';
 
 interface Product {
   id: string;
@@ -239,6 +240,26 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         title: "Nome obrigatório",
         description: "Informe o nome do cliente.",
         variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const openCashSession = await getOpenCashRegisterSession(user?.id);
+      if (!openCashSession?.id) {
+        toast({
+          title: 'Caixa fechado',
+          description: 'Abra o caixa antes de lanÃ§ar itens em mesas.',
+          variant: 'destructive'
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Erro ao validar caixa para mesas:', error);
+      toast({
+        title: 'Erro no caixa',
+        description: 'NÃ£o foi possÃ­vel validar a abertura do caixa.',
+        variant: 'destructive'
       });
       return;
     }

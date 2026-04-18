@@ -205,6 +205,10 @@ const TableManager: React.FC = () => {
     }
   };
 
+  const availableCount = tables.filter((table) => table.status === 'available').length;
+  const occupiedCount = tables.filter((table) => table.status === 'occupied').length;
+  const reservedCount = tables.filter((table) => table.status === 'reserved').length;
+
   if (loading) {
     return <div className="text-center py-8">Carregando mesas...</div>;
   }
@@ -212,7 +216,10 @@ const TableManager: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Gerenciar Mesas</h2>
+        <div>
+          <h2 className="text-2xl font-bold">OperaÃ§Ã£o de Mesas</h2>
+          <p className="text-sm text-muted-foreground">Abra, acompanhe, transfira e feche contas sem sair do salÃ£o.</p>
+        </div>
         <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogTrigger asChild>
             <Button onClick={() => {
@@ -272,13 +279,34 @@ const TableManager: React.FC = () => {
         </Dialog>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-emerald-100 bg-emerald-50/60">
+          <CardContent className="p-4">
+            <div className="text-sm text-emerald-700">Mesas livres</div>
+            <div className="mt-1 text-3xl font-black text-emerald-900">{availableCount}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-amber-100 bg-amber-50/70">
+          <CardContent className="p-4">
+            <div className="text-sm text-amber-700">Em atendimento</div>
+            <div className="mt-1 text-3xl font-black text-amber-900">{occupiedCount}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200 bg-slate-50">
+          <CardContent className="p-4">
+            <div className="text-sm text-slate-600">Reservadas</div>
+            <div className="mt-1 text-3xl font-black text-slate-900">{reservedCount}</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="mb-4 p-4 bg-boracume-orange/5 rounded-xl border border-boracume-orange/20">
         <div className="flex items-center gap-2 mb-2">
           <MousePointer size={16} className="text-boracume-orange" />
-          <span className="font-semibold text-boracume-dark-green">Como usar as mesas:</span>
+          <span className="font-semibold text-boracume-dark-green">Fluxo rÃ¡pido de operaÃ§Ã£o:</span>
         </div>
         <p className="text-sm text-gray-600">
-          <strong>Clique na mesa</strong> para ver detalhes, transferir ou finalizar. 
+          <strong>Clique na mesa</strong> para acompanhar a conta, imprimir parcial, transferir ou fechar com pagamento.
           <strong className="ml-1">Botão carrinho</strong> para adicionar produtos à mesa.
         </p>
       </div>

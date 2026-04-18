@@ -6,12 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Clock, ArrowRightLeft, Printer, CheckCircle, Plus } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
+import { getOpenCashRegisterSession } from '@/utils/cashSession';
 
 interface Table {
   id: string;
@@ -62,9 +64,9 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [currentOrder, setCurrentOrder] = useState<TableOrder | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedTransferTable, setSelectedTransferTable] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao' | 'dinheiro'>('pix');
   const { toast } = useToast();
   const { user } = useAuth();
-  const { sendToKitchen } = useKitchenIntegration();
 
   useEffect(() => {
     if (table && isOpen) {
@@ -110,8 +112,10 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           ...order,
           items: parsedItems
         });
+        setPaymentMethod((order.payment_method as 'pix' | 'cartao' | 'dinheiro') || 'pix');
       } else {
         setCurrentOrder(null);
+        setPaymentMethod('pix');
       }
     } catch (error) {
       console.error('Erro ao carregar pedido da mesa:', error);
@@ -217,10 +221,30 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     try {
       setLoading(true);
 
-      // Atualizar status do pedido
+      const openCashSession = await getOpenCashRegisterSession(user?.id);
+      if (!openCashSession?.id) {
+        toast({
+          title: "Caixa fechado",
+          description: "Abra o caixa antes de fechar a conta da mesa.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const { error: orderUpdateError } = await supabase
+        .from('orders')
+        .update({
+          payment_method: paymentMethod,
+          cash_register_session_id: openCashSession.id,
+          acceptance_status: 'accepted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentOrder.id);
+
+      if (orderUpdateError) throw orderUpdateError;
+
       await updateOrderStatusRemote(currentOrder.id, 'completed');
 
-      // Liberar a mesa
       const { error: tableError } = await supabase
         .from('tables')
         .update({ status: 'available' })
@@ -229,8 +253,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       if (tableError) throw tableError;
 
       toast({
-        title: "Pedido finalizado",
-        description: `Mesa ${table.table_number} foi liberada com sucesso.`,
+        title: "Conta encerrada",
+        description: `Mesa ${table.table_number} fechada com pagamento em ${paymentMethod === 'cartao' ? 'cartÃ£o' : paymentMethod}.`,
       });
 
       onRefresh();
@@ -443,22 +467,52 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                 </CardContent>
               </Card>
 
-              {/* Finalizar Pedido */}
+              {/* Fechamento */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <CheckCircle size={16} />
-                    Finalizar
+                    <WalletCards size={16} />
+                    Fechar Conta
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border bg-slate-50 p-3">
+                    <div className="flex items-center justify-between text-sm text-slate-500">
+                      <span>Total para receber</span>
+                      <ReceiptText size={14} />
+                    </div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900">{formatCurrency(currentOrder.total)}</div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
+                    <RadioGroup
+                      value={paymentMethod}
+                      onValueChange={(value) => setPaymentMethod(value as 'pix' | 'cartao' | 'dinheiro')}
+                      className="grid gap-2"
+                    >
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
+                        <RadioGroupItem value="pix" />
+                        <span className="text-sm font-medium">PIX</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
+                        <RadioGroupItem value="cartao" />
+                        <span className="text-sm font-medium">CartÃ£o</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
+                        <RadioGroupItem value="dinheiro" />
+                        <span className="text-sm font-medium">Dinheiro</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+
                   <Button
                     onClick={handleFinishOrder}
                     disabled={loading}
-                    className="w-full"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
                     size="sm"
                   >
-                    Finalizar Pedido
+                    Receber e Fechar Mesa
                   </Button>
                 </CardContent>
               </Card>

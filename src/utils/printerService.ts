@@ -44,6 +44,26 @@ function splitLabelValue(line: string): { label: string; value: string } | null 
   return { label, value };
 }
 
+function normalizeSingleLine(value: any) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function resolveReceiptLogoUrl(store: any, config: any) {
+  return String(config?.receipt_logo_url || store?.receipt_logo_url || store?.logo_url || '').trim();
+}
+
+function resolveCustomerAddressLine(order: any) {
+  const address = normalizeSingleLine(order?.customer_address);
+  const neighborhood = normalizeSingleLine(order?.delivery_zone_name || order?.customer_neighborhood);
+  if (!address) return neighborhood;
+  if (!neighborhood) return address;
+
+  const lowerAddress = address.toLowerCase();
+  const lowerNeighborhood = neighborhood.toLowerCase();
+  if (lowerAddress.includes(lowerNeighborhood)) return address;
+  return `${address} - Bairro: ${neighborhood}`;
+}
+
 async function fetchVariationOrderMaps(productIds: string[]) {
   const ids = Array.from(new Set((productIds || []).map((x) => String(x || '').trim()).filter(Boolean)));
   const result = new Map<string, Map<string, number>>();
@@ -385,11 +405,12 @@ function buildOrderHtml(order: any, config: any, store?: any) {
   const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
   const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
   const storeDesc = escapeHtml(store?.description || '');
-  const storeLogo = String(store?.logo_url || '').trim();
-  const storeLogoHtml = storeLogo ? `<img src="${escapeHtml(storeLogo)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
+  const storeLogo = resolveReceiptLogoUrl(store, config);
+  const storeLogoHtml = storeLogo ? `<img src="${escapeHtml(storeLogo)}" alt="Logo" style="max-width: 160px; max-height: 68px; object-fit: contain; margin: 0 auto 8px auto; display:block;" />` : '';
   const storeAddress = escapeHtml(store?.address || '');
   const storePhone = escapeHtml(store?.phone || '');
   const storeCnpj = escapeHtml(store?.cnpj || '');
+  const customerAddressLine = escapeHtml(resolveCustomerAddressLine(order));
 
   return `
       <!DOCTYPE html>
@@ -404,12 +425,15 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             font-family: 'Courier New', Courier, monospace;
             width: ${width};
             margin: 0;
-            padding: 6px 4px;
+            padding: 7px 4px 10px;
             font-size: ${fontSize};
             color: #000;
-            line-height: 1.2;
+            line-height: 1.28;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            text-rendering: geometricPrecision;
+            font-smooth: never;
+            -webkit-font-smoothing: none;
           }
           .container {
             width: 100%;
@@ -418,14 +442,18 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             overflow: hidden;
           }
           .center { text-align: center; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .bold { font-weight: 700; }
+          .divider { border-top: 1px dashed #000; margin: 9px 0; }
           .flex { display: flex; justify-content: space-between; gap: 8px; }
           .item-row { margin-bottom: 8px; }
+          .brand-block { padding-bottom: 2px; }
+          .ticket-code { font-size: 1.52em; letter-spacing: 0.08em; }
+          .section-title { font-weight: 700; letter-spacing: 0.06em; }
           .item-title {
             white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
+            font-weight: 700;
           }
           .item-meta,
           .total-line {
@@ -457,15 +485,15 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             overflow-wrap: anywhere;
           }
           .total-row { font-size: 1.2em; margin-top: 10px; }
-          .muted { color: #333; font-size: 0.95em; }
+          .muted { color: #111; font-size: 0.95em; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="center">
+          <div class="center brand-block">
             ${storeLogoHtml}
           </div>
-          <div class="center bold" style="font-size: 1.2em;">${storeName}</div>
+          <div class="center bold" style="font-size: 1.2em; letter-spacing: 0.04em;">${storeName}</div>
           ${storeDesc ? `<div class="center muted" style="margin-top: 2px;">${storeDesc}</div>` : ''}
           ${storeAddress ? `<div class="center muted" style="margin-top: 2px;">${storeAddress}</div>` : ''}
           ${storePhone ? `<div class="center muted">Tel: ${storePhone}</div>` : ''}
@@ -473,20 +501,20 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
           <div class="divider"></div>
           
-          <div class="center bold" style="font-size: 1.4em;">SENHA: ${order.order_number?.slice(-4) || '----'}</div>
+          <div class="center bold ticket-code">SENHA: ${order.order_number?.slice(-4) || '----'}</div>
           <div class="center">Pedido #${order.order_number}</div>
           
           <div class="divider"></div>
           
-          <div class="bold">CLIENTE:</div>
+          <div class="section-title">CLIENTE:</div>
           <div>${order.customer_name || 'Balcão'}</div>
           ${order.customer_phone ? `<div>Tel: ${order.customer_phone}</div>` : ''}
-          ${order.customer_address ? `<div>End: ${order.customer_address}</div>` : ''}
+          ${customerAddressLine ? `<div>End: ${customerAddressLine}</div>` : ''}
           ${order.delivery_zone_id ? `<div>Entrega: ${order.order_type === 'delivery' ? 'Delivery' : 'Retirada'}</div>` : ''}
           
           <div class="divider"></div>
           
-          <div class="bold" style="margin-bottom: 5px;">ITENS:</div>
+          <div class="section-title" style="margin-bottom: 5px;">ITENS:</div>
           ${(order.items || []).map((item: any) => `
             <div class="item-row">
               <div class="item-title bold">${item.quantity}x ${escapeHtml(item.product_name || item.name || 'Produto')}</div>
@@ -623,6 +651,9 @@ async function printElectron(order: any, config: any) {
     customer_name: order.customer_name || 'Balcão',
     customer_phone: order.customer_phone || '',
     customer_address: order.customer_address || '',
+    customer_address_display: resolveCustomerAddressLine(order),
+    delivery_zone_name: order.delivery_zone_name || '',
+    order_type: order.order_type || '',
     date: order.created_at,
     items: (Array.isArray(order.items) ? order.items : []).map((it: any) => ({
       product_name: it.product_name || it.name,
@@ -640,7 +671,7 @@ async function printElectron(order: any, config: any) {
     payment_method: String(order.payment_method || '').toUpperCase()
   };
 
-  const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: 48 });
+  const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: config.paper_width === '58mm' ? 32 : 48 });
   if (!conn?.success) return { success: false, error: conn?.error || conn?.message || 'Falha ao conectar impressora' };
 
   for (let i = 0; i < copies; i++) {
@@ -703,7 +734,8 @@ export const PrinterService = {
       font_size: 'normal',
       print_header: 'BoraCumê PDV',
       print_footer: 'Obrigado!',
-      copies: 1
+      copies: 1,
+      receipt_logo_url: ''
     };
 
     const { data: profile } = await supabase
@@ -717,6 +749,14 @@ export const PrinterService = {
       .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
       .eq('user_id', order.user_id)
       .maybeSingle();
+
+    const { data: deliveryZone } = order?.delivery_zone_id
+      ? await supabase
+          .from('delivery_zones')
+          .select('name')
+          .eq('id', order.delivery_zone_id)
+          .maybeSingle()
+      : { data: null as any };
 
     const fiscalAddressParts = [
       fiscal?.endereco_logradouro,
@@ -737,6 +777,7 @@ export const PrinterService = {
           restaurant_name: profile.restaurant_name || '',
           description: profile.description || '',
           logo_url: profile.logo_url || '',
+          receipt_logo_url: String((settings as any)?.receipt_logo_url || '').trim(),
           phone: profile.phone || '',
           address: fiscalAddress || profile.address || '',
           website: profile.website || '',
@@ -744,7 +785,11 @@ export const PrinterService = {
         }
       : null;
 
-    const enrichedOrder = { ...order, store };
+    const enrichedOrder = {
+      ...order,
+      delivery_zone_name: String((deliveryZone as any)?.name || order?.delivery_zone_name || '').trim(),
+      store
+    };
 
     const productIds = Array.isArray(enrichedOrder.items)
       ? enrichedOrder.items.map((it: any) => String(it?.product_id || '').trim()).filter(Boolean)
@@ -921,7 +966,8 @@ export const PrinterService = {
     bold(false);
     commands += text(order.customer_name || 'Balcão');
     if (order.customer_phone) commands += text(`Tel: ${order.customer_phone}`);
-    if (order.customer_address) commands += text(`End: ${order.customer_address}`);
+    const customerAddressLine = resolveCustomerAddressLine(order);
+    if (customerAddressLine) commands += text(`End: ${customerAddressLine}`);
     if (order.delivery_zone_id) commands += text(`Entrega: ${order.order_type === 'delivery' ? 'Delivery' : 'Retirada'}`);
     line();
 

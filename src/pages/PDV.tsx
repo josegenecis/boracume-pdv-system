@@ -739,6 +739,16 @@ const PDV = () => {
       return;
     }
 
+    if (!cashSession?.id) {
+      toast({
+        title: "Caixa fechado",
+        description: "Abra o caixa antes de lançar itens em mesas.",
+        variant: "destructive",
+      });
+      openCashDialog('open');
+      return;
+    }
+
     try {
       setProcessing(true);
 
