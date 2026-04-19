@@ -12,6 +12,12 @@ interface CartItem {
   product: CartProduct;
   quantity: number;
   variations: string[];
+  options?: Array<{
+    key?: string;
+    label?: string;
+    value?: string;
+    price?: number;
+  }>;
   notes: string;
   totalPrice: number;
   uniqueId: string; // Para distinguir mesmo produto com variações diferentes
@@ -124,7 +130,8 @@ export const useSimpleCart = (scope?: string) => {
     quantity: number = 1, 
     variations: string[] = [], 
     notes: string = '',
-    variationPrice: number = 0
+    variationPrice: number = 0,
+    options: CartItem['options'] = []
   ) => {
     pendingPerfRef.current = { start: perfStart('menu.cart.add', { productId: product.id, qty: quantity }) };
 
@@ -163,6 +170,7 @@ export const useSimpleCart = (scope?: string) => {
           product,
           quantity,
           variations: uniqueVariations,
+          options: Array.isArray(options) ? options : [],
           notes: notes.trim(),
           totalPrice,
           uniqueId

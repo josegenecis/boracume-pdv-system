@@ -8,7 +8,8 @@ import {
   getCachedSimpleVariations,
   hasDefinitiveSimpleVariationsResult,
   getSimpleVariationPresence,
-  useSimpleVariations
+  useSimpleVariations,
+  type SelectedVariationDetail,
 } from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
@@ -25,7 +26,14 @@ interface SimpleVariationModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product | null;
-  onAddToCart: (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => void;
+  onAddToCart: (
+    product: Product,
+    quantity: number,
+    variations: string[],
+    notes: string,
+    variationPrice: number,
+    optionDetails?: SelectedVariationDetail[]
+  ) => void;
   maxQuantity?: number | null;
 }
 
@@ -46,7 +54,13 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const { toast } = useToast();
   const [loadingVariations, setLoadingVariations] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsTextWithReceiptLabels } = useSimpleVariations();
+  const {
+    isLoading,
+    fetchVariations,
+    calculateVariationPrice,
+    getSelectedVariationDetails,
+    getSelectedVariationsTextWithReceiptLabels,
+  } = useSimpleVariations();
 
   useEffect(() => {
     if (product && isOpen) {
@@ -147,9 +161,10 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
     const variationPrice = calculateVariationPrice(selectedVariations, variations);
     const variationTexts = getSelectedVariationsTextWithReceiptLabels(selectedVariations, variations);
+    const variationDetails = getSelectedVariationDetails(selectedVariations, variations);
 
     setSubmitting(true);
-    onAddToCart(product, quantity, variationTexts, notes, variationPrice);
+    onAddToCart(product, quantity, variationTexts, notes, variationPrice, variationDetails);
 
     setQuantity(1);
     setNotes('');

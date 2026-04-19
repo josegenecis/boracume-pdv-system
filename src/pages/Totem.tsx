@@ -104,8 +104,8 @@ export default function Totem() {
     setShowVariationModal(true);
   };
 
-  const handleAddToCartFromModal = (product: any, quantity: number, variations: string[], notes: string, variationPrice: number) => {
-    addToCart(product, quantity, variations, notes, variationPrice);
+  const handleAddToCartFromModal = (product: any, quantity: number, variations: string[], notes: string, variationPrice: number, optionDetails?: any[]) => {
+    addToCart(product, quantity, variations, notes, variationPrice, optionDetails);
     setShowVariationModal(false);
     setSelectedProduct(null);
   };

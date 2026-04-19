@@ -14,6 +14,12 @@ interface TotemCartItem {
   product: { id: string; name: string; price: number; image_url?: string };
   quantity: number;
   variations: string[];
+  options?: Array<{
+    key?: string;
+    label?: string;
+    value?: string;
+    price?: number;
+  }>;
   notes: string;
   totalPrice: number;
   uniqueId: string;
@@ -54,6 +60,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
       product_name: item.product.name,
       quantity: item.quantity,
       price: item.product.price,
+      options: Array.isArray(item.options) ? item.options : [],
       variations: item.variations,
       notes: item.notes,
       total: item.totalPrice

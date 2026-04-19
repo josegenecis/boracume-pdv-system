@@ -163,26 +163,46 @@ function getItemTotal(item: any) {
 function appendDetailLine(
   bucket: Map<string, { key: string; text: string; price?: number }>,
   text: string,
-  price?: number
+  price?: number,
+  keyHint?: string
 ) {
   const normalizedText = normalizeText(text);
   if (!normalizedText) return;
 
   const normalizedPrice = typeof price === "number" && price > 0 ? price : undefined;
-  const key = `${normalizedText.toLowerCase()}|${normalizedPrice ?? ""}`;
-  if (!bucket.has(key)) {
-    bucket.set(key, { key, text: normalizedText, price: normalizedPrice });
+  const fallbackKey = normalizedText.toLowerCase();
+  const key = normalizeText(keyHint) || fallbackKey;
+  const existing = bucket.get(key);
+
+  if (existing) {
+    if (normalizedPrice !== undefined && existing.price === undefined) {
+      bucket.set(key, { ...existing, price: normalizedPrice });
+    }
+    return;
   }
+
+  const existingByText = bucket.get(fallbackKey);
+  if (existingByText) {
+    if (normalizedPrice !== undefined && existingByText.price === undefined) {
+      bucket.set(fallbackKey, { ...existingByText, price: normalizedPrice });
+    }
+    return;
+  }
+
+  bucket.set(key, { key, text: normalizedText, price: normalizedPrice });
 }
 
 function getItemDetailLines(item: any) {
   const bucket = new Map<string, { key: string; text: string; price?: number }>();
+  const options = Array.isArray(item?.options) ? item.options : [];
+  const hasStoredOptions = options.length > 0;
   const variations = Array.isArray(item?.variations) ? item.variations : [];
 
   for (const variation of variations) {
     if (!variation) continue;
 
     if (typeof variation === "string") {
+      if (hasStoredOptions) continue;
       appendDetailLine(bucket, variation);
       continue;
     }
@@ -194,11 +214,15 @@ function getItemDetailLines(item: any) {
           ? variation.options.map((option: any) => normalizeText(option)).filter(Boolean).join(", ")
           : normalizeText(variation?.value || variation?.selected_option || variation?.choice);
 
-      appendDetailLine(bucket, label && value ? `${label}: ${value}` : label || value);
+      appendDetailLine(
+        bucket,
+        label && value ? `${label}: ${value}` : label || value,
+        toNumber(variation?.price ?? variation?.additional_price) || undefined,
+        variation?.key
+      );
     }
   }
 
-  const options = Array.isArray(item?.options) ? item.options : [];
   for (const option of options) {
     if (!option) continue;
 
@@ -212,11 +236,21 @@ function getItemDetailLines(item: any) {
       const value = normalizeText(option?.value || option?.selected_option || option?.choice);
       const price = toNumber(option?.price ?? option?.additional_price);
 
-      appendDetailLine(bucket, value ? `${label}: ${value}` : label, price > 0 ? price : undefined);
+      appendDetailLine(bucket, value ? `${label}: ${value}` : label, price > 0 ? price : undefined, option?.key);
     }
   }
 
-  return Array.from(bucket.values());
+  const lines = Array.from(bucket.values());
+  const inferredExtraTotal = Math.max(0, getItemTotal(item) - (getItemUnitPrice(item) * getItemQuantity(item)));
+  const pricedTotal = lines.reduce((total: number, detail: any) => total + toNumber(detail?.price), 0);
+  const missingPriceLines = lines.filter((detail: any) => detail?.price === undefined);
+  const remainingExtra = Math.max(0, inferredExtraTotal - pricedTotal);
+
+  if (remainingExtra > 0 && missingPriceLines.length === 1) {
+    missingPriceLines[0].price = remainingExtra;
+  }
+
+  return lines;
 }
 
 function getMapsLink(order: any) {
@@ -266,7 +300,6 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
   if (customerPhone) lines.push(`Telefone: ${customerPhone}`);
   if (customerAddress) lines.push(`Endereco: ${customerAddress}`);
   if (mapsLink) lines.push(`Maps: ${mapsLink}`);
-  if (deliveryInstructions) lines.push(`Instrucoes: ${deliveryInstructions}`);
 
   lines.push("", "Itens:");
 
@@ -279,6 +312,8 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
       const itemTotal = getItemTotal(item);
       const itemNotes = normalizeText(item?.notes || item?.observations);
       const detailLines = getItemDetailLines(item);
+      const baseLineTotal = unitPrice * quantity;
+      const extraLineTotal = detailLines.reduce((totalDetails: number, detail: any) => totalDetails + toNumber(detail?.price), 0);
 
       lines.push(`${quantity}x ${getItemDisplayName(item)}`);
       for (const detail of detailLines) {
@@ -289,15 +324,22 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
         );
       }
       if (itemNotes) lines.push(`   - Obs: ${itemNotes}`);
-      lines.push(`   ${formatCurrency(unitPrice)} x ${quantity} = ${formatCurrency(itemTotal)}`);
+      lines.push(`   Base: ${formatCurrency(unitPrice)} x ${quantity} = ${formatCurrency(baseLineTotal)}`);
+      if (extraLineTotal > 0) lines.push(`   Complementos: +${formatCurrency(extraLineTotal)}`);
+      lines.push(`   Subtotal do item: ${formatCurrency(itemTotal)}`);
     }
   }
 
-  lines.push("", "Resumo:");
-  lines.push(`Subtotal: ${formatCurrency(subtotal)}`);
+  if (deliveryInstructions) {
+    lines.push("", "*OBSERVAÇÕES:*");
+    lines.push(deliveryInstructions);
+  }
+
+  lines.push("", "*Resumo:*");
+  lines.push(`Subtotal dos itens: ${formatCurrency(subtotal)}`);
   if (deliveryFee > 0) lines.push(`Taxa de entrega: ${formatCurrency(deliveryFee)}`);
   if (discount > 0) lines.push(`Desconto: -${formatCurrency(discount)}`);
-  lines.push(`Total: ${formatCurrency(total)}`);
+  lines.push(`*Total com entrega: ${formatCurrency(total)}*`);
   lines.push(`Pagamento: ${paymentMethod}`);
 
   return lines.join("\n").trim();

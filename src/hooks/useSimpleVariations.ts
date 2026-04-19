@@ -32,6 +32,13 @@ export type Variation = {
   options: VariationOption[];
 };
 
+export type SelectedVariationDetail = {
+  key: string;
+  label: string;
+  value: string;
+  price: number;
+};
+
 export type VariationPresence = 'unknown' | 'none' | 'has';
 
 const TTL_MS = 10 * 60 * 1000;
@@ -654,6 +661,36 @@ export function useSimpleVariations() {
     return total;
   };
 
+  const getSelectedVariationDetails = (
+    selectedVariations: Record<string, string[]>,
+    variations: Variation[]
+  ): SelectedVariationDetail[] => {
+    const details: SelectedVariationDetail[] = [];
+
+    for (const variation of variations) {
+      const selected = selectedVariations[variation.id] || [];
+      let freeRemaining = Math.max(0, Number(variation.free_selections_limit || 0));
+      const label = String(variation.receipt_label || variation.name || '').trim();
+
+      selected.forEach((optionName, index) => {
+        const option = variation.options.find((opt) => opt.name === optionName);
+        if (!option) return;
+
+        const price = freeRemaining > 0 ? 0 : Number(option.price || 0);
+        if (freeRemaining > 0) freeRemaining -= 1;
+
+        details.push({
+          key: `${variation.id}:${index}:${option.name}`,
+          label: label || 'Complemento',
+          value: option.name,
+          price: price > 0 ? price : 0,
+        });
+      });
+    }
+
+    return details;
+  };
+
   const getSelectedVariationsText = (selectedVariations: Record<string, string[]>) => {
     const texts: string[] = [];
     for (const options of Object.values(selectedVariations)) {
@@ -674,6 +711,13 @@ export function useSimpleVariations() {
     return texts;
   };
 
-  return { isLoading, fetchVariations, calculateVariationPrice, getSelectedVariationsText, getSelectedVariationsTextWithReceiptLabels };
+  return {
+    isLoading,
+    fetchVariations,
+    calculateVariationPrice,
+    getSelectedVariationDetails,
+    getSelectedVariationsText,
+    getSelectedVariationsTextWithReceiptLabels,
+  };
 }
 

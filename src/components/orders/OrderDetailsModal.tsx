@@ -327,13 +327,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => { WhatsAppService.shareOrder(order); return;
-                      const digits = (order.customer_phone || '').replace(/\D/g, '');
-                      const wa = digits.startsWith('55') ? digits : `55${digits}`;
-                      const link = `${window.location.origin}/track/${order?.id}`;
-                      const msg = `Olá! Aqui está o link para acompanhar seu pedido ${order?.order_number || ''}: ${link}`;
-                      window.open(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`, '_blank');
-                    }}
+                    onClick={() => WhatsAppService.shareOrder(order)}
                   >
                     <MessageCircle className="h-3 w-3 mr-1" />
                     WhatsApp
@@ -493,6 +487,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
               </div>
 
+              {order?.delivery_instructions && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-base font-semibold">OBSERVAÇÕES</h3>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{order.delivery_instructions}</p>
+                  </div>
+                </>
+              )}
+
               <Separator />
 
               {/* Resumo do Pedido */}
@@ -547,12 +551,6 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <div className="flex items-center gap-2">
                       <Clock className="h-3 w-3" />
                       <span className="text-xs">Tempo estimado: {order.estimated_time} {typeof order.estimated_time === 'number' ? 'minutos' : ''}</span>
-                    </div>
-                  )}
-                  {order?.delivery_instructions && (
-                    <div className="text-xs">
-                      <span className="font-medium">Instruções de entrega:</span>
-                      <p className="mt-1 text-gray-600">{order.delivery_instructions}</p>
                     </div>
                   )}
                 </div>

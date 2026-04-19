@@ -367,7 +367,14 @@ const MenuDigital = () => {
     }
   };
 
-  const handleAddToCartFromModal = (product: Product, quantity: number, variations: string[], notes: string, variationPrice: number) => {
+  const handleAddToCartFromModal = (
+    product: Product,
+    quantity: number,
+    variations: string[],
+    notes: string,
+    variationPrice: number,
+    optionDetails?: any[]
+  ) => {
     const track = Boolean((product as any).track_stock);
     const stock = Number((product as any).stock_quantity);
     const inCart = cart.reduce((sum, item) => sum + (item.product.id === product.id ? Number(item.quantity || 0) : 0), 0);
@@ -382,7 +389,7 @@ const MenuDigital = () => {
         return;
       }
     }
-    addToCart(product, quantity, variations, notes, variationPrice);
+    addToCart(product, quantity, variations, notes, variationPrice, optionDetails);
     setShowVariationModal(false);
     setSelectedProduct(null);
   };

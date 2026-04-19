@@ -11,9 +11,9 @@ const normalizeSpaces = (value: unknown) =>
 
 export const toOrderNumber = (value: unknown) => {
   if (typeof value === 'number') return value;
+
   if (typeof value === 'string') {
-    let safe = value.trim();
-    safe = safe.replace(/[^0-9.,-]/g, '');
+    let safe = value.trim().replace(/[^0-9.,-]/g, '');
     const lastComma = safe.lastIndexOf(',');
     const lastDot = safe.lastIndexOf('.');
     const decimalPos = Math.max(lastComma, lastDot);
@@ -51,6 +51,7 @@ export const formatPaymentMethodLabel = (value: unknown) => {
 
   if (labels[raw]) return labels[raw];
   if (!raw) return 'Não informado';
+
   return raw
     .split(/[_\s]+/)
     .filter(Boolean)
@@ -92,26 +93,46 @@ export const getOrderItemTotal = (item: any) => {
 const appendDetailLine = (
   bucket: Map<string, OrderItemDetailLine>,
   text: string,
-  price?: number
+  price?: number,
+  keyHint?: string
 ) => {
   const normalizedText = normalizeSpaces(text);
   if (!normalizedText) return;
 
   const normalizedPrice = typeof price === 'number' && price > 0 ? price : undefined;
-  const key = `${normalizedText.toLowerCase()}|${normalizedPrice ?? ''}`;
-  if (!bucket.has(key)) {
-    bucket.set(key, { key, text: normalizedText, price: normalizedPrice });
+  const fallbackKey = normalizedText.toLowerCase();
+  const key = normalizeSpaces(keyHint) || fallbackKey;
+
+  const existing = bucket.get(key);
+  if (existing) {
+    if (normalizedPrice !== undefined && existing.price === undefined) {
+      bucket.set(key, { ...existing, price: normalizedPrice });
+    }
+    return;
   }
+
+  const existingByText = bucket.get(fallbackKey);
+  if (existingByText) {
+    if (normalizedPrice !== undefined && existingByText.price === undefined) {
+      bucket.set(fallbackKey, { ...existingByText, price: normalizedPrice });
+    }
+    return;
+  }
+
+  bucket.set(key, { key, text: normalizedText, price: normalizedPrice });
 };
 
 export const getOrderItemDetailLines = (item: any): OrderItemDetailLine[] => {
   const bucket = new Map<string, OrderItemDetailLine>();
+  const options = Array.isArray(item?.options) ? item.options : [];
+  const hasStoredOptions = options.length > 0;
 
   const variations = Array.isArray(item?.variations) ? item.variations : [];
   for (const variation of variations) {
     if (!variation) continue;
 
     if (typeof variation === 'string') {
+      if (hasStoredOptions) continue;
       appendDetailLine(bucket, variation);
       continue;
     }
@@ -123,11 +144,15 @@ export const getOrderItemDetailLines = (item: any): OrderItemDetailLine[] => {
           ? variation.options.map((option: any) => normalizeSpaces(option)).filter(Boolean).join(', ')
           : normalizeSpaces(variation?.value || variation?.selected_option || variation?.choice);
 
-      appendDetailLine(bucket, label && value ? `${label}: ${value}` : label || value);
+      appendDetailLine(
+        bucket,
+        label && value ? `${label}: ${value}` : label || value,
+        toOrderNumber(variation?.price ?? variation?.additional_price) || undefined,
+        variation?.key
+      );
     }
   }
 
-  const options = Array.isArray(item?.options) ? item.options : [];
   for (const option of options) {
     if (!option) continue;
 
@@ -140,12 +165,28 @@ export const getOrderItemDetailLines = (item: any): OrderItemDetailLine[] => {
       const label = normalizeSpaces(option?.name || option?.option_name || option?.title || option?.label || 'Variação');
       const value = normalizeSpaces(option?.value || option?.selected_option || option?.choice);
       const price = toOrderNumber(option?.price ?? option?.additional_price);
-      appendDetailLine(bucket, value ? `${label}: ${value}` : label, price > 0 ? price : undefined);
+      appendDetailLine(bucket, value ? `${label}: ${value}` : label, price > 0 ? price : undefined, option?.key);
     }
   }
 
-  return Array.from(bucket.values());
+  const lines = Array.from(bucket.values());
+  const inferredExtraTotal = Math.max(
+    0,
+    getOrderItemTotal(item) - (getOrderItemUnitPrice(item) * getOrderItemQuantity(item))
+  );
+  const pricedTotal = lines.reduce((total, detail) => total + toOrderNumber(detail.price), 0);
+  const missingPriceLines = lines.filter((detail) => detail.price === undefined);
+  const remainingExtra = Math.max(0, inferredExtraTotal - pricedTotal);
+
+  if (remainingExtra > 0 && missingPriceLines.length === 1) {
+    missingPriceLines[0].price = remainingExtra;
+  }
+
+  return lines;
 };
+
+export const getOrderItemExtraTotal = (item: any) =>
+  getOrderItemDetailLines(item).reduce((total, detail) => total + toOrderNumber(detail.price), 0);
 
 export const getOrderMapsLink = (order: any) => {
   const explicitLink = normalizeSpaces(order?.google_maps_link);
@@ -176,14 +217,19 @@ export const getOrderSubtotal = (order: any) => {
 export const buildTrackUrl = (order: any, origin?: string) => {
   const orderId = normalizeSpaces(order?.id);
   if (!orderId) return '';
+
   const safeOrigin =
     normalizeSpaces(origin) ||
     (typeof window !== 'undefined' ? normalizeSpaces(window.location.origin) : '');
+
   if (!safeOrigin) return '';
   return `${safeOrigin.replace(/\/+$/, '')}/track/${orderId}`;
 };
 
-export const buildDetailedOrderWhatsappMessage = (order: any, options?: { origin?: string; trackingUrl?: string }) => {
+export const buildDetailedOrderWhatsappMessage = (
+  order: any,
+  options?: { origin?: string; trackingUrl?: string }
+) => {
   const lines: string[] = [];
   const orderNumber = normalizeSpaces(order?.order_number || order?.id || '');
   const customerName = normalizeSpaces(order?.customer_name || 'Cliente');
@@ -205,7 +251,6 @@ export const buildDetailedOrderWhatsappMessage = (order: any, options?: { origin
   if (customerPhone) lines.push(`Telefone: ${customerPhone}`);
   if (customerAddress) lines.push(`Endereço: ${customerAddress}`);
   if (mapsLink) lines.push(`Maps: ${mapsLink}`);
-  if (deliveryInstructions) lines.push(`Instruções: ${deliveryInstructions}`);
 
   lines.push('', '*Itens:*');
 
@@ -218,6 +263,8 @@ export const buildDetailedOrderWhatsappMessage = (order: any, options?: { origin
       const itemTotal = getOrderItemTotal(item);
       const detailLines = getOrderItemDetailLines(item);
       const notes = normalizeSpaces(item?.notes || item?.observations);
+      const baseLineTotal = unitPrice * quantity;
+      const extraLineTotal = detailLines.reduce((totalDetails, detail) => totalDetails + toOrderNumber(detail.price), 0);
 
       lines.push(`${quantity}x ${getOrderItemDisplayName(item)}`);
       detailLines.forEach((detail) => {
@@ -228,15 +275,22 @@ export const buildDetailedOrderWhatsappMessage = (order: any, options?: { origin
         );
       });
       if (notes) lines.push(`   - Obs: ${notes}`);
-      lines.push(`   ${formatCurrencyBRL(unitPrice)} x ${quantity} = ${formatCurrencyBRL(itemTotal)}`);
+      lines.push(`   Base: ${formatCurrencyBRL(unitPrice)} x ${quantity} = ${formatCurrencyBRL(baseLineTotal)}`);
+      if (extraLineTotal > 0) lines.push(`   Complementos: +${formatCurrencyBRL(extraLineTotal)}`);
+      lines.push(`   Subtotal do item: ${formatCurrencyBRL(itemTotal)}`);
     });
   }
 
+  if (deliveryInstructions) {
+    lines.push('', '*OBSERVAÇÕES:*');
+    lines.push(deliveryInstructions);
+  }
+
   lines.push('', '*Resumo:*');
-  lines.push(`Subtotal: ${formatCurrencyBRL(subtotal)}`);
+  lines.push(`Subtotal dos itens: ${formatCurrencyBRL(subtotal)}`);
   if (deliveryFee > 0) lines.push(`Taxa de entrega: ${formatCurrencyBRL(deliveryFee)}`);
   if (discount > 0) lines.push(`Desconto: -${formatCurrencyBRL(discount)}`);
-  lines.push(`*Total: ${formatCurrencyBRL(total)}*`);
+  lines.push(`*Total com entrega: ${formatCurrencyBRL(total)}*`);
   lines.push(`Pagamento: ${paymentMethod}`);
 
   return lines.join('\n').trim();

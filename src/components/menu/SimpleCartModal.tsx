@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
+import { getOrderItemDetailLines } from '@/lib/orderDetails';
 
 interface CartItem {
   product: {
@@ -24,6 +25,12 @@ interface CartItem {
   };
   quantity: number;
   variations: string[];
+  options?: Array<{
+    key?: string;
+    label?: string;
+    value?: string;
+    price?: number;
+  }>;
   notes: string;
   totalPrice: number;
   uniqueId: string;
@@ -743,7 +750,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     setUpsellVariationOpen(false);
   };
 
-  const applyUpsellAndPlace = async (product: any, quantity: number, variations: string[], itemNotes: string, variationPrice: number, offerOverride?: UpsellOffer | null) => {
+  const applyUpsellAndPlace = async (
+    product: any,
+    quantity: number,
+    variations: string[],
+    itemNotes: string,
+    variationPrice: number,
+    optionDetails?: CartItem['options'],
+    offerOverride?: UpsellOffer | null
+  ) => {
     const base = pendingOrderData;
     if (!base) return;
     const selectedOffer = offerOverride || selectedUpsellOffer;
@@ -762,6 +777,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           product_name: String(product.name || ''),
           quantity: safeQuantity,
           price: finalUnitPrice,
+          options: Array.isArray(optionDetails) ? optionDetails : [],
           variations: Array.isArray(variations) ? variations : [],
           notes: String(itemNotes || ''),
           total: Number(lineTotal || 0),
@@ -808,7 +824,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     try {
       const hasVars = await hasProductVariations(String(offer.product.id));
       if (!hasVars) {
-        await applyUpsellAndPlace(offer.product, 1, [], '', 0, offer);
+        await applyUpsellAndPlace(offer.product, 1, [], '', 0, [], offer);
         return;
       }
       setSelectedUpsellOffer(offer);
@@ -855,6 +871,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           product_name: item.product.name,
           quantity: item.quantity,
           price: item.product.price,
+          options: Array.isArray(item.options) ? item.options : [],
           variations: item.variations,
           notes: item.notes,
           total: item.totalPrice
@@ -1000,13 +1017,23 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 </div>
 
                 <div className="space-y-4">
-                  {cart.map((item) => (
+                  {cart.map((item) => {
+                    const detailLines = getOrderItemDetailLines(item);
+
+                    return (
                     <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <h4 className="font-bold text-gray-900">{item.product.name}</h4>
-                          {item.variations.length > 0 && (
-                            <p className="text-sm text-gray-600 mt-1">{item.variations.join(', ')}</p>
+                          {detailLines.length > 0 && (
+                            <div className="mt-1 space-y-1">
+                              {detailLines.map((detail) => (
+                                <p key={detail.key} className="text-sm text-gray-600">
+                                  {detail.text}
+                                  {detail.price && detail.price > 0 ? ` (+${formatBRL(detail.price)})` : ''}
+                                </p>
+                              ))}
+                            </div>
                           )}
                           {item.notes && (
                             <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">Obs: {item.notes}</p>
@@ -1043,7 +1070,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                         </div>
                       </div>
                     </Card>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-xl space-y-2">
@@ -1553,8 +1581,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           setUpsellOpen(true);
         }}
         product={upsellSelectedProduct}
-        onAddToCart={(product, quantity, variations, notes, variationPrice) =>
-          applyUpsellAndPlace(product, quantity, variations, notes, variationPrice)
+        onAddToCart={(product, quantity, variations, notes, variationPrice, optionDetails) =>
+          applyUpsellAndPlace(product, quantity, variations, notes, variationPrice, optionDetails)
         }
       />
     </>
