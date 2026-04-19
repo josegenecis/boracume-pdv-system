@@ -29,6 +29,12 @@ import { PrinterService } from '@/utils/printerService';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
+import { WhatsAppService } from '@/services/WhatsAppService';
+import {
+  formatPaymentMethodLabel,
+  getOrderItemDetailLines,
+  getOrderMapsLink,
+} from '@/lib/orderDetails';
 
 interface OrderItem {
   product_name: string;
@@ -40,7 +46,7 @@ interface OrderItem {
   total?: number;
   unit_price?: number;
   options?: any[];
-  variations?: Array<{name: string; options: string[]}>;
+  variations?: any[];
 
   notes?: string;
 }
@@ -179,6 +185,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const totalValue = orderTotal > 0 ? orderTotal : subtotalValue + (deliveryFee > 0 ? deliveryFee : 0);
     const couponCode = String(order?.coupon_code || '').trim();
     const isLoyaltyDiscount = couponCode.startsWith('FID');
+    const mapsLink = getOrderMapsLink(order);
 
     const copyLocation = async () => {
       try {
@@ -320,7 +327,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    onClick={() => {
+                    onClick={() => { WhatsAppService.shareOrder(order); return;
                       const digits = (order.customer_phone || '').replace(/\D/g, '');
                       const wa = digits.startsWith('55') ? digits : `55${digits}`;
                       const link = `${window.location.origin}/track/${order?.id}`;
@@ -370,10 +377,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             <Copy className="h-3 w-3 mr-1" />
                             Copiar
                           </Button>
-                          {order?.customer_latitude && order?.customer_longitude && (
+                          {mapsLink && (
                             <Button
                               onClick={() => {
-                                window.open(`https://www.google.com/maps?q=${order.customer_latitude},${order.customer_longitude}`, '_blank');
+                                window.open(mapsLink, '_blank');
                               }}
                               variant="outline"
                               size="sm"
@@ -397,8 +404,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <h3 className="text-base font-semibold">Itens do Pedido</h3>
                 <div className="space-y-3">
                   {order?.items && Array.isArray(order.items) && order.items.length > 0 ? (
-                    order.items.map((item, index) => (
-                      <div key={index} className="border rounded-lg p-3 space-y-2">
+                    order.items.map((item, index) => {
+                      const detailLines = getOrderItemDetailLines(item);
+                      const itemNotes = String(item?.notes || item?.observations || '').trim();
+
+                      return (
+                        <div key={index} className="border rounded-lg p-3 space-y-2">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <h4 className="font-medium text-sm">{item?.product_name || 'Produto não informado'}</h4>
@@ -410,8 +421,23 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             {formatCurrency(itemTotal(item))}
                           </div>
                         </div>
-                        
-                        {item?.options && Array.isArray(item.options) && item.options.length > 0 && (
+                        {detailLines.length > 0 && (
+                          <div className="text-xs">
+                            <span className="font-medium text-gray-700">Adicionais e complementos:</span>
+                            <div className="mt-1 space-y-1">
+                              {detailLines.map((detail) => (
+                                <div key={detail.key} className="text-gray-600 flex justify-between gap-3">
+                                  <span>{detail.text}</span>
+                                  {detail.price && detail.price > 0 ? (
+                                    <span className="whitespace-nowrap">+{formatCurrency(detail.price)}</span>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {false && item?.options && Array.isArray(item.options) && item.options.length > 0 && (
                           <div className="text-xs">
                             <span className="font-medium text-gray-700">Variações:</span>
                             <div className="mt-1 space-y-1">
@@ -450,14 +476,15 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                           </div>
                         )}
                         
-                        {item?.notes && (
+                        {itemNotes && (
                           <div className="text-xs">
                             <span className="font-medium text-gray-700">Observações:</span>
-                            <p className="text-gray-600 mt-1">{item.notes}</p>
+                            <p className="text-gray-600 mt-1">{itemNotes}</p>
                           </div>
                         )}
-                      </div>
-                    ))
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="text-center text-gray-500 py-4">
                       Nenhum item encontrado no pedido
@@ -495,7 +522,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   </div>
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>Método de pagamento:</span>
-                    <span className="font-medium">{(order?.payment_method || 'N/A').toUpperCase()}</span>
+                    <span className="font-medium">{formatPaymentMethodLabel(order?.payment_method)}</span>
                   </div>
                   {couponCode && (
                     <div className="flex justify-between text-xs text-gray-600">

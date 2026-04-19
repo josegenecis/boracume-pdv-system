@@ -168,7 +168,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[100dvw] max-w-[100dvw] h-[100dvh] sm:h-auto sm:max-h-[85vh] sm:max-w-md overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+      <DialogContent className="w-[100dvw] max-w-[100dvw] h-[100dvh] max-h-[100dvh] sm:h-[88dvh] sm:max-h-[88dvh] sm:max-w-md overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
           <div className="relative">
             {product.image_url ? (

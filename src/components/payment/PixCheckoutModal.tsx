@@ -102,7 +102,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Pagamento via PIX</DialogTitle>
           <DialogDescription>Escaneie o QR Code ou copie o código para pagar.</DialogDescription>

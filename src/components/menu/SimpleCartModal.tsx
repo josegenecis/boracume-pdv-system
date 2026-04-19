@@ -29,6 +29,17 @@ interface CartItem {
   uniqueId: string;
 }
 
+type PaymentMethodCode = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'cartao';
+
+interface CheckoutPaymentMethod {
+  id: string;
+  name: string;
+  is_card: boolean;
+  extra_fee_percent: number;
+  icon: 'pix' | 'cartao_credito' | 'cartao_debito' | 'cartao' | 'dinheiro';
+  code: PaymentMethodCode;
+}
+
 type UpsellOffer = {
   ruleId: string;
   triggerProductId: string | null;
@@ -37,6 +48,76 @@ type UpsellOffer = {
   discountValue: number | null;
   product: { id: string; name: string; price: number; description?: string; image_url?: string };
 };
+
+const normalizePaymentMethodText = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const inferPaymentMethodCode = (method: { id?: string; name?: string; is_card?: boolean; icon?: string | null }): PaymentMethodCode => {
+  const raw = [
+    normalizePaymentMethodText(method.id),
+    normalizePaymentMethodText(method.name),
+    normalizePaymentMethodText(method.icon)
+  ].join(' ');
+
+  if (raw.includes('pix')) return 'pix';
+  if (raw.includes('debito')) return 'cartao_debito';
+  if (raw.includes('credito') || raw.includes('credit')) return 'cartao_credito';
+  if (raw.includes('dinheiro') || raw.includes('cash') || raw.includes('especie')) return 'dinheiro';
+  return method.is_card ? 'cartao' : 'dinheiro';
+};
+
+const getPaymentMethodIcon = (code: PaymentMethodCode): CheckoutPaymentMethod['icon'] => {
+  switch (code) {
+    case 'pix':
+      return 'pix';
+    case 'cartao_credito':
+      return 'cartao_credito';
+    case 'cartao_debito':
+      return 'cartao_debito';
+    case 'cartao':
+      return 'cartao';
+    default:
+      return 'dinheiro';
+  }
+};
+
+const paymentMethodPriority: Record<PaymentMethodCode, number> = {
+  pix: 0,
+  cartao_credito: 1,
+  cartao_debito: 2,
+  cartao: 3,
+  dinheiro: 4
+};
+
+const mapCheckoutPaymentMethod = (method: any): CheckoutPaymentMethod => {
+  const isCard = Boolean(method?.is_card);
+  const code = inferPaymentMethodCode({
+    id: String(method?.id || ''),
+    name: String(method?.name || ''),
+    is_card: isCard,
+    icon: typeof method?.icon === 'string' ? method.icon : null
+  });
+
+  return {
+    id: String(method?.id || code),
+    name: String(method?.name || ''),
+    is_card: isCard,
+    extra_fee_percent: Number(method?.extra_fee_percent || 0),
+    icon: getPaymentMethodIcon(code),
+    code
+  };
+};
+
+const fallbackPaymentMethods: CheckoutPaymentMethod[] = [
+  { id: 'pix', name: 'PIX', is_card: false, extra_fee_percent: 0, icon: 'pix', code: 'pix' },
+  { id: 'cartao_credito', name: 'Cartão de Crédito', is_card: true, extra_fee_percent: 0, icon: 'cartao_credito', code: 'cartao_credito' },
+  { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito', code: 'cartao_debito' },
+  { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro', code: 'dinheiro' }
+];
 
 interface SimpleCartModalProps {
   isOpen: boolean;
@@ -117,10 +198,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     error: null as string | null
   });
 
-
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
-  const isPixSelected = (selectedPaymentMethod as any)?.id === 'pix';
+  const [paymentMethods, setPaymentMethods] = useState<CheckoutPaymentMethod[]>([]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<CheckoutPaymentMethod | null>(null);
+  const isPixSelected = selectedPaymentMethod?.code === 'pix';
   const requiresMercadoPago = isPixSelected;
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
@@ -207,15 +287,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           .order('name');
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((m: any) => ({
-            ...m,
-            extra_fee_percent: m.extra_fee_percent ?? 0,
-            is_card: m.is_card ?? false,
-            icon: m.icon || (m.id === 'pix' ? 'pix' : m.is_card ? 'cartao_credito' : 'dinheiro')
-          }));
+          const mapped = data
+            .map((m: any) => mapCheckoutPaymentMethod(m))
+            .sort((a, b) => {
+              const priorityDelta = paymentMethodPriority[a.code] - paymentMethodPriority[b.code];
+              if (priorityDelta !== 0) return priorityDelta;
+              return a.name.localeCompare(b.name, 'pt-BR');
+            });
           setPaymentMethods(mapped);
           setSelectedPaymentMethod(mapped[0] || null);
-          setPaymentMethod(mapped[0]?.id || '');
+          setPaymentMethod(mapped[0]?.code || '');
         } else {
           // Fallback para ambientes onde o fetch falha ou não há métodos cadastrados
           const fallback = [
@@ -224,9 +305,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
             { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
           ];
-          setPaymentMethods(fallback as any);
-          setSelectedPaymentMethod(fallback[0] as any);
-          setPaymentMethod((fallback[0] as any)?.id || '');
+          setPaymentMethods(fallbackPaymentMethods);
+          setSelectedPaymentMethod(fallbackPaymentMethods[0] || null);
+          setPaymentMethod(fallbackPaymentMethods[0]?.code || '');
         }
       } catch (e) {
         const fallback = [
@@ -235,9 +316,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           { id: 'cartao_debito', name: 'Cartão de Débito', is_card: true, extra_fee_percent: 0, icon: 'cartao_debito' },
           { id: 'dinheiro', name: 'Dinheiro', is_card: false, extra_fee_percent: 0, icon: 'dinheiro' }
         ];
-        setPaymentMethods(fallback as any);
-        setSelectedPaymentMethod(fallback[0] as any);
-        setPaymentMethod((fallback[0] as any)?.id || '');
+        setPaymentMethods(fallbackPaymentMethods);
+        setSelectedPaymentMethod(fallbackPaymentMethods[0] || null);
+        setPaymentMethod(fallbackPaymentMethods[0]?.code || '');
       }
     };
     if (isOpen) fetchPaymentMethods();
@@ -889,7 +970,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         />
       ) : null}
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+      <DialogContent className="max-w-lg h-[100dvh] max-h-[100dvh] sm:h-[90dvh] sm:max-h-[90dvh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
@@ -1206,7 +1287,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               <div className="space-y-2">
                 {paymentMethods.length > 0 ? paymentMethods.map((option) => {
-                  const IconComponent = option.icon === 'cartao_credito' || option.icon === 'cartao_debito' ? CreditCard : Banknote;
+                  const IconComponent = option.code === 'pix' ? Smartphone : option.is_card ? CreditCard : Banknote;
                   const isSelected = selectedPaymentMethod?.id === option.id;
                   return (
                     <div
@@ -1214,16 +1295,16 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${isSelected ? '' : 'border-gray-200 hover:border-gray-300'}`}
                       style={isSelected ? { borderColor: menuPrimaryColor, backgroundColor: menuBackgroundColor } : undefined}
                       onClick={() => {
-                        setSelectedPaymentMethod(option as any)
-                        setPaymentMethod(option.id)
+                        setSelectedPaymentMethod(option)
+                        setPaymentMethod(option.code)
                       }}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          setSelectedPaymentMethod(option as any);
-                          setPaymentMethod(option.id);
+                          setSelectedPaymentMethod(option);
+                          setPaymentMethod(option.code);
                         }
                       }}
                     >
@@ -1256,7 +1337,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               )}
 
               {/* Campo de Troco */}
-              {selectedPaymentMethod?.id === 'dinheiro' && (
+              {selectedPaymentMethod?.code === 'dinheiro' && (
                 <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                   <Label htmlFor="change" className="text-sm font-medium mb-1 block">
                     Precisa de troco para quanto?

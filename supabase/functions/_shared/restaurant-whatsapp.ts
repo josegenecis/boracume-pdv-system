@@ -62,6 +62,247 @@ export function fillTemplate(template: string, variables: Record<string, string>
   return template.replace(/\{(\w+)\}/g, (_, key) => variables[key] ?? "");
 }
 
+function normalizeText(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    let safe = value.trim().replace(/[^0-9.,-]/g, "");
+    const lastComma = safe.lastIndexOf(",");
+    const lastDot = safe.lastIndexOf(".");
+    const decimalPos = Math.max(lastComma, lastDot);
+
+    if (decimalPos >= 0) {
+      const integerPart = safe.slice(0, decimalPos).replace(/[^0-9-]/g, "");
+      const fractionPart = safe.slice(decimalPos + 1).replace(/[^0-9]/g, "");
+      safe = `${integerPart}.${fractionPart}`;
+    } else {
+      safe = safe.replace(/[^0-9-]/g, "");
+    }
+
+    const parsed = Number(safe);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrency(value: unknown) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(toNumber(value));
+}
+
+function formatPaymentMethodLabel(value: unknown) {
+  const raw = normalizeText(value).toLowerCase();
+  const labels: Record<string, string> = {
+    pix: "PIX",
+    dinheiro: "Dinheiro",
+    cartao: "Cartao",
+    cartao_credito: "Cartao de Credito",
+    cartao_debito: "Cartao de Debito",
+    credito: "Cartao de Credito",
+    debito: "Cartao de Debito",
+  };
+
+  if (labels[raw]) return labels[raw];
+  if (!raw) return "Nao informado";
+
+  return raw
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function parseOrderItems(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function getItemDisplayName(item: any) {
+  return normalizeText(item?.product_name || item?.name || "Produto nao informado");
+}
+
+function getItemQuantity(item: any) {
+  const quantity = toNumber(item?.quantity);
+  return quantity > 0 ? quantity : 1;
+}
+
+function getItemUnitPrice(item: any) {
+  const price = toNumber(item?.unit_price ?? item?.price);
+  return price >= 0 ? price : 0;
+}
+
+function getOptionsExtra(item: any) {
+  const options = Array.isArray(item?.options) ? item.options : [];
+  return options.reduce((total: number, option: any) => {
+    if (!option || typeof option === "string") return total;
+    const extra = toNumber(option?.price ?? option?.additional_price);
+    return total + (extra > 0 ? extra : 0);
+  }, 0);
+}
+
+function getItemTotal(item: any) {
+  const explicitTotal = toNumber(item?.total_price ?? item?.subtotal ?? item?.total);
+  if (explicitTotal > 0) return explicitTotal;
+
+  const quantity = getItemQuantity(item);
+  const unitPrice = getItemUnitPrice(item);
+  return quantity * unitPrice + quantity * getOptionsExtra(item);
+}
+
+function appendDetailLine(
+  bucket: Map<string, { key: string; text: string; price?: number }>,
+  text: string,
+  price?: number
+) {
+  const normalizedText = normalizeText(text);
+  if (!normalizedText) return;
+
+  const normalizedPrice = typeof price === "number" && price > 0 ? price : undefined;
+  const key = `${normalizedText.toLowerCase()}|${normalizedPrice ?? ""}`;
+  if (!bucket.has(key)) {
+    bucket.set(key, { key, text: normalizedText, price: normalizedPrice });
+  }
+}
+
+function getItemDetailLines(item: any) {
+  const bucket = new Map<string, { key: string; text: string; price?: number }>();
+  const variations = Array.isArray(item?.variations) ? item.variations : [];
+
+  for (const variation of variations) {
+    if (!variation) continue;
+
+    if (typeof variation === "string") {
+      appendDetailLine(bucket, variation);
+      continue;
+    }
+
+    if (typeof variation === "object") {
+      const label = normalizeText(variation?.name || variation?.label || variation?.receipt_label);
+      const value =
+        Array.isArray(variation?.options) && variation.options.length > 0
+          ? variation.options.map((option: any) => normalizeText(option)).filter(Boolean).join(", ")
+          : normalizeText(variation?.value || variation?.selected_option || variation?.choice);
+
+      appendDetailLine(bucket, label && value ? `${label}: ${value}` : label || value);
+    }
+  }
+
+  const options = Array.isArray(item?.options) ? item.options : [];
+  for (const option of options) {
+    if (!option) continue;
+
+    if (typeof option === "string") {
+      appendDetailLine(bucket, option);
+      continue;
+    }
+
+    if (typeof option === "object") {
+      const label = normalizeText(option?.name || option?.option_name || option?.title || option?.label || "Opcao");
+      const value = normalizeText(option?.value || option?.selected_option || option?.choice);
+      const price = toNumber(option?.price ?? option?.additional_price);
+
+      appendDetailLine(bucket, value ? `${label}: ${value}` : label, price > 0 ? price : undefined);
+    }
+  }
+
+  return Array.from(bucket.values());
+}
+
+function getMapsLink(order: any) {
+  const explicitLink = normalizeText(order?.google_maps_link);
+  if (explicitLink) return explicitLink;
+
+  const latitude = toNumber(order?.customer_latitude);
+  const longitude = toNumber(order?.customer_longitude);
+  if (latitude && longitude) {
+    return `https://www.google.com/maps?q=${latitude},${longitude}`;
+  }
+
+  return "";
+}
+
+function getOrderSubtotal(order: any) {
+  const explicitSubtotal = toNumber(order?.subtotal);
+  if (explicitSubtotal > 0) return explicitSubtotal;
+
+  const items = parseOrderItems(order?.items);
+  const itemsSubtotal = items.reduce((total: number, item: any) => total + getItemTotal(item), 0);
+  if (itemsSubtotal > 0) return itemsSubtotal;
+
+  const total = toNumber(order?.total);
+  const deliveryFee = toNumber(order?.delivery_fee);
+  return Math.max(0, total - deliveryFee);
+}
+
+function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
+  const lines: string[] = [];
+  const orderNumber = normalizeText(order?.order_number || order?.id || "");
+  const customerName = normalizeText(order?.customer_name || "Cliente");
+  const customerPhone = normalizeText(order?.customer_phone);
+  const customerAddress = normalizeText(order?.customer_address);
+  const deliveryInstructions = normalizeText(order?.delivery_instructions);
+  const mapsLink = getMapsLink(order);
+  const items = parseOrderItems(order?.items);
+  const subtotal = getOrderSubtotal(order);
+  const deliveryFee = Math.max(0, toNumber(order?.delivery_fee));
+  const discount = Math.max(0, toNumber(order?.discount));
+  const total = toNumber(order?.total) || Math.max(0, subtotal + deliveryFee - discount);
+  const paymentMethod = formatPaymentMethodLabel(order?.payment_method);
+
+  lines.push(`Pedido #${orderNumber || "sem numero"}`);
+  if (trackingUrl) lines.push(`Acompanhe: ${trackingUrl}`);
+  lines.push(`Cliente: ${customerName}`);
+  if (customerPhone) lines.push(`Telefone: ${customerPhone}`);
+  if (customerAddress) lines.push(`Endereco: ${customerAddress}`);
+  if (mapsLink) lines.push(`Maps: ${mapsLink}`);
+  if (deliveryInstructions) lines.push(`Instrucoes: ${deliveryInstructions}`);
+
+  lines.push("", "Itens:");
+
+  if (items.length === 0) {
+    lines.push("- Nenhum item informado");
+  } else {
+    for (const item of items) {
+      const quantity = getItemQuantity(item);
+      const unitPrice = getItemUnitPrice(item);
+      const itemTotal = getItemTotal(item);
+      const itemNotes = normalizeText(item?.notes || item?.observations);
+      const detailLines = getItemDetailLines(item);
+
+      lines.push(`${quantity}x ${getItemDisplayName(item)}`);
+      for (const detail of detailLines) {
+        lines.push(
+          detail.price && detail.price > 0
+            ? `   - ${detail.text} (+${formatCurrency(detail.price)})`
+            : `   - ${detail.text}`
+        );
+      }
+      if (itemNotes) lines.push(`   - Obs: ${itemNotes}`);
+      lines.push(`   ${formatCurrency(unitPrice)} x ${quantity} = ${formatCurrency(itemTotal)}`);
+    }
+  }
+
+  lines.push("", "Resumo:");
+  lines.push(`Subtotal: ${formatCurrency(subtotal)}`);
+  if (deliveryFee > 0) lines.push(`Taxa de entrega: ${formatCurrency(deliveryFee)}`);
+  if (discount > 0) lines.push(`Desconto: -${formatCurrency(discount)}`);
+  lines.push(`Total: ${formatCurrency(total)}`);
+  lines.push(`Pagamento: ${paymentMethod}`);
+
+  return lines.join("\n").trim();
+}
+
 export async function loadRestaurantContext(supabase: any, restaurantId: string): Promise<RestaurantContext> {
   const [profileResult, settingsResult] = await Promise.all([
     supabase.from("profiles").select("restaurant_name").eq("id", restaurantId).maybeSingle(),
@@ -129,7 +370,10 @@ export async function notifyOrderCreated(supabase: any, order: any) {
     customer_name: String(order?.customer_name || "Cliente")
   };
 
-  const text = fillTemplate(context.autoResponses.order_received, variables);
+  const intro = fillTemplate(context.autoResponses.order_received, variables).trim();
+  const detailTrackingUrl = intro.includes(variables.track_link) ? "" : variables.track_link;
+  const details = buildDetailedOrderMessage(order, detailTrackingUrl);
+  const text = [intro, details].filter(Boolean).join("\n\n");
   return await sendRestaurantWhatsApp(restaurantId, customerPhone, text);
 }
 
