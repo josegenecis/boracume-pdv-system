@@ -264,9 +264,8 @@ export const buildDetailedOrderWhatsappMessage = (
       const detailLines = getOrderItemDetailLines(item);
       const notes = normalizeSpaces(item?.notes || item?.observations);
       const baseLineTotal = unitPrice * quantity;
-      const extraLineTotal = detailLines.reduce((totalDetails, detail) => totalDetails + toOrderNumber(detail.price), 0);
 
-      lines.push(`${quantity}x ${getOrderItemDisplayName(item)}`);
+      lines.push(`${quantity}x ${getOrderItemDisplayName(item)} = ${formatCurrencyBRL(baseLineTotal)}`);
       detailLines.forEach((detail) => {
         lines.push(
           detail.price && detail.price > 0
@@ -275,8 +274,6 @@ export const buildDetailedOrderWhatsappMessage = (
         );
       });
       if (notes) lines.push(`   - Obs: ${notes}`);
-      lines.push(`   Base: ${formatCurrencyBRL(unitPrice)} x ${quantity} = ${formatCurrencyBRL(baseLineTotal)}`);
-      if (extraLineTotal > 0) lines.push(`   Complementos: +${formatCurrencyBRL(extraLineTotal)}`);
       lines.push(`   Subtotal do item: ${formatCurrencyBRL(itemTotal)}`);
     });
   }

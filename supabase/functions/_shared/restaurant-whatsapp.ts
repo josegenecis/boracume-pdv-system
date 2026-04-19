@@ -313,9 +313,8 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
       const itemNotes = normalizeText(item?.notes || item?.observations);
       const detailLines = getItemDetailLines(item);
       const baseLineTotal = unitPrice * quantity;
-      const extraLineTotal = detailLines.reduce((totalDetails: number, detail: any) => totalDetails + toNumber(detail?.price), 0);
 
-      lines.push(`${quantity}x ${getItemDisplayName(item)}`);
+      lines.push(`${quantity}x ${getItemDisplayName(item)} = ${formatCurrency(baseLineTotal)}`);
       for (const detail of detailLines) {
         lines.push(
           detail.price && detail.price > 0
@@ -324,8 +323,6 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
         );
       }
       if (itemNotes) lines.push(`   - Obs: ${itemNotes}`);
-      lines.push(`   Base: ${formatCurrency(unitPrice)} x ${quantity} = ${formatCurrency(baseLineTotal)}`);
-      if (extraLineTotal > 0) lines.push(`   Complementos: +${formatCurrency(extraLineTotal)}`);
       lines.push(`   Subtotal do item: ${formatCurrency(itemTotal)}`);
     }
   }

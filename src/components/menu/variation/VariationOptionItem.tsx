@@ -35,10 +35,10 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
       : `+ ${formatBRL(option.price)}`
     : '';
   return (
-    <div className={`flex items-center justify-between gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium text-gray-900 truncate">{option.name}</div>
+    <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>
+      <div className="min-w-0 pr-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="text-sm font-medium leading-snug text-gray-900 break-words whitespace-normal">{option.name}</div>
           {option.recommended && (
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
               Recomendado
@@ -46,18 +46,20 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
           )}
         </div>
         {priceLabel && (
-          <div className="text-xs font-medium" style={{ color: 'var(--menu-primary, #85C441)' }}>{priceLabel}</div>
+          <div className="mt-1 text-xs font-medium leading-snug break-words whitespace-normal" style={{ color: 'var(--menu-primary, #85C441)' }}>
+            {priceLabel}
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 flex-shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 self-center">
         {isSelected ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-xl"
+              className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl"
               disabled={removeDisabled}
               style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
               onClick={(e) => {
@@ -67,12 +69,12 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             >
               <Minus className="h-4 w-4" />
             </Button>
-            <div className="w-6 text-center text-sm font-bold" style={{ color: 'var(--menu-primary, #85C441)' }}>{selectedCount}</div>
+            <div className="min-w-[1.5rem] text-center text-sm font-bold" style={{ color: 'var(--menu-primary, #85C441)' }}>{selectedCount}</div>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-xl"
+              className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl"
               disabled={addDisabled}
               style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
               onClick={(e) => {
@@ -88,7 +90,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
             type="button"
             variant="outline"
             size="icon"
-            className="h-9 w-9 rounded-xl"
+            className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl"
             disabled={addDisabled}
             style={{ color: 'var(--menu-primary, #85C441)', borderColor: 'color-mix(in srgb, var(--menu-primary, #85C441) 22%, #d1d5db)' }}
             onClick={(e) => {
