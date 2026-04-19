@@ -4,10 +4,40 @@ export type OrderItemDetailLine = {
   price?: number;
 };
 
+export type OrderItemDetailGroupItem = {
+  key: string;
+  text: string;
+  price?: number;
+};
+
+export type OrderItemDetailGroup = {
+  key: string;
+  label?: string;
+  items: OrderItemDetailGroupItem[];
+};
+
 const normalizeSpaces = (value: unknown) =>
   String(value ?? '')
     .replace(/\s+/g, ' ')
     .trim();
+
+const splitDetailLabelValue = (text: string) => {
+  const normalized = normalizeSpaces(text);
+  const idx = normalized.indexOf(':');
+  if (idx <= 0) return null;
+
+  const label = normalizeSpaces(normalized.slice(0, idx));
+  const value = normalizeSpaces(normalized.slice(idx + 1));
+  if (!label || !value) return null;
+
+  return { label, value };
+};
+
+const splitGroupedValues = (value: string) =>
+  normalizeSpaces(value)
+    .split(/\s*,\s*/)
+    .map((item) => normalizeSpaces(item))
+    .filter(Boolean);
 
 export const toOrderNumber = (value: unknown) => {
   if (typeof value === 'number') return value;
@@ -188,6 +218,86 @@ export const getOrderItemDetailLines = (item: any): OrderItemDetailLine[] => {
 export const getOrderItemExtraTotal = (item: any) =>
   getOrderItemDetailLines(item).reduce((total, detail) => total + toOrderNumber(detail.price), 0);
 
+export const getOrderItemDetailGroups = (item: any): OrderItemDetailGroup[] => {
+  const groups: Array<OrderItemDetailGroup & { itemMap: Map<string, OrderItemDetailGroupItem> }> = [];
+  const groupMap = new Map<string, OrderItemDetailGroup & { itemMap: Map<string, OrderItemDetailGroupItem> }>();
+
+  const ensureGroup = (label?: string) => {
+    const normalizedLabel = normalizeSpaces(label);
+    const groupKey = normalizedLabel ? normalizedLabel.toLowerCase() : '__plain__';
+    const existing = groupMap.get(groupKey);
+    if (existing) return existing;
+
+    const next: OrderItemDetailGroup & { itemMap: Map<string, OrderItemDetailGroupItem> } = {
+      key: groupKey,
+      ...(normalizedLabel ? { label: normalizedLabel } : {}),
+      items: [],
+      itemMap: new Map(),
+    };
+    groupMap.set(groupKey, next);
+    groups.push(next);
+    return next;
+  };
+
+  const appendGroupItem = (
+    group: OrderItemDetailGroup & { itemMap: Map<string, OrderItemDetailGroupItem> },
+    text: string,
+    price?: number,
+    keyHint?: string
+  ) => {
+    const normalizedText = normalizeSpaces(text);
+    if (!normalizedText) return;
+
+    const normalizedPrice = typeof price === 'number' && price > 0 ? price : undefined;
+    const itemKey = normalizeSpaces(keyHint) || normalizedText.toLowerCase();
+    const existing = group.itemMap.get(itemKey);
+
+    if (existing) {
+      if (normalizedPrice !== undefined && existing.price === undefined) {
+        existing.price = normalizedPrice;
+      }
+      return;
+    }
+
+    const existingByText = group.items.find((item) => item.text.toLowerCase() === normalizedText.toLowerCase());
+    if (existingByText) {
+      if (normalizedPrice !== undefined && existingByText.price === undefined) {
+        existingByText.price = normalizedPrice;
+      }
+      group.itemMap.set(itemKey, existingByText);
+      return;
+    }
+
+    const nextItem: OrderItemDetailGroupItem = {
+      key: itemKey,
+      text: normalizedText,
+      ...(normalizedPrice !== undefined ? { price: normalizedPrice } : {}),
+    };
+    group.items.push(nextItem);
+    group.itemMap.set(itemKey, nextItem);
+  };
+
+  getOrderItemDetailLines(item).forEach((detail) => {
+    const parsed = splitDetailLabelValue(detail.text);
+    if (!parsed) {
+      appendGroupItem(ensureGroup(), detail.text, detail.price, detail.key);
+      return;
+    }
+
+    const valueParts =
+      detail.price === undefined && parsed.value.includes(',')
+        ? splitGroupedValues(parsed.value)
+        : [parsed.value];
+
+    const group = ensureGroup(parsed.label);
+    valueParts.forEach((value, index) => {
+      appendGroupItem(group, value, detail.price, `${detail.key}:${index}`);
+    });
+  });
+
+  return groups.map(({ itemMap, ...group }) => group);
+};
+
 export const getOrderMapsLink = (order: any) => {
   const explicitLink = normalizeSpaces(order?.google_maps_link);
   if (explicitLink) return explicitLink;
@@ -261,17 +371,23 @@ export const buildDetailedOrderWhatsappMessage = (
       const quantity = getOrderItemQuantity(item);
       const unitPrice = getOrderItemUnitPrice(item);
       const itemTotal = getOrderItemTotal(item);
-      const detailLines = getOrderItemDetailLines(item);
+      const detailGroups = getOrderItemDetailGroups(item);
       const notes = normalizeSpaces(item?.notes || item?.observations);
       const baseLineTotal = unitPrice * quantity;
 
       lines.push(`${quantity}x ${getOrderItemDisplayName(item)} = ${formatCurrencyBRL(baseLineTotal)}`);
-      detailLines.forEach((detail) => {
-        lines.push(
-          detail.price && detail.price > 0
-            ? `   - ${detail.text} (+${formatCurrencyBRL(detail.price)})`
-            : `   - ${detail.text}`
-        );
+      detailGroups.forEach((group) => {
+        if (group.label) {
+          lines.push(`   ${group.label}:`);
+        }
+
+        group.items.forEach((detail) => {
+          lines.push(
+            detail.price && detail.price > 0
+              ? `   - ${detail.text} (+${formatCurrencyBRL(detail.price)})`
+              : `   - ${detail.text}`
+          );
+        });
       });
       if (notes) lines.push(`   - Obs: ${notes}`);
       lines.push(`   Subtotal do item: ${formatCurrencyBRL(itemTotal)}`);

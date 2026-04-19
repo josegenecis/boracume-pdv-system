@@ -32,7 +32,7 @@ import { verifyAdminPin } from '@/services/adminPin';
 import { WhatsAppService } from '@/services/WhatsAppService';
 import {
   formatPaymentMethodLabel,
-  getOrderItemDetailLines,
+  getOrderItemDetailGroups,
   getOrderMapsLink,
 } from '@/lib/orderDetails';
 
@@ -399,7 +399,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <div className="space-y-3">
                   {order?.items && Array.isArray(order.items) && order.items.length > 0 ? (
                     order.items.map((item, index) => {
-                      const detailLines = getOrderItemDetailLines(item);
+                      const detailGroups = getOrderItemDetailGroups(item);
                       const itemNotes = String(item?.notes || item?.observations || '').trim();
 
                       return (
@@ -415,16 +415,23 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                             {formatCurrency(itemTotal(item))}
                           </div>
                         </div>
-                        {detailLines.length > 0 && (
+                        {detailGroups.length > 0 && (
                           <div className="text-xs">
                             <span className="font-medium text-gray-700">Adicionais e complementos:</span>
-                            <div className="mt-1 space-y-1">
-                              {detailLines.map((detail) => (
-                                <div key={detail.key} className="text-gray-600 flex justify-between gap-3">
-                                  <span>{detail.text}</span>
-                                  {detail.price && detail.price > 0 ? (
-                                    <span className="whitespace-nowrap">+{formatCurrency(detail.price)}</span>
+                            <div className="mt-1 space-y-2">
+                              {detailGroups.map((group) => (
+                                <div key={group.key} className="space-y-1">
+                                  {group.label ? (
+                                    <div className="font-medium text-gray-700">{group.label}:</div>
                                   ) : null}
+                                  {group.items.map((detail) => (
+                                    <div key={detail.key} className="text-gray-600 flex justify-between gap-3">
+                                      <span>{detail.text}</span>
+                                      {detail.price && detail.price > 0 ? (
+                                        <span className="whitespace-nowrap">+{formatCurrency(detail.price)}</span>
+                                      ) : null}
+                                    </div>
+                                  ))}
                                 </div>
                               ))}
                             </div>

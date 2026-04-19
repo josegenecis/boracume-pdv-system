@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/card';
 import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
-import { getOrderItemDetailLines } from '@/lib/orderDetails';
+import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 
 interface CartItem {
   product: {
@@ -1018,20 +1018,27 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
                 <div className="space-y-4">
                   {cart.map((item) => {
-                    const detailLines = getOrderItemDetailLines(item);
+                    const detailGroups = getOrderItemDetailGroups(item);
 
                     return (
                     <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <h4 className="font-bold text-gray-900">{item.product.name}</h4>
-                          {detailLines.length > 0 && (
+                          {detailGroups.length > 0 && (
                             <div className="mt-1 space-y-1">
-                              {detailLines.map((detail) => (
-                                <p key={detail.key} className="text-sm text-gray-600">
-                                  {detail.text}
-                                  {detail.price && detail.price > 0 ? ` (+${formatBRL(detail.price)})` : ''}
-                                </p>
+                              {detailGroups.map((group) => (
+                                <div key={group.key} className="space-y-1">
+                                  {group.label ? (
+                                    <p className="text-sm font-medium text-gray-700">{group.label}:</p>
+                                  ) : null}
+                                  {group.items.map((detail) => (
+                                    <p key={detail.key} className="text-sm text-gray-600">
+                                      {detail.text}
+                                      {detail.price && detail.price > 0 ? ` (+${formatBRL(detail.price)})` : ''}
+                                    </p>
+                                  ))}
+                                </div>
                               ))}
                             </div>
                           )}

@@ -253,6 +253,109 @@ function getItemDetailLines(item: any) {
   return lines;
 }
 
+function splitDetailLabelValue(text: string) {
+  const normalized = normalizeText(text);
+  const idx = normalized.indexOf(":");
+  if (idx <= 0) return null;
+
+  const label = normalizeText(normalized.slice(0, idx));
+  const value = normalizeText(normalized.slice(idx + 1));
+  if (!label || !value) return null;
+
+  return { label, value };
+}
+
+function splitGroupedValues(value: string) {
+  return normalizeText(value)
+    .split(/\s*,\s*/)
+    .map((item) => normalizeText(item))
+    .filter(Boolean);
+}
+
+function getItemDetailGroups(item: any) {
+  const groups: Array<{
+    key: string;
+    label?: string;
+    items: Array<{ key: string; text: string; price?: number }>;
+    itemMap: Map<string, { key: string; text: string; price?: number }>;
+  }> = [];
+  const groupMap = new Map<string, (typeof groups)[number]>();
+
+  const ensureGroup = (label?: string) => {
+    const normalizedLabel = normalizeText(label);
+    const groupKey = normalizedLabel ? normalizedLabel.toLowerCase() : "__plain__";
+    const existing = groupMap.get(groupKey);
+    if (existing) return existing;
+
+    const next = {
+      key: groupKey,
+      ...(normalizedLabel ? { label: normalizedLabel } : {}),
+      items: [],
+      itemMap: new Map<string, { key: string; text: string; price?: number }>(),
+    };
+    groupMap.set(groupKey, next);
+    groups.push(next);
+    return next;
+  };
+
+  const appendGroupItem = (
+    group: (typeof groups)[number],
+    text: string,
+    price?: number,
+    keyHint?: string
+  ) => {
+    const normalizedText = normalizeText(text);
+    if (!normalizedText) return;
+
+    const normalizedPrice = typeof price === "number" && price > 0 ? price : undefined;
+    const itemKey = normalizeText(keyHint) || normalizedText.toLowerCase();
+    const existing = group.itemMap.get(itemKey);
+    if (existing) {
+      if (normalizedPrice !== undefined && existing.price === undefined) {
+        existing.price = normalizedPrice;
+      }
+      return;
+    }
+
+    const existingByText = group.items.find((item) => item.text.toLowerCase() === normalizedText.toLowerCase());
+    if (existingByText) {
+      if (normalizedPrice !== undefined && existingByText.price === undefined) {
+        existingByText.price = normalizedPrice;
+      }
+      group.itemMap.set(itemKey, existingByText);
+      return;
+    }
+
+    const nextItem = {
+      key: itemKey,
+      text: normalizedText,
+      ...(normalizedPrice !== undefined ? { price: normalizedPrice } : {}),
+    };
+    group.items.push(nextItem);
+    group.itemMap.set(itemKey, nextItem);
+  };
+
+  getItemDetailLines(item).forEach((detail: any) => {
+    const parsed = splitDetailLabelValue(detail?.text || "");
+    if (!parsed) {
+      appendGroupItem(ensureGroup(), detail?.text || "", detail?.price, detail?.key);
+      return;
+    }
+
+    const valueParts =
+      detail?.price === undefined && parsed.value.includes(",")
+        ? splitGroupedValues(parsed.value)
+        : [parsed.value];
+
+    const group = ensureGroup(parsed.label);
+    valueParts.forEach((value, index) => {
+      appendGroupItem(group, value, detail?.price, `${detail?.key || group.key}:${index}`);
+    });
+  });
+
+  return groups.map(({ itemMap, ...group }) => group);
+}
+
 function getMapsLink(order: any) {
   const explicitLink = normalizeText(order?.google_maps_link);
   if (explicitLink) return explicitLink;
@@ -311,16 +414,21 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
       const unitPrice = getItemUnitPrice(item);
       const itemTotal = getItemTotal(item);
       const itemNotes = normalizeText(item?.notes || item?.observations);
-      const detailLines = getItemDetailLines(item);
+      const detailGroups = getItemDetailGroups(item);
       const baseLineTotal = unitPrice * quantity;
 
       lines.push(`${quantity}x ${getItemDisplayName(item)} = ${formatCurrency(baseLineTotal)}`);
-      for (const detail of detailLines) {
-        lines.push(
-          detail.price && detail.price > 0
-            ? `   - ${detail.text} (+${formatCurrency(detail.price)})`
-            : `   - ${detail.text}`
-        );
+      for (const group of detailGroups) {
+        if (group.label) {
+          lines.push(`   ${group.label}:`);
+        }
+        for (const detail of group.items) {
+          lines.push(
+            detail.price && detail.price > 0
+              ? `   - ${detail.text} (+${formatCurrency(detail.price)})`
+              : `   - ${detail.text}`
+          );
+        }
       }
       if (itemNotes) lines.push(`   - Obs: ${itemNotes}`);
       lines.push(`   Subtotal do item: ${formatCurrency(itemTotal)}`);

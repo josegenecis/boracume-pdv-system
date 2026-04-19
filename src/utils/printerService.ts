@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getOrderItemDetailGroups } from '@/lib/orderDetails';
 import { toast } from 'sonner';
 
 // ESC/POS Commands
@@ -522,11 +523,18 @@ function buildOrderHtml(order: any, config: any, store?: any) {
                 <span class="item-meta-left">${formatCurrencyValue(Number(item.price || item.unit_price || 0))} x ${Number(item.quantity || 1)}</span>
                 <span class="item-meta-right">${formatCurrencyValue(Number(item.total || item.subtotal || item.price * item.quantity || 0))}</span>
               </div>
-              ${item.variations && item.variations.length ? item.variations.map((v: any) => {
-                const parsed = splitLabelValue(String(v || ''));
-                if (!parsed) return `<div class="notes">${escapeHtml(v)}</div>`;
-                return `<div class="notes"><span class="bold">${escapeHtml(parsed.label)}:</span> ${escapeHtml(parsed.value)}</div>`;
-              }).join('') : ''}
+              ${(() => {
+                const detailGroups = getOrderItemDetailGroups(item);
+                return detailGroups.map((group) => `
+                  ${group.label ? `<div class="notes"><span class="bold">${escapeHtml(group.label)}:</span></div>` : ''}
+                  ${group.items.map((detail) => `
+                    <div class="notes">
+                      ${group.label ? '&nbsp;&nbsp;&bull; ' : ''}${escapeHtml(detail.text)}
+                      ${detail.price && detail.price > 0 ? ` (${escapeHtml(formatCurrencyValue(detail.price))})` : ''}
+                    </div>
+                  `).join('')}
+                `).join('');
+              })()}
               ${item.notes ? `<div class="notes"><span class="bold">Obs:</span> ${escapeHtml(item.notes)}</div>` : ''}
             </div>
           `).join('')}
@@ -992,19 +1000,18 @@ export const PrinterService = {
       ).forEach((value) => {
         commands += text(value);
       });
-      if (item.variations && item.variations.length) {
-        for (const v of item.variations) {
-          if (!v) continue;
-          const parsed = splitLabelValue(String(v));
-          if (!parsed) {
-            wrapTextLine(`   ${String(v)}`, lineWidth).forEach((value) => {
-              commands += text(value);
-            });
-            continue;
-          }
-          const label = String(parsed.label || '').trim();
-          const value = String(parsed.value || '').trim();
-          wrapTextLine(`   ${label}:${value ? ` ${value}` : ''}`, lineWidth).forEach((lineValue) => {
+      const detailGroups = getOrderItemDetailGroups(item);
+      for (const group of detailGroups) {
+        if (group.label) {
+          wrapTextLine(`   ${group.label}:`, lineWidth).forEach((lineValue) => {
+            commands += text(lineValue);
+          });
+        }
+        for (const detail of group.items) {
+          wrapTextLine(
+            `   ${group.label ? '- ' : ''}${detail.text}${detail.price && detail.price > 0 ? ` (${formatCurrencyValue(detail.price)})` : ''}`,
+            lineWidth
+          ).forEach((lineValue) => {
             commands += text(lineValue);
           });
         }
