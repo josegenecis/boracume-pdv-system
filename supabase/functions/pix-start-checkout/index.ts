@@ -43,6 +43,23 @@ const randomSecret = () => {
 }
 
 const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const weekdayToDayKey: Record<string, string> = {
+  sun: 'sunday',
+  sunday: 'sunday',
+  mon: 'monday',
+  monday: 'monday',
+  tue: 'tuesday',
+  tuesday: 'tuesday',
+  wed: 'wednesday',
+  wednesday: 'wednesday',
+  thu: 'thursday',
+  thursday: 'thursday',
+  fri: 'friday',
+  friday: 'friday',
+  sat: 'saturday',
+  saturday: 'saturday',
+}
+const storeTimeZone = getEnv('STORE_TIME_ZONE', 'BORACUME_STORE_TIME_ZONE') || 'America/Sao_Paulo'
 
 const parseOpeningHours = (value: unknown) => {
   if (!value) return {}
@@ -63,21 +80,74 @@ const parseMinutes = (value?: string) => {
   return Number(match[1]) * 60 + Number(match[2])
 }
 
-const isStoreOpenNow = (openingHours: unknown, now = new Date()) => {
-  const schedule = parseOpeningHours(openingHours) as Record<string, any>
-  const currentDay = dayKeys[now.getDay()]
-  const todaySchedule = schedule[currentDay]
-  if (!todaySchedule || todaySchedule.closed) return false
+const getClockInTimeZone = (now = new Date(), timeZone = storeTimeZone) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now)
 
-  const openMinutes = parseMinutes(todaySchedule.open)
-  const closeMinutes = parseMinutes(todaySchedule.close)
+    const values = parts.reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== 'literal') acc[part.type] = part.value
+      return acc
+    }, {})
+
+    const dayKey = weekdayToDayKey[String(values.weekday || '').toLowerCase()] || dayKeys[now.getDay()]
+    const dayIndex = dayKeys.indexOf(dayKey)
+    const hours = Number(values.hour || now.getHours())
+    const minutes = Number(values.minute || now.getMinutes())
+
+    return {
+      dayKey,
+      dayIndex: dayIndex >= 0 ? dayIndex : now.getDay(),
+      currentMinutes: hours * 60 + minutes,
+    }
+  } catch {
+    return {
+      dayKey: dayKeys[now.getDay()],
+      dayIndex: now.getDay(),
+      currentMinutes: now.getHours() * 60 + now.getMinutes(),
+    }
+  }
+}
+
+const isOpenFromTodaySchedule = (schedule: any, currentMinutes: number) => {
+  if (!schedule || schedule.closed) return false
+
+  const openMinutes = parseMinutes(schedule.open)
+  const closeMinutes = parseMinutes(schedule.close)
   if (openMinutes === null || closeMinutes === null) return true
 
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
   if (closeMinutes <= openMinutes) {
-    return currentMinutes >= openMinutes || currentMinutes < closeMinutes
+    return currentMinutes >= openMinutes
   }
+
   return currentMinutes >= openMinutes && currentMinutes < closeMinutes
+}
+
+const isOpenFromYesterdaySchedule = (schedule: any, currentMinutes: number) => {
+  if (!schedule || schedule.closed) return false
+
+  const openMinutes = parseMinutes(schedule.open)
+  const closeMinutes = parseMinutes(schedule.close)
+  if (openMinutes === null || closeMinutes === null) return false
+
+  return closeMinutes <= openMinutes && currentMinutes < closeMinutes
+}
+
+const isStoreOpenNow = (openingHours: unknown, now = new Date(), timeZone = storeTimeZone) => {
+  const schedule = parseOpeningHours(openingHours) as Record<string, any>
+  const { dayKey: currentDay, dayIndex, currentMinutes } = getClockInTimeZone(now, timeZone)
+  const todaySchedule = schedule[currentDay]
+  const yesterdaySchedule = schedule[dayKeys[(dayIndex + 6) % 7]]
+
+  return (
+    isOpenFromTodaySchedule(todaySchedule, currentMinutes) ||
+    isOpenFromYesterdaySchedule(yesterdaySchedule, currentMinutes)
+  )
 }
 
 Deno.serve(async (req: Request) => {

@@ -663,6 +663,22 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     await onPlaceOrder(data);
   };
 
+  const getCheckoutErrorMessage = (error: unknown) => {
+    const raw = String(error instanceof Error ? error.message : error || '').trim();
+    if (!raw) return 'Nao foi possivel finalizar o pedido. Tente novamente.';
+    if (raw.includes('store_closed') || /loja est[aá] fechada/i.test(raw)) {
+      return 'A loja esta fechada no momento. Aguarde o horario de atendimento para finalizar seu pedido.';
+    }
+    if (
+      raw.includes('pix_not_configured') ||
+      raw.includes('pix_disabled') ||
+      raw.includes('missing_provider_credentials')
+    ) {
+      return 'O checkout via PIX nao esta configurado para este restaurante.';
+    }
+    return raw;
+  };
+
   const startPixCheckout = async (orderData: any) => {
     const { data, status } = await invokeEdgeFunction('pix-start-checkout', {
       restaurantUserId: userId,
@@ -673,6 +689,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     if (!data) throw new Error(`Erro na conexão com checkout (HTTP ${status})`);
     if (!data.ok) {
+      if (String(data?.error || '') === 'store_closed') {
+        throw new Error(String(data?.message || 'A loja esta fechada no momento.'));
+      }
+      if (
+        ['pix_not_configured', 'pix_disabled', 'missing_provider_credentials'].includes(String(data?.error || ''))
+      ) {
+        throw new Error('O checkout via PIX nao esta configurado para este restaurante.');
+      }
       const providerMessage =
         data?.details?.message ||
         data?.details?.error ||
@@ -949,6 +973,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setUpsellOpen(true);
     } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
+      alert(`Erro ao finalizar pedido: ${getCheckoutErrorMessage(error)}`);
+      return;
       alert(`Erro ao finalizar pedido: ${error.message || error}. Se for pagamento online, verifique se o PIX/checkout está configurado para o restaurante.`);
     } finally {
       setIsLoading(false);
