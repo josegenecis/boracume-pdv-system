@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -24,7 +24,6 @@ import {
   createAccount,
   getSessionDetails,
   getSessionTotal,
-  listenRestaurantRealtime,
   removeEmptyAccount,
   renameAccount,
   sendAccountItems,
@@ -46,20 +45,9 @@ export function TableSessionScreen({ navigation, route }: Props) {
   const sessionQuery = useQuery({
     queryKey: ['session', route.params.sessionId],
     queryFn: () => getSessionDetails(route.params.sessionId),
+    refetchInterval: 8000,
+    refetchIntervalInBackground: true,
   });
-
-  useEffect(() => {
-    if (!operator?.restaurantId) {
-      return;
-    }
-    const unsubscribePromise = listenRestaurantRealtime(operator.restaurantId, () => {
-      queryClient.invalidateQueries({ queryKey: ['session', route.params.sessionId] });
-      queryClient.invalidateQueries({ queryKey: ['tables', operator.restaurantId] });
-    });
-    return () => {
-      unsubscribePromise.then((unsubscribe) => unsubscribe());
-    };
-  }, [operator?.restaurantId, route.params.sessionId]);
 
   const total = useMemo(
     () => getSessionTotal(sessionQuery.data?.accounts ?? []),

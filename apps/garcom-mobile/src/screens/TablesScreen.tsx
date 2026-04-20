@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -19,7 +19,7 @@ import { colors, radius, spacing } from '../config/theme';
 import { useAuthSession } from '../contexts/AuthSessionContext';
 import { queryClient } from '../lib/queryClient';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { listenRestaurantRealtime, listRestaurantTables, openTableSession } from '../services/waiterApp';
+import { listRestaurantTables, openTableSession } from '../services/waiterApp';
 import type { RestaurantTable } from '../types/domain';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Tables'>;
@@ -33,19 +33,9 @@ export function TablesScreen({ navigation }: Props) {
     queryKey: ['tables', operator?.restaurantId],
     enabled: Boolean(operator?.restaurantId),
     queryFn: () => listRestaurantTables(operator!.restaurantId),
+    refetchInterval: 10000,
+    refetchIntervalInBackground: true,
   });
-
-  useEffect(() => {
-    if (!operator?.restaurantId) {
-      return;
-    }
-    const unsubscribePromise = listenRestaurantRealtime(operator.restaurantId, () => {
-      queryClient.invalidateQueries({ queryKey: ['tables', operator.restaurantId] });
-    });
-    return () => {
-      unsubscribePromise.then((unsubscribe) => unsubscribe());
-    };
-  }, [operator?.restaurantId]);
 
   const stats = useMemo(() => {
     const rows = tablesQuery.data ?? [];

@@ -44,6 +44,73 @@ const DeviceManager = () => {
   const [claimingPairing, setClaimingPairing] = React.useState(false);
   const [downloadingBridge, setDownloadingBridge] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!user?.id) return;
+
+    let active = true;
+    const loadKitchenTicketSetting = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('printer_settings')
+          .select('print_kitchen_ticket')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (!active) return;
+
+        const enabled = Boolean((data as any)?.print_kitchen_ticket);
+        setAutoPrintKds(enabled);
+        const cfg = loadPrinterConfig();
+        savePrinterConfig({ ...cfg, autoPrintKds: enabled });
+      } catch (error) {
+        console.error('Erro ao carregar configuração da cozinha:', error);
+      }
+    };
+
+    void loadKitchenTicketSetting();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  const persistKitchenTicketSetting = async (checked: boolean) => {
+    const previous = autoPrintKds;
+    setAutoPrintKds(checked);
+
+    const cfg = loadPrinterConfig();
+    savePrinterConfig({
+      ...cfg,
+      autoPrintKds: checked,
+      bridge: { ...cfg.bridge, websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address || '' }
+    });
+
+    if (!user?.id) return;
+
+    try {
+      const { error } = await (supabase as any)
+        .from('printer_settings')
+        .upsert({
+          user_id: user.id,
+          print_kitchen_ticket: checked,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setAutoPrintKds(previous);
+      const rollbackConfig = loadPrinterConfig();
+      savePrinterConfig({
+        ...rollbackConfig,
+        autoPrintKds: previous,
+        bridge: { ...rollbackConfig.bridge, websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address || '' }
+      });
+      toast({ title: 'Falha ao salvar', description: error?.message || 'Não foi possível atualizar a impressão da cozinha.', variant: 'destructive' });
+    }
+  };
+
   const getDeviceIcon = (type: Device['type']) => {
     switch (type) {
       case 'scale': return <Scale size={20} />;
@@ -197,16 +264,12 @@ const DeviceManager = () => {
                 </div>
                 <div className="flex items-center justify-between mt-3 border-t pt-3">
                   <div className="text-sm">
-                    <div className="font-medium">Impressão automática (Cozinha/KDS)</div>
-                    <div className="text-muted-foreground">Imprime quando o pedido entrar em preparo</div>
+                    <div className="font-medium">Comanda da cozinha</div>
+                    <div className="text-muted-foreground">Imprime um segundo cupom separado, sem preços e sem endereço.</div>
                   </div>
                   <Switch
                     checked={autoPrintKds}
-                    onCheckedChange={(checked) => {
-                      setAutoPrintKds(checked);
-                      const cfg = loadPrinterConfig();
-                      savePrinterConfig({ ...cfg, autoPrintKds: checked, bridge: { ...cfg.bridge, websocketUrl: bridgeConfig.websocketUrl, transport: bridgeConfig.transport as any, address: bridgeConfig.address || '' } });
-                    }}
+                    onCheckedChange={(checked) => { void persistKitchenTicketSetting(checked); }}
                   />
                 </div>
                 <div className="flex justify-end gap-2 mt-2">

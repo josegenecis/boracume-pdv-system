@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
 import { getOpenCashRegisterSession } from '@/utils/cashSession';
+import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 
 interface Product {
   id: string;
@@ -358,11 +359,19 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           estimated_time: '15-20 min'
         };
 
-        const { error: createError } = await supabase
+        const { data: createdOrder, error: createError } = await supabase
           .from('orders')
-          .insert([orderData]);
+          .insert([orderData])
+          .select('id')
+          .single();
 
         if (createError) throw createError;
+
+        try {
+          await notifyOrderCreatedById(createdOrder?.id);
+        } catch (waErr) {
+          console.warn('Falha ao notificar pedido da mesa via WhatsApp:', waErr);
+        }
 
         await supabase
           .from('tables')

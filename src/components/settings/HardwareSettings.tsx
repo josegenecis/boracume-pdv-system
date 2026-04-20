@@ -4,13 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle, Printer, RefreshCw, Scale } from 'lucide-react';
 
 type PrinterMode = 'serial' | 'system';
 
 const HardwareSettings = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const isElectron = useMemo(() => !!window.electronAPI, []);
 
   const [loading, setLoading] = useState(false);
@@ -26,6 +30,8 @@ const HardwareSettings = () => {
   const [receiptConnected, setReceiptConnected] = useState(false);
 
   const [reportPrinterName, setReportPrinterName] = useState(() => localStorage.getItem('hw.report.printer') || '');
+  const [kitchenTicketEnabled, setKitchenTicketEnabled] = useState(false);
+  const [savingKitchenTicket, setSavingKitchenTicket] = useState(false);
 
   const [scalePort, setScalePort] = useState(() => localStorage.getItem('hw.scale.port') || '');
   const [scaleProtocol, setScaleProtocol] = useState(() => localStorage.getItem('hw.scale.protocol') || 'generic');
@@ -65,6 +71,33 @@ const HardwareSettings = () => {
     if (!isElectron) return;
     refreshAll();
   }, [isElectron]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let active = true;
+    const loadKitchenTicketSetting = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('printer_settings')
+          .select('print_kitchen_ticket')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (active) {
+          setKitchenTicketEnabled(Boolean((data as any)?.print_kitchen_ticket));
+        }
+      } catch (error) {
+        console.error('Erro ao carregar impressão da cozinha:', error);
+      }
+    };
+
+    void loadKitchenTicketSetting();
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     localStorage.setItem('hw.receipt.mode', receiptMode);
@@ -283,6 +316,45 @@ const HardwareSettings = () => {
     }
   };
 
+  const updateKitchenTicketSetting = async (checked: boolean) => {
+    if (!user?.id) {
+      toast({ title: 'Usuário não encontrado', description: 'Faça login novamente para salvar essa configuração.', variant: 'destructive' });
+      return;
+    }
+
+    const previous = kitchenTicketEnabled;
+    setKitchenTicketEnabled(checked);
+
+    try {
+      setSavingKitchenTicket(true);
+      const { error } = await (supabase as any)
+        .from('printer_settings')
+        .upsert({
+          user_id: user.id,
+          print_kitchen_ticket: checked,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: checked ? 'Comanda da cozinha ativada' : 'Comanda da cozinha desativada',
+        description: checked
+          ? 'O sistema vai imprimir o cupom normal e, em seguida, a comanda enxuta da cozinha.'
+          : 'O sistema voltará a imprimir apenas o cupom normal do pedido.'
+      });
+    } catch (error: any) {
+      setKitchenTicketEnabled(previous);
+      toast({
+        title: 'Erro ao salvar configuração',
+        description: error?.message || 'Não foi possível atualizar a impressão da cozinha.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingKitchenTicket(false);
+    }
+  };
+
   if (!isElectron) {
     return (
       <Card>
@@ -403,6 +475,20 @@ const HardwareSettings = () => {
                 <Button onClick={openDrawer} variant="outline" disabled={loading || !receiptConnected}>
                   Abrir Gaveta
                 </Button>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-1 pr-4">
+                  <Label>Comanda da cozinha</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Quando ativada, imprime 2 cupons separados: o normal do pedido e depois a comanda da cozinha sem preços, endereço e totais.
+                  </p>
+                </div>
+                <Switch
+                  checked={kitchenTicketEnabled}
+                  disabled={savingKitchenTicket}
+                  onCheckedChange={updateKitchenTicketSetting}
+                />
               </div>
             </CardContent>
           </Card>

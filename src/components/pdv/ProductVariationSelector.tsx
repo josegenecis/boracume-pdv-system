@@ -116,8 +116,6 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
         });
       }
     });
-    onAddToCart(product, quantity, selectedOptions, notes);
-
     for (const variation of variations) {
       const options = selectedVariations[variation.id];
       if (!Array.isArray(options) || options.length === 0) continue;

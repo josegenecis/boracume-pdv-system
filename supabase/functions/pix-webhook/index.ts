@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { markLoyaltyRewardUsedForOrder } from '../_shared/loyalty.ts'
+import { notifyOrderCreated } from '../_shared/restaurant-whatsapp.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -368,6 +369,12 @@ serve(async (req) => {
           .update({ status: 'PAID', order_id: created.id, updated_at: new Date().toISOString() })
           .eq('id', checkout.id)
 
+        try {
+          await notifyOrderCreated(supabase, { ...insertData, id: created.id })
+        } catch (error) {
+          console.error('[PixWebhook] Falha ao notificar pedido criado via WhatsApp:', error)
+        }
+
         return new Response(JSON.stringify({ ok: true, orderId: created.id }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
     }
@@ -451,6 +458,12 @@ serve(async (req) => {
           })
         }
       } catch {}
+
+      try {
+        await notifyOrderCreated(supabase, { ...insertData, id: created.id })
+      } catch (error) {
+        console.error('[PixWebhook] Falha ao notificar pedido legado via WhatsApp:', error)
+      }
 
       return new Response(JSON.stringify({ ok: true, orderId: created.id }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }

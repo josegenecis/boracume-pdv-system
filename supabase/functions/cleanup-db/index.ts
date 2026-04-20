@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
         print_header text, -- Nome da loja ou CNPJ no topo
         print_footer text DEFAULT 'Obrigado pela preferência!',
         auto_print boolean DEFAULT false, -- Imprimir automático ao aceitar pedido
+        print_kitchen_ticket boolean DEFAULT false, -- Imprime uma comanda enxuta da cozinha junto do cupom
         copies integer DEFAULT 1,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()

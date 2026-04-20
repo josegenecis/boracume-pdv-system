@@ -21,6 +21,8 @@ export const getEnv = (...keys: string[]) => {
 }
 
 export const normalizeCpf = (value: string) => String(value || '').replace(/\D/g, '')
+export const hasWaiterAppAccess = (permissions: unknown) =>
+  Boolean(permissions && typeof permissions === 'object' && (permissions as Record<string, boolean>).waiter_app)
 
 export const createServiceClient = () => {
   const url = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
@@ -65,6 +67,12 @@ export async function getWaiterSession(req: Request) {
     throw new Error('Garçom inativo.')
   }
 
+  const permissions = ((data.waiters as any).permissions as Record<string, boolean>) || {}
+  if (!hasWaiterAppAccess(permissions)) {
+    await supabase.from('waiter_web_sessions').delete().eq('id', data.id)
+    throw new Error('Acesso ao app garcom nao liberado para este usuario.')
+  }
+
   if (new Date(data.expires_at).getTime() <= Date.now()) {
     await supabase.from('waiter_web_sessions').delete().eq('id', data.id)
     throw new Error('Sessão expirada. Faça login novamente.')
@@ -84,7 +92,7 @@ export async function getWaiterSession(req: Request) {
       name: (data.waiters as any).name,
       cpf: (data.waiters as any).cpf || '',
       role: (data.waiters as any).role || 'cashier',
-      permissions: ((data.waiters as any).permissions as Record<string, boolean>) || {},
+      permissions,
     },
     expiresAt: data.expires_at,
     supabase,

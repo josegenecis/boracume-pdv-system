@@ -21,6 +21,7 @@ export const PrinterConfig = () => {
     print_header: '',
     print_footer: 'Obrigado pela preferência!',
     auto_print: false,
+    print_kitchen_ticket: false,
     copies: 1,
     receipt_logo_url: ''
   });
@@ -37,7 +38,7 @@ export const PrinterConfig = () => {
         .eq('user_id', user?.id)
         .maybeSingle();
 
-      if (data) setSettings(data as any);
+      if (data) setSettings((prev) => ({ ...prev, ...(data as any) }));
     } catch (error) {
       console.error('Erro ao carregar config impressora:', error);
     }
@@ -52,7 +53,7 @@ export const PrinterConfig = () => {
           user_id: user?.id,
           ...settings,
           updated_at: new Date().toISOString()
-        });
+        } as any);
 
       if (error) throw error;
       toast({ title: 'Configurações salvas!' });
@@ -235,6 +236,17 @@ export const PrinterConfig = () => {
           <Switch 
             checked={settings.auto_print}
             onCheckedChange={c => setSettings({...settings, auto_print: c})}
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div className="space-y-0.5">
+            <Label>Comanda da cozinha</Label>
+            <p className="text-sm text-gray-500">Imprime um segundo cupom separado, sem preços, endereço e totais.</p>
+          </div>
+          <Switch
+            checked={settings.print_kitchen_ticket}
+            onCheckedChange={c => setSettings({...settings, print_kitchen_ticket: c})}
           />
         </div>
 

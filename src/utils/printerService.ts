@@ -21,6 +21,16 @@ type PrintOrderOptions = {
   onlyIfAuto?: boolean;
 };
 
+type NormalizedPrintConfig = {
+  paper_width: '58mm' | '80mm';
+  font_size: 'small' | 'normal' | 'large';
+  print_header: string;
+  print_footer: string;
+  copies: number;
+  receipt_logo_url: string;
+  print_kitchen_ticket: boolean;
+};
+
 type ElectronTarget =
   | { type: 'system'; printerName: string }
   | { type: 'device'; deviceId: string; protocol: string };
@@ -63,6 +73,38 @@ function resolveCustomerAddressLine(order: any) {
   const lowerNeighborhood = neighborhood.toLowerCase();
   if (lowerAddress.includes(lowerNeighborhood)) return address;
   return `${address} - Bairro: ${neighborhood}`;
+}
+
+function getOrderTypeLabel(order: any) {
+  const orderType = String(order?.order_type || '').trim().toLowerCase();
+  if (orderType === 'delivery') return 'Delivery';
+  if (orderType === 'pickup') return 'Retirada';
+  if (orderType === 'dine_in') return 'Mesa';
+  return 'Balcão';
+}
+
+function getKitchenCustomerLabel(order: any) {
+  const customerName = normalizeSingleLine(order?.customer_name);
+  if (customerName) return customerName;
+  if (String(order?.order_type || '').trim().toLowerCase() === 'dine_in') return 'Mesa';
+  return 'Balcão';
+}
+
+function normalizePrintConfig(settings: any): NormalizedPrintConfig {
+  const paperWidth = String(settings?.paper_width || '80mm').trim() === '58mm' ? '58mm' : '80mm';
+  const fontSizeRaw = String(settings?.font_size || 'normal').trim();
+  const fontSize: NormalizedPrintConfig['font_size'] =
+    fontSizeRaw === 'small' || fontSizeRaw === 'large' ? fontSizeRaw : 'normal';
+
+  return {
+    paper_width: paperWidth,
+    font_size: fontSize,
+    print_header: String(settings?.print_header || 'BoraCumê PDV').trim() || 'BoraCumê PDV',
+    print_footer: String(settings?.print_footer || 'Obrigado!').trim() || 'Obrigado!',
+    copies: Math.max(1, Number(settings?.copies || 1) || 1),
+    receipt_logo_url: String(settings?.receipt_logo_url || '').trim(),
+    print_kitchen_ticket: Boolean(settings?.print_kitchen_ticket),
+  };
 }
 
 async function fetchVariationOrderMaps(productIds: string[]) {
@@ -575,6 +617,199 @@ function buildOrderHtml(order: any, config: any, store?: any) {
     `;
 }
 
+function buildKitchenTicketHtml(order: any, config: any) {
+  const width = config.paper_width === '58mm' ? '58mm' : '80mm';
+  const bodyWidth = config.paper_width === '58mm' ? '190px' : '260px';
+  const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
+  const customerName = escapeHtml(getKitchenCustomerLabel(order));
+  const orderTypeLabel = escapeHtml(getOrderTypeLabel(order));
+  const orderNumber = escapeHtml(order?.order_number || '----');
+  const ticketCode = escapeHtml(order?.order_number?.slice(-4) || '----');
+
+  return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Comanda Cozinha #${order.order_number || ''}</title>
+        <style>
+          @page { margin: 0; size: ${width} auto; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            width: ${width};
+            margin: 0;
+            padding: 7px 4px 10px;
+            font-size: ${fontSize};
+            color: #000;
+            line-height: 1.28;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .container {
+            width: 100%;
+            max-width: ${bodyWidth};
+            margin: 0 auto;
+            overflow: hidden;
+          }
+          .center { text-align: center; }
+          .bold { font-weight: 700; }
+          .divider { border-top: 1px dashed #000; margin: 9px 0; }
+          .title { font-size: 1.15em; letter-spacing: 0.06em; }
+          .ticket-code { font-size: 1.52em; letter-spacing: 0.08em; }
+          .section-title { font-weight: 700; letter-spacing: 0.06em; }
+          .item-row { margin-bottom: 10px; }
+          .item-title {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            font-weight: 700;
+          }
+          .notes {
+            font-size: 0.92em;
+            margin-left: 10px;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+          }
+          .muted { color: #111; font-size: 0.95em; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="center bold title">COMANDA DA COZINHA</div>
+          <div class="center muted">${new Date(order.created_at || Date.now()).toLocaleString('pt-BR')}</div>
+          <div class="divider"></div>
+
+          <div class="center bold ticket-code">SENHA: ${ticketCode}</div>
+          <div class="center">Pedido #${orderNumber}</div>
+          <div class="center">${orderTypeLabel}</div>
+
+          <div class="divider"></div>
+
+          <div class="section-title">CLIENTE:</div>
+          <div class="bold">${customerName}</div>
+
+          <div class="divider"></div>
+
+          <div class="section-title" style="margin-bottom: 5px;">ITENS:</div>
+          ${(order.items || []).map((item: any) => `
+            <div class="item-row">
+              <div class="item-title">${Number(item.quantity || 1)}x ${escapeHtml(item.product_name || item.name || 'Produto')}</div>
+              ${(() => {
+                const detailGroups = getOrderItemDetailGroups(item);
+                return detailGroups.map((group) => `
+                  ${group.label ? `<div class="notes"><span class="bold">${escapeHtml(group.label)}:</span></div>` : ''}
+                  ${group.items.map((detail) => `
+                    <div class="notes">${group.label ? '&nbsp;&nbsp;&bull; ' : ''}${escapeHtml(detail.text)}</div>
+                  `).join('')}
+                `).join('');
+              })()}
+              ${item.notes ? `<div class="notes"><span class="bold">Obs:</span> ${escapeHtml(item.notes)}</div>` : ''}
+            </div>
+          `).join('')}
+
+          <div class="divider"></div>
+        </div>
+      </body>
+      </html>
+    `;
+}
+
+function extractBodyInnerHtml(documentHtml: string) {
+  const match = String(documentHtml || '').match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match ? match[1] : documentHtml;
+}
+
+function buildCombinedTicketHtml(order: any, config: any, store?: any) {
+  const primaryHtml = buildOrderHtml(order, config, store);
+  const kitchenHtml = buildKitchenTicketHtml(order, config);
+  const combinedBody = `${extractBodyInnerHtml(primaryHtml)}<div class="ticket-break"></div>${extractBodyInnerHtml(kitchenHtml)}`;
+
+  return primaryHtml
+    .replace(
+      '</style>',
+      `
+          .ticket-break {
+            page-break-before: always;
+            break-before: page;
+          }
+        </style>`
+    )
+    .replace(/<body[^>]*>[\s\S]*<\/body>/i, `<body>${combinedBody}</body>`);
+}
+
+function buildKitchenEscPosCommands(order: any, lineWidth: number) {
+  let commands = '';
+  const text = (str: string) => str + '\n';
+  const center = () => { commands += ALIGN_CENTER; };
+  const left = () => { commands += ALIGN_LEFT; };
+  const bold = (enabled: boolean) => { commands += enabled ? BOLD_ON : BOLD_OFF; };
+  const line = () => { commands += `${'-'.repeat(lineWidth)}\n`; };
+
+  commands += INIT;
+  center();
+  bold(true);
+  commands += text('COMANDA DA COZINHA');
+  bold(false);
+  commands += text(new Date(order.created_at || Date.now()).toLocaleString('pt-BR'));
+  line();
+
+  bold(true);
+  commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
+  bold(false);
+  commands += text(`Pedido #${order.order_number || '----'}`);
+  commands += text(`Tipo: ${getOrderTypeLabel(order)}`);
+  line();
+
+  left();
+  bold(true);
+  commands += text('CLIENTE:');
+  bold(false);
+  commands += text(getKitchenCustomerLabel(order));
+  line();
+
+  bold(true);
+  commands += text('ITENS:');
+  bold(false);
+
+  for (const item of Array.isArray(order.items) ? order.items : []) {
+    const quantity = Number(item.quantity || 1);
+    const productName = item.product_name || item.name || 'Produto';
+    wrapTextLine(`${quantity}x ${productName}`, lineWidth).forEach((value) => {
+      commands += text(value);
+    });
+
+    const detailGroups = getOrderItemDetailGroups(item);
+    for (const group of detailGroups) {
+      if (group.label) {
+        wrapTextLine(`   ${group.label}:`, lineWidth).forEach((lineValue) => {
+          commands += text(lineValue);
+        });
+      }
+      for (const detail of group.items) {
+        wrapTextLine(`   ${group.label ? '- ' : ''}${detail.text}`, lineWidth).forEach((lineValue) => {
+          commands += text(lineValue);
+        });
+      }
+    }
+
+    if (item.notes) {
+      wrapTextLine(`   Obs: ${String(item.notes)}`, lineWidth).forEach((value) => {
+        commands += text(value);
+      });
+    }
+
+    commands += '\n';
+  }
+
+  line();
+  commands += '\n\n\n\n';
+  commands += CUT_PARTIAL;
+
+  return commands;
+}
+
 function buildReportHtml(title: string, lines: string[], store?: any) {
   const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
@@ -647,6 +882,13 @@ async function printElectron(order: any, config: any) {
       const resp = await api.printSystem(target.printerName, html, true);
       if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
     }
+
+    if (config.print_kitchen_ticket) {
+      const kitchenHtml = buildKitchenTicketHtml(order, config);
+      const kitchenResp = await api.printSystem(target.printerName, kitchenHtml, true);
+      if (!kitchenResp?.success) return { success: false, error: kitchenResp?.error || 'Falha ao imprimir comanda da cozinha' };
+    }
+
     return { success: true };
   }
 
@@ -687,6 +929,13 @@ async function printElectron(order: any, config: any) {
     if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao imprimir' };
   }
 
+  if (config.print_kitchen_ticket) {
+    const kitchenResp = await api.printReceipt(deviceId, normalized, 'kitchen_ticket');
+    if (!kitchenResp?.success) {
+      return { success: false, error: kitchenResp?.error || kitchenResp?.message || 'Falha ao imprimir comanda da cozinha' };
+    }
+  }
+
   return { success: true };
 }
 
@@ -723,7 +972,7 @@ export const PrinterService = {
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
 
     // 1. Buscar configurações
-    const { data: settings } = await supabase
+    const { data: settings } = await (supabase as any)
       .from('printer_settings')
       .select('*')
       .eq('user_id', order.user_id)
@@ -737,14 +986,7 @@ export const PrinterService = {
       }
     }
 
-    const config = settings || {
-      paper_width: '80mm',
-      font_size: 'normal',
-      print_header: 'BoraCumê PDV',
-      print_footer: 'Obrigado!',
-      copies: 1,
-      receipt_logo_url: ''
-    };
+    const config = normalizePrintConfig(settings);
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -785,7 +1027,7 @@ export const PrinterService = {
           restaurant_name: profile.restaurant_name || '',
           description: profile.description || '',
           logo_url: profile.logo_url || '',
-          receipt_logo_url: String((settings as any)?.receipt_logo_url || '').trim(),
+          receipt_logo_url: config.receipt_logo_url,
           phone: profile.phone || '',
           address: fiscalAddress || profile.address || '',
           website: profile.website || '',
@@ -1066,6 +1308,10 @@ export const PrinterService = {
     commands += '\n\n\n\n'; // Feed
     commands += CUT_PARTIAL;
 
+    if (config.print_kitchen_ticket) {
+      commands += buildKitchenEscPosCommands(order, lineWidth);
+    }
+
     // Enviar dados
     const data = encoder.encode(commands);
     // Endpoint 1 geralmente é OUT em impressoras (mas pode variar, ideal é descobrir dinamicamente)
@@ -1076,7 +1322,11 @@ export const PrinterService = {
 
   // Impressão HTML (Fallback)
   printHtml(order: any, config: any) {
-    const htmlContent = buildOrderHtml(order, config, order.store).replace(
+    const printableHtml = config.print_kitchen_ticket
+      ? buildCombinedTicketHtml(order, config, order.store)
+      : buildOrderHtml(order, config, order.store);
+
+    const htmlContent = printableHtml.replace(
       '</body>',
       `<script>window.onload=function(){window.print();}</script></body>`
     );

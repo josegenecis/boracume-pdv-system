@@ -4,13 +4,13 @@
     "slug": "boracume-garcom",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-garcom.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/app-garcom.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#003223"
     },
     "ios": {
       "bundleIdentifier": "com.boracume.garcom",
@@ -19,8 +19,8 @@
     "android": {
       "package": "com.boracume.garcom",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#F5EBE1"
+        "foregroundImage": "./assets/app-garcom.png",
+        "backgroundColor": "#003223"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

@@ -9,6 +9,7 @@ import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { supabase } from '@/integrations/supabase/client';
 import TotemPixCheckoutModal from '@/components/totem/TotemPixCheckoutModal';
 import { PrinterService } from '@/utils/printerService';
+import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 
 interface TotemCartItem {
   product: { id: string; name: string; price: number; image_url?: string };
@@ -122,6 +123,11 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
       if (error) throw error;
       setSuccessOrder(data);
       onClearCart();
+      try {
+        await notifyOrderCreatedById(data?.id);
+      } catch (waErr) {
+        console.warn('Falha ao notificar pedido do totem via WhatsApp:', waErr);
+      }
       await printCoupon(data);
     } catch (e: any) {
       const msg = String(e?.message || e || 'Erro ao criar pedido');

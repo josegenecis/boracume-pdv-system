@@ -1,4 +1,14 @@
-import { buildSessionToken, corsHeaders, createServiceClient, fail, getWaiterSession, hashToken, normalizeCpf, ok } from '../_shared/waiter-web.ts'
+import {
+  buildSessionToken,
+  corsHeaders,
+  createServiceClient,
+  fail,
+  getWaiterSession,
+  hasWaiterAppAccess,
+  hashToken,
+  normalizeCpf,
+  ok,
+} from '../_shared/waiter-web.ts'
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -13,7 +23,7 @@ Deno.serve(async (req: Request) => {
       const cpf = normalizeCpf(String(body?.cpf || ''))
       const password = String(body?.password || '')
       if (cpf.length !== 11 || !password) {
-        return fail('Informe CPF e senha válidos.')
+        return fail('Informe CPF e senha validos.')
       }
 
       const supabase = createServiceClient()
@@ -28,8 +38,17 @@ Deno.serve(async (req: Request) => {
         return fail(error.message, 400)
       }
 
-      if (!data || String(data.password || '') !== password) {
-        return fail('CPF ou senha inválidos.', 401)
+      if (!data) {
+        return fail('CPF ou senha invalidos.', 401)
+      }
+
+      const permissions = (data.permissions as Record<string, boolean>) || {}
+      if (!hasWaiterAppAccess(permissions)) {
+        return fail('Acesso ao app garcom nao liberado para este usuario.', 403)
+      }
+
+      if (String(data.password || '') !== password) {
+        return fail('CPF ou senha invalidos.', 401)
       }
 
       const token = buildSessionToken()
@@ -59,7 +78,7 @@ Deno.serve(async (req: Request) => {
             name: data.name,
             cpf: data.cpf || cpf,
             role: data.role || 'cashier',
-            permissions: (data.permissions as Record<string, boolean>) || {},
+            permissions,
           },
         },
       })
@@ -82,8 +101,8 @@ Deno.serve(async (req: Request) => {
       return ok({ ok: true })
     }
 
-    return fail('Ação inválida.', 400)
+    return fail('Acao invalida.', 400)
   } catch (error: any) {
-    return fail(String(error?.message || 'Erro interno no login do garçom.'), 500)
+    return fail(String(error?.message || 'Erro interno no login do garcom.'), 500)
   }
 })

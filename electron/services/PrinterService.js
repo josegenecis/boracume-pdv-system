@@ -32,6 +32,17 @@ class PrinterService extends EventEmitter {
       ]
     });
 
+    this.templates.set('kitchen_ticket', {
+      name: 'Comanda da Cozinha',
+      width: 48,
+      sections: [
+        { type: 'kitchen_header', align: 'center' },
+        { type: 'kitchen_order_info', align: 'left' },
+        { type: 'kitchen_items', align: 'left' },
+        { type: 'kitchen_footer', align: 'center' }
+      ]
+    });
+
     // Template para etiqueta de produto
     this.templates.set('product_label', {
       name: 'Etiqueta de Produto',
@@ -199,6 +210,18 @@ class PrinterService extends EventEmitter {
         case 'footer':
           await this.printFooter(printer, data, sectionConfig);
           break;
+        case 'kitchen_header':
+          await this.printKitchenHeader(printer, data, sectionConfig);
+          break;
+        case 'kitchen_order_info':
+          await this.printKitchenOrderInfo(printer, data, sectionConfig);
+          break;
+        case 'kitchen_items':
+          await this.printKitchenItems(printer, data, sectionConfig);
+          break;
+        case 'kitchen_footer':
+          await this.printKitchenFooter(printer, data, sectionConfig);
+          break;
         case 'product_name':
           await this.printProductName(printer, data, sectionConfig);
           break;
@@ -220,6 +243,20 @@ class PrinterService extends EventEmitter {
   formatCurrency(value) {
     const amount = Number(value || 0);
     return `R$ ${amount.toFixed(2)}`;
+  }
+
+  getOrderTypeLabel(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'delivery') return 'Delivery';
+    if (raw === 'pickup') return 'Retirada';
+    if (raw === 'dine_in') return 'Mesa';
+    return 'Balcão';
+  }
+
+  getKitchenCustomerName(data) {
+    const name = String(data?.customer_name || '').trim();
+    if (name) return name;
+    return String(data?.order_type || '').trim().toLowerCase() === 'dine_in' ? 'Mesa' : 'Balcão';
   }
 
   wrapText(text, width) {
@@ -477,6 +514,87 @@ class PrinterService extends EventEmitter {
       printer.println(data.store.website);
     }
     
+    printer.newLine();
+    printer.newLine();
+    printer.cut();
+  }
+
+  async printKitchenHeader(printer, data, section) {
+    printer.alignCenter();
+    printer.bold(true);
+    printer.setTextSize(1, 1);
+    printer.println('COMANDA DA COZINHA');
+    printer.bold(false);
+    printer.setTextNormal();
+    printer.println(new Date(data.created_at || data.date || Date.now()).toLocaleString('pt-BR'));
+    printer.drawLine();
+    printer.newLine();
+  }
+
+  async printKitchenOrderInfo(printer, data, section) {
+    printer.alignLeft();
+    printer.bold(true);
+    printer.setTextSize(1, 1);
+    printer.println(`SENHA: ${String(data.order_number || '----').slice(-4) || '----'}`);
+    printer.bold(false);
+    printer.setTextNormal();
+    if (data.order_number) {
+      printer.println(`Pedido: #${data.order_number}`);
+    }
+    printer.println(`Tipo: ${this.getOrderTypeLabel(data.order_type)}`);
+    printer.println(`Cliente: ${this.getKitchenCustomerName(data)}`);
+    printer.drawLine();
+  }
+
+  async printKitchenItems(printer, data, section) {
+    printer.alignLeft();
+    printer.bold(false);
+    printer.setTextNormal();
+    const width = this.getSectionWidth(section);
+
+    if (!data.items || data.items.length === 0) {
+      printer.println('Nenhum item encontrado');
+      return;
+    }
+
+    for (const item of data.items) {
+      const productName = item.product_name || item.name || 'Produto';
+      const quantity = Number(item.quantity || 1);
+
+      this.wrapText(`${quantity}x ${productName}`, width).forEach((line) => {
+        printer.println(line);
+      });
+
+      if (Array.isArray(item.variations) && item.variations.length > 0) {
+        for (const variation of item.variations) {
+          if (!variation) continue;
+          const raw = String(variation);
+          const idx = raw.indexOf(':');
+          if (idx > 0) {
+            this.wrapText(`  ${raw.slice(0, idx).trim()}: ${raw.slice(idx + 1).trim()}`, width).forEach((line) => {
+              printer.println(line);
+            });
+          } else {
+            this.wrapText(`  ${raw}`, width).forEach((line) => {
+              printer.println(line);
+            });
+          }
+        }
+      }
+
+      if (item.notes || item.observations) {
+        this.wrapText(`Obs: ${item.notes || item.observations}`, width).forEach((line) => {
+          printer.println(line);
+        });
+      }
+
+      printer.newLine();
+    }
+  }
+
+  async printKitchenFooter(printer, data, section) {
+    printer.alignCenter();
+    printer.drawLine();
     printer.newLine();
     printer.newLine();
     printer.cut();

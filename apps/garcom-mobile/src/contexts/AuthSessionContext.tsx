@@ -1,16 +1,18 @@
 import type { PropsWithChildren } from 'react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { resolveOperatorProfile } from '../services/waiterApp';
-import type { OperatorProfile } from '../types/domain';
+import { queryClient } from '../lib/queryClient';
+import {
+  restoreWaiterSession,
+  signInWaiter,
+  signOutWaiter,
+} from '../services/waiterApp';
+import type { OperatorProfile, WaiterStoredSession } from '../types/domain';
 
 type AuthSessionContextValue = {
   loading: boolean;
-  session: Session | null;
-  user: User | null;
+  session: WaiterStoredSession | null;
   operator: OperatorProfile | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (cpf: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshOperator: () => Promise<void>;
 };
@@ -19,35 +21,32 @@ const AuthSessionContext = createContext<AuthSessionContextValue | undefined>(un
 
 export function AuthSessionProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<WaiterStoredSession | null>(null);
   const [operator, setOperator] = useState<OperatorProfile | null>(null);
 
-  async function loadOperator(user: User | null) {
-    if (!user) {
-      setOperator(null);
-      return;
-    }
-    const profile = await resolveOperatorProfile(user);
-    setOperator(profile);
-  }
-
-  async function bootstrap() {
-    setLoading(true);
-    const { data } = await supabase.auth.getSession();
-    setSession(data.session);
-    await loadOperator(data.session?.user ?? null);
-    setLoading(false);
-  }
-
   useEffect(() => {
+    let mounted = true;
+
+    async function bootstrap() {
+      try {
+        const restoredSession = await restoreWaiterSession();
+        if (!mounted) {
+          return;
+        }
+
+        setSession(restoredSession);
+        setOperator(restoredSession?.profile ?? null);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
     bootstrap();
-    const listener = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      setSession(nextSession);
-      await loadOperator(nextSession?.user ?? null);
-      setLoading(false);
-    });
+
     return () => {
-      listener.data.subscription.unsubscribe();
+      mounted = false;
     };
   }, []);
 
@@ -55,22 +54,23 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     () => ({
       loading,
       session,
-      user: session?.user ?? null,
       operator,
-      signIn: async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          throw error;
-        }
+      signIn: async (cpf: string, password: string) => {
+        const nextSession = await signInWaiter(cpf, password);
+        setSession(nextSession);
+        setOperator(nextSession.profile);
+        queryClient.clear();
       },
       signOut: async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          throw error;
-        }
+        await signOutWaiter();
+        setSession(null);
+        setOperator(null);
+        queryClient.clear();
       },
       refreshOperator: async () => {
-        await loadOperator(session?.user ?? null);
+        const refreshedSession = await restoreWaiterSession();
+        setSession(refreshedSession);
+        setOperator(refreshedSession?.profile ?? null);
       },
     }),
     [loading, operator, session],

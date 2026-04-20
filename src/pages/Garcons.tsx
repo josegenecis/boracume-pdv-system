@@ -26,6 +26,9 @@ interface Waiter {
   waiter_access?: boolean;
 }
 
+const WAITER_ACCESS_SCHEMA_MESSAGE =
+  'O banco publicado ainda nao tem todas as colunas do acesso do app garcom. Aplique a migration mais recente de equipe/garcom no Supabase e tente novamente.';
+
 const PERMISSIONS_GROUPS = [
   {
     id: 'sales',
@@ -99,6 +102,13 @@ const Garcons = () => {
   const hasMissingColumnError = (error: any, columnName: string) => {
     const message = String(error?.message || '').toLowerCase();
     return message.includes(`could not find the '${columnName.toLowerCase()}' column`) || message.includes(`column "${columnName.toLowerCase()}"`);
+  };
+
+  const getSchemaRepairMessage = (error: any) => {
+    const requiredColumns = ['cpf', 'password', 'permissions', 'role'];
+    return requiredColumns.some((column) => hasMissingColumnError(error, column))
+      ? WAITER_ACCESS_SCHEMA_MESSAGE
+      : null;
   };
 
   const getWaiterAppAccess = (waiter?: Partial<Waiter>) => {
@@ -219,6 +229,93 @@ const Garcons = () => {
       if (!(emailValue && false)) {
         toast({ title: 'Sucesso!', description: 'Usuário salvo com sucesso.' });
       }
+      setIsDialogOpen(false);
+      loadWaiters();
+    } catch (e: any) {
+      toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveUser = async () => {
+    const normalizedCpf = String(formData.cpf || '').replace(/\D/g, '');
+    const wantsWaiterAccess = Boolean(formData.waiter_access);
+    const rawPassword = String(formData.password || '').trim();
+    const shouldValidateCpf = wantsWaiterAccess || normalizedCpf.length > 0;
+
+    if (!formData.name?.trim() || !formData.pin?.trim()) {
+      toast({ title: 'Campos obrigatorios', description: 'Nome e PIN sao obrigatorios.', variant: 'destructive' });
+      return;
+    }
+
+    if (shouldValidateCpf && normalizedCpf.length !== 11) {
+      toast({
+        title: 'CPF invalido',
+        description: 'Informe um CPF valido para liberar o login do app garcom.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (wantsWaiterAccess && !formData.id && !rawPassword) {
+      toast({
+        title: 'Senha obrigatoria',
+        description: 'Defina uma senha para liberar o acesso ao app garcom.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const permissions = buildPermissions();
+      const emailValue = String(formData.email || '').trim();
+      const hasEmail = Boolean(emailValue);
+      const basePayload = {
+        user_id: user?.id,
+        name: formData.name?.trim(),
+        ...(normalizedCpf ? { cpf: normalizedCpf } : {}),
+        pin: formData.pin?.trim(),
+        role: formData.role,
+        active: formData.active,
+        permissions,
+        ...(rawPassword ? { password: rawPassword } : {}),
+      };
+
+      const savePayload = async (includeEmail: boolean) => {
+        const payload = includeEmail && emailValue
+          ? { ...basePayload, email: emailValue }
+          : basePayload;
+
+        if (formData.id) {
+          return supabase.from('waiters').update(payload).eq('id', formData.id);
+        }
+
+        return supabase.from('waiters').insert(payload);
+      };
+
+      let { error } = await savePayload(true);
+
+      if (error && hasMissingColumnError(error, 'email')) {
+        const retry = await savePayload(false);
+        error = retry.error;
+      }
+
+      if (error) {
+        const repairMessage = getSchemaRepairMessage(error);
+        if (repairMessage) {
+          throw new Error(repairMessage);
+        }
+        throw error;
+      }
+
+      toast({
+        title: 'Sucesso!',
+        description: hasEmail
+          ? 'Usuario salvo com sucesso.'
+          : 'Usuario salvo com sucesso. Voce pode adicionar um email depois, se quiser.',
+      });
       setIsDialogOpen(false);
       loadWaiters();
     } catch (e: any) {
@@ -409,7 +506,7 @@ const Garcons = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="cpf">CPF para Login Web</Label>
+                      <Label htmlFor="cpf">CPF para login do app garcom</Label>
                       <Input
                         id="cpf"
                         placeholder="000.000.000-00"
@@ -449,14 +546,14 @@ const Garcons = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha (Login Web)</Label>
+                    <Label htmlFor="password">Senha do app garcom</Label>
                     <div className="relative">
                       <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                       <Input 
                         id="password" 
                         type={showPassword ? "text" : "password"}
                         className="pl-9 pr-9" 
-                        placeholder={formData.id ? "Deixe em branco para manter" : "Senha segura"}
+                        placeholder={formData.id ? "Deixe em branco para manter" : "Senha para o app garcom"}
                         value={formData.password}
                         onChange={e => setFormData({ ...formData, password: e.target.value })}
                       />
@@ -572,7 +669,7 @@ const Garcons = () => {
 
           <DialogFooter className="mt-6 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={loading} className="min-w-[120px]">
+            <Button onClick={handleSaveUser} disabled={loading} className="min-w-[120px]">
               {loading ? 'Salvando...' : 'Salvar Usuário'}
             </Button>
           </DialogFooter>

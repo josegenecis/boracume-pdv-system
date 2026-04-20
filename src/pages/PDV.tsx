@@ -27,6 +27,7 @@ import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
@@ -1052,6 +1053,14 @@ const PDV = () => {
 
       console.log('Pedido criado com sucesso:', data);
 
+      const created = Array.isArray(data) ? data[0] : data;
+
+      try {
+        await notifyOrderCreatedById(created?.id);
+      } catch (waErr) {
+        console.warn('Falha ao notificar pedido via WhatsApp:', waErr);
+      }
+
       if (orderType === 'dine_in' && selectedTable) {
         try {
           await supabase
@@ -1065,7 +1074,6 @@ const PDV = () => {
 
       if (paymentMethod === 'pix') {
         setPixAmount(getFinalTotal());
-        const created = Array.isArray(data) ? data[0] : data;
         setPixOrderId(created?.id || null);
         setCreatedOrderForNfce(created || null);
         setIsPixModalOpen(true);
@@ -1083,7 +1091,6 @@ const PDV = () => {
           description: "Aguardando pagamento do PIX para enviar ao restaurante.",
         });
       } else {
-        const created = Array.isArray(data) ? data[0] : data;
         setCreatedOrderForNfce(created || null);
         try {
           await PrinterService.printOrder(created);

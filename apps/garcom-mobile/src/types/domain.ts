@@ -8,8 +8,16 @@ export type OperatorProfile = {
   id: string;
   restaurantId: string;
   name: string;
+  cpf: string;
   email: string;
   role: string;
+  permissions: Record<string, boolean>;
+};
+
+export type WaiterStoredSession = {
+  token: string;
+  expiresAt: string;
+  profile: OperatorProfile;
 };
 
 export type RestaurantTable = {

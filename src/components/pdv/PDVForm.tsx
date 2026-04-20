@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from './ProductSelectionModal';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
+import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 
 interface CartItem {
   id: string;
@@ -226,6 +227,12 @@ const PDVForm: React.FC = () => {
         .single();
 
       if (error) throw error;
+
+      try {
+        await notifyOrderCreatedById(createdOrder?.id);
+      } catch (waErr) {
+        console.warn('Falha ao notificar pedido do PDV via WhatsApp:', waErr);
+      }
 
       if (createdOrder?.id) {
         await updateOrderStatusRemote(createdOrder.id, 'completed');

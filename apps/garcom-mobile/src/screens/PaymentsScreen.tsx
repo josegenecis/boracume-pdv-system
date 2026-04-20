@@ -30,6 +30,8 @@ export function PaymentsScreen({ navigation, route }: Props) {
   const sessionQuery = useQuery({
     queryKey: ['session', route.params.sessionId],
     queryFn: () => getSessionDetails(route.params.sessionId),
+    refetchInterval: 8000,
+    refetchIntervalInBackground: true,
   });
 
   const targetAccount = useMemo(

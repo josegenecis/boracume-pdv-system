@@ -28,6 +28,7 @@ import MarketingPixels from '@/components/marketing/MarketingPixels';
 import { Badge } from '@/components/ui/badge';
 import { getStoreOpenInfo } from '@/lib/storeHours';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 // import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
@@ -633,11 +634,7 @@ const MenuDigital = () => {
       // Notificar cliente via WhatsApp (pedido recebido)
       try {
         if (data?.id) {
-          await supabase.functions.invoke('whatsapp-order-created', {
-            body: {
-              orderId: data.id
-            }
-          });
+          await notifyOrderCreatedById(data.id);
         }
       } catch (waErr) {
         console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
