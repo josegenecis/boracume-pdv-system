@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { clearAllMenuCartStorage } from '@/hooks/useSimpleCart';
 
-const BORACUME_LOGO_SRC = '/LOGOMARCA/Logo BoraCumê.png';
+const BORACUME_LOGO_SRC = '/LOGOMARCA/logo-sistema.png';
 const MERCADO_PAGO_LOGO_SRC = '/LOGOMARCA/mercado-pago-handshake.svg';
 
 interface PixCheckoutModalProps {
@@ -129,11 +129,14 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
           <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-gray-100 w-full relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-[#009EE3]" />
 
-            <div className="flex items-center justify-center mb-4 mt-2">
+            <div className="flex flex-col items-center justify-center mb-4 mt-2">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest mb-2">
+                Processado por
+              </span>
               <img
-                src={BORACUME_LOGO_SRC}
-                alt="BoraCume"
-                className="h-10 sm:h-12 object-contain"
+                src={MERCADO_PAGO_LOGO_SRC}
+                alt="Mercado Pago"
+                className="h-7 sm:h-8 object-contain"
                 loading="eager"
               />
             </div>
@@ -151,11 +154,10 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             )}
 
             <div className="mt-6 pt-4 border-t border-gray-100 w-full flex flex-col items-center justify-center opacity-80">
-              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest mb-1">Processado por</span>
               <img
-                src={MERCADO_PAGO_LOGO_SRC}
-                alt="Mercado Pago"
-                className="h-5 object-contain"
+                src={BORACUME_LOGO_SRC}
+                alt="BoraCume"
+                className="h-4 sm:h-5 object-contain"
                 loading="eager"
               />
             </div>
