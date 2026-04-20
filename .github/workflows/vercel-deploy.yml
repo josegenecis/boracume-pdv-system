@@ -7,17 +7,30 @@ on:
 
 jobs:
   deploy:
-    if: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check Vercel secrets
+        id: vercel-secrets
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ] && [ -n "${{ secrets.VERCEL_ORG_ID }}" ] && [ -n "${{ secrets.VERCEL_PROJECT_ID }}" ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Vercel CLI deploy because repository secrets are missing. Git integration can still publish production."
+          fi
       - uses: actions/setup-node@v4
+        if: steps.vercel-secrets.outputs.can_deploy == 'true'
         with:
           node-version: '20.x'
           cache: 'npm'
-      - run: npm ci
-      - run: npm run build
+      - if: steps.vercel-secrets.outputs.can_deploy == 'true'
+        run: npm ci
+      - if: steps.vercel-secrets.outputs.can_deploy == 'true'
+        run: npm run build
       - name: Deploy to Vercel (Production)
+        if: steps.vercel-secrets.outputs.can_deploy == 'true'
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
