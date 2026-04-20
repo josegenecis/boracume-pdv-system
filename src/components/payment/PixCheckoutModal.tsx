@@ -136,7 +136,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
               <img
                 src={MERCADO_PAGO_LOGO_SRC}
                 alt="Mercado Pago"
-                className="h-7 sm:h-8 object-contain"
+                className="h-8 sm:h-9 object-contain"
                 loading="eager"
               />
             </div>
@@ -157,9 +157,12 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
               <img
                 src={BORACUME_LOGO_SRC}
                 alt="BoraCume"
-                className="h-4 sm:h-5 object-contain"
+                className="h-3 sm:h-4 object-contain"
                 loading="eager"
               />
+              <span className="mt-1 text-[11px] text-gray-400 text-center">
+                Sistema para restaurantes
+              </span>
             </div>
           </div>
 
