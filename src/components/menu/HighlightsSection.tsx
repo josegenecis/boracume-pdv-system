@@ -30,7 +30,7 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
       </div>
       
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-        {products.map((product) => (
+        {products.map((product, index) => (
           <div
             key={product.id}
             onClick={() => onProductClick(product)}
@@ -43,7 +43,9 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
                     src={normalizeImageUrlForDisplay(product.image_url) || product.image_url}
                     alt={product.name}
                     className="w-full h-full object-cover"
-                    loading="lazy"
+                    loading={index < 2 ? 'eager' : 'lazy'}
+                    fetchPriority={index < 2 ? 'high' : 'auto'}
+                    decoding="async"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">

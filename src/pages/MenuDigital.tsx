@@ -27,6 +27,7 @@ import MarketingBanners from '@/components/marketing/MarketingBanners';
 import MarketingPixels from '@/components/marketing/MarketingPixels';
 import { Badge } from '@/components/ui/badge';
 import { getStoreOpenInfo } from '@/lib/storeHours';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 // import ClubDiscountBanner from '@/components/menu/ClubDiscountBanner';
 
 interface Product {
@@ -103,6 +104,16 @@ const MenuDigital = () => {
       )
     );
   }, [highlights, products]);
+  const priorityImageUrls = useMemo(() => {
+    const urls = [
+      normalizeImageUrlForDisplay(String((profile as any)?.banner_url || '')),
+      normalizeImageUrlForDisplay(String((profile as any)?.logo_url || '')),
+      ...highlights.slice(0, 4).map((product) => normalizeImageUrlForDisplay(String(product.image_url || ''))),
+      ...(products as any[]).slice(0, 8).map((product) => normalizeImageUrlForDisplay(String(product?.image_url || '')))
+    ].filter(Boolean);
+
+    return Array.from(new Set(urls));
+  }, [profile, highlights, products]);
   const variationsReadyFromCache = useMemo(() => {
     if (menuProductIds.length === 0) return true;
     return menuProductIds.every((id) => isSimpleVariationReady(id));
@@ -215,15 +226,28 @@ const MenuDigital = () => {
 
   // Pré-carregar imagens dos destaques para exibição instantânea
   useEffect(() => {
-    if (highlights.length > 0) {
-      highlights.forEach(product => {
-        if (product.image_url) {
-          const img = new Image();
-          img.src = product.image_url;
-        }
+    if (priorityImageUrls.length === 0) return;
+
+    const preload = () => {
+      priorityImageUrls.forEach((src) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = src;
       });
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = (window as any).requestIdleCallback(preload, { timeout: 800 });
+      return () => {
+        if ('cancelIdleCallback' in window) {
+          (window as any).cancelIdleCallback(idleId);
+        }
+      };
     }
-  }, [highlights]);
+
+    const timeoutId = window.setTimeout(preload, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [priorityImageUrls]);
 
   useEffect(() => {
     if (!finalUserId || menuLoading || menuError || menuProductIds.length === 0 || variationsReadyFromCache) return;
@@ -769,12 +793,18 @@ const MenuDigital = () => {
               src={String((profile as any).banner_url)}
               alt={profile.restaurant_name || 'Banner'}
               className="absolute inset-0 w-full h-full object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
             />
           ) : (profile as any)?.logo_url ? (
             <img
               src={String((profile as any).logo_url)}
               alt={profile.restaurant_name || 'Logo'}
               className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-110"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
             />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/0 to-white/0" />
@@ -785,7 +815,14 @@ const MenuDigital = () => {
             <div className="flex items-start gap-3">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-4 border-white shadow-sm overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 -mt-9 sm:-mt-10">
                 {(profile as any)?.logo_url ? (
-                  <img src={String((profile as any).logo_url)} alt={profile.restaurant_name || 'Logo'} className="w-full h-full object-cover" />
+                  <img
+                    src={String((profile as any).logo_url)}
+                    alt={profile.restaurant_name || 'Logo'}
+                    className="w-full h-full object-cover"
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                  />
                 ) : (
                   <div className="text-xs font-bold text-gray-600">
                     {(profile?.restaurant_name || 'BC').slice(0, 2).toUpperCase()}
