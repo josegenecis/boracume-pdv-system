@@ -8,7 +8,6 @@ import { useToast } from '@/hooks/use-toast';
 import {
   bootstrapWaiterWeb,
   createWaiterTable,
-  formatMoney,
   loadWaiterBootstrapCache,
   loadWaiterWebSession,
   logoutWaiterWeb,
@@ -21,33 +20,13 @@ import {
 } from '@/services/waiterWebClient';
 import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
-import { WaiterMetricCard } from '@/components/waiter-web/WaiterMetricCard';
-import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
 import {
   Armchair,
-  ChefHat,
-  CircleDollarSign,
   LayoutGrid,
   LogOut,
-  MoveRight,
   PlusCircle,
   RefreshCw,
-  Search,
-  Sparkles,
-  Users,
 } from 'lucide-react';
-
-type FilterValue = 'all' | TableStatus;
-
-const filterOptions: Array<{ value: FilterValue; label: string }> = [
-  { value: 'all', label: 'Todas' },
-  { value: 'free', label: 'Livres' },
-  { value: 'occupied', label: 'Ocupadas' },
-  { value: 'preparing', label: 'Em preparo' },
-  { value: 'ready', label: 'Prontas' },
-  { value: 'check_requested', label: 'Conta solicitada' },
-  { value: 'partially_paid', label: 'Parcial' },
-];
 
 const tableTileTone: Record<TableStatus, string> = {
   free: 'bg-[#A4D65E] text-[#083223]',
@@ -58,6 +37,8 @@ const tableTileTone: Record<TableStatus, string> = {
   partially_paid: 'bg-[#FFB347] text-[#083223]',
 };
 
+const tableOccupancyLabel = (status: TableStatus) => (status === 'free' ? 'Livre' : 'Ocupada');
+
 const WaiterDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -65,8 +46,6 @@ const WaiterDashboard = () => {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FilterValue>('all');
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [transferTable, setTransferTable] = useState<RestaurantTable | null>(null);
   const [releaseTable, setReleaseTable] = useState<RestaurantTable | null>(null);
@@ -116,30 +95,9 @@ const WaiterDashboard = () => {
     return () => window.clearInterval(interval);
   }, [waiterSession]);
 
-  const stats = useMemo(() => {
-    return {
-      total: tables.length,
-      preparing: tables.filter((table) => table.status === 'preparing').length,
-      ready: tables.filter((table) => table.status === 'ready').length,
-      pendingPayment: tables.filter((table) => ['check_requested', 'partially_paid'].includes(table.status)).length,
-      commandas: tables.reduce((sum, table) => sum + table.accountCount, 0),
-    };
-  }, [tables]);
-
   const filteredTables = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    return tables.filter((table) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        table.label.toLowerCase().includes(normalizedSearch) ||
-        String(table.number).includes(normalizedSearch) ||
-        String(table.location || '').toLowerCase().includes(normalizedSearch);
-
-      const matchesStatus = statusFilter === 'all' || table.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [tables, search, statusFilter]);
+    return [...tables].sort((left, right) => left.number - right.number);
+  }, [tables]);
 
   const transferTargets = useMemo(() => {
     if (!transferTable?.sessionId) return [];
@@ -320,88 +278,29 @@ const WaiterDashboard = () => {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-24 text-white">
-      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/75">
-            {syncing ? 'Sincronizando' : 'Salao online'}
-          </div>
-
-          <div className="hidden items-center gap-2 md:flex">
-            <Button
-              variant="outline"
-              className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-              onClick={() => void loadTables({ initialLoad: false, announceError: true })}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-              Atualizar
-            </Button>
-            <Button className="rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Nova mesa
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-              onClick={handleLogout}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sair
-            </Button>
-          </div>
+      <div className="mx-auto max-w-[440px] px-3 py-3 sm:max-w-3xl sm:px-6 lg:max-w-6xl lg:px-8">
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
 
-        <div className="mt-5 flex flex-col items-center text-center">
+        <div className="mt-2 flex flex-col items-center text-center">
           <img
             src="/waiter/logo-boracume.png"
             alt="BoraCume"
-            className="h-24 w-24 rounded-full object-contain shadow-[0_18px_40px_-22px_rgba(0,0,0,0.7)]"
+            className="h-16 w-auto object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,0.32)]"
           />
-          <div className="mt-3 inline-flex rounded-full bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-white/80">
+          <div className="mt-2 inline-flex rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-white/80">
             App web Garcom
           </div>
-          <h1 className="mt-4 text-3xl font-semibold leading-tight text-white sm:text-4xl">Mapa de mesas</h1>
-          <p className="mt-2 max-w-md text-sm leading-6 text-white/72">
-            {waiterSession.profile.name}, toque na mesa para abrir atendimento ou continuar a operacao.
-          </p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <WaiterMetricCard label="Mesas" value={stats.total} hint="Mapa ativo" icon={<LayoutGrid className="h-4 w-4" />} />
-          <WaiterMetricCard label="Preparo" value={stats.preparing} hint="Na cozinha" icon={<ChefHat className="h-4 w-4" />} />
-          <WaiterMetricCard label="Prontas" value={stats.ready} hint="Para servir" icon={<Sparkles className="h-4 w-4" />} />
-          <WaiterMetricCard label="Conta" value={stats.pendingPayment} hint={`${stats.commandas} comandas`} icon={<CircleDollarSign className="h-4 w-4" />} />
-        </div>
-
-        <div className="mt-5 rounded-[28px] border border-white/10 bg-white/[0.08] p-3 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.6)] backdrop-blur-sm">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-11 rounded-[18px] border-white/10 bg-white/95 pl-10 text-slate-900 placeholder:text-slate-400"
-              placeholder="Buscar mesa ou local"
-            />
-          </div>
-
-          <div className="-mx-1 mt-3 overflow-x-auto">
-            <div className="flex min-w-max gap-2 px-1 pb-1">
-              {filterOptions.map((filter) => (
-                <Button
-                  key={filter.value}
-                  type="button"
-                  variant={statusFilter === filter.value ? 'default' : 'outline'}
-                  className={
-                    statusFilter === filter.value
-                      ? 'rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]'
-                      : 'rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white'
-                  }
-                  onClick={() => setStatusFilter(filter.value)}
-                >
-                  {filter.label}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <h1 className="mt-3 text-[1.95rem] font-semibold leading-tight text-white">Mesas</h1>
+          <p className="mt-1 text-xs leading-5 text-white/68">{waiterSession.profile.name}</p>
         </div>
 
         {loadError ? (
@@ -415,7 +314,7 @@ const WaiterDashboard = () => {
             <WaiterEmptyState
               icon={<Armchair className="h-7 w-7" />}
               title="Nenhuma mesa encontrada"
-              description="Ajuste o filtro ou cadastre uma nova mesa para iniciar o atendimento no salao."
+              description="Cadastre uma nova mesa para iniciar o atendimento no salao."
               action={
                 <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
@@ -424,12 +323,8 @@ const WaiterDashboard = () => {
               }
             />
           ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6">
               {filteredTables.map((table) => {
-                const canOpenSession = !table.sessionId && table.status === 'free';
-                const canRelease = Boolean(table.sessionId) && table.dueAmount <= 0;
-                const canTransfer = Boolean(table.sessionId);
-
                 return (
                   <div
                     key={table.id}
@@ -456,57 +351,16 @@ const WaiterDashboard = () => {
                         setGuestCount('2');
                       }
                     }}
-                    className={`relative flex min-h-[188px] cursor-pointer flex-col rounded-[28px] p-3 text-left shadow-[0_18px_40px_-26px_rgba(0,0,0,0.75)] transition active:scale-[0.99] ${tableTileTone[table.status]}`}
+                    className={`relative flex aspect-square cursor-pointer flex-col rounded-[22px] p-2 text-left shadow-[0_16px_34px_-24px_rgba(0,0,0,0.8)] transition active:scale-[0.98] sm:rounded-[24px] sm:p-3 ${tableTileTone[table.status]}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <WaiterStatusBadge
-                        status={table.status}
-                        className="border-black/10 bg-black/15 text-[10px] text-white backdrop-blur-sm"
-                      />
-                      <div className="flex items-center gap-1">
-                        {canTransfer ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setTransferTable(table);
-                              setTargetTableId('');
-                            }}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/15 text-white"
-                            aria-label={`Transferir mesa ${table.number}`}
-                          >
-                            <MoveRight className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {canRelease ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setReleaseTable(table);
-                            }}
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/15 text-white"
-                            aria-label={`Liberar mesa ${table.number}`}
-                          >
-                            <Sparkles className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </div>
+                    <div className="flex items-start justify-start">
+                      <span className="rounded-full bg-black/12 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-current">
+                        {tableOccupancyLabel(table.status)}
+                      </span>
                     </div>
 
                     <div className="flex flex-1 items-center justify-center">
-                      <div className="text-6xl font-semibold tracking-tight">{table.number}</div>
-                    </div>
-
-                    <div className="space-y-1 rounded-[20px] bg-black/10 px-3 py-2 text-white/90">
-                      <div className="flex items-center justify-between text-[11px] font-medium">
-                        <span>{table.accountCount} comandas</span>
-                        <span>{table.readyItemsCount} prontos</span>
-                      </div>
-                      <div className="truncate text-[11px] text-white/70">{table.location || 'Salao principal'}</div>
-                      <div className="text-sm font-semibold">
-                        {table.dueAmount > 0 ? `Saldo ${formatMoney(table.dueAmount)}` : formatMoney(table.total)}
-                      </div>
+                      <div className="text-[2.25rem] font-semibold leading-none tracking-tight sm:text-5xl">{table.number}</div>
                     </div>
                   </div>
                 );

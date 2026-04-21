@@ -18,7 +18,7 @@ export function WaiterBottomNav({ items, className }: WaiterBottomNavProps) {
   return (
     <div
       className={cn(
-        'fixed inset-x-3 bottom-3 z-40 rounded-[28px] border border-[#E4E9E0] bg-[#FFFDF7]/95 p-2 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.55)] backdrop-blur md:hidden',
+        'fixed inset-x-2 bottom-2 z-40 rounded-[24px] border border-[#E4E9E0] bg-[#FFFDF7]/95 p-1.5 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.55)] backdrop-blur md:hidden',
         className,
       )}
     >
@@ -29,12 +29,12 @@ export function WaiterBottomNav({ items, className }: WaiterBottomNavProps) {
             type="button"
             onClick={item.onClick}
             className={cn(
-              'flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-[20px] px-2 py-2 text-center transition',
+              'flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-[18px] px-2 py-1.5 text-center transition',
               item.active ? 'bg-[#FFF1E6] text-[#FF6400]' : 'text-[#0B4A36]',
             )}
           >
             <span className="flex h-5 items-center justify-center">{item.icon}</span>
-            <span className="text-[11px] font-medium leading-4">{item.label}</span>
+            <span className="text-[10px] font-medium leading-4">{item.label}</span>
           </button>
         ))}
       </div>
