@@ -88,6 +88,7 @@ const WaiterSessionPage = () => {
   const [editingAccountId, setEditingAccountId] = useState('');
   const [accountName, setAccountName] = useState('');
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [productDialogStep, setProductDialogStep] = useState<'browse' | 'configure'>('browse');
   const [catalogAccountId, setCatalogAccountId] = useState('');
   const [editingItemId, setEditingItemId] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -108,6 +109,8 @@ const WaiterSessionPage = () => {
   const [transferTableOpen, setTransferTableOpen] = useState(false);
   const [transferTableTargetId, setTransferTableTargetId] = useState('');
   const [activeTab, setActiveTab] = useState<'accounts' | 'timeline' | 'payments'>('accounts');
+  const [sessionLoadIssue, setSessionLoadIssue] = useState('');
+  const [catalogLoadIssue, setCatalogLoadIssue] = useState('');
   const deferredProductSearch = useDeferredValue(productSearch);
 
   const applySession = (nextSession: TableSession) => {
@@ -185,8 +188,10 @@ const WaiterSessionPage = () => {
 
       const response = await getWaiterSessionDetails(sessionId);
       applySession(response.session);
+      setSessionLoadIssue('');
     } catch (error: any) {
       const message = String(error?.message || 'Nao foi possivel carregar a mesa.');
+      setSessionLoadIssue(message);
 
       if (message.toLowerCase().includes('sess')) {
         await logoutWaiterWeb();
@@ -194,11 +199,13 @@ const WaiterSessionPage = () => {
         return;
       }
 
-      toast({
-        title: 'Erro ao carregar mesa',
-        description: message,
-        variant: 'destructive',
-      });
+      if (!silent && !session) {
+        toast({
+          title: 'Erro ao carregar mesa',
+          description: message,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -209,12 +216,18 @@ const WaiterSessionPage = () => {
     try {
       const response = await listWaiterCatalog();
       setCatalog(response.categories || []);
+      setCatalogLoadIssue('');
     } catch (error: any) {
-      toast({
-        title: 'Erro ao carregar cardapio',
-        description: error?.message || 'Nao foi possivel carregar os produtos do restaurante.',
-        variant: 'destructive',
-      });
+      const message = error?.message || 'Nao foi possivel carregar os produtos do restaurante.';
+      setCatalogLoadIssue(String(message));
+
+      if (!catalog.length) {
+        toast({
+          title: 'Erro ao carregar cardapio',
+          description: message,
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -270,7 +283,29 @@ const WaiterSessionPage = () => {
     setItemNotes(item?.notes || '');
     setProductSearch('');
     setSelectedCategoryId(product?.categoryId || 'all');
+    setProductDialogStep(product ? 'configure' : 'browse');
     setProductDialogOpen(true);
+  };
+
+  const selectProductForDialog = (product: Product) => {
+    setSelectedProductId(product.id);
+    setSelectedOptions({});
+    setQuantity('1');
+    setItemNotes('');
+    setProductDialogStep('configure');
+  };
+
+  const resetProductDialog = () => {
+    setProductDialogOpen(false);
+    setProductDialogStep('browse');
+    setCatalogAccountId('');
+    setEditingItemId('');
+    setSelectedProductId('');
+    setSelectedOptions({});
+    setQuantity('1');
+    setItemNotes('');
+    setProductSearch('');
+    setSelectedCategoryId('all');
   };
 
   const toggleOption = (groupId: string, option: ProductOption, maxSelections: number) => {
@@ -384,13 +419,7 @@ const WaiterSessionPage = () => {
           });
 
       applySession(response.session);
-      setProductDialogOpen(false);
-      setCatalogAccountId('');
-      setEditingItemId('');
-      setSelectedProductId('');
-      setSelectedOptions({});
-      setQuantity('1');
-      setItemNotes('');
+      resetProductDialog();
       toast({
         title: editingItem ? 'Item atualizado' : 'Item adicionado',
         description: `${selectedProduct.name} foi salvo na comanda.`,
@@ -664,6 +693,9 @@ const WaiterSessionPage = () => {
 
   if (!session) return null;
 
+  const showProductBrowsePane = productDialogStep === 'browse' || !selectedProduct;
+  const showProductConfigurePane = Boolean(selectedProduct) && productDialogStep === 'configure';
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900">
       <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
@@ -779,6 +811,12 @@ const WaiterSessionPage = () => {
               Liberar
             </Button>
           </div>
+
+          {sessionLoadIssue || catalogLoadIssue ? (
+            <div className="mt-3 rounded-[18px] border border-amber-200/40 bg-amber-100/10 px-3 py-2 text-left text-xs leading-5 text-white/80">
+              Sincronizacao instavel. O app continua com os ultimos dados salvos enquanto tenta reconectar.
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4">
@@ -1155,34 +1193,37 @@ const WaiterSessionPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
-        <DialogContent className="max-h-[92vh] max-w-6xl rounded-[28px] border-0 p-0">
-          <div className="grid h-full gap-0 lg:grid-cols-[1fr,1fr]">
-            <div className="border-b border-slate-100 p-6 lg:border-b-0 lg:border-r">
-              <DialogTitle className="text-2xl font-semibold text-[#082F23]">
-                {editingItem ? 'Editar item da comanda' : 'Adicionar produto'}
+      <Dialog open={productDialogOpen} onOpenChange={(open) => (open ? setProductDialogOpen(true) : resetProductDialog())}>
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden rounded-[28px] border-0 p-0">
+          <div className="grid h-full gap-0 lg:grid-cols-[0.95fr,1.05fr]">
+            <div className={`${showProductBrowsePane ? 'block' : 'hidden'} border-b border-slate-100 p-4 lg:block lg:border-b-0 lg:border-r lg:p-5`}>
+              <DialogTitle className="text-xl font-semibold text-[#082F23]">
+                {editingItem ? 'Editar item' : 'Adicionar produto'}
               </DialogTitle>
-              <DialogDescription className="mt-2">
-                Escolha um produto do cardapio do restaurante, configure variacoes e envie para a comanda certa.
-              </DialogDescription>
 
-              <div className="mt-5 space-y-4">
+              {catalogLoadIssue ? (
+                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                  Cardapio offline no momento. Exibindo os ultimos produtos carregados.
+                </div>
+              ) : null}
+
+              <div className="mt-4 space-y-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={productSearch}
                     onChange={(event) => setProductSearch(event.target.value)}
-                    className="h-12 rounded-2xl pl-10"
-                    placeholder="Buscar produto do salao"
+                    className="h-10 rounded-2xl pl-10"
+                    placeholder="Buscar produto"
                   />
                 </div>
 
                 <ScrollArea className="w-full whitespace-nowrap">
-                  <div className="flex gap-2 pb-2">
+                  <div className="flex gap-1.5 pb-2">
                     <Button
                       type="button"
                       variant={selectedCategoryId === 'all' ? 'default' : 'outline'}
-                      className={selectedCategoryId === 'all' ? 'rounded-full bg-[#082F23] hover:bg-[#0B4A36]' : 'rounded-full'}
+                      className={selectedCategoryId === 'all' ? 'h-8 rounded-full bg-[#082F23] px-3 text-xs hover:bg-[#0B4A36]' : 'h-8 rounded-full px-3 text-xs'}
                       onClick={() => setSelectedCategoryId('all')}
                     >
                       Todas
@@ -1192,7 +1233,7 @@ const WaiterSessionPage = () => {
                         key={category.id}
                         type="button"
                         variant={selectedCategoryId === category.id ? 'default' : 'outline'}
-                        className={selectedCategoryId === category.id ? 'rounded-full bg-[#082F23] hover:bg-[#0B4A36]' : 'rounded-full'}
+                        className={selectedCategoryId === category.id ? 'h-8 rounded-full bg-[#082F23] px-3 text-xs hover:bg-[#0B4A36]' : 'h-8 rounded-full px-3 text-xs'}
                         onClick={() => setSelectedCategoryId(category.id)}
                       >
                         {category.name}
@@ -1201,47 +1242,52 @@ const WaiterSessionPage = () => {
                   </div>
                 </ScrollArea>
 
-                <ScrollArea className="h-[440px] pr-3">
-                  <div className="space-y-5">
+                <ScrollArea className="h-[54vh] pr-2 lg:h-[62vh]">
+                  <div className="space-y-4">
                     {filteredCategories.map((category) => (
                       <div key={category.id}>
-                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{category.name}</div>
-                        <div className="grid gap-3">
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{category.name}</div>
+                        <div className="space-y-2">
                           {category.products.map((product) => {
                             const imageUrl = normalizeImageUrlForDisplay(product.imageUrl);
+                            const isSelected = selectedProductId === product.id;
+
                             return (
-                              <button
+                              <div
                                 key={product.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedProductId(product.id);
-                                  setSelectedOptions({});
-                                  setQuantity('1');
-                                  setItemNotes('');
-                                }}
-                                className={`rounded-3xl border p-4 text-left transition ${
-                                  selectedProductId === product.id ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
+                                className={`flex items-center gap-3 rounded-[22px] border px-3 py-2.5 transition ${
+                                  isSelected ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
                                 }`}
                               >
-                                <div className="flex gap-4">
-                                  <div className="h-20 w-20 flex-none overflow-hidden rounded-2xl bg-[#EEF4E9]">
+                                <button
+                                  type="button"
+                                  onClick={() => selectProductForDialog(product)}
+                                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                >
+                                  <div className="h-12 w-12 flex-none overflow-hidden rounded-2xl bg-[#EEF4E9]">
                                     {imageUrl ? (
                                       <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
                                     ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-sm font-medium text-[#0B4A36]">
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-[#0B4A36]">
                                         Sem foto
                                       </div>
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="font-semibold text-[#082F23]">{product.name}</div>
-                                    <div className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">
-                                      {product.description || 'Produto pronto para operar no salao.'}
-                                    </div>
-                                    <div className="mt-3 text-base font-semibold text-[#082F23]">{formatMoney(product.price)}</div>
+                                    <div className="truncate text-sm font-semibold text-[#082F23]">{product.name}</div>
+                                    <div className="mt-1 text-xs font-medium text-slate-500">{formatMoney(product.price)}</div>
                                   </div>
-                                </div>
-                              </button>
+                                </button>
+
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  className="h-9 w-9 rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]"
+                                  onClick={() => selectProductForDialog(product)}
+                                >
+                                  <PlusCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
                             );
                           })}
                         </div>
@@ -1252,28 +1298,40 @@ const WaiterSessionPage = () => {
               </div>
             </div>
 
-            <div className="bg-[#F4F8F2] p-6">
+            <div className={`${showProductConfigurePane ? 'block' : 'hidden'} bg-[#F4F8F2] p-4 lg:block lg:p-5`}>
               {selectedProduct ? (
                 <div className="flex h-full flex-col">
-                  <div className="rounded-[28px] bg-white p-5 shadow-sm">
-                    <div className="text-2xl font-semibold text-[#082F23]">{selectedProduct.name}</div>
-                    <div className="mt-2 text-sm leading-6 text-slate-500">
-                      {selectedProduct.description || 'Produto selecionado para a comanda.'}
-                    </div>
-                    <div className="mt-4 text-3xl font-semibold text-[#082F23]">{formatMoney(selectedProduct.price)}</div>
+                  <div className="flex items-center justify-between gap-3 lg:hidden">
+                    <Button variant="outline" className="h-9 rounded-2xl" onClick={() => setProductDialogStep('browse')}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Produtos
+                    </Button>
+                    <div className="text-xs font-medium text-slate-500">{activeAccount?.name || 'Comanda'}</div>
                   </div>
 
-                  <ScrollArea className="mt-4 h-[390px] pr-3">
-                    <div className="space-y-4">
+                  <div className="mt-3 rounded-[24px] bg-white p-4 shadow-sm lg:mt-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xl font-semibold text-[#082F23]">{selectedProduct.name}</div>
+                        {selectedProduct.description ? (
+                          <div className="mt-1 text-sm leading-5 text-slate-500">{selectedProduct.description}</div>
+                        ) : null}
+                      </div>
+                      <div className="text-lg font-semibold text-[#082F23]">{formatMoney(selectedProduct.price)}</div>
+                    </div>
+                  </div>
+
+                  <ScrollArea className="mt-3 h-[52vh] pr-2 lg:h-[58vh]">
+                    <div className="space-y-3">
                       {selectedProduct.variations.map((group) => (
-                        <div key={group.id} className="rounded-[28px] bg-white p-4 shadow-sm">
+                        <div key={group.id} className="rounded-[22px] bg-white p-3 shadow-sm">
                           <div className="flex items-center justify-between gap-3">
-                            <div className="font-semibold text-[#082F23]">{group.name}</div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            <div className="text-sm font-semibold text-[#082F23]">{group.name}</div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                               {group.required ? 'Obrigatorio' : `Ate ${group.maxSelections}`}
                             </div>
                           </div>
-                          <div className="mt-3 space-y-2">
+                          <div className="mt-2 space-y-2">
                             {group.options.map((option) => {
                               const selected = (selectedOptions[group.id] || []).some((item) => item.id === option.id);
                               return (
@@ -1281,12 +1339,12 @@ const WaiterSessionPage = () => {
                                   key={option.id}
                                   type="button"
                                   onClick={() => toggleOption(group.id, option, group.maxSelections)}
-                                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left transition ${
                                     selected ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
                                   }`}
                                 >
-                                  <span className="font-medium text-slate-700">{option.name}</span>
-                                  <span className="text-sm font-semibold text-slate-500">
+                                  <span className="text-sm font-medium text-slate-700">{option.name}</span>
+                                  <span className="text-xs font-semibold text-slate-500">
                                     {option.price ? `+ ${formatMoney(option.price)}` : 'Incluso'}
                                   </span>
                                 </button>
@@ -1296,45 +1354,51 @@ const WaiterSessionPage = () => {
                         </div>
                       ))}
 
-                      <div className="rounded-[28px] bg-white p-4 shadow-sm">
+                      {selectedProduct.variations.length === 0 ? (
+                        <div className="rounded-[22px] bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">Sem complementos para este produto.</div>
+                      ) : null}
+
+                      <div className="rounded-[22px] bg-white p-3 shadow-sm">
                         <Label htmlFor="itemQuantity">Quantidade</Label>
                         <Input
                           id="itemQuantity"
                           inputMode="numeric"
                           value={quantity}
                           onChange={(event) => setQuantity(event.target.value.replace(/\D/g, '').slice(0, 2))}
-                          className="mt-2 h-12 rounded-2xl"
+                          className="mt-2 h-10 rounded-2xl"
                         />
                       </div>
 
-                      <div className="rounded-[28px] bg-white p-4 shadow-sm">
-                        <Label htmlFor="itemNotes">Observacoes do item</Label>
+                      <div className="rounded-[22px] bg-white p-3 shadow-sm">
+                        <Label htmlFor="itemNotes">Observacoes</Label>
                         <Textarea
                           id="itemNotes"
                           value={itemNotes}
                           onChange={(event) => setItemNotes(event.target.value)}
-                          className="mt-2 min-h-[120px] rounded-2xl"
-                          placeholder="Ex: sem cebola, carne ao ponto, molho separado..."
+                          className="mt-2 min-h-[96px] rounded-2xl"
+                          placeholder="Ex: sem cebola, molho separado..."
                         />
                       </div>
                     </div>
                   </ScrollArea>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Button variant="outline" className="rounded-2xl" onClick={() => setProductDialogOpen(false)} disabled={submitting}>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button variant="outline" className="h-11 rounded-2xl" onClick={() => resetProductDialog()} disabled={submitting}>
                       Cancelar
                     </Button>
-                    <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleAddOrUpdateItem} disabled={submitting}>
-                      {editingItem ? 'Atualizar item' : 'Adicionar na comanda'}
+                    <Button className="h-11 rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleAddOrUpdateItem} disabled={submitting}>
+                      {editingItem ? 'Salvar' : 'Adicionar'}
                     </Button>
                   </div>
                 </div>
               ) : (
-                <WaiterEmptyState
-                  icon={<PackageOpen className="h-7 w-7" />}
-                  title="Selecione um produto"
-                  description="Ao escolher um produto, voce podera configurar variacoes, complementos, quantidade e observacoes."
-                />
+                <div className="hidden h-full lg:flex lg:items-center lg:justify-center">
+                  <WaiterEmptyState
+                    icon={<PackageOpen className="h-7 w-7" />}
+                    title="Selecione um produto"
+                    description="Toque em um item da lista para abrir complementos e observacoes."
+                  />
+                </div>
               )}
             </div>
           </div>
