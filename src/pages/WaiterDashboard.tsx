@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   bootstrapWaiterWeb,
   createWaiterTable,
+  formatMoney,
   loadWaiterBootstrapCache,
   loadWaiterWebSession,
   logoutWaiterWeb,
@@ -19,6 +19,7 @@ import {
   transferWaiterTable,
   WaiterWebStoredSession,
 } from '@/services/waiterWebClient';
+import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { WaiterMetricCard } from '@/components/waiter-web/WaiterMetricCard';
 import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
@@ -47,6 +48,15 @@ const filterOptions: Array<{ value: FilterValue; label: string }> = [
   { value: 'check_requested', label: 'Conta solicitada' },
   { value: 'partially_paid', label: 'Parcial' },
 ];
+
+const tableTileTone: Record<TableStatus, string> = {
+  free: 'bg-[#A4D65E] text-[#083223]',
+  occupied: 'bg-[#FF7A00] text-white',
+  preparing: 'bg-[#F2BE49] text-[#083223]',
+  ready: 'bg-[#B7E66A] text-[#083223]',
+  check_requested: 'bg-[#E53935] text-white',
+  partially_paid: 'bg-[#FFB347] text-[#083223]',
+};
 
 const WaiterDashboard = () => {
   const navigate = useNavigate();
@@ -309,251 +319,232 @@ const WaiterDashboard = () => {
   if (!waiterSession) return null;
 
   return (
-    <div className="min-h-screen bg-[#EEF3EC] text-slate-900">
-      <div className="bg-[radial-gradient(circle_at_top,#0D4A36_0%,#083223_48%,#07281e_100%)]">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="rounded-[36px] border border-white/10 bg-white/[0.05] p-5 text-white shadow-[0_35px_90px_-50px_rgba(0,0,0,0.7)] backdrop-blur-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-4">
-                <div className="inline-flex rounded-full border border-white/10 bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
-                  BoraCume Pro Salao
-                </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-24 text-white">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between">
+          <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-white/75">
+            {syncing ? 'Sincronizando' : 'Salao online'}
+          </div>
 
-                <div className="space-y-3">
-                  <div className="text-sm font-medium text-[#A4D65E]">{waiterSession.profile.name}</div>
-                  <h1 className="max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
-                    Um mapa de mesas rapido, claro e pronto para alto fluxo.
-                  </h1>
-                  <p className="max-w-2xl text-sm leading-6 text-white/70">
-                    Visualize comandas, acompanhe cozinha, abra novas operacoes e mantenha o salao sincronizado com o PDV.
-                  </p>
-                </div>
-              </div>
+          <div className="hidden items-center gap-2 md:flex">
+            <Button
+              variant="outline"
+              className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+              onClick={() => void loadTables({ initialLoad: false, announceError: true })}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+            <Button className="rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Nova mesa
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </Button>
+          </div>
+        </div>
 
-              <div className="flex flex-wrap gap-3">
+        <div className="mt-5 flex flex-col items-center text-center">
+          <img
+            src="/waiter/logo-boracume.png"
+            alt="BoraCume"
+            className="h-24 w-24 rounded-full object-contain shadow-[0_18px_40px_-22px_rgba(0,0,0,0.7)]"
+          />
+          <div className="mt-3 inline-flex rounded-full bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.22em] text-white/80">
+            App web Garcom
+          </div>
+          <h1 className="mt-4 text-3xl font-semibold leading-tight text-white sm:text-4xl">Mapa de mesas</h1>
+          <p className="mt-2 max-w-md text-sm leading-6 text-white/72">
+            {waiterSession.profile.name}, toque na mesa para abrir atendimento ou continuar a operacao.
+          </p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <WaiterMetricCard label="Mesas" value={stats.total} hint="Mapa ativo" icon={<LayoutGrid className="h-4 w-4" />} />
+          <WaiterMetricCard label="Preparo" value={stats.preparing} hint="Na cozinha" icon={<ChefHat className="h-4 w-4" />} />
+          <WaiterMetricCard label="Prontas" value={stats.ready} hint="Para servir" icon={<Sparkles className="h-4 w-4" />} />
+          <WaiterMetricCard label="Conta" value={stats.pendingPayment} hint={`${stats.commandas} comandas`} icon={<CircleDollarSign className="h-4 w-4" />} />
+        </div>
+
+        <div className="mt-5 rounded-[28px] border border-white/10 bg-white/[0.08] p-3 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.6)] backdrop-blur-sm">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-11 rounded-[18px] border-white/10 bg-white/95 pl-10 text-slate-900 placeholder:text-slate-400"
+              placeholder="Buscar mesa ou local"
+            />
+          </div>
+
+          <div className="-mx-1 mt-3 overflow-x-auto">
+            <div className="flex min-w-max gap-2 px-1 pb-1">
+              {filterOptions.map((filter) => (
                 <Button
-                  variant="outline"
-                  className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  onClick={() => void loadTables({ initialLoad: false, announceError: true })}
+                  key={filter.value}
+                  type="button"
+                  variant={statusFilter === filter.value ? 'default' : 'outline'}
+                  className={
+                    statusFilter === filter.value
+                      ? 'rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]'
+                      : 'rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white'
+                  }
+                  onClick={() => setStatusFilter(filter.value)}
                 >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                  Atualizar
+                  {filter.label}
                 </Button>
-                <Button
-                  className="rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]"
-                  onClick={() => setCreateTableOpen(true)}
-                >
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {loadError ? (
+          <div className="mt-4 rounded-[20px] border border-red-300/60 bg-red-500/90 px-4 py-3 text-sm font-medium text-white">
+            {loadError}
+          </div>
+        ) : null}
+
+        <div className="mt-5">
+          {filteredTables.length === 0 ? (
+            <WaiterEmptyState
+              icon={<Armchair className="h-7 w-7" />}
+              title="Nenhuma mesa encontrada"
+              description="Ajuste o filtro ou cadastre uma nova mesa para iniciar o atendimento no salao."
+              action={
+                <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
-                  Nova mesa
+                  Cadastrar mesa
                 </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sair
-                </Button>
-              </div>
-            </div>
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              {filteredTables.map((table) => {
+                const canOpenSession = !table.sessionId && table.status === 'free';
+                const canRelease = Boolean(table.sessionId) && table.dueAmount <= 0;
+                const canTransfer = Boolean(table.sessionId);
 
-            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <WaiterMetricCard
-                label="Mesas no mapa"
-                value={stats.total}
-                hint="Todas as mesas visiveis para o restaurante."
-                icon={<LayoutGrid className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Em preparo"
-                value={stats.preparing}
-                hint="Mesas com pedido ja enviado para producao."
-                icon={<ChefHat className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Prontas"
-                value={stats.ready}
-                hint="Itens liberados para entrega no salao."
-                icon={<Sparkles className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Pagamento"
-                value={stats.pendingPayment}
-                hint="Mesas com conta solicitada ou recebimento parcial."
-                icon={<CircleDollarSign className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Comandas"
-                value={stats.commandas}
-                hint="Total de comandas ativas no salao agora."
-                icon={<Users className="h-5 w-5" />}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+                return (
+                  <div
+                    key={table.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (table.sessionId) {
+                        navigate(`/waiter-session/${table.sessionId}`);
+                        return;
+                      }
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="rounded-[32px] border border-[#DCE6D8] bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-semibold text-[#082F23]">Tela principal de mesas</h2>
-              <p className="text-sm leading-6 text-slate-500">
-                Use filtros para achar rapido a mesa certa e entrar direto na operacao da comanda.
-              </p>
-            </div>
+                      setSelectedTable(table);
+                      setGuestCount('2');
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        if (table.sessionId) {
+                          navigate(`/waiter-session/${table.sessionId}`);
+                          return;
+                        }
 
-            <div className="flex w-full flex-col gap-3 lg:max-w-xl lg:flex-row">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="h-12 rounded-2xl border-[#D7E2D3] pl-10"
-                  placeholder="Buscar mesa por numero ou local"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {filterOptions.map((filter) => (
-              <Button
-                key={filter.value}
-                type="button"
-                variant={statusFilter === filter.value ? 'default' : 'outline'}
-                className={
-                  statusFilter === filter.value
-                    ? 'rounded-full bg-[#082F23] text-white hover:bg-[#0B4A36]'
-                    : 'rounded-full border-[#D7E2D3] text-slate-600 hover:bg-[#F5F8F3]'
-                }
-                onClick={() => setStatusFilter(filter.value)}
-              >
-                {filter.label}
-              </Button>
-            ))}
-          </div>
-
-          {loadError ? (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-              {loadError}
-            </div>
-          ) : null}
-
-          <div className="mt-6">
-            {filteredTables.length === 0 ? (
-              <WaiterEmptyState
-                icon={<Armchair className="h-7 w-7" />}
-                title="Nenhuma mesa encontrada"
-                description="Ajuste o filtro ou cadastre uma nova mesa para iniciar o atendimento no salao."
-                action={
-                  <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Cadastrar mesa
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredTables.map((table) => {
-                  const canOpenSession = !table.sessionId && table.status === 'free';
-                  const canRelease = Boolean(table.sessionId) && table.dueAmount <= 0;
-                  const canTransfer = Boolean(table.sessionId);
-
-                  return (
-                    <Card
-                      key={table.id}
-                      className="rounded-[28px] border border-[#DCE6D8] bg-[#FBFCFA] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-                    >
-                      <CardContent className="space-y-5 p-5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Mesa</div>
-                            <div className="text-3xl font-semibold text-[#082F23]">{table.number}</div>
-                            <div className="text-sm text-slate-500">{table.location || 'Salao principal'}</div>
-                          </div>
-                          <WaiterStatusBadge status={table.status} />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-2xl bg-white p-4">
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Total</div>
-                            <div className="mt-2 text-xl font-semibold text-[#082F23]">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(table.total || 0)}
-                            </div>
-                          </div>
-                          <div className="rounded-2xl bg-white p-4">
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Pendente</div>
-                            <div className="mt-2 text-xl font-semibold text-[#082F23]">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(table.dueAmount || 0)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3 text-sm">
-                          <div className="rounded-2xl bg-white p-3">
-                            <div className="text-slate-400">Comandas</div>
-                            <div className="mt-1 text-lg font-semibold text-[#082F23]">{table.accountCount}</div>
-                          </div>
-                          <div className="rounded-2xl bg-white p-3">
-                            <div className="text-slate-400">Itens</div>
-                            <div className="mt-1 text-lg font-semibold text-[#082F23]">{table.itemCount}</div>
-                          </div>
-                          <div className="rounded-2xl bg-white p-3">
-                            <div className="text-slate-400">Prontos</div>
-                            <div className="mt-1 text-lg font-semibold text-[#082F23]">{table.readyItemsCount}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            className="flex-1 rounded-2xl bg-[#082F23] text-white hover:bg-[#0B4A36]"
-                            onClick={() => {
-                              if (table.sessionId) {
-                                navigate(`/waiter-session/${table.sessionId}`);
-                                return;
-                              }
-
-                              setSelectedTable(table);
-                              setGuestCount('2');
+                        setSelectedTable(table);
+                        setGuestCount('2');
+                      }
+                    }}
+                    className={`relative flex min-h-[188px] cursor-pointer flex-col rounded-[28px] p-3 text-left shadow-[0_18px_40px_-26px_rgba(0,0,0,0.75)] transition active:scale-[0.99] ${tableTileTone[table.status]}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <WaiterStatusBadge
+                        status={table.status}
+                        className="border-black/10 bg-black/15 text-[10px] text-white backdrop-blur-sm"
+                      />
+                      <div className="flex items-center gap-1">
+                        {canTransfer ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setTransferTable(table);
+                              setTargetTableId('');
                             }}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/15 text-white"
+                            aria-label={`Transferir mesa ${table.number}`}
                           >
-                            {canOpenSession ? 'Abrir mesa' : 'Entrar na operacao'}
-                          </Button>
+                            <MoveRight className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        {canRelease ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setReleaseTable(table);
+                            }}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/15 text-white"
+                            aria-label={`Liberar mesa ${table.number}`}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
 
-                          {canTransfer ? (
-                            <Button
-                              variant="outline"
-                              className="rounded-2xl border-[#D7E2D3] text-slate-600 hover:bg-[#F5F8F3]"
-                              onClick={() => {
-                                setTransferTable(table);
-                                setTargetTableId('');
-                              }}
-                            >
-                              <MoveRight className="mr-2 h-4 w-4" />
-                              Transferir
-                            </Button>
-                          ) : null}
+                    <div className="flex flex-1 items-center justify-center">
+                      <div className="text-6xl font-semibold tracking-tight">{table.number}</div>
+                    </div>
 
-                          {canRelease ? (
-                            <Button
-                              variant="outline"
-                              className="rounded-2xl border-[#D7E2D3] text-slate-600 hover:bg-[#F5F8F3]"
-                              onClick={() => setReleaseTable(table)}
-                            >
-                              Liberar
-                            </Button>
-                          ) : null}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    <div className="space-y-1 rounded-[20px] bg-black/10 px-3 py-2 text-white/90">
+                      <div className="flex items-center justify-between text-[11px] font-medium">
+                        <span>{table.accountCount} comandas</span>
+                        <span>{table.readyItemsCount} prontos</span>
+                      </div>
+                      <div className="truncate text-[11px] text-white/70">{table.location || 'Salao principal'}</div>
+                      <div className="text-sm font-semibold">
+                        {table.dueAmount > 0 ? `Saldo ${formatMoney(table.dueAmount)}` : formatMoney(table.total)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      <WaiterBottomNav
+        items={[
+          {
+            key: 'tables',
+            label: 'Mesas',
+            icon: <LayoutGrid className="h-5 w-5" />,
+            active: true,
+            onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+          },
+          {
+            key: 'new',
+            label: 'Nova mesa',
+            icon: <PlusCircle className="h-5 w-5" />,
+            onClick: () => setCreateTableOpen(true),
+          },
+          {
+            key: 'refresh',
+            label: 'Atualizar',
+            icon: <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />,
+            onClick: () => void loadTables({ initialLoad: false, announceError: true }),
+          },
+          {
+            key: 'logout',
+            label: 'Sair',
+            icon: <LogOut className="h-5 w-5" />,
+            onClick: () => void handleLogout(),
+          },
+        ]}
+      />
 
       <Dialog open={Boolean(selectedTable)} onOpenChange={(open) => !open && setSelectedTable(null)}>
         <DialogContent className="rounded-[28px] border-0 p-0 sm:max-w-md">

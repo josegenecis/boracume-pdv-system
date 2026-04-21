@@ -55,7 +55,7 @@ export function WaiterStatusBadge({ status, className }: WaiterStatusBadgeProps)
     <Badge
       variant="outline"
       className={cn(
-        'rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.12em] uppercase',
+        'rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.1em] uppercase sm:px-3 sm:text-[11px]',
         toneByStatus[status],
         className,
       )}

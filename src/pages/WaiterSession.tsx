@@ -41,6 +41,7 @@ import {
   WaiterPaymentInput,
 } from '@/services/waiterWebClient';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { WaiterMetricCard } from '@/components/waiter-web/WaiterMetricCard';
 import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
@@ -52,14 +53,12 @@ import {
   MoveRight,
   NotebookPen,
   PackageOpen,
-  Pencil,
   PlusCircle,
   ReceiptText,
   RefreshCw,
   Search,
   Send,
   Sparkles,
-  Trash2,
   Users,
 } from 'lucide-react';
 
@@ -110,6 +109,7 @@ const WaiterSessionPage = () => {
   const [transferAccountTargetId, setTransferAccountTargetId] = useState('');
   const [transferTableOpen, setTransferTableOpen] = useState(false);
   const [transferTableTargetId, setTransferTableTargetId] = useState('');
+  const [activeTab, setActiveTab] = useState<'accounts' | 'timeline' | 'payments'>('accounts');
   const deferredProductSearch = useDeferredValue(productSearch);
 
   const applySession = (nextSession: TableSession) => {
@@ -667,120 +667,114 @@ const WaiterSessionPage = () => {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-[#EEF3EC] text-slate-900">
-      <div className="bg-[radial-gradient(circle_at_top,#0D4A36_0%,#083223_48%,#07281e_100%)]">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="rounded-[36px] border border-white/10 bg-white/[0.05] p-5 text-white shadow-[0_35px_90px_-50px_rgba(0,0,0,0.7)] backdrop-blur-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-4">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  onClick={() => navigate('/waiter-dashboard')}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Voltar para mesas
-                </Button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
+        <div className="rounded-[30px] border border-white/10 bg-white/[0.08] p-4 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              variant="outline"
+              className="rounded-full border-white/15 bg-white/10 px-3 text-white hover:bg-white/15 hover:text-white"
+              onClick={() => navigate('/waiter-dashboard')}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Mesas</span>
+            </Button>
 
-                <div className="space-y-2">
-                  <div className="text-sm font-medium uppercase tracking-[0.18em] text-[#A4D65E]">Mesa em atendimento</div>
-                  <h1 className="text-3xl font-semibold text-white sm:text-4xl">{session.tableLabel}</h1>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-white/75">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
-                      <Clock3 className="h-4 w-4 text-[#A4D65E]" />
-                      {Math.max(0, Math.floor((Date.now() - new Date(session.openedAt).getTime()) / 60000))} min aberta
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
-                      <Users className="h-4 w-4 text-[#A4D65E]" />
-                      {session.accountCount} comandas
-                    </span>
-                    <WaiterStatusBadge status={session.status === 'payment_pending' ? 'check_requested' : session.readyItemsCount > 0 ? 'ready' : session.sentItemsCount > 0 ? 'preparing' : 'occupied'} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  onClick={() => void loadSession(true)}
-                >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
-                <Button
-                  className="rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]"
-                  onClick={() => openAccountDialog('create')}
-                >
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Nova comanda
-                </Button>
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  onClick={() => setTransferTableOpen(true)}
-                >
-                  <MoveRight className="mr-2 h-4 w-4" />
-                  Transferir mesa
-                </Button>
-              </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                onClick={() => void loadSession(true)}
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                onClick={() => setTransferTableOpen(true)}
+              >
+                <MoveRight className="h-4 w-4" />
+              </Button>
             </div>
+          </div>
 
-            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <WaiterMetricCard
-                label="Total da mesa"
-                value={formatMoney(session.total)}
-                hint="Soma bruta das comandas abertas."
-                icon={<ReceiptText className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Recebido"
-                value={formatMoney(session.paidTotal)}
-                hint="Pagamentos ja registrados na mesa."
-                icon={<CircleDollarSign className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Pendente"
-                value={formatMoney(session.dueAmount)}
-                hint="Valor ainda em aberto para fechamento."
-                icon={<NotebookPen className="h-5 w-5" />}
-              />
-              <WaiterMetricCard
-                label="Itens enviados"
-                value={session.sentItemsCount}
-                hint={`${session.readyItemsCount} itens prontos para entrega.`}
-                icon={<ChefHat className="h-5 w-5" />}
+          <div className="mt-4 flex flex-col items-center text-center">
+            <img
+              src="/waiter/logo-boracume.png"
+              alt="BoraCume"
+              className="h-20 w-20 rounded-full object-contain shadow-[0_18px_35px_-24px_rgba(0,0,0,0.7)]"
+            />
+            <div className="mt-3 inline-flex rounded-full bg-white/10 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/75">
+              App web Garcom
+            </div>
+            <h1 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">{session.tableLabel}</h1>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm text-white/75">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+                <Clock3 className="h-4 w-4 text-[#A4D65E]" />
+                {Math.max(0, Math.floor((Date.now() - new Date(session.openedAt).getTime()) / 60000))} min
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+                <Users className="h-4 w-4 text-[#A4D65E]" />
+                {session.accountCount} comandas
+              </span>
+              <WaiterStatusBadge
+                status={
+                  session.status === 'payment_pending'
+                    ? 'check_requested'
+                    : session.readyItemsCount > 0
+                      ? 'ready'
+                      : session.sentItemsCount > 0
+                        ? 'preparing'
+                        : 'occupied'
+                }
               />
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-[1.25fr,0.75fr]">
-          <Card className="rounded-[32px] border border-[#DCE6D8] bg-white shadow-sm">
-            <CardContent className="space-y-5 p-5">
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <WaiterMetricCard label="Total" value={formatMoney(session.total)} hint="Mesa" icon={<ReceiptText className="h-4 w-4" />} />
+            <WaiterMetricCard label="Recebido" value={formatMoney(session.paidTotal)} hint="Pagamentos" icon={<CircleDollarSign className="h-4 w-4" />} />
+            <WaiterMetricCard label="Saldo" value={formatMoney(session.dueAmount)} hint="Em aberto" icon={<NotebookPen className="h-4 w-4" />} />
+            <WaiterMetricCard label="Cozinha" value={session.sentItemsCount} hint={`${session.readyItemsCount} prontos`} icon={<ChefHat className="h-4 w-4" />} />
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button className="rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]" onClick={() => openAccountDialog('create')}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Nova
+            </Button>
+            <Button variant="outline" className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
+              Solicitar conta
+            </Button>
+            <Button className="rounded-2xl bg-[#082F23] text-white hover:bg-[#0B4A36]" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
+              Receber
+            </Button>
+            <Button variant="outline" className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
+              Liberar
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr,0.85fr]">
+          <Card className="rounded-[28px] border border-[#DCE6D8] bg-white shadow-sm">
+            <CardContent className="space-y-5 p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-2xl font-semibold text-[#082F23]">Operacao da mesa</h2>
-                  <p className="text-sm leading-6 text-slate-500">
+                  <h2 className="text-xl font-semibold text-[#082F23] sm:text-2xl">Operacao da mesa</h2>
+                  <p className="text-sm leading-6 text-slate-500 sm:block">
                     Comandas independentes, movimentacao de itens, envio para cozinha e recebimento multi-forma.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="hidden flex-wrap gap-2 sm:flex">
                   <Button variant="outline" className="rounded-2xl" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
                     Solicitar conta
-                  </Button>
-                  <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
-                    Receber mesa
-                  </Button>
-                  <Button variant="outline" className="rounded-2xl" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
-                    Liberar mesa
                   </Button>
                 </div>
               </div>
 
-              <Tabs defaultValue="accounts" className="w-full">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'accounts' | 'timeline' | 'payments')} className="w-full">
                 <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-[#F1F5EF] p-1">
                   <TabsTrigger value="accounts" className="rounded-xl">
                     Comandas
@@ -809,12 +803,12 @@ const WaiterSessionPage = () => {
                   ) : (
                     <div className="grid gap-4 xl:grid-cols-2">
                       {session.accounts.map((account) => (
-                        <Card key={account.id} className="rounded-[28px] border border-[#DCE6D8] bg-[#FBFCFA] shadow-sm">
-                          <CardContent className="space-y-5 p-5">
+                        <Card key={account.id} className="rounded-[24px] border border-[#DCE6D8] bg-[#FBFCFA] shadow-sm">
+                          <CardContent className="space-y-4 p-4">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                               <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="text-xl font-semibold text-[#082F23]">{account.name}</h3>
+                                  <h3 className="text-lg font-semibold text-[#082F23]">{account.name}</h3>
                                   <WaiterStatusBadge status={account.status} />
                                   {account.kitchenStatus !== 'idle' ? <WaiterStatusBadge status={account.kitchenStatus} /> : null}
                                 </div>
@@ -823,26 +817,26 @@ const WaiterSessionPage = () => {
                                 </p>
                               </div>
 
-                              <div className="grid min-w-[220px] grid-cols-3 gap-3">
-                                <div className="rounded-2xl bg-white p-3">
+                              <div className="grid min-w-[220px] grid-cols-3 gap-2">
+                                <div className="rounded-2xl bg-white p-2.5">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Subtotal</div>
-                                  <div className="mt-2 text-lg font-semibold text-[#082F23]">{formatMoney(account.total)}</div>
+                                  <div className="mt-1 text-base font-semibold text-[#082F23]">{formatMoney(account.total)}</div>
                                 </div>
-                                <div className="rounded-2xl bg-white p-3">
+                                <div className="rounded-2xl bg-white p-2.5">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Recebido</div>
-                                  <div className="mt-2 text-lg font-semibold text-[#082F23]">{formatMoney(account.paidTotal)}</div>
+                                  <div className="mt-1 text-base font-semibold text-[#082F23]">{formatMoney(account.paidTotal)}</div>
                                 </div>
-                                <div className="rounded-2xl bg-white p-3">
+                                <div className="rounded-2xl bg-white p-2.5">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Pendente</div>
-                                  <div className="mt-2 text-lg font-semibold text-[#082F23]">{formatMoney(account.dueAmount)}</div>
+                                  <div className="mt-1 text-base font-semibold text-[#082F23]">{formatMoney(account.dueAmount)}</div>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
+                            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                               <Button className="rounded-2xl bg-[#082F23] hover:bg-[#0B4A36]" onClick={() => openProductDialog(account)}>
                                 <PlusCircle className="mr-2 h-4 w-4" />
-                                Adicionar produto
+                                Produto
                               </Button>
                               <Button
                                 variant="outline"
@@ -854,11 +848,9 @@ const WaiterSessionPage = () => {
                                 Enviar pedido
                               </Button>
                               <Button variant="outline" className="rounded-2xl" onClick={() => openPaymentDialog(account)} disabled={account.dueAmount <= 0}>
-                                <CircleDollarSign className="mr-2 h-4 w-4" />
                                 Receber
                               </Button>
                               <Button variant="outline" className="rounded-2xl" onClick={() => openAccountDialog('edit', account)}>
-                                <Pencil className="mr-2 h-4 w-4" />
                                 Editar
                               </Button>
                               <Button
@@ -888,8 +880,7 @@ const WaiterSessionPage = () => {
                                 onClick={() => void handleRemoveAccount(account)}
                                 disabled={submitting || account.itemCount > 0 || account.paidTotal > 0}
                               >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Excluir vazia
+                                Excluir
                               </Button>
                             </div>
 
@@ -985,7 +976,7 @@ const WaiterSessionPage = () => {
                       description="Assim que itens forem enviados ou pagamentos forem registrados, o historico aparecera aqui."
                     />
                   ) : (
-                    <ScrollArea className="h-[560px] pr-4">
+                    <ScrollArea className="h-[380px] pr-4 sm:h-[560px]">
                       <div className="space-y-3">
                         {session.history.map((entry) => (
                           <div key={entry.id} className="rounded-2xl border border-[#E7ECE4] bg-[#FBFCFA] p-4">
@@ -1039,7 +1030,7 @@ const WaiterSessionPage = () => {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-lg font-semibold text-[#082F23]">Historico de pagamentos</h3>
                           <p className="text-sm text-slate-500">Tudo o que ja entrou no caixa desta mesa.</p>
@@ -1085,8 +1076,8 @@ const WaiterSessionPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[32px] border border-[#DCE6D8] bg-white shadow-sm">
-            <CardContent className="space-y-5 p-5">
+          <Card className="rounded-[28px] border border-[#DCE6D8] bg-white shadow-sm">
+            <CardContent className="space-y-5 p-4 sm:p-5">
               <div>
                 <h2 className="text-2xl font-semibold text-[#082F23]">Resumo operacional</h2>
                 <p className="text-sm leading-6 text-slate-500">
@@ -1141,6 +1132,38 @@ const WaiterSessionPage = () => {
           </Card>
         </div>
       </div>
+
+      <WaiterBottomNav
+        items={[
+          {
+            key: 'accounts',
+            label: 'Comandas',
+            icon: <ReceiptText className="h-5 w-5" />,
+            active: activeTab === 'accounts',
+            onClick: () => setActiveTab('accounts'),
+          },
+          {
+            key: 'payments',
+            label: 'Pagamentos',
+            icon: <CircleDollarSign className="h-5 w-5" />,
+            active: activeTab === 'payments',
+            onClick: () => setActiveTab('payments'),
+          },
+          {
+            key: 'timeline',
+            label: 'Historico',
+            icon: <Clock3 className="h-5 w-5" />,
+            active: activeTab === 'timeline',
+            onClick: () => setActiveTab('timeline'),
+          },
+          {
+            key: 'tables',
+            label: 'Mesas',
+            icon: <ArrowLeft className="h-5 w-5" />,
+            onClick: () => navigate('/waiter-dashboard'),
+          },
+        ]}
+      />
 
       <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
         <DialogContent className="rounded-[28px] border-0 sm:max-w-md">
