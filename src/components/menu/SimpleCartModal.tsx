@@ -37,6 +37,7 @@ interface CartItem {
 }
 
 type PaymentMethodCode = 'pix' | 'dinheiro' | 'cartao_credito' | 'cartao_debito' | 'cartao';
+type OrderMode = 'delivery' | 'pickup';
 
 interface CheckoutPaymentMethod {
   id: string;
@@ -167,6 +168,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const [customerNeighborhood, setCustomerNeighborhood] = React.useState('');
   const [customerAddress, setCustomerAddress] = React.useState('');
   const [isExistingCustomer, setIsExistingCustomer] = React.useState(false);
+  const [orderMode, setOrderMode] = React.useState<OrderMode>('delivery');
   const [deliveryZoneId, setDeliveryZoneId] = React.useState('');
   const [isDetectingZone, setIsDetectingZone] = React.useState(false);
   const [detectZoneError, setDetectZoneError] = React.useState<string | null>(null);
@@ -220,10 +222,36 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       .replace(/[\u0300-\u036f]/g, '')
       .trim()
       .toLowerCase();
+  const deliveryModalities = {
+    delivery: deliverySettings?.modalities?.delivery !== false,
+    pickup: deliverySettings?.modalities?.pickup !== false,
+  };
+  const isDeliveryMode = orderMode === 'delivery';
+
+  useEffect(() => {
+    if (deliveryModalities.delivery) {
+      if (orderMode !== 'delivery' && !deliveryModalities.pickup) {
+        setOrderMode('delivery');
+      }
+      return;
+    }
+
+    if (deliveryModalities.pickup && orderMode !== 'pickup') {
+      setOrderMode('pickup');
+    }
+  }, [deliveryModalities.delivery, deliveryModalities.pickup, orderMode]);
+
+  useEffect(() => {
+    if (isDeliveryMode) return;
+    setDeliveryZoneId('');
+    setDeliveryQuote(null);
+    setDetectZoneError(null);
+  }, [isDeliveryMode]);
 
   // Setup Google Places Autocomplete para o endereço do cliente
   useEffect(() => {
     if (!isOpen || step !== 'checkout') return;
+    if (!isDeliveryMode) return;
     if (!window.google?.maps?.places) return;
 
     const inputElement = addressInputRef.current;
@@ -343,14 +371,20 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         phoneInputRef.current?.focus();
       } catch {}
     }, 0);
-  }, [isOpen, step]);
+  }, [isOpen, step, isDeliveryMode]);
 
   const storePricingMode = deliverySettings?.pricing?.mode || 'neighborhood';
-  const showNeighborhoodSelect = storePricingMode === 'neighborhood';
+  const showNeighborhoodSelect = isDeliveryMode && storePricingMode === 'neighborhood';
 
   useEffect(() => {
     if (!isOpen) return;
     if (!userId) return;
+    if (!isDeliveryMode) {
+      setDetectZoneError(null);
+      setDeliveryQuote(null);
+      setIsDetectingZone(false);
+      return;
+    }
     if (showNeighborhoodSelect) {
       setDetectZoneError(null);
       setDeliveryQuote(null);
@@ -405,12 +439,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       if (detectTimerRef.current) window.clearTimeout(detectTimerRef.current);
       detectTimerRef.current = null;
     };
-  }, [isOpen, userId, customerAddress, location.latitude, location.longitude, total, deliveryZoneId, showNeighborhoodSelect]);
+  }, [isOpen, userId, customerAddress, location.latitude, location.longitude, total, deliveryZoneId, showNeighborhoodSelect, isDeliveryMode]);
   const selectedZone = deliveryZones.find(zone => zone.id === deliveryZoneId);
   const quoteMode = String(deliveryQuote?.mode || '');
   const quoteZone = deliveryQuote?.zone || null;
 
   useEffect(() => {
+    if (!isDeliveryMode) return;
     if (!showNeighborhoodSelect) return;
     const normalizedNeighborhood = normalizeNeighborhood(customerNeighborhood);
     if (!normalizedNeighborhood) return;
@@ -422,11 +457,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     zoneWasAutoRef.current = true;
     setDeliveryZoneId(String(matchedZone.id));
     setDetectZoneError(null);
-  }, [showNeighborhoodSelect, customerNeighborhood, deliveryZones, deliveryZoneId]);
+  }, [showNeighborhoodSelect, customerNeighborhood, deliveryZones, deliveryZoneId, isDeliveryMode]);
   
   // O valor da entrega depende do modo configurado na loja
   let deliveryFee = 0;
-  if (showNeighborhoodSelect) {
+  if (!isDeliveryMode) {
+    deliveryFee = 0;
+  } else if (showNeighborhoodSelect) {
     deliveryFee = deliveryZoneId !== '' ? (selectedZone?.delivery_fee || 0) : (Number(quoteZone?.delivery_fee || 0) || 0);
   } else if (deliveryQuote?.ok && typeof deliveryQuote.fee === 'number') {
     deliveryFee = deliveryQuote.fee;
@@ -632,13 +669,15 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const isFormValid = () => {
 
     const isPaymentValid = paymentMethod !== '';
-
-    const hasDelivery = (showNeighborhoodSelect && deliveryZoneId !== '') || (!showNeighborhoodSelect && deliveryQuote?.ok);
+    const hasDelivery =
+      !isDeliveryMode ||
+      (showNeighborhoodSelect && deliveryZoneId !== '') ||
+      (!showNeighborhoodSelect && deliveryQuote?.ok);
     
     const valid = (
       customerName.trim() !== '' &&
       customerPhone.trim() !== '' &&
-      customerAddress.trim() !== '' &&
+      (!isDeliveryMode || customerAddress.trim() !== '') &&
       hasDelivery &&
       isPaymentValid &&
       (paymentMethod !== 'dinheiro' || changeAmount === '' || parseFloat(changeAmount) >= finalTotal)
@@ -647,7 +686,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     console.log('💳 VALIDAÇÃO FORMULÁRIO:', {
       customerName: customerName.trim() !== '',
       customerPhone: customerPhone.trim() !== '',
-      customerAddress: customerAddress.trim() !== '',
+      customerAddress: !isDeliveryMode || customerAddress.trim() !== '',
+      orderMode,
       deliveryZoneId: deliveryZoneId !== '',
       quoteMode,
       paymentMethod: paymentMethod,
@@ -875,21 +915,23 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
     try {
       const phoneDigits = String(customerPhone || '').replace(/\D/g, '');
-      const neighborhood = String(customerNeighborhood || '').trim() || String(selectedZone?.name || '').trim() || String(quoteZone?.name || '').trim() || '';
+      const neighborhood = isDeliveryMode
+        ? String(customerNeighborhood || '').trim() || String(selectedZone?.name || '').trim() || String(quoteZone?.name || '').trim() || ''
+        : '';
       const baseOrderData = {
         user_id: userId,
         customer_name: customerName,
         customer_phone: phoneDigits,
-        customer_address: customerAddress,
+        customer_address: isDeliveryMode ? customerAddress : null,
         customer_neighborhood: neighborhood,
-        delivery_zone_id: deliveryZoneId || null,
+        delivery_zone_id: isDeliveryMode ? (deliveryZoneId || null) : null,
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
         delivery_instructions: notes,
-        customer_latitude: location.latitude,
-        customer_longitude: location.longitude,
-        customer_location_accuracy: location.accuracy ? Math.round(location.accuracy) : null,
-        google_maps_link: location.latitude && location.longitude ? generateGoogleMapsLink(location.latitude, location.longitude) : null,
+        customer_latitude: isDeliveryMode ? location.latitude : null,
+        customer_longitude: isDeliveryMode ? location.longitude : null,
+        customer_location_accuracy: isDeliveryMode && location.accuracy ? Math.round(location.accuracy) : null,
+        google_maps_link: isDeliveryMode && location.latitude && location.longitude ? generateGoogleMapsLink(location.latitude, location.longitude) : null,
         items: cart.map(item => ({
           product_id: item.product.id,
           product_name: item.product.name,
@@ -900,13 +942,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           notes: item.notes,
           total: item.totalPrice
         })),
-        delivery_fee: deliveryFee,
+        delivery_fee: isDeliveryMode ? deliveryFee : 0,
         discount: discount,
         coupon_code: appliedCoupon?.code || autoLoyaltyReward?.code || null,
         loyalty_reward_id: autoLoyaltyReward?.id || null,
         total: finalTotal,
         status: 'pending',
-        order_type: 'delivery',
+        order_type: orderMode,
         order_number: 'PED' + Date.now().toString().slice(-6)
       };
 
@@ -1123,7 +1165,36 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
           {/* Dados do cliente */}
           <div className="space-y-4">
-            <h3 className="font-bold text-gray-900">Dados para entrega:</h3>
+            <h3 className="font-bold text-gray-900">{isDeliveryMode ? 'Dados para entrega:' : 'Dados para retirada:'}</h3>
+            {(deliveryModalities.delivery || deliveryModalities.pickup) && (
+              <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
+                <Label className="text-sm font-semibold mb-3 block" style={{ color: menuSecondaryColor }}>Modalidade do pedido</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {deliveryModalities.delivery && (
+                    <Button
+                      type="button"
+                      variant={orderMode === 'delivery' ? 'default' : 'outline'}
+                      className="h-11 rounded-xl"
+                      style={orderMode === 'delivery' ? { backgroundColor: menuPrimaryColor, color: '#fff' } : undefined}
+                      onClick={() => setOrderMode('delivery')}
+                    >
+                      Entrega
+                    </Button>
+                  )}
+                  {deliveryModalities.pickup && (
+                    <Button
+                      type="button"
+                      variant={orderMode === 'pickup' ? 'default' : 'outline'}
+                      className="h-11 rounded-xl"
+                      style={orderMode === 'pickup' ? { backgroundColor: menuSecondaryColor, color: '#fff' } : undefined}
+                      onClick={() => setOrderMode('pickup')}
+                    >
+                      Retirada
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             
             <div className="space-y-4">
               <div>
@@ -1212,7 +1283,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 </div>
               </div>
 
-              {showNeighborhoodSelect && (
+              {isDeliveryMode && showNeighborhoodSelect && (
                 <div>
                   <Label htmlFor="neighborhood" className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Bairro</Label>
                   <Input
@@ -1226,7 +1297,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               )}
             </div>
 
-            <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
+            {isDeliveryMode && <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
               <Label htmlFor="address" className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Endereço completo *</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-5 w-5" style={{ color: menuPrimaryColor }} />
@@ -1239,9 +1310,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   className="pl-11 h-12 bg-white rounded-xl text-base shadow-sm border-gray-200"
                 />
               </div>
-            </div>
+            </div>}
 
-            <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
+            {isDeliveryMode && <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
               <Label className="text-sm font-semibold mb-2 block" style={{ color: menuSecondaryColor }}>Localização Exata (GPS)</Label>
               <div className="flex gap-2">
                 <Button
@@ -1274,9 +1345,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               <p className="text-xs text-gray-500 mt-3 text-center">
                 A localização ajuda o entregador a chegar mais rápido.
               </p>
-            </div>
+            </div>}
 
-            {!showNeighborhoodSelect ? (
+            {isDeliveryMode && (!showNeighborhoodSelect ? (
               <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
                 <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete da entrega</div>
                 {deliveryQuote?.ok ? (
@@ -1341,7 +1412,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   </div>
                 )}
               </div>
-            )}
+            ))}
 
             <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
               <Label className="text-sm font-semibold mb-3 block" style={{ color: menuSecondaryColor }}>Forma de Pagamento *</Label>
@@ -1487,10 +1558,12 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <span className="text-gray-700">Subtotal:</span>
                 <span className="font-bold">{formatBRL(total)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-700">Taxa de entrega:</span>
-                <span className="font-bold">{formatBRL(deliveryFee)}</span>
-              </div>
+              {isDeliveryMode && (
+                <div className="flex justify-between">
+                  <span className="text-gray-700">Taxa de entrega:</span>
+                  <span className="font-bold">{formatBRL(deliveryFee)}</span>
+                </div>
+              )}
               {discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span className="font-medium">{autoLoyaltyReward ? 'Desconto fidelidade:' : 'Desconto:'}</span>

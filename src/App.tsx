@@ -148,6 +148,7 @@ function AppContent() {
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
           <Route path="/garcons" element={<Garcons />} />
           <Route path="/nfce" element={<NFCe />} />
+          <Route path="/caixa" element={<Financeiro />} />
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
           <Route path="/despesas" element={<Despesas />} />

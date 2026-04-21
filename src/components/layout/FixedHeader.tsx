@@ -5,6 +5,7 @@ import { User, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, C
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
@@ -29,24 +30,51 @@ const FixedHeader = () => {
   // Custom hook ou lógica para pegar o estado do caixa globalmente (se não existir um contexto, podemos usar fetch direto, mas o ideal é mover a lógica do PDV para um context)
   // Como não sabemos se existe um CashRegisterContext, vamos usar um estado local com fetch inicial por enquanto para o header.
   const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
-  const [cashSessionId, setCashSessionId] = useState<string | null>(null);
   const [whatsAppConnected, setWhatsAppConnected] = useState(false);
 
   useEffect(() => {
-    // Escutar eventos de abertura/fechamento de caixa se disparados via evento customizado
-    const handleCashChange = () => {
-      // Refresh logic here if needed
+    if (!user?.id) return;
+
+    let active = true;
+
+    const loadCashStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('cash_register_sessions' as any)
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .order('opened_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!active) return;
+        if (error) throw error;
+        setCashStatus(data?.id ? 'open' : 'closed');
+      } catch {
+        if (!active) return;
+        setCashStatus('closed');
+      }
     };
+
+    void loadCashStatus();
+
+    const handleCashChange = () => {
+      void loadCashStatus();
+    };
+
     window.addEventListener('cash-session-changed', handleCashChange);
-    return () => window.removeEventListener('cash-session-changed', handleCashChange);
-  }, []);
+    return () => {
+      active = false;
+      window.removeEventListener('cash-session-changed', handleCashChange);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
 
     const loadWhatsAppStatus = async () => {
       try {
-        const { supabase } = await import('@/integrations/supabase/client');
         const { data } = await supabase.functions.invoke('whatsapp-status', { method: 'GET' });
         if (!active) return;
         setWhatsAppConnected(data?.status === 'connected');
@@ -104,6 +132,19 @@ const FixedHeader = () => {
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`hidden h-9 rounded-xl border px-4 font-semibold shadow-sm hover:bg-[#F5F8F6] md:inline-flex ${
+              cashStatus === 'open'
+                ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]'
+                : 'border-[#DCE6DF] bg-white text-[#003223]'
+            }`}
+            onClick={() => navigate('/caixa')}
+          >
+            <Wallet size={18} className="mr-2" />
+            Caixa
+          </Button>
           <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#DCE6DF] bg-white px-4 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex" onClick={() => navigate('/relatorios')}>
             Abrir relatório diário
           </Button>
@@ -119,6 +160,10 @@ const FixedHeader = () => {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Gerencial</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/caixa')}>
+                <Wallet className="mr-2 h-4 w-4" />
+                Caixa Geral
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/financeiro')}>
                 <BarChart3 className="mr-2 h-4 w-4" />
                 Financeiro

@@ -334,6 +334,7 @@ const PDV = () => {
       }
       setCashDialogOpen(false);
       await fetchOpenCashSession();
+      window.dispatchEvent(new CustomEvent('cash-session-changed'));
     } catch (e: any) {
       toast({ title: 'Erro no caixa', description: e?.message || 'Erro desconhecido', variant: 'destructive' });
       try { alert(e?.message || 'Erro no caixa') } catch {}

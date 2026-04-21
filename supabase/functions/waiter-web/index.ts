@@ -958,9 +958,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'open_session') {
-      const cashGuard = await requireOpenCashSession(supabase, waiterSession.profile.restaurantId)
-      if (cashGuard) return cashGuard
-
       const tableId = String(body?.tableId || '')
       const tableNumber = Math.max(1, Number(body?.tableNumber || 0))
       const guestCount = Math.max(1, Number(body?.guestCount || 1))
@@ -1475,9 +1472,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'add_item') {
-      const cashGuard = await requireOpenCashSession(supabase, waiterSession.profile.restaurantId)
-      if (cashGuard) return cashGuard
-
       const sessionId = String(body?.sessionId || '')
       const accountId = String(body?.accountId || '')
       const productId = String(body?.productId || '')
@@ -1530,7 +1524,7 @@ Deno.serve(async (req: Request) => {
           .insert(
             selectedOptions.map((option: any) => ({
               order_item_id: itemId,
-              option_name: String(option.name || option.optionName || ''),
+              option_name: String(option.optionName || option.name || ''),
               price: normalizeAmount(option.price),
               quantity: Math.max(1, Number(option.quantity || 1)),
             })),
@@ -1586,7 +1580,7 @@ Deno.serve(async (req: Request) => {
           .insert(
             selectedOptions.map((option: any) => ({
               order_item_id: itemId,
-              option_name: String(option.name || option.optionName || ''),
+              option_name: String(option.optionName || option.name || ''),
               price: normalizeAmount(option.price),
               quantity: Math.max(1, Number(option.quantity || 1)),
             })),

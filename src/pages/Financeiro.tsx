@@ -42,7 +42,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import {
   Dialog,
   DialogContent,
@@ -382,6 +382,7 @@ const Financeiro = () => {
       setCashDescription('');
       checkOpenSession();
       fetchCashSessions();
+      window.dispatchEvent(new CustomEvent('cash-session-changed'));
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' });
     }

@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
-import { getOpenCashRegisterSession } from '@/utils/cashSession';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 
 interface Product {
@@ -245,9 +244,8 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       return;
     }
 
+    /*
     try {
-      const openCashSession = await getOpenCashRegisterSession(user?.id);
-      if (!openCashSession?.id) {
         toast({
           title: 'Caixa fechado',
           description: 'Abra o caixa antes de lanÃ§ar itens em mesas.',
@@ -264,6 +262,8 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       });
       return;
     }
+
+    */
 
     try {
       setLoading(true);

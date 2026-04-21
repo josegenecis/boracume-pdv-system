@@ -202,8 +202,67 @@ const WAITER_SESSION_CACHE_PREFIX = 'waiter_web_session_cache:';
 
 const normalizeCpf = (value: string) => value.replace(/\D/g, '');
 
-const getErrorMessage = (error: any) =>
-  String(error?.message || error?.error_description || error?.details || 'Nao foi possivel concluir a operacao.');
+const tryParseErrorPayload = (value: unknown) => {
+  if (!value) return null;
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+
+  return null;
+};
+
+const getErrorMessage = (error: any) => {
+  const parsedError =
+    tryParseErrorPayload(error) ||
+    tryParseErrorPayload(error?.message) ||
+    tryParseErrorPayload(error?.details) ||
+    tryParseErrorPayload(error?.context);
+
+  const nestedMessage =
+    parsedError?.error ||
+    parsedError?.message ||
+    parsedError?.error_description ||
+    parsedError?.details;
+
+  return String(
+    nestedMessage ||
+      error?.message ||
+      error?.error_description ||
+      error?.details ||
+      error?.description ||
+      'Nao foi possivel concluir a operacao.',
+  );
+};
+
+const extractFunctionErrorMessage = async (error: any) => {
+  const context = error?.context;
+  if (context && typeof context.clone === 'function') {
+    try {
+      const text = await context.clone().text();
+      const parsed = tryParseErrorPayload(text);
+      if (parsed) {
+        return getErrorMessage(parsed);
+      }
+      if (text?.trim()) {
+        return text.trim();
+      }
+    } catch {}
+  }
+
+  return getErrorMessage(error);
+};
 
 const isTransportError = (error: unknown) => {
   const message = String((error as any)?.message || error || '').toLowerCase();
@@ -338,8 +397,12 @@ async function invokeFunction<T>(name: string, body: Record<string, unknown>, to
 
     return data as T;
   } catch (error) {
-    if (!isTransportError(error) && !isFunctionResponseError(error)) {
-      throw new Error(getErrorMessage(error));
+    if (isFunctionResponseError(error)) {
+      throw new Error(await extractFunctionErrorMessage(error));
+    }
+
+    if (!isTransportError(error)) {
+      throw new Error(await extractFunctionErrorMessage(error));
     }
 
     return invokeFunctionDirect<T>(name, body, token);
