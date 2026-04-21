@@ -200,34 +200,58 @@ async function listRestaurantTables(supabase: any, restaurantId: string) {
     .in('status', ['open', 'serving', 'payment_pending'])
     .order('opened_at', { ascending: false })
 
-  if (sessionError) throw sessionError
+  const activeSessions = sessionError ? [] : (sessionRows ?? [])
 
   const latestSessionByTable = new Map<string, any>()
-  ;(sessionRows ?? []).forEach((row: any) => {
+  activeSessions.forEach((row: any) => {
     if (!latestSessionByTable.has(row.table_id)) latestSessionByTable.set(row.table_id, row)
   })
 
-  const sessionIds = (sessionRows ?? []).map((row: any) => row.id)
+  const sessionIds = activeSessions.map((row: any) => row.id)
   const { data: accountRows, error: accountError } = sessionIds.length
     ? await supabase.from('table_accounts').select('session_id, total').in('session_id', sessionIds)
     : { data: [], error: null }
 
-  if (accountError) throw accountError
-
   const totalsBySession = new Map<string, number>()
-  ;(accountRows ?? []).forEach((row: any) => {
+  ;(accountError ? [] : (accountRows ?? [])).forEach((row: any) => {
     totalsBySession.set(row.session_id, (totalsBySession.get(row.session_id) ?? 0) + Number(row.total ?? 0))
+  })
+
+  const legacyAccountsResult = await supabase
+    .from('table_accounts')
+    .select('table_id, total, status, updated_at, session_id')
+    .eq('user_id', restaurantId)
+    .order('updated_at', { ascending: false })
+
+  let legacyRows = legacyAccountsResult.error ? [] : (legacyAccountsResult.data ?? [])
+  if (legacyAccountsResult.error) {
+    const fallbackLegacyResult = await supabase
+      .from('table_accounts')
+      .select('table_id, total, status, updated_at')
+      .eq('user_id', restaurantId)
+      .order('updated_at', { ascending: false })
+
+    legacyRows = fallbackLegacyResult.error ? [] : (fallbackLegacyResult.data ?? [])
+  }
+
+  const legacyTotalsByTable = new Map<string, number>()
+  legacyRows.forEach((row: any) => {
+    if (row.session_id) return
+    const status = String(row.status || '').toLowerCase()
+    if (status === 'closed' || status === 'paid') return
+    legacyTotalsByTable.set(row.table_id, (legacyTotalsByTable.get(row.table_id) ?? 0) + Number(row.total ?? 0))
   })
 
   return (tableRows ?? []).map((row: any) => {
     const session = latestSessionByTable.get(row.id)
+    const fallbackTotal = legacyTotalsByTable.get(row.id) ?? 0
     return {
       id: row.id,
       number: Number(row.table_number),
       capacity: Number(row.capacity ?? 0),
       location: row.location,
       status: session ? mapSessionToTableStatus(session.status) : mapTableStatus(row.status),
-      total: session ? totalsBySession.get(session.id) ?? 0 : 0,
+      total: session ? totalsBySession.get(session.id) ?? 0 : fallbackTotal,
       openMinutes: session?.opened_at ? minutesSince(session.opened_at) : 0,
       sessionId: session?.id ?? null,
     }

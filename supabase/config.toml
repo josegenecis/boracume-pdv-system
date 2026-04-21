@@ -74,3 +74,13 @@ entrypoint = "./functions/evolution-bot-ai/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/evolution-webhook/index.ts"
+
+[functions.waiter-web-auth]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/waiter-web-auth/index.ts"
+
+[functions.waiter-web]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/waiter-web/index.ts"

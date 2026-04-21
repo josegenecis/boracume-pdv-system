@@ -138,6 +138,15 @@ const isTransportError = (error: unknown) => {
   );
 };
 
+const isFunctionResponseError = (error: unknown) => {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    message.includes('non-2xx') ||
+    message.includes('edge function returned') ||
+    message.includes('functionshttperror')
+  );
+};
+
 const isSessionAccessError = (error: unknown) => {
   const message = getErrorMessage(error).toLowerCase();
   return (
@@ -222,7 +231,7 @@ async function invokeFunction<T>(name: string, body: Record<string, unknown>, to
 
     return data as T;
   } catch (error) {
-    if (!isTransportError(error)) {
+    if (!isTransportError(error) && !isFunctionResponseError(error)) {
       throw new Error(getErrorMessage(error));
     }
 
