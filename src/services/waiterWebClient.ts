@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from '@/integrations/supabase/client';
 
 export type TableStatus = 'free' | 'occupied' | 'serving' | 'payment_pending';
 export type SessionStatus = 'open' | 'serving' | 'payment_pending' | 'closed';
@@ -118,27 +118,103 @@ export type SessionHistoryEntry = {
 };
 
 const WAITER_WEB_SESSION_KEY = 'waiter_web_session';
+const WAITER_WEB_TIMEOUT_MS = 15000;
 
 const normalizeCpf = (value: string) => value.replace(/\D/g, '');
 
 const getErrorMessage = (error: any) =>
   String(error?.message || error?.error_description || error?.details || 'Não foi possível concluir a operação.');
 
+const isTransportError = (error: unknown) => {
+  const message = String((error as any)?.message || error || '').toLowerCase();
+  return (
+    message.includes('failed to send a request to the edge function') ||
+    message.includes('failed to fetch') ||
+    message.includes('network') ||
+    message.includes('fetch') ||
+    message.includes('cors') ||
+    message.includes('timeout') ||
+    message.includes('abort')
+  );
+};
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs = WAITER_WEB_TIMEOUT_MS,
+  message = 'A conexão com o app do garçom demorou demais para responder.',
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function invokeFunctionDirect<T>(name: string, body: Record<string, unknown>, token?: string) {
+  const response = await withTimeout(
+    fetch(`${SUPABASE_URL}/functions/v1/${name}/`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${token || SUPABASE_PUBLISHABLE_KEY}`,
+        'Content-Type': 'application/json',
+        'X-Client-Info': 'boracume-waiter-web',
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+
+  const payload = await response
+    .json()
+    .catch(() => ({ error: `A função ${name} retornou uma resposta inválida.` }));
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload));
+  }
+
+  if ((payload as any)?.error) {
+    throw new Error(getErrorMessage(payload));
+  }
+
+  return payload as T;
+}
+
 async function invokeFunction<T>(name: string, body: Record<string, unknown>, token?: string) {
-  const { data, error } = await supabase.functions.invoke(name, {
-    body,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const functionPath = name.endsWith('/') ? name : `${name}/`;
 
-  if (error) {
-    throw new Error(getErrorMessage(error));
+  try {
+    const { data, error } = await withTimeout(
+      supabase.functions.invoke(functionPath, {
+        body,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      }),
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.error) {
+      throw new Error(getErrorMessage(data));
+    }
+
+    return data as T;
+  } catch (error) {
+    if (!isTransportError(error)) {
+      throw new Error(getErrorMessage(error));
+    }
+
+    return invokeFunctionDirect<T>(name, body, token);
   }
-
-  if (data?.error) {
-    throw new Error(getErrorMessage(data));
-  }
-
-  return data as T;
 }
 
 export const waiterWebSessionStorage = {

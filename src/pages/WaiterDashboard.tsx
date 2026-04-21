@@ -28,6 +28,9 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 
+const APP_ARTWORK = '/waiter/app-garcom.png';
+const BRAND_WORDMARK = '/waiter/logo-boracume.png';
+
 const WaiterDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -138,25 +141,26 @@ const WaiterDashboard = () => {
   if (!waiterSession) return null;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_40%,#f8fafc_100%)]">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#003223_0px,#003223_260px,#f7efe6_260px,#f8fafc_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="rounded-[32px] bg-[#003223] p-6 text-white shadow-[0_35px_80px_-45px_rgba(0,50,35,0.65)]">
+        <div className="relative overflow-hidden rounded-[32px] bg-[#003223] p-6 text-white shadow-[0_35px_80px_-45px_rgba(0,50,35,0.65)]">
+          <div className="absolute -right-10 top-0 h-48 w-48 rounded-full bg-[#8CC850]/15 blur-3xl" />
+          <div className="absolute -left-6 bottom-0 h-32 w-32 rounded-full bg-[#FF6400]/15 blur-2xl" />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-                <UtensilsCrossed className="h-7 w-7 text-[#8CC850]" />
-              </div>
-              <div>
+            <div className="relative z-10 flex items-center gap-4">
+              <img src={APP_ARTWORK} alt="App Garçom BoraCumê" className="h-20 w-20 rounded-[24px] object-contain shadow-2xl" />
+              <div className="min-w-0">
                 <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">
                   BoraCumê Garçom
                 </div>
+                <img src={BRAND_WORDMARK} alt="BoraCumê" className="mt-3 h-10 w-auto object-contain" />
                 <h1 className="mt-3 text-3xl font-black">Salão em tempo real</h1>
                 <p className="mt-1 text-sm text-white/70">
                   {waiterSession.profile.name} • {stats.active} mesas em operação agora
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="relative z-10 flex flex-wrap gap-3">
               <Button
                 variant="outline"
                 className="rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
@@ -194,7 +198,7 @@ const WaiterDashboard = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="relative z-10 mt-6 grid gap-4 md:grid-cols-3">
             <Card className="rounded-3xl border-0 bg-white/10 text-white">
               <CardContent className="p-5">
                 <div className="text-sm text-white/70">Mesas livres</div>
@@ -220,7 +224,7 @@ const WaiterDashboard = () => {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-slate-900">Mapa de mesas</h2>
-              <p className="text-sm text-slate-500">Toque em uma mesa para abrir ou continuar a operação.</p>
+              <p className="text-sm text-slate-500">A mesma lógica do app Android, agora também no navegador.</p>
             </div>
             <Badge className="rounded-full bg-[#FFF1E8] px-3 py-1 text-[#C14E00] hover:bg-[#FFF1E8]">
               {tables.length} mesas carregadas

@@ -6,7 +6,10 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { formatCpf, loadWaiterWebSession, loginWaiterWeb } from '@/services/waiterWebClient';
-import { CreditCard, Lock, ArrowRight, Eye, EyeOff, Sparkles, UtensilsCrossed, ShieldCheck } from 'lucide-react';
+import { CreditCard, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+
+const APP_ARTWORK = '/waiter/app-garcom.png';
+const BRAND_WORDMARK = '/waiter/logo-boracume.png';
 
 const WaiterLogin = () => {
   const [cpf, setCpf] = useState('');
@@ -14,6 +17,7 @@ const WaiterLogin = () => {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -38,6 +42,7 @@ const WaiterLogin = () => {
     if (!cpf || !password) return;
 
     setLoading(true);
+    setError('');
     try {
       const session = await loginWaiterWeb(cpf, password);
 
@@ -48,6 +53,7 @@ const WaiterLogin = () => {
 
       navigate('/waiter-dashboard', { replace: true });
     } catch (error: any) {
+      setError(error.message);
       toast({
         title: 'Erro no login',
         description: error.message,
@@ -60,66 +66,42 @@ const WaiterLogin = () => {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_40%,#f8fafc_100%)] flex items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#003223] p-4">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#FF6400]/20 border-t-[#FF6400]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_40%,#f8fafc_100%)] p-4">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center">
-        <div className="grid w-full gap-6 lg:grid-cols-[1.1fr,0.9fr]">
-          <div className="hidden rounded-[32px] bg-[#003223] p-8 text-white shadow-[0_35px_80px_-45px_rgba(0,50,35,0.65)] lg:block">
-            <div className="inline-flex rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white/90">
-              BoraCumê Garçom Web
-            </div>
-            <h1 className="mt-6 text-5xl font-black leading-tight">
-              Salão no navegador com cara de app de verdade.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg text-white/75">
-              Login rápido por CPF e senha, mesa em tempo real, lançamento de itens, envio para produção e fechamento sem depender do Android.
-            </p>
-            <div className="mt-8 grid gap-4">
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <div className="flex items-center gap-3 text-lg font-semibold">
-                  <UtensilsCrossed className="h-5 w-5 text-[#8CC850]" />
-                  Fluxo focado no salão
-                </div>
-                <p className="mt-2 text-sm leading-6 text-white/70">
-                  Mesas, comandas, itens pendentes e pagamento organizados para poucos toques.
-                </p>
+    <div className="min-h-screen bg-[#003223] px-4 py-6">
+      <div className="mx-auto flex min-h-screen max-w-lg items-center">
+        <div className="w-full space-y-6">
+          <div className="relative overflow-hidden rounded-[36px] bg-[#003223] px-6 py-8 text-center text-white">
+            <div className="absolute -right-4 top-0 h-44 w-44 rounded-full bg-[#8CC850]/15 blur-2xl" />
+            <div className="absolute -left-6 bottom-2 h-28 w-28 rounded-full bg-[#FF6400]/15 blur-xl" />
+
+            <div className="relative z-10 flex flex-col items-center gap-3">
+              <img src={APP_ARTWORK} alt="App Garçom BoraCumê" className="h-40 w-40 rounded-[36px] object-contain shadow-2xl" />
+              <img src={BRAND_WORDMARK} alt="BoraCumê" className="h-20 w-auto object-contain" />
+              <div className="rounded-full border border-white/15 bg-white/10 px-4 py-1 text-xs font-extrabold uppercase tracking-[0.28em] text-white/90">
+                App Garçom Web
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <div className="flex items-center gap-3 text-lg font-semibold">
-                  <ShieldCheck className="h-5 w-5 text-[#FFB36E]" />
-                  Acesso individual do garçom
-                </div>
-                <p className="mt-2 text-sm leading-6 text-white/70">
-                  Cada operador entra com CPF e senha, sem depender do login do dono do restaurante.
-                </p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <div className="flex items-center gap-3 text-lg font-semibold">
-                  <Sparkles className="h-5 w-5 text-[#D39BFF]" />
-                  Experiência mais premium
-                </div>
-                <p className="mt-2 text-sm leading-6 text-white/70">
-                  Visual mais forte, leitura clara e operação preparada para tablet, notebook ou celular.
-                </p>
-              </div>
+              <h1 className="text-xl font-black text-white">Operações de mesas e comandas</h1>
+              <p className="max-w-sm text-sm leading-6 text-white/80">
+                Entre com o CPF e a senha liberados em Configurações &gt; Equipe para operar o salão no navegador.
+              </p>
             </div>
           </div>
 
-          <Card className="w-full rounded-[32px] border-0 bg-white/95 shadow-[0_35px_90px_-55px_rgba(15,23,42,0.45)] backdrop-blur">
-            <CardHeader className="space-y-4 px-7 pt-8 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF1E8]">
-                <CreditCard className="h-7 w-7 text-[#FF6400]" />
+          <Card className="w-full rounded-[32px] border border-white/15 bg-white/95 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.45)] backdrop-blur">
+            <CardHeader className="space-y-2 px-7 pt-8 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF1E8]">
+                <CreditCard className="h-6 w-6 text-[#FF6400]" />
               </div>
               <div>
                 <CardTitle className="text-3xl font-black text-[#003223]">Acesso do Garçom</CardTitle>
                 <CardDescription className="mt-2 text-base text-slate-500">
-                  Entre com seu CPF e senha para operar as mesas do restaurante.
+                  O mesmo fluxo do app Android, agora também no navegador.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -135,7 +117,7 @@ const WaiterLogin = () => {
                       autoFocus
                       value={cpf}
                       onChange={(e) => setCpf(formatCpf(e.target.value))}
-                      className="h-12 rounded-2xl border-slate-200 pl-11 text-base"
+                      className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-11 text-base"
                       placeholder="000.000.000-00"
                     />
                   </div>
@@ -150,7 +132,7 @@ const WaiterLogin = () => {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="h-12 rounded-2xl border-slate-200 pl-11 pr-11 text-base"
+                      className="h-12 rounded-2xl border-slate-200 bg-white pl-11 pr-11 text-base"
                       placeholder="Digite sua senha"
                     />
                     <Button
@@ -166,18 +148,24 @@ const WaiterLogin = () => {
                   </div>
                 </div>
 
+                {error ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                    {error}
+                  </div>
+                ) : null}
+
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
                   O cadastro do CPF e da senha é feito na gestão de equipe do restaurante.
                 </div>
 
                 <Button
                   type="submit"
-                  className="h-12 w-full rounded-2xl bg-[#FF6400] text-base font-bold hover:bg-[#e55a00]"
+                  className="h-12 w-full rounded-full bg-[#FF6400] text-base font-bold hover:bg-[#e55a00]"
                   disabled={loading || cpf.replace(/\D/g, '').length !== 11 || !password}
                 >
                   {loading ? 'Entrando...' : (
                     <>
-                      Entrar no salão
+                      Entrar no App Garçom
                       <ArrowRight className="ml-2 h-5 w-5" />
                     </>
                   )}
