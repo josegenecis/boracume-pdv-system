@@ -46,46 +46,66 @@ const buildItemTotal = (row: any, options: any[]) => {
   return unitPrice * quantity + optionsTotal
 }
 
+const parseVariationOptions = (rawOptions: unknown, groupId: string) => {
+  let parsedOptions = rawOptions
+
+  if (typeof parsedOptions === 'string') {
+    try {
+      parsedOptions = JSON.parse(parsedOptions)
+    } catch {
+      parsedOptions = []
+    }
+  }
+
+  if (!Array.isArray(parsedOptions)) return []
+
+  return parsedOptions
+    .filter((option: any) => option && typeof option === 'object' && String(option.name || '').trim() && option.active !== false)
+    .map((option: any, index: number) => ({
+      id: `${groupId}-${index}-${String(option.name).trim()}`,
+      name: String(option.name).trim(),
+      price: normalizeAmount(option.price),
+    }))
+}
+
 const buildProductVariationGroups = (productId: string, specificRows: any[], linkRows: any[], globalRows: any[]) => {
   const directGroups = specificRows
-    .filter((row) => row.product_id === productId)
+    .filter((row) => row.product_id === productId && row.active !== false)
     .map((row) => ({
       id: row.id,
       name: String(row.name),
       required: Boolean(row.required),
       maxSelections: Math.max(1, Number(row.max_selections ?? 1)),
-      options: Array.isArray(row.options)
-        ? row.options.map((option: any, index: number) => ({
-            id: `${row.id}-${index}-${option.name}`,
-            name: String(option.name),
-            price: normalizeAmount(option.price),
-          }))
-        : [],
+      displayOrder: Number.isFinite(Number(row.display_order)) ? Number(row.display_order) : 10_000,
+      options: parseVariationOptions(row.options, String(row.id)),
     }))
 
   const links = linkRows.filter((row) => row.product_id === productId)
   const globalGroups = links
     .map((link) => {
       const globalRow = globalRows.find((row) => row.id === link.global_variation_id)
-      if (!globalRow) return null
+      if (!globalRow || globalRow.active === false) return null
 
       return {
         id: String(globalRow.id),
         name: String(globalRow.name),
         required: Boolean(link.required ?? globalRow.required),
         maxSelections: Math.max(1, Number(link.max_selections ?? globalRow.max_selections ?? 1)),
-        options: Array.isArray(globalRow.options)
-          ? globalRow.options.map((option: any, index: number) => ({
-              id: `${globalRow.id}-${index}-${option.name}`,
-              name: String(option.name),
-              price: normalizeAmount(option.price),
-            }))
-          : [],
+        displayOrder: Number.isFinite(Number(link.display_order ?? globalRow.display_order))
+          ? Number(link.display_order ?? globalRow.display_order)
+          : 10_000,
+        options: parseVariationOptions(globalRow.options, String(globalRow.id)),
       }
     })
     .filter(Boolean)
 
   return [...directGroups, ...globalGroups]
+    .filter((group: any) => Array.isArray(group.options) && group.options.length > 0)
+    .sort((left: any, right: any) => {
+      if (left.displayOrder !== right.displayOrder) return left.displayOrder - right.displayOrder
+      return String(left.name || '').localeCompare(String(right.name || ''), 'pt-BR')
+    })
+    .map(({ displayOrder, ...group }: any) => group)
 }
 
 const mapTableRecordStatus = (status?: string | null): TableStatus => {

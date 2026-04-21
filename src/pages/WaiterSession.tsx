@@ -46,12 +46,14 @@ import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
 import {
   ArrowLeft,
+  Check,
   ChefHat,
   CircleDollarSign,
   Clock3,
   MoveRight,
   NotebookPen,
   PackageOpen,
+  Plus,
   PlusCircle,
   ReceiptText,
   RefreshCw,
@@ -73,6 +75,8 @@ const createPaymentLine = (accountId: string, amount: number, method: PaymentMet
   method,
   amount: amount > 0 ? amount.toFixed(2) : '',
 });
+
+const buildOptionLabel = (groupName: string, optionName: string) => `${groupName}: ${optionName}`;
 
 const WaiterSessionPage = () => {
   const { sessionId = '' } = useParams();
@@ -191,7 +195,9 @@ const WaiterSessionPage = () => {
       setSessionLoadIssue('');
     } catch (error: any) {
       const message = String(error?.message || 'Nao foi possivel carregar a mesa.');
-      setSessionLoadIssue(message);
+      if (!silent || !session) {
+        setSessionLoadIssue(message);
+      }
 
       if (message.toLowerCase().includes('sess')) {
         await logoutWaiterWeb();
@@ -219,7 +225,9 @@ const WaiterSessionPage = () => {
       setCatalogLoadIssue('');
     } catch (error: any) {
       const message = error?.message || 'Nao foi possivel carregar os produtos do restaurante.';
-      setCatalogLoadIssue(String(message));
+      if (!catalog.length) {
+        setCatalogLoadIssue(String(message));
+      }
 
       if (!catalog.length) {
         toast({
@@ -240,11 +248,12 @@ const WaiterSessionPage = () => {
     if (!sessionId) return;
 
     const interval = window.setInterval(() => {
+      if (document.hidden || productDialogOpen || paymentDialogOpen || accountDialogOpen || submitting) return;
       void loadSession(true);
-    }, 6000);
+    }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [sessionId]);
+  }, [accountDialogOpen, paymentDialogOpen, productDialogOpen, sessionId, submitting]);
 
   const openAccountDialog = (mode: 'create' | 'edit', account?: TableAccount) => {
     setAccountDialogMode(mode);
@@ -258,12 +267,20 @@ const WaiterSessionPage = () => {
 
     product.variations.forEach((group) => {
       const matches = group.options.filter((option) =>
-        itemOptions.some((itemOption) => itemOption.optionName === option.name),
+        itemOptions.some((itemOption) => {
+          const optionLabel = String(itemOption.optionName || '').trim().toLowerCase();
+          return (
+            optionLabel === option.name.trim().toLowerCase() ||
+            optionLabel === buildOptionLabel(group.name, option.name).toLowerCase()
+          );
+        }),
       );
       if (matches.length) {
         nextOptions[group.id] = matches.map((option) => ({
           ...option,
           quantity: 1,
+          groupName: group.name,
+          optionName: buildOptionLabel(group.name, option.name),
         }));
       }
     });
@@ -308,25 +325,33 @@ const WaiterSessionPage = () => {
     setSelectedCategoryId('all');
   };
 
-  const toggleOption = (groupId: string, option: ProductOption, maxSelections: number) => {
+  const toggleOption = (group: Product['variations'][number], option: ProductOption) => {
     setSelectedOptions((current) => {
-      const existing = current[groupId] || [];
+      const existing = current[group.id] || [];
       const alreadySelected = existing.some((item) => item.id === option.id);
 
       if (alreadySelected) {
         return {
           ...current,
-          [groupId]: existing.filter((item) => item.id !== option.id),
+          [group.id]: existing.filter((item) => item.id !== option.id),
         };
       }
 
-      const nextOptions = maxSelections <= 1 ? [option] : [...existing.slice(0, maxSelections - 1), option];
+      if (group.maxSelections > 1 && existing.length >= group.maxSelections) {
+        return current;
+      }
+
+      const nextOption = {
+        ...option,
+        quantity: option.quantity || 1,
+        groupName: group.name,
+        optionName: buildOptionLabel(group.name, option.name),
+      };
+
+      const nextOptions = group.maxSelections <= 1 ? [nextOption] : [...existing, nextOption];
       return {
         ...current,
-        [groupId]: nextOptions.map((item) => ({
-          ...item,
-          quantity: item.quantity || 1,
-        })),
+        [group.id]: nextOptions,
       };
     });
   };
@@ -699,7 +724,7 @@ const WaiterSessionPage = () => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900">
       <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
-        <div className="rounded-[30px] border border-white/10 bg-white/[0.08] p-4 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm">
+        <div className="rounded-[28px] border border-white/10 bg-white/[0.08] p-3 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:p-4">
           <div className="flex items-center justify-between gap-2">
             <Button
               variant="outline"
@@ -730,22 +755,22 @@ const WaiterSessionPage = () => {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-col items-center text-center">
+          <div className="mt-2.5 flex flex-col items-center text-center">
             <img
               src="/waiter/logo-boracume.png"
               alt="BoraCume"
-              className="h-14 w-auto object-contain drop-shadow-[0_14px_26px_rgba(0,0,0,0.32)]"
+              className="h-11 w-auto object-contain drop-shadow-[0_14px_26px_rgba(0,0,0,0.32)] sm:h-14"
             />
-            <div className="mt-2 inline-flex rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/75">
+            <div className="mt-1.5 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/75">
               App web Garcom
             </div>
-            <h1 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">{session.tableLabel}</h1>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-white/75">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+            <h1 className="mt-2 text-[1.7rem] font-semibold leading-none text-white sm:mt-3 sm:text-3xl">{session.tableLabel}</h1>
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-white/75 sm:text-xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
                 <Clock3 className="h-3.5 w-3.5 text-[#A4D65E]" />
                 {Math.max(0, Math.floor((Date.now() - new Date(session.openedAt).getTime()) / 60000))} min
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
                 <Users className="h-3.5 w-3.5 text-[#A4D65E]" />
                 {session.accountCount} comandas
               </span>
@@ -763,51 +788,51 @@ const WaiterSessionPage = () => {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="rounded-[20px] border border-white/10 bg-white/[0.08] px-3 py-2.5 text-left">
+          <div className="mt-3 grid grid-cols-2 gap-1.5 sm:gap-2">
+            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Total</span>
-                <ReceiptText className="h-4 w-4 text-[#A4D65E]" />
+                <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Total</span>
+                <ReceiptText className="h-3.5 w-3.5 text-[#A4D65E]" />
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">{formatMoney(session.total)}</div>
+              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.total)}</div>
             </div>
-            <div className="rounded-[20px] border border-white/10 bg-white/[0.08] px-3 py-2.5 text-left">
+            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Recebido</span>
-                <CircleDollarSign className="h-4 w-4 text-[#A4D65E]" />
+                <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Recebido</span>
+                <CircleDollarSign className="h-3.5 w-3.5 text-[#A4D65E]" />
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">{formatMoney(session.paidTotal)}</div>
+              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.paidTotal)}</div>
             </div>
-            <div className="rounded-[20px] border border-white/10 bg-white/[0.08] px-3 py-2.5 text-left">
+            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Saldo</span>
-                <NotebookPen className="h-4 w-4 text-[#A4D65E]" />
+                <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Saldo</span>
+                <NotebookPen className="h-3.5 w-3.5 text-[#A4D65E]" />
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">{formatMoney(session.dueAmount)}</div>
+              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.dueAmount)}</div>
             </div>
-            <div className="rounded-[20px] border border-white/10 bg-white/[0.08] px-3 py-2.5 text-left">
+            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">Cozinha</span>
-                <ChefHat className="h-4 w-4 text-[#A4D65E]" />
+                <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Cozinha</span>
+                <ChefHat className="h-3.5 w-3.5 text-[#A4D65E]" />
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">
-                {session.sentItemsCount} <span className="text-sm text-white/60">/ {session.readyItemsCount} prontos</span>
+              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">
+                {session.sentItemsCount} <span className="text-xs text-white/60">/ {session.readyItemsCount} prontos</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button className="h-11 rounded-2xl bg-[#FF6400] text-white hover:bg-[#E25A00]" onClick={() => openAccountDialog('create')}>
-              <PlusCircle className="mr-2 h-4 w-4" />
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:gap-2">
+            <Button className="h-9 rounded-xl bg-[#FF6400] px-3 text-sm text-white hover:bg-[#E25A00]" onClick={() => openAccountDialog('create')}>
+              <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
               Nova
             </Button>
-            <Button variant="outline" className="h-11 rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
+            <Button variant="outline" className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
               Solicitar conta
             </Button>
-            <Button className="h-11 rounded-2xl bg-[#082F23] text-white hover:bg-[#0B4A36]" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
+            <Button className="h-9 rounded-xl bg-[#082F23] px-3 text-sm text-white hover:bg-[#0B4A36]" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
               Receber
             </Button>
-            <Button variant="outline" className="h-11 rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
+            <Button variant="outline" className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
               Liberar
             </Button>
           </div>
@@ -1255,16 +1280,16 @@ const WaiterSessionPage = () => {
                             return (
                               <div
                                 key={product.id}
-                                className={`flex items-center gap-3 rounded-[22px] border px-3 py-2.5 transition ${
+                                className={`flex items-center gap-2.5 rounded-[18px] border px-2.5 py-2 transition ${
                                   isSelected ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
                                 }`}
                               >
                                 <button
                                   type="button"
                                   onClick={() => selectProductForDialog(product)}
-                                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                                 >
-                                  <div className="h-12 w-12 flex-none overflow-hidden rounded-2xl bg-[#EEF4E9]">
+                                  <div className="h-10 w-10 flex-none overflow-hidden rounded-xl bg-[#EEF4E9]">
                                     {imageUrl ? (
                                       <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
                                     ) : (
@@ -1274,18 +1299,18 @@ const WaiterSessionPage = () => {
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-semibold text-[#082F23]">{product.name}</div>
-                                    <div className="mt-1 text-xs font-medium text-slate-500">{formatMoney(product.price)}</div>
+                                    <div className="truncate text-[13px] font-semibold text-[#082F23]">{product.name}</div>
+                                    <div className="mt-0.5 text-[11px] font-medium text-slate-500">{formatMoney(product.price)}</div>
                                   </div>
                                 </button>
 
                                 <Button
                                   type="button"
                                   size="icon"
-                                  className="h-9 w-9 rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]"
+                                  className="h-8 w-8 rounded-full bg-[#FF6400] text-white hover:bg-[#E25A00]"
                                   onClick={() => selectProductForDialog(product)}
                                 >
-                                  <PlusCircle className="h-4 w-4" />
+                                  <PlusCircle className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
                             );
@@ -1324,28 +1349,39 @@ const WaiterSessionPage = () => {
                   <ScrollArea className="mt-3 h-[52vh] pr-2 lg:h-[58vh]">
                     <div className="space-y-3">
                       {selectedProduct.variations.map((group) => (
-                        <div key={group.id} className="rounded-[22px] bg-white p-3 shadow-sm">
+                        <div key={group.id} className="rounded-[20px] bg-white p-3 shadow-sm">
                           <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold text-[#082F23]">{group.name}</div>
+                            <div className="text-[13px] font-semibold text-[#082F23]">{group.name}</div>
                             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                               {group.required ? 'Obrigatorio' : `Ate ${group.maxSelections}`}
                             </div>
                           </div>
-                          <div className="mt-2 space-y-2">
+                          <div className="mt-2 space-y-1.5">
                             {group.options.map((option) => {
                               const selected = (selectedOptions[group.id] || []).some((item) => item.id === option.id);
                               return (
                                 <button
                                   key={option.id}
                                   type="button"
-                                  onClick={() => toggleOption(group.id, option, group.maxSelections)}
-                                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2.5 text-left transition ${
+                                  onClick={() => toggleOption(group, option)}
+                                  className={`flex w-full items-center justify-between rounded-[16px] border px-3 py-2 text-left transition ${
                                     selected ? 'border-[#082F23] bg-[#EEF4E9]' : 'border-[#DCE6D8] bg-white'
                                   }`}
                                 >
-                                  <span className="text-sm font-medium text-slate-700">{option.name}</span>
-                                  <span className="text-xs font-semibold text-slate-500">
-                                    {option.price ? `+ ${formatMoney(option.price)}` : 'Incluso'}
+                                  <div className="min-w-0 pr-3">
+                                    <div className="truncate text-[13px] font-medium text-slate-700">{option.name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                                      {option.price ? `+ ${formatMoney(option.price)}` : 'Incluso'}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={`flex h-7 w-7 flex-none items-center justify-center rounded-full border transition ${
+                                      selected
+                                        ? 'border-[#082F23] bg-[#082F23] text-white'
+                                        : 'border-[#DCE6D8] bg-white text-[#0B4A36]'
+                                    }`}
+                                  >
+                                    {selected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                                   </span>
                                 </button>
                               );

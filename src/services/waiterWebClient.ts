@@ -83,6 +83,8 @@ export type ProductOption = {
   name: string;
   price: number;
   quantity?: number;
+  groupName?: string;
+  optionName?: string;
 };
 
 export type ProductVariationGroup = {
