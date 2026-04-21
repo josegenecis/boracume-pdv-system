@@ -508,6 +508,120 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
   }
 }
 
+async function sendAccountDraftItemsToKitchen(
+  supabase: any,
+  waiterSession: any,
+  sessionId: string,
+  accountId: string,
+) {
+  const draftRows = await supabase
+    .from('order_items')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('status', 'draft')
+    .order('created_at', { ascending: true })
+
+  if (draftRows.error) throw draftRows.error
+  if (!draftRows.data?.length) {
+    return {
+      sent: false,
+      accountName: '',
+      itemCount: 0,
+    }
+  }
+
+  const { data: accountRow, error: accountError } = await supabase
+    .from('table_accounts')
+    .select('id, name, session_id')
+    .eq('id', accountId)
+    .single()
+
+  if (accountError) throw accountError
+
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from('table_sessions')
+    .select('table_id')
+    .eq('id', sessionId)
+    .single()
+
+  if (sessionError) throw sessionError
+
+  const { data: tableRow, error: tableError } = await supabase
+    .from('tables')
+    .select('table_number, location')
+    .eq('id', sessionRow.table_id)
+    .single()
+
+  if (tableError) throw tableError
+
+  const itemIds = draftRows.data.map((row: any) => row.id)
+  const optionRows = itemIds.length
+    ? await supabase
+        .from('order_item_options')
+        .select('*')
+        .in('order_item_id', itemIds)
+    : { data: [], error: null }
+
+  if (optionRows.error) throw optionRows.error
+
+  const optionsMap = buildOptionsMap(optionRows.data ?? [])
+  const orderItems = draftRows.data.map((row: any) => {
+    const options = optionsMap.get(row.id) ?? []
+    return {
+      product_id: row.product_id,
+      product_name: row.product_name,
+      quantity: Math.max(1, Number(row.quantity || 1)),
+      price: normalizeAmount(row.unit_price),
+      subtotal: buildItemTotal(row, options),
+      options: options.map((option: any) => option.optionName),
+      notes: row.notes || '',
+      account_name: accountRow.name,
+      table_number: Number(tableRow.table_number),
+    }
+  })
+
+  const total = orderItems.reduce((sum: number, item: any) => sum + normalizeAmount(item.subtotal), 0)
+  const orderNumber = `M${tableRow.table_number}-${Date.now().toString().slice(-5)}-${String(accountId).slice(0, 4)}`
+
+  const { data: orderRow, error: orderError } = await supabase
+    .from('orders')
+    .insert({
+      user_id: waiterSession.profile.restaurantId,
+      order_number: orderNumber,
+      customer_name: `Mesa ${tableRow.table_number} - ${accountRow.name}`,
+      table_id: sessionRow.table_id,
+      items: orderItems,
+      total,
+      order_type: 'dine_in',
+      payment_method: 'pendente',
+      status: 'pending',
+      session_id: sessionId,
+      account_id: accountId,
+      waiter_id: waiterSession.profile.id,
+    })
+    .select('id')
+    .single()
+
+  if (orderError) throw orderError
+
+  const { error: updateError } = await supabase
+    .from('order_items')
+    .update({
+      status: 'sent',
+      order_id: orderRow.id,
+      sent_at: new Date().toISOString(),
+    })
+    .in('id', itemIds)
+
+  if (updateError) throw updateError
+
+  return {
+    sent: true,
+    accountName: String(accountRow.name || ''),
+    itemCount: draftRows.data.length,
+  }
+}
+
 async function refreshAccountTotal(supabase: any, accountId: string) {
   const { data: itemRows, error: itemError } = await supabase
     .from('order_items')
@@ -1631,105 +1745,39 @@ Deno.serve(async (req: Request) => {
       const accountId = String(body?.accountId || '')
       if (!sessionId || !accountId) return fail('Comanda invalida.', 400)
 
-      const draftRows = await supabase
-        .from('order_items')
-        .select('*')
-        .eq('account_id', accountId)
-        .eq('status', 'draft')
-        .order('created_at', { ascending: true })
-
-      if (draftRows.error) throw draftRows.error
-      if (!draftRows.data?.length) return fail('Nenhum item pendente para enviar.', 400)
-
-      const { data: accountRow, error: accountError } = await supabase
-        .from('table_accounts')
-        .select('id, name, session_id')
-        .eq('id', accountId)
-        .single()
-
-      if (accountError) throw accountError
-
-      const { data: sessionRow, error: sessionError } = await supabase
-        .from('table_sessions')
-        .select('table_id')
-        .eq('id', sessionId)
-        .single()
-
-      if (sessionError) throw sessionError
-
-      const { data: tableRow, error: tableError } = await supabase
-        .from('tables')
-        .select('table_number, location')
-        .eq('id', sessionRow.table_id)
-        .single()
-
-      if (tableError) throw tableError
-
-      const itemIds = draftRows.data.map((row: any) => row.id)
-      const optionRows = itemIds.length
-        ? await supabase
-            .from('order_item_options')
-            .select('*')
-            .in('order_item_id', itemIds)
-        : { data: [], error: null }
-
-      if (optionRows.error) throw optionRows.error
-
-      const optionsMap = buildOptionsMap(optionRows.data ?? [])
-      const orderItems = draftRows.data.map((row: any) => {
-        const options = optionsMap.get(row.id) ?? []
-        return {
-          product_id: row.product_id,
-          product_name: row.product_name,
-          quantity: Math.max(1, Number(row.quantity || 1)),
-          price: normalizeAmount(row.unit_price),
-          subtotal: buildItemTotal(row, options),
-          options: options.map((option: any) => option.optionName),
-          notes: row.notes || '',
-          account_name: accountRow.name,
-          table_number: Number(tableRow.table_number),
-        }
-      })
-
-      const total = orderItems.reduce((sum: number, item: any) => sum + normalizeAmount(item.subtotal), 0)
-      const orderNumber = `M${tableRow.table_number}-${Date.now().toString().slice(-5)}`
-
-      const { data: orderRow, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          user_id: waiterSession.profile.restaurantId,
-          order_number: orderNumber,
-          customer_name: `Mesa ${tableRow.table_number} - ${accountRow.name}`,
-          table_id: sessionRow.table_id,
-          items: orderItems,
-          total,
-          total_amount: total,
-          order_type: 'dine_in',
-          payment_method: 'pendente',
-          status: 'pending',
-          session_id: sessionId,
-          account_id: accountId,
-          waiter_id: waiterSession.profile.id,
-        })
-        .select('id')
-        .single()
-
-      if (orderError) throw orderError
-
-      const { error: updateError } = await supabase
-        .from('order_items')
-        .update({
-          status: 'sent',
-          order_id: orderRow.id,
-          sent_at: new Date().toISOString(),
-        })
-        .in('id', itemIds)
-
-      if (updateError) throw updateError
+      const sentAccount = await sendAccountDraftItemsToKitchen(supabase, waiterSession, sessionId, accountId)
+      if (!sentAccount.sent) return fail('Nenhum item pendente para enviar.', 400)
 
       await refreshSessionStatus(supabase, sessionId)
       const session = await buildSessionResponse(supabase, waiterSession.profile.restaurantId, sessionId)
       return ok({ session })
+    }
+
+    if (action === 'send_all_accounts') {
+      const sessionId = String(body?.sessionId || '')
+      if (!sessionId) return fail('Sessao invalida.', 400)
+
+      const { data: draftRows, error: draftError } = await supabase
+        .from('order_items')
+        .select('account_id')
+        .eq('session_id', sessionId)
+        .eq('status', 'draft')
+
+      if (draftError) throw draftError
+
+      const accountIds = Array.from(
+        new Set((draftRows ?? []).map((row: any) => String(row.account_id || '')).filter(Boolean)),
+      )
+
+      if (!accountIds.length) return fail('Nenhuma comanda com itens pendentes para enviar.', 400)
+
+      for (const accountId of accountIds) {
+        await sendAccountDraftItemsToKitchen(supabase, waiterSession, sessionId, accountId)
+      }
+
+      await refreshSessionStatus(supabase, sessionId)
+      const session = await buildSessionResponse(supabase, waiterSession.profile.restaurantId, sessionId)
+      return ok({ session, sentAccounts: accountIds.length })
     }
 
     if (action === 'record_payments') {

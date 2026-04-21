@@ -32,6 +32,7 @@ import {
   removeWaiterAccount,
   renameWaiterAccount,
   requestWaiterCheck,
+  sendAllWaiterSessionItems,
   sendWaiterAccountItems,
   TableAccount,
   TableSession,
@@ -136,6 +137,10 @@ const WaiterSessionPage = () => {
         })),
       )
       .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  }, [session]);
+
+  const hasDraftAccounts = useMemo(() => {
+    return (session?.accounts || []).some((account) => account.draftCount > 0);
   }, [session]);
 
   const catalogProducts = useMemo(() => catalog.flatMap((category) => category.products), [catalog]);
@@ -504,6 +509,32 @@ const WaiterSessionPage = () => {
     }
   };
 
+  const handleSendAllAccounts = async () => {
+    if (!session) return;
+
+    setSubmitting(true);
+    try {
+      const response = await sendAllWaiterSessionItems(session.id);
+      applySession(response.session);
+      const sentAccounts = Number(response.sentAccounts || 0);
+      toast({
+        title: 'Pedidos enviados',
+        description:
+          sentAccounts > 1
+            ? `${sentAccounts} comandas foram encaminhadas para a cozinha.`
+            : 'A comanda pendente foi encaminhada para a cozinha.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao enviar pedidos',
+        description: error?.message || 'Nao foi possivel enviar as comandas da mesa.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const openPaymentDialog = (account?: TableAccount) => {
     if (!session) return;
 
@@ -825,6 +856,15 @@ const WaiterSessionPage = () => {
             <Button className="h-9 rounded-xl bg-[#FF6400] px-3 text-sm text-white hover:bg-[#E25A00]" onClick={() => openAccountDialog('create')}>
               <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
               Nova
+            </Button>
+            <Button
+              variant="outline"
+              className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white"
+              onClick={handleSendAllAccounts}
+              disabled={submitting || !hasDraftAccounts}
+            >
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              Enviar tudo
             </Button>
             <Button variant="outline" className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
               Solicitar conta

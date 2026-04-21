@@ -813,6 +813,21 @@ export async function sendWaiterAccountItems(sessionId: string, accountId: strin
   return response;
 }
 
+export async function sendAllWaiterSessionItems(sessionId: string) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession; sentAccounts?: number }>(
+    'waiter-web',
+    {
+      action: 'send_all_accounts',
+      sessionId,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
+}
+
 export async function recordWaiterPayments(sessionId: string, payments: WaiterPaymentInput[]) {
   const session = requireSession();
   const response = await invokeFunction<{ session: TableSession }>(
