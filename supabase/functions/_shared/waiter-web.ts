@@ -28,7 +28,7 @@ export const createServiceClient = () => {
   const url = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
   const key = getEnv('SUPABASE_SERVICE_ROLE_KEY', 'BORACUME_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY')
   if (!url || !key) {
-    throw new Error('Ambiente do Supabase não configurado para o app do garçom.')
+    throw new Error('Ambiente do Supabase nao configurado para o app do garcom.')
   }
   return createClient(url, key, { auth: { persistSession: false } })
 }
@@ -43,31 +43,55 @@ export const hashToken = async (value: string) => {
 
 export const buildSessionToken = () => `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '')
 
+type WaiterSessionWaiterRow = {
+  id: string
+  name: string
+  role: string | null
+  permissions: Record<string, boolean> | null
+  cpf: string | null
+  active: boolean | null
+}
+
 export async function getWaiterSession(req: Request) {
   const authHeader = req.headers.get('authorization') || ''
   const rawToken = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!rawToken) {
-    throw new Error('Sessão do garçom não informada.')
+    throw new Error('Sessao do garcom nao informada.')
   }
 
   const supabase = createServiceClient()
   const tokenHash = await hashToken(rawToken)
   const { data, error } = await supabase
     .from('waiter_web_sessions')
-    .select('id, waiter_id, restaurant_id, expires_at, waiters(id, name, role, permissions, cpf, active)')
+    .select(`
+      id,
+      waiter_id,
+      restaurant_id,
+      expires_at,
+      waiter:waiters!waiter_web_sessions_waiter_id_fkey(
+        id,
+        name,
+        role,
+        permissions,
+        cpf,
+        active
+      )
+    `)
     .eq('token_hash', tokenHash)
     .maybeSingle()
 
   if (error || !data) {
-    throw new Error('Sessão do garçom inválida.')
+    throw new Error('Sessao do garcom invalida.')
   }
 
-  if (!data.waiters || !(data.waiters as any).active) {
+  const waiter = (Array.isArray(data.waiter) ? data.waiter[0] : data.waiter) as WaiterSessionWaiterRow | null
+
+  if (!waiter?.active) {
     await supabase.from('waiter_web_sessions').delete().eq('id', data.id)
-    throw new Error('Garçom inativo.')
+    throw new Error('Garcom inativo.')
   }
 
-  const permissions = ((data.waiters as any).permissions as Record<string, boolean>) || {}
+  const permissions = (waiter.permissions as Record<string, boolean>) || {}
   if (!hasWaiterAppAccess(permissions)) {
     await supabase.from('waiter_web_sessions').delete().eq('id', data.id)
     throw new Error('Acesso ao app garcom nao liberado para este usuario.')
@@ -75,7 +99,7 @@ export async function getWaiterSession(req: Request) {
 
   if (new Date(data.expires_at).getTime() <= Date.now()) {
     await supabase.from('waiter_web_sessions').delete().eq('id', data.id)
-    throw new Error('Sessão expirada. Faça login novamente.')
+    throw new Error('Sessao expirada. Faca login novamente.')
   }
 
   await supabase
@@ -87,11 +111,11 @@ export async function getWaiterSession(req: Request) {
     rawToken,
     sessionId: data.id,
     profile: {
-      id: (data.waiters as any).id,
+      id: waiter.id,
       restaurantId: data.restaurant_id,
-      name: (data.waiters as any).name,
-      cpf: (data.waiters as any).cpf || '',
-      role: (data.waiters as any).role || 'cashier',
+      name: waiter.name,
+      cpf: waiter.cpf || '',
+      role: waiter.role || 'cashier',
       permissions,
     },
     expiresAt: data.expires_at,

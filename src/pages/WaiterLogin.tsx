@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { formatCpf, loadWaiterWebSession, loginWaiterWeb } from '@/services/waiterWebClient';
-import { CreditCard, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, CreditCard, Eye, EyeOff, Lock } from 'lucide-react';
 
-const APP_ARTWORK = '/waiter/app-garcom.png';
 const BRAND_WORDMARK = '/waiter/logo-boracume.png';
 
 const WaiterLogin = () => {
@@ -23,6 +21,7 @@ const WaiterLogin = () => {
 
   useEffect(() => {
     let mounted = true;
+
     loadWaiterWebSession()
       .then((session) => {
         if (mounted && session) {
@@ -32,17 +31,19 @@ const WaiterLogin = () => {
       .finally(() => {
         if (mounted) setCheckingSession(false);
       });
+
     return () => {
       mounted = false;
     };
   }, [navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!cpf || !password) return;
 
     setLoading(true);
     setError('');
+
     try {
       const session = await loginWaiterWeb(cpf, password);
 
@@ -52,11 +53,12 @@ const WaiterLogin = () => {
       });
 
       navigate('/waiter-dashboard', { replace: true });
-    } catch (error: any) {
-      setError(error.message);
+    } catch (loginError: any) {
+      const message = String(loginError?.message || 'Nao foi possivel concluir o login.');
+      setError(message);
       toast({
         title: 'Erro no login',
-        description: error.message,
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -66,114 +68,101 @@ const WaiterLogin = () => {
 
   if (checkingSession) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#003223] p-4">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#003223] p-4">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#FF6400]/20 border-t-[#FF6400]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#003223] px-4 py-6">
-      <div className="mx-auto flex min-h-screen max-w-lg items-center">
-        <div className="w-full space-y-6">
-          <div className="relative overflow-hidden rounded-[36px] bg-[#003223] px-6 py-8 text-center text-white">
-            <div className="absolute -right-4 top-0 h-44 w-44 rounded-full bg-[#8CC850]/15 blur-2xl" />
-            <div className="absolute -left-6 bottom-2 h-28 w-28 rounded-full bg-[#FF6400]/15 blur-xl" />
+    <div className="min-h-[100dvh] bg-[#003223] px-4 py-8 text-white">
+      <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-[430px] flex-col justify-between">
+        <div className="space-y-8">
+          <div className="space-y-5 pt-3 text-center">
+            <img src={BRAND_WORDMARK} alt="BoraCumê" className="mx-auto h-24 w-auto object-contain" />
 
-            <div className="relative z-10 flex flex-col items-center gap-3">
-              <img src={APP_ARTWORK} alt="App Garçom BoraCumê" className="h-40 w-40 rounded-[36px] object-contain shadow-2xl" />
-              <img src={BRAND_WORDMARK} alt="BoraCumê" className="h-20 w-auto object-contain" />
-              <div className="rounded-full border border-white/15 bg-white/10 px-4 py-1 text-xs font-extrabold uppercase tracking-[0.28em] text-white/90">
-                App Garçom Web
-              </div>
-              <h1 className="text-xl font-black text-white">Operações de mesas e comandas</h1>
-              <p className="max-w-sm text-sm leading-6 text-white/80">
-                Entre com o CPF e a senha liberados em Configurações &gt; Equipe para operar o salão no navegador.
-              </p>
+            <div className="mx-auto inline-flex rounded-2xl bg-white/12 px-5 py-2 text-sm font-medium tracking-[0.18em] text-white/85">
+              APP WEB GARÇOM
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[1.65rem] font-light leading-tight text-white/90">Opere mesas e comandas</p>
+              <h1 className="text-[2.25rem] font-semibold leading-tight text-white">Entre com CPF e senha</h1>
             </div>
           </div>
 
-          <Card className="w-full rounded-[32px] border border-white/15 bg-white/95 shadow-[0_24px_70px_-40px_rgba(0,0,0,0.45)] backdrop-blur">
-            <CardHeader className="space-y-2 px-7 pt-8 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF1E8]">
-                <CreditCard className="h-6 w-6 text-[#FF6400]" />
+          <div className="rounded-[34px] border-2 border-[#FF6400] bg-[#EEF2EC] px-6 py-7 text-slate-900 shadow-[0_32px_90px_-60px_rgba(0,0,0,0.75)]">
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="cpf" className="text-sm font-bold text-[#0B4A36]">
+                  CPF
+                </Label>
+                <div className="relative">
+                  <CreditCard className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="cpf"
+                    inputMode="numeric"
+                    autoFocus
+                    value={cpf}
+                    onChange={(event) => setCpf(formatCpf(event.target.value))}
+                    className="h-14 rounded-full border-2 border-[#8CC850] bg-white pl-12 text-lg shadow-none"
+                    placeholder="000.000.000-00"
+                  />
+                </div>
               </div>
-              <div>
-                <CardTitle className="text-3xl font-black text-[#003223]">Acesso do Garçom</CardTitle>
-                <CardDescription className="mt-2 text-base text-slate-500">
-                  O mesmo fluxo do app Android, agora também no navegador.
-                </CardDescription>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-bold text-[#0B4A36]">
+                  Senha
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="h-14 rounded-full border-2 border-[#8CC850] bg-white pl-12 pr-12 text-lg shadow-none"
+                    placeholder="Digite sua senha"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full text-[#0B4A36] hover:bg-transparent hover:text-[#0B4A36]"
+                    onClick={() => setShowPassword((current) => !current)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </Button>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="px-7 pb-8">
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="cpf" className="text-sm font-semibold text-slate-700">CPF</Label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      id="cpf"
-                      inputMode="numeric"
-                      autoFocus
-                      value={cpf}
-                      onChange={(e) => setCpf(formatCpf(e.target.value))}
-                      className="h-12 rounded-2xl border-slate-200 bg-slate-50 pl-11 text-base"
-                      placeholder="000.000.000-00"
-                    />
-                  </div>
+
+              {error ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                  {error}
                 </div>
+              ) : null}
 
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-semibold text-slate-700">Senha</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="h-12 rounded-2xl border-slate-200 bg-white pl-11 pr-11 text-base"
-                      placeholder="Digite sua senha"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
-                      onClick={() => setShowPassword((current) => !current)}
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </Button>
-                  </div>
-                </div>
-
-                {error ? (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                    {error}
-                  </div>
-                ) : null}
-
-                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                  O cadastro do CPF e da senha é feito na gestão de equipe do restaurante.
-                </div>
-
-                <Button
-                  type="submit"
-                  className="h-12 w-full rounded-full bg-[#FF6400] text-base font-bold hover:bg-[#e55a00]"
-                  disabled={loading || cpf.replace(/\D/g, '').length !== 11 || !password}
-                >
-                  {loading ? 'Entrando...' : (
-                    <>
-                      Entrar no App Garçom
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+              <Button
+                type="submit"
+                className="h-14 w-full rounded-full bg-[#FF6400] text-lg font-semibold text-white hover:bg-[#e55a00]"
+                disabled={loading || cpf.replace(/\D/g, '').length !== 11 || !password}
+              >
+                {loading ? (
+                  'Entrando...'
+                ) : (
+                  <>
+                    Entrar no App Garçom
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </div>
         </div>
+
+        <div className="pb-2 pt-8 text-center text-sm text-white/75">boracume.com</div>
       </div>
     </div>
   );

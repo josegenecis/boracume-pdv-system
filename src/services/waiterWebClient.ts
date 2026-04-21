@@ -123,7 +123,7 @@ const WAITER_WEB_TIMEOUT_MS = 15000;
 const normalizeCpf = (value: string) => value.replace(/\D/g, '');
 
 const getErrorMessage = (error: any) =>
-  String(error?.message || error?.error_description || error?.details || 'Não foi possível concluir a operação.');
+  String(error?.message || error?.error_description || error?.details || 'Nao foi possivel concluir a operacao.');
 
 const isTransportError = (error: unknown) => {
   const message = String((error as any)?.message || error || '').toLowerCase();
@@ -138,10 +138,23 @@ const isTransportError = (error: unknown) => {
   );
 };
 
+const isSessionAccessError = (error: unknown) => {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('sess') ||
+    message.includes('expirada') ||
+    message.includes('invalida') ||
+    message.includes('inválida') ||
+    message.includes('inativo') ||
+    message.includes('nao liberado') ||
+    message.includes('não liberado')
+  );
+};
+
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs = WAITER_WEB_TIMEOUT_MS,
-  message = 'A conexão com o app do garçom demorou demais para responder.',
+  message = 'A conexao com o app do garcom demorou demais para responder.',
 ) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -175,7 +188,7 @@ async function invokeFunctionDirect<T>(name: string, body: Record<string, unknow
 
   const payload = await response
     .json()
-    .catch(() => ({ error: `A função ${name} retornou uma resposta inválida.` }));
+    .catch(() => ({ error: `A funcao ${name} retornou uma resposta invalida.` }));
 
   if (!response.ok) {
     throw new Error(getErrorMessage(payload));
@@ -250,15 +263,28 @@ export async function loginWaiterWeb(cpf: string, password: string) {
 export async function loadWaiterWebSession() {
   const session = waiterWebSessionStorage.load();
   if (!session) return null;
+
   try {
-    const response = await invokeFunction<{ session: WaiterWebStoredSession }>('waiter-web-auth', {
-      action: 'me',
-    }, session.token);
+    const response = await invokeFunction<{ session: WaiterWebStoredSession }>(
+      'waiter-web-auth',
+      {
+        action: 'me',
+      },
+      session.token,
+    );
     waiterWebSessionStorage.save(response.session);
     return response.session;
-  } catch {
-    waiterWebSessionStorage.clear();
-    return null;
+  } catch (error) {
+    if (isTransportError(error)) {
+      return session;
+    }
+
+    if (isSessionAccessError(error)) {
+      waiterWebSessionStorage.clear();
+      return null;
+    }
+
+    return session;
   }
 }
 
@@ -275,67 +301,95 @@ export async function logoutWaiterWeb() {
 function requireSession() {
   const session = waiterWebSessionStorage.load();
   if (!session?.token) {
-    throw new Error('Sessão do garçom não encontrada.');
+    throw new Error('Sessao do garcom nao encontrada.');
   }
   return session;
 }
 
 export async function bootstrapWaiterWeb() {
   const session = requireSession();
-  return invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>('waiter-web', {
-    action: 'bootstrap',
-  }, session.token);
+  return invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>(
+    'waiter-web',
+    {
+      action: 'bootstrap',
+    },
+    session.token,
+  );
 }
 
 export async function openWaiterTableSession(tableId: string, tableNumber: number, guestCount: number) {
   const session = requireSession();
-  return invokeFunction<{ sessionId: string }>('waiter-web', {
-    action: 'open_session',
-    tableId,
-    tableNumber,
-    guestCount,
-  }, session.token);
+  return invokeFunction<{ sessionId: string }>(
+    'waiter-web',
+    {
+      action: 'open_session',
+      tableId,
+      tableNumber,
+      guestCount,
+    },
+    session.token,
+  );
 }
 
 export async function getWaiterSessionDetails(sessionId: string) {
   const session = requireSession();
-  return invokeFunction<{ session: TableSession }>('waiter-web', {
-    action: 'session_details',
-    sessionId,
-  }, session.token);
+  return invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'session_details',
+      sessionId,
+    },
+    session.token,
+  );
 }
 
 export async function createWaiterAccount(sessionId: string, name: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'create_account',
-    sessionId,
-    name,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'create_account',
+      sessionId,
+      name,
+    },
+    session.token,
+  );
 }
 
 export async function renameWaiterAccount(accountId: string, name: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'rename_account',
-    accountId,
-    name,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'rename_account',
+      accountId,
+      name,
+    },
+    session.token,
+  );
 }
 
 export async function removeWaiterAccount(accountId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'remove_account',
-    accountId,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'remove_account',
+      accountId,
+    },
+    session.token,
+  );
 }
 
 export async function listWaiterCatalog() {
   const session = requireSession();
-  return invokeFunction<{ categories: ProductCategory[] }>('waiter-web', {
-    action: 'catalog',
-  }, session.token);
+  return invokeFunction<{ categories: ProductCategory[] }>(
+    'waiter-web',
+    {
+      action: 'catalog',
+    },
+    session.token,
+  );
 }
 
 export async function addWaiterItem(input: {
@@ -347,40 +401,61 @@ export async function addWaiterItem(input: {
   selectedOptions: ProductOption[];
 }) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'add_item',
-    ...input,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'add_item',
+      ...input,
+    },
+    session.token,
+  );
 }
 
 export async function cancelWaiterDraftItem(itemId: string, accountId: string, sessionId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'cancel_draft_item',
-    itemId,
-    accountId,
-    sessionId,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'cancel_draft_item',
+      itemId,
+      accountId,
+      sessionId,
+    },
+    session.token,
+  );
 }
 
 export async function sendWaiterAccountItems(sessionId: string, accountId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'send_account',
-    sessionId,
-    accountId,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'send_account',
+      sessionId,
+      accountId,
+    },
+    session.token,
+  );
 }
 
-export async function recordWaiterPayment(sessionId: string, accountId: string | null, amount: number, method: PaymentMethod) {
+export async function recordWaiterPayment(
+  sessionId: string,
+  accountId: string | null,
+  amount: number,
+  method: PaymentMethod,
+) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>('waiter-web', {
-    action: 'record_payment',
-    sessionId,
-    accountId,
-    amount,
-    method,
-  }, session.token);
+  return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'record_payment',
+      sessionId,
+      accountId,
+      amount,
+      method,
+    },
+    session.token,
+  );
 }
 
 export function formatCpf(value: string) {
