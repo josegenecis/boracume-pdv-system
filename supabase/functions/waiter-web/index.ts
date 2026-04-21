@@ -40,7 +40,7 @@ const buildOptionsMap = (rows: any[]) => {
 }
 
 const buildItemTotal = (row: any, options: any[]) => {
-  const unitPrice = normalizeAmount(row.unit_price ?? row.price)
+  const unitPrice = normalizeAmount(row.unit_price)
   const quantity = Math.max(1, Number(row.quantity || 1))
   const optionsTotal = options.reduce((sum, option) => sum + normalizeAmount(option.price) * Math.max(1, Number(option.quantity || 1)), 0)
   return unitPrice * quantity + optionsTotal
@@ -373,7 +373,7 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
       productId: row.product_id,
       productName: row.product_name,
       quantity: Math.max(1, Number(row.quantity || 1)),
-      unitPrice: normalizeAmount(row.unit_price ?? row.price),
+      unitPrice: normalizeAmount(row.unit_price),
       totalPrice: buildItemTotal(row, options),
       notes: row.notes || '',
       status,
@@ -511,7 +511,7 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
 async function refreshAccountTotal(supabase: any, accountId: string) {
   const { data: itemRows, error: itemError } = await supabase
     .from('order_items')
-    .select('id, quantity, unit_price, price, status')
+    .select('id, quantity, unit_price, status')
     .eq('account_id', accountId)
     .neq('status', 'cancelled')
 
@@ -1427,7 +1427,7 @@ Deno.serve(async (req: Request) => {
             product_id: itemRow.product_id,
             product_name: itemRow.product_name,
             quantity: quantityToMove,
-            unit_price: normalizeAmount(itemRow.unit_price ?? itemRow.price),
+            unit_price: normalizeAmount(itemRow.unit_price),
             notes: itemRow.notes || '',
             status: 'draft',
           })
@@ -1682,7 +1682,7 @@ Deno.serve(async (req: Request) => {
           product_id: row.product_id,
           product_name: row.product_name,
           quantity: Math.max(1, Number(row.quantity || 1)),
-          price: normalizeAmount(row.unit_price ?? row.price),
+          price: normalizeAmount(row.unit_price),
           subtotal: buildItemTotal(row, options),
           options: options.map((option: any) => option.optionName),
           notes: row.notes || '',
