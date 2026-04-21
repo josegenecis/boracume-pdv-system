@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 import RecentOrdersTable from '@/components/dashboard/RecentOrdersTable';
-import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Sparkles, Activity, ArrowUpRight } from 'lucide-react';
+import { Users, ClipboardList, ShoppingBag, Settings, MessageCircle, ChevronRight, Search, Sparkles, Activity, ArrowUpRight, CreditCard, Wallet, ChefHat } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -337,7 +337,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 pb-8">
-      <div className="rounded-[30px] border border-white/70 bg-white/85 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#101a16]/92 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.8)] md:hidden">
+      <div className="hidden">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
@@ -369,7 +369,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid gap-3 md:hidden">
+      <div className="hidden">
         <div className="grid grid-cols-2 gap-3">
           <button type="button" onClick={() => navigate('/pedidos')} className="rounded-[26px] border border-[#FF6400]/12 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98] dark:border-white/10 dark:bg-[#101a16]/95">
             <div className="flex items-center justify-between">
@@ -412,6 +412,122 @@ const Dashboard = () => {
             <div className="mt-1 text-xs text-slate-500">configurações e integrações</div>
           </button>
         </div>
+      </div>
+
+      <div className="space-y-4 md:hidden">
+        <section className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.28)]">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#FF6400]">
+              Central BoraCumê
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{greeting}, bora operar</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                O BoraCumê mobile agora prioriza as ações do dia: aceitar pedido, vender rápido e cuidar do caixa.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-[#FF6400]/12 bg-[#FFF8F2] px-3 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pedidos</div>
+                <div className="mt-1 text-lg font-bold text-slate-900">{stats.todayOrders}</div>
+              </div>
+              <div className="rounded-2xl border border-[#8CC850]/20 bg-[#F5FBED] px-3 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pendentes</div>
+                <div className="mt-1 text-lg font-bold text-slate-900">{stats.pendingOrders}</div>
+              </div>
+              <div className="rounded-2xl border border-[#003223]/10 bg-[#F6F8F7] px-3 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ticket</div>
+                <div className="mt-1 text-sm font-bold text-slate-900">{formatCurrency(stats.averageTicket)}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'Gestor de pedidos', hint: 'aceitar e acompanhar fila', icon: ClipboardList, to: '/pedidos', accent: 'bg-[#FFF1E6] text-[#FF6400]' },
+            { label: 'PDV mobile', hint: 'lançar venda com menos toques', icon: CreditCard, to: '/pdv', accent: 'bg-[#003223]/8 text-[#003223]' },
+            { label: 'Caixa geral', hint: 'abertura, sangria e conferência', icon: Wallet, to: '/caixa', accent: 'bg-[#F5FBED] text-[#245B2B]' },
+            { label: 'Cozinha', hint: 'acompanhar produção', icon: ChefHat, to: '/cozinha', accent: 'bg-[#FFF6E8] text-[#C46A00]' },
+            { label: 'Cardápio', hint: 'produtos e complementos', icon: ShoppingBag, to: '/produtos', accent: 'bg-[#F2F7EF] text-[#245B2B]' },
+            { label: 'WhatsApp', hint: 'atendimento e automações', icon: MessageCircle, to: '/configuracoes?tab=whatsapp', accent: 'bg-[#EEF4FF] text-[#0B4D8A]' },
+          ].map((action) => {
+            const Icon = action.icon;
+
+            return (
+              <button
+                key={action.to}
+                type="button"
+                onClick={() => navigate(action.to)}
+                className="rounded-[24px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`rounded-2xl p-2 ${action.accent}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                </div>
+                <div className="mt-4 text-sm font-semibold text-slate-900">{action.label}</div>
+                <div className="mt-1 text-xs text-slate-500">{action.hint}</div>
+              </button>
+            );
+          })}
+        </section>
+
+        <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Fila operacional</div>
+              <div className="text-xs text-slate-500">Visão rápida para agir no celular.</div>
+            </div>
+            <button type="button" className="text-sm font-semibold text-[#FF6400]" onClick={() => navigate('/pedidos')}>
+              Abrir pedidos
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-[#FF6400]/12 bg-[#FFF8F2] p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Novos</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{stats.pendingOrders}</div>
+            </div>
+            <div className="rounded-2xl border border-[#8CC850]/20 bg-[#F5FBED] p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Receita hoje</div>
+              <div className="mt-1 text-sm font-bold text-slate-900">{formatCurrency(stats.todaySales)}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Pedidos recentes</h2>
+            <button type="button" className="text-sm font-semibold text-[#FF6400]" onClick={() => navigate('/pedidos')}>
+              Ver tudo
+            </button>
+          </div>
+          <div className="space-y-3">
+            {recentOrders.slice(0, 4).map((order) => (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => navigate('/pedidos')}
+                className="w-full rounded-[24px] border border-slate-200/80 bg-white/95 p-4 text-left shadow-sm transition-transform active:scale-[0.99]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">#{order.id.slice(0, 8)}</div>
+                    <div className="mt-1 text-sm text-slate-600">{order.customer_name || 'Cliente não informado'}</div>
+                  </div>
+                  <div className="rounded-full bg-[#F5EBE1] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#003223]">
+                    {order.status}
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between text-sm">
+                  <div className="text-slate-500">{new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="font-bold text-slate-900">{formatCurrency(order.total)}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
 
       <div className="hidden gap-5 md:grid">
@@ -620,7 +736,7 @@ const Dashboard = () => {
 
       </div>
       
-      <div className="grid gap-3 md:hidden">
+      <div className="hidden">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Pedidos recentes</h2>
           <button type="button" className="text-sm font-semibold text-[#FF6400]" onClick={() => navigate('/pedidos')}>Ver tudo</button>

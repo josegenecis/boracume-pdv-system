@@ -34,7 +34,10 @@ import {
   Filter,
   Percent,
   Lock,
-  Unlock
+  Unlock,
+  RefreshCw,
+  ReceiptText,
+  ChevronRight
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -43,6 +46,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
+import { useLocation } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -79,6 +83,7 @@ interface CashSession {
 const Financeiro = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -100,6 +105,7 @@ const Financeiro = () => {
   const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
   const [cashOperation, setCashOperation] = useState<'open' | 'close' | 'in' | 'out'>('open');
   const [cashDescription, setCashDescription] = useState('');
+  const [mobileFinanceTab, setMobileFinanceTab] = useState<'caixa' | 'movimentos' | 'relatorios'>('caixa');
 
   const [filters, setFilters] = useState({
     paymentMethod: '' as PaymentMethodFilter,
@@ -645,6 +651,85 @@ const Financeiro = () => {
     { label: 'Caixa', value: Math.max(16, Math.min(94, currentSession ? 74 : 48)) },
   ];
   const topExpenseCards = expenseByCategory.slice(0, 4);
+  const isCashRoute = location.pathname.startsWith('/caixa');
+  const headerTitle = isCashRoute ? 'Caixa geral' : 'Financeiro';
+  const headerSubtitle = isCashRoute
+    ? 'Abertura, suprimento, sangria e conferência do caixa em uma visão operacional.'
+    : 'Acompanhe receitas, despesas, lucro e DRE no período selecionado';
+
+  const openCashActionDialog = (operation: 'open' | 'close' | 'in' | 'out') => {
+    setCashOperation(operation);
+    setCashAmount('');
+    setCashDescription('');
+    setIsCashDialogOpen(true);
+  };
+
+  const refreshFinanceData = async () => {
+    await Promise.all([fetchData(), checkOpenSession(), fetchCashSessions()]);
+    if (selectedSessionId) {
+      await fetchSessionDetails(selectedSessionId);
+    }
+  };
+
+  const mobileCashActions = [
+    {
+      key: currentSession ? 'close' : 'open',
+      label: currentSession ? 'Fechar caixa' : 'Abrir caixa',
+      icon: currentSession ? Unlock : Lock,
+      onClick: () => openCashActionDialog(currentSession ? 'close' : 'open'),
+      className: currentSession
+        ? 'border-[#003223]/12 bg-[#003223] text-white'
+        : 'border-[#8CC850]/25 bg-[#F5FBED] text-[#245B2B]',
+    },
+    {
+      key: 'in',
+      label: 'Suprimento',
+      icon: ArrowUp,
+      onClick: () => openCashActionDialog('in'),
+      className: 'border-[#8CC850]/18 bg-white text-[#245B2B]',
+    },
+    {
+      key: 'out',
+      label: 'Sangria',
+      icon: ArrowDown,
+      onClick: () => openCashActionDialog('out'),
+      className: 'border-[#FF6400]/18 bg-white text-[#C45E00]',
+    },
+    {
+      key: 'expense',
+      label: 'Despesa',
+      icon: ReceiptText,
+      onClick: () => setIsExpenseDialogOpen(true),
+      className: 'border-[#003223]/10 bg-white text-[#003223]',
+    },
+    {
+      key: 'refresh',
+      label: 'Atualizar',
+      icon: RefreshCw,
+      onClick: () => { void refreshFinanceData(); },
+      className: 'border-[#003223]/10 bg-white text-[#003223]',
+    },
+    {
+      key: 'report',
+      label: 'Relatório',
+      icon: Download,
+      onClick: generateCSV,
+      className: 'border-[#003223]/10 bg-white text-[#003223]',
+    },
+  ];
+
+  const mobileTypeFilters: Array<{ value: TxTypeFilter; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'entrada', label: 'Receitas' },
+    { value: 'saida', label: 'Despesas' },
+  ];
+
+  const mobilePaymentFilters: Array<{ value: PaymentMethodFilter; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'pix', label: 'PIX' },
+    { value: 'cartao', label: 'Cartão' },
+    { value: 'dinheiro', label: 'Dinheiro' },
+  ];
   
   return (
     <div className="space-y-6">
@@ -652,9 +737,9 @@ const Financeiro = () => {
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="text-2xl font-bold tracking-tight">Financeiro</div>
+              <div className="text-2xl font-bold tracking-tight">{headerTitle}</div>
               <div className="text-white/90 text-sm mt-1">
-                Acompanhe receitas, despesas, lucro e DRE no período selecionado
+                {headerSubtitle}
               </div>
             </div>
 
@@ -960,7 +1045,371 @@ const Financeiro = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:hidden md:grid-cols-3">
+      <div className="space-y-4 md:hidden">
+        <section className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.28)]">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#FF6400]">
+              {isCashRoute ? 'Caixa geral' : 'Financeiro mobile'}
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  {currentSession ? 'Caixa aberto agora' : 'Caixa pronto para abrir'}
+                </h1>
+                <p className="mt-1 text-sm text-slate-500">
+                  {currentSession
+                    ? 'Use suprimento, sangria, conferência e sessão atual com poucos toques.'
+                    : 'Abra o caixa e acompanhe vendas, pagamentos e movimentações direto do celular.'}
+                </p>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${currentSession ? 'bg-[#F5FBED] text-[#245B2B]' : 'bg-[#FFF1E6] text-[#C45E00]'}`}>
+                {currentSession ? 'Aberto' : 'Fechado'}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-3">
+          {mobileCashActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.key}
+                type="button"
+                onClick={action.onClick}
+                className={`rounded-[24px] border p-4 text-left shadow-sm transition-transform active:scale-[0.98] ${action.className}`}
+              >
+                <div className="flex items-center justify-between">
+                  <Icon className="h-5 w-5" />
+                  <ChevronRight className="h-4 w-4 opacity-40" />
+                </div>
+                <div className="mt-4 text-sm font-semibold">{action.label}</div>
+              </button>
+            );
+          })}
+        </section>
+
+        <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Sessão do caixa</div>
+                <div className="text-xs text-slate-500">Escolha a sessão para conferir vendas e movimentações.</div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]"
+                onClick={() => { void refreshFinanceData(); }}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Atualizar
+              </Button>
+            </div>
+            <Select
+              value={selectedSessionId}
+              onValueChange={(value) => {
+                setSelectedSessionId(value);
+                void fetchSessionDetails(value);
+              }}
+            >
+              <SelectTrigger className="h-11 rounded-2xl border-[#003223]/10 bg-white">
+                <SelectValue placeholder="Selecione uma sessão" />
+              </SelectTrigger>
+              <SelectContent>
+                {cashSessions.map((session) => (
+                  <SelectItem key={session.id} value={session.id}>
+                    {new Date(session.opened_at).toLocaleString('pt-BR')} - {session.status === 'open' ? 'ABERTO' : 'FECHADO'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center justify-between rounded-[22px] border border-[#003223]/8 bg-[#F8FAF8] px-4 py-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedSession?.status === 'open' ? 'Sessão aberta' : 'Sessão fechada'}
+                </div>
+              </div>
+              <Badge variant={selectedSession?.status === 'open' ? 'default' : 'outline'}>
+                {selectedSession?.status === 'open' ? 'ABERTO' : 'FECHADO'}
+              </Badge>
+            </div>
+          </div>
+        </section>
+
+        <Tabs value={mobileFinanceTab} onValueChange={(value) => setMobileFinanceTab(value as typeof mobileFinanceTab)} className="w-full">
+          <TabsList className="grid h-auto grid-cols-3 rounded-[24px] border border-[#FF6400]/10 bg-white p-1">
+            <TabsTrigger value="caixa" className="rounded-2xl text-xs">Caixa</TabsTrigger>
+            <TabsTrigger value="movimentos" className="rounded-2xl text-xs">Movimentos</TabsTrigger>
+            <TabsTrigger value="relatorios" className="rounded-2xl text-xs">DRE</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="caixa" className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vendas</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(sessionTotal)}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#003223]/10 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Abertura</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(Number(selectedSession?.initial_amount || 0))}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">PIX</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(sessionPix)}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#FF6400]/18 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cartão</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(sessionCard)}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#7C3AED]/18 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Dinheiro</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(sessionCash)}</div>
+              </div>
+              <div className="rounded-[24px] border border-[#003223]/10 bg-white/95 p-4 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Saldo</div>
+                <div className="mt-2 text-xl font-bold text-slate-900">{formatCurrency(sessionTotal + sessionIn - sessionOut)}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-[22px] border border-[#003223]/10 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Abertura</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{formatCurrency(Number(selectedSession?.initial_amount || 0))}</div>
+              </div>
+              <div className="rounded-[22px] border border-[#8CC850]/20 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Suprimentos</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{formatCurrency(sessionIn)}</div>
+              </div>
+              <div className="rounded-[22px] border border-[#FF6400]/18 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sangrias</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{formatCurrency(sessionOut)}</div>
+              </div>
+            </div>
+
+            <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">Últimas vendas da sessão</div>
+                <div className="text-xs text-slate-500">{sessionSales.length} venda(s)</div>
+              </div>
+              <div className="mt-3 space-y-3">
+                {loadingSessionDetails ? (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">Carregando sessão...</div>
+                ) : sessionSales.length === 0 ? (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">Sem vendas nessa sessão.</div>
+                ) : (
+                  sessionSales.slice(0, 5).map((order) => (
+                    <div key={order.id} className="rounded-[22px] border border-[#003223]/8 bg-[#F8FAF8] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">Pedido {order.order_number ? `#${order.order_number}` : order.id?.slice(0, 8)}</div>
+                          <div className="mt-1 text-xs text-slate-500">{formatDate(new Date(order.created_at))} às {formatTime(new Date(order.created_at))}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-slate-900">{formatCurrency(Number(order.total || 0))}</div>
+                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{getPaymentMethodLabel(order.payment_method)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">Movimentações do caixa</div>
+                <div className="text-xs text-slate-500">{sessionMovements.length} registro(s)</div>
+              </div>
+              <div className="mt-3 space-y-3">
+                {loadingSessionDetails ? (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">Carregando movimentações...</div>
+                ) : sessionMovements.length === 0 ? (
+                  <div className="rounded-[22px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">Sem movimentações nesta sessão.</div>
+                ) : (
+                  sessionMovements.slice(0, 6).map((movement) => (
+                    <div key={movement.id} className="rounded-[22px] border border-[#003223]/8 bg-[#F8FAF8] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{movement.type === 'in' ? 'Suprimento' : 'Sangria'}</div>
+                          <div className="mt-1 text-xs text-slate-500">{movement.description || 'Sem descrição'}</div>
+                          <div className="mt-1 text-xs text-slate-500">{formatDate(new Date(movement.created_at))} às {formatTime(new Date(movement.created_at))}</div>
+                        </div>
+                        <div className={`text-sm font-bold ${movement.type === 'in' ? 'text-[#245B2B]' : 'text-[#C45E00]'}`}>
+                          {formatCurrency(Number(movement.amount || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="movimentos" className="mt-4 space-y-4">
+            <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+              <div className="space-y-3">
+                <Input
+                  placeholder="Buscar movimentações, categorias ou pedidos..."
+                  value={filters.searchTerm}
+                  onChange={(event) => handleFilterChange('searchTerm', event.target.value)}
+                  className="h-11 rounded-2xl border-[#003223]/10 bg-white"
+                />
+                <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                  {mobileTypeFilters.map((filter) => (
+                    <button
+                      key={filter.value || 'all'}
+                      type="button"
+                      onClick={() => handleFilterChange('type', filter.value)}
+                      className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                        (filters.type || 'all') === filter.value
+                          ? 'border-[#003223] bg-[#003223] text-white'
+                          : 'border-[#DCE6DF] bg-white text-[#003223]'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                  {mobilePaymentFilters.map((filter) => (
+                    <button
+                      key={filter.value || 'all'}
+                      type="button"
+                      onClick={() => handleFilterChange('paymentMethod', filter.value)}
+                      className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                        (filters.paymentMethod || 'all') === filter.value
+                          ? 'border-[#003223] bg-[#003223] text-white'
+                          : 'border-[#DCE6DF] bg-white text-[#003223]'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 flex-1 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]"
+                    onClick={resetFilters}
+                  >
+                    Limpar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 flex-1 rounded-2xl bg-[#003223] text-white hover:bg-[#0a4a34]"
+                    onClick={applyFilters}
+                  >
+                    Aplicar
+                  </Button>
+                </div>
+              </div>
+            </section>
+
+            <div className="space-y-3">
+              {isLoading ? (
+                <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/90 px-4 py-10 text-center text-sm text-slate-500">Carregando transações...</div>
+              ) : filteredTransactions.length === 0 ? (
+                <div className="rounded-[28px] border border-dashed border-slate-200 bg-white/90 px-4 py-10 text-center text-sm text-slate-500">Nenhuma transação encontrada.</div>
+              ) : (
+                filteredTransactions.slice(0, 12).map((transaction) => (
+                  <div key={transaction.id} className="rounded-[24px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{transaction.description}</div>
+                        <div className="mt-1 text-xs text-slate-500">{transaction.category}</div>
+                        <div className="mt-2 text-xs text-slate-500">{formatDate(transaction.date)} às {formatTime(transaction.date)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-bold ${transaction.type === 'entrada' ? 'text-[#245B2B]' : 'text-[#C45E00]'}`}>
+                          {formatCurrency(transaction.amount)}
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          {getPaymentMethodLabel(transaction.paymentMethod)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="relatorios" className="mt-4 space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-[22px] border border-[#8CC850]/20 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Receita</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{formatCurrency(dre.receitaLiquida)}</div>
+              </div>
+              <div className="rounded-[22px] border border-[#FF6400]/18 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Despesas</div>
+                <div className="mt-2 text-base font-bold text-slate-900">{formatCurrency(dre.despesas)}</div>
+              </div>
+              <div className="rounded-[22px] border border-[#003223]/10 bg-white/95 p-3 shadow-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Lucro</div>
+                <div className={`mt-2 text-base font-bold ${dre.lucroOperacional >= 0 ? 'text-[#245B2B]' : 'text-[#C45E00]'}`}>
+                  {formatCurrency(dre.lucroOperacional)}
+                </div>
+              </div>
+            </div>
+
+            <section className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">DRE simplificada</div>
+                  <div className="text-xs text-slate-500">
+                    {new Intl.DateTimeFormat('pt-BR').format(reportStart)} até {new Intl.DateTimeFormat('pt-BR').format(reportEnd)}
+                  </div>
+                </div>
+                <div className="rounded-full bg-[#F5FBED] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#245B2B]">
+                  {Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%
+                </div>
+              </div>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Receita bruta</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(dre.receitaBruta)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Descontos</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(dre.descontos)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Receita líquida</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(dre.receitaLiquida)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Taxa de entrega</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(dre.taxaEntrega)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Despesas</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(dre.despesas)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                  <span className="font-semibold text-slate-900">Lucro operacional</span>
+                  <span className={`font-bold ${dre.lucroOperacional >= 0 ? 'text-[#245B2B]' : 'text-[#C45E00]'}`}>
+                    {formatCurrency(dre.lucroOperacional)}
+                  </span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="mt-4 h-11 w-full rounded-2xl bg-[#003223] text-white hover:bg-[#0a4a34]"
+                onClick={generateCSV}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar relatório
+              </Button>
+            </section>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <div className="hidden">
         <Card className="rounded-[28px] border border-white/70 border-t-4 border-t-boracume-green bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2 text-slate-900 dark:text-white">
@@ -1007,7 +1456,7 @@ const Financeiro = () => {
         </Card>
       </div>
       
-      <div className="grid grid-cols-1 gap-4 md:hidden md:grid-cols-3">
+      <div className="hidden">
         <Card className="rounded-[26px] border border-white/70 bg-white/90 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.2)] dark:border-white/10 dark:bg-[#101a16]/95">
           <CardHeader className="pb-2">
             <CardTitle className="text-md flex items-center gap-2">
@@ -1054,6 +1503,7 @@ const Financeiro = () => {
         </Card>
       </div>
       
+      <div className="hidden md:block">
       <Tabs defaultValue="fluxo-caixa" className="w-full">
         <TabsList className="bg-muted/60 dark:bg-white/5">
           <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
@@ -1528,6 +1978,7 @@ const Financeiro = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 };

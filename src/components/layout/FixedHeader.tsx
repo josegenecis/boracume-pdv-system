@@ -1,15 +1,22 @@
-
-import React from 'react';
-
-import { User, Menu, Wallet, Settings, Package, Layers, CookingPot, BarChart3, ClipboardList, MessageCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  User,
+  Menu,
+  Wallet,
+  Settings,
+  Package,
+  Layers,
+  CookingPot,
+  BarChart3,
+  ClipboardList,
+  MessageCircle,
+  CreditCard,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useState, useEffect } from 'react';
-
-import { useNavigate } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Logo from '@/components/Logo';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import {
@@ -18,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
 const FixedHeader = () => {
@@ -26,9 +33,6 @@ const FixedHeader = () => {
   const { isMobile, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Custom hook ou lógica para pegar o estado do caixa globalmente (se não existir um contexto, podemos usar fetch direto, mas o ideal é mover a lógica do PDV para um context)
-  // Como não sabemos se existe um CashRegisterContext, vamos usar um estado local com fetch inicial por enquanto para o header.
   const [cashStatus, setCashStatus] = useState<'open' | 'closed'>('closed');
   const [whatsAppConnected, setWhatsAppConnected] = useState(false);
 
@@ -84,7 +88,7 @@ const FixedHeader = () => {
       }
     };
 
-    loadWhatsAppStatus();
+    void loadWhatsAppStatus();
     const timer = window.setInterval(loadWhatsAppStatus, 30000);
     return () => {
       active = false;
@@ -100,19 +104,29 @@ const FixedHeader = () => {
   const mobileTitle = (() => {
     if (location.pathname.startsWith('/dashboard')) return 'Início';
     if (location.pathname.startsWith('/pedidos')) return 'Pedidos';
+    if (location.pathname.startsWith('/pdv')) return 'PDV';
+    if (location.pathname.startsWith('/caixa') || location.pathname.startsWith('/financeiro')) return 'Caixa';
+    if (location.pathname.startsWith('/cozinha')) return 'Cozinha';
     if (location.pathname.startsWith('/produtos')) return 'Cardápio';
     if (location.pathname.startsWith('/marketing')) return 'Clientes';
     if (location.pathname.startsWith('/configuracoes')) return 'Mais';
     return 'BoraCumê';
   })();
 
+  const mobileQuickActions = [
+    { key: 'orders', label: 'Pedidos', icon: ClipboardList, to: '/pedidos', active: location.pathname.startsWith('/pedidos') },
+    { key: 'pdv', label: 'PDV', icon: CreditCard, to: '/pdv', active: location.pathname.startsWith('/pdv') },
+    { key: 'cash', label: cashStatus === 'open' ? 'Caixa aberto' : 'Abrir caixa', icon: Wallet, to: '/caixa', active: location.pathname.startsWith('/caixa') || location.pathname.startsWith('/financeiro') },
+    { key: 'menu', label: 'Cardápio', icon: Package, to: '/produtos', active: location.pathname.startsWith('/produtos') },
+  ];
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#E7ECE8] bg-white shadow-[0_12px_30px_-24px_rgba(0,50,35,0.16)]">
-      <div className={`flex items-center justify-between ${isMobile ? 'px-4 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
+      <div className={`flex items-center justify-between ${isMobile ? 'mobile-safe-x px-3 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={toggleSidebar}
             className="h-9 w-9 rounded-xl border border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
           >
@@ -135,20 +149,29 @@ const FixedHeader = () => {
           <Button
             variant="outline"
             size="sm"
-            className={`hidden h-9 rounded-xl border px-4 font-semibold shadow-sm hover:bg-[#F5F8F6] md:inline-flex ${
+            className={`h-9 rounded-xl border font-semibold shadow-sm hover:bg-[#F5F8F6] ${
               cashStatus === 'open'
                 ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]'
                 : 'border-[#DCE6DF] bg-white text-[#003223]'
-            }`}
+            } ${isMobile ? 'w-9 p-0 md:hidden' : 'hidden px-4 md:inline-flex'}`}
             onClick={() => navigate('/caixa')}
           >
-            <Wallet size={18} className="mr-2" />
-            Caixa
+            <Wallet size={18} className={isMobile ? '' : 'mr-2'} />
+            {!isMobile && 'Caixa'}
           </Button>
-          <Button variant="outline" size="sm" className="hidden h-9 rounded-xl border-[#DCE6DF] bg-white px-4 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex" onClick={() => navigate('/relatorios')}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden h-9 rounded-xl border-[#DCE6DF] bg-white px-4 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex"
+            onClick={() => navigate('/relatorios')}
+          >
             Abrir relatório diário
           </Button>
-          <Button size="sm" className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex" onClick={() => navigate('/pdv')}>
+          <Button
+            size="sm"
+            className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex"
+            onClick={() => navigate('/pdv')}
+          >
             + Novo pedido
           </Button>
           <DropdownMenu>
@@ -190,16 +213,21 @@ const FixedHeader = () => {
                 <Settings className="mr-2 h-4 w-4" />
                 Configurações
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/configuracoes?tab=whatsapp')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut}>
+                <User className="mr-2 h-4 w-4" />
+                Sair do sistema
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'px-3' : 'px-4'}`} onClick={() => navigate('/pedidos')}>
-            <ClipboardList size={18} className={isMobile ? '' : 'mr-2'} />
-            {!isMobile && 'Pedidos'}
-          </Button>
           <Button
             variant="outline"
             size="sm"
-            className="relative h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
+            className="relative hidden h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex"
             onClick={() => navigate('/configuracoes?tab=whatsapp')}
           >
             <MessageCircle size={18} />
@@ -207,6 +235,42 @@ const FixedHeader = () => {
           </Button>
         </div>
       </div>
+      {isMobile && (
+        <div className="mobile-safe-x border-t border-[#E7ECE8] bg-[#F8FBF8]/95 px-3 pb-2 pt-2 backdrop-blur">
+          <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+            {mobileQuickActions.map((action) => {
+              const Icon = action.icon;
+
+              return (
+                <button
+                  key={action.key}
+                  type="button"
+                  onClick={() => navigate(action.to)}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
+                    action.active
+                      ? 'border-[#003223] bg-[#003223] text-white'
+                      : action.key === 'cash' && cashStatus === 'open'
+                        ? 'border-[#8CC850]/50 bg-[#F4FAEC] text-[#245B2B]'
+                        : 'border-[#DCE6DF] bg-white text-[#003223]'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{action.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => navigate('/configuracoes?tab=whatsapp')}
+              className="relative inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#DCE6DF] bg-white px-3 py-2 text-xs font-semibold text-[#003223] shadow-sm"
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>WhatsApp</span>
+              <span className={`h-2.5 w-2.5 rounded-full ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} />
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

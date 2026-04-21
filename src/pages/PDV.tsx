@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -30,6 +30,8 @@ import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
+import { useSidebar } from '@/contexts/SidebarContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Product {
   id: string;
@@ -126,9 +128,12 @@ const PDV = () => {
   const [tefOpen, setTefOpen] = useState(false);
   const [tefData, setTefData] = useState<{ nsu: string; auth: string; brand: string; acquirer: string; installments: string } | null>(null);
   const [cardProcessingMode, setCardProcessingMode] = useState<'maquininha' | 'tef'>('maquininha');
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { isMobile } = useSidebar();
   const { settings: tefSettings } = useTefSettings();
+  const navigate = useNavigate();
 
   // Refs for animation
   const cartContainerRef = useRef<HTMLDivElement>(null);
@@ -826,6 +831,7 @@ const PDV = () => {
       });
 
       setCart([]);
+      setMobileCartOpen(false);
       setSelectedTable('');
       fetchTables();
     } catch (error: any) {
@@ -1113,6 +1119,7 @@ const PDV = () => {
         });
         setNfceModalOpen(true);
         setCart([]);
+        setMobileCartOpen(false);
         setCustomerName('');
         setCustomerPhone('');
         setCustomerAddress('');
@@ -1174,6 +1181,13 @@ const PDV = () => {
   }
 
   const operatorSelected = !!getOperatorSession()?.id;
+  const cartItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const mobileOrderTypeOptions: Array<{ value: 'counter' | 'delivery' | 'pickup' | 'dine_in'; label: string }> = [
+    { value: 'counter', label: 'Balcão' },
+    { value: 'delivery', label: 'Entrega' },
+    { value: 'pickup', label: 'Retirada' },
+    { value: 'dine_in', label: 'Mesa' },
+  ];
 
   return (
     <div className="-mx-4 -mt-4 -mb-4 flex h-[calc(100%+1rem)] flex-col overflow-hidden bg-white sm:-mx-6 sm:-mt-6 sm:-mb-6 sm:h-[calc(100%+1.5rem)]">
@@ -1204,7 +1218,7 @@ const PDV = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
+                    className="hidden h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex"
                     disabled={!cashSession?.id}
                     onClick={() => { setCashMoveType('in'); setCashMoveOpen(true); }}
                   >
@@ -1213,7 +1227,7 @@ const PDV = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1]"
+                    className="hidden h-9 rounded-xl whitespace-nowrap border-[#FF6400]/15 bg-white/85 px-4 font-semibold text-[#003223] hover:bg-[#F5EBE1] md:inline-flex"
                     disabled={!cashSession?.id}
                     onClick={() => { setCashMoveType('out'); setCashMoveOpen(true); }}
                   >
@@ -1221,9 +1235,44 @@ const PDV = () => {
                   </Button>
                 </div>
               </div>
+              <div className="space-y-2 lg:hidden">
+                <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                  {mobileOrderTypeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setOrderType(option.value)}
+                      className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                        orderType === option.value
+                          ? 'border-[#003223] bg-[#003223] text-white'
+                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223]'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => (cashSession?.id ? navigate('/caixa') : openCashDialog('open'))}
+                    className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-semibold shadow-sm ${
+                      cashSession?.id
+                        ? 'border-[#8CC850]/45 bg-[#F4FAEC] text-[#245B2B]'
+                        : 'border-[#FF6400]/18 bg-white text-[#003223]'
+                    }`}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    <span>{cashSession?.id ? 'Caixa aberto' : 'Abrir caixa'}</span>
+                  </button>
+                  <div className={`rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm ${operatorSelected ? 'border-[#003223]/12 bg-white text-[#003223]' : 'border-red-200 bg-red-50 text-red-600'}`}>
+                    {operatorSelected ? 'Operador selecionado' : 'Selecione o operador'}
+                  </div>
+                </div>
+              </div>
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
-              <div className="flex-1 pb-24 lg:pb-0">
+              <div className={`flex-1 ${isMobile ? 'pb-40' : 'pb-24 lg:pb-0'}`}>
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500">
@@ -1231,7 +1280,7 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(130px,1fr))]">
                     {filteredProducts.map((product) => (
                       (() => {
                         const track = !!(product as any)?.track_stock;
@@ -1612,30 +1661,59 @@ const PDV = () => {
             </div>
           </div>
           
-          {/* Mobile Cart Floating Button */}
-          <Sheet>
+          {/* Mobile Cart Summary */}
+          <Sheet open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
             <SheetTrigger asChild>
-              <div 
+              <button
+                type="button"
                 id="mobile-cart-btn" 
                 ref={mobileCartBtnRef}
-                className="lg:hidden fixed bottom-4 right-4 z-50"
+                className="mobile-safe-x lg:hidden fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+5.8rem)] z-40 flex w-full items-center justify-between rounded-[26px] border border-[#003223]/12 bg-[#003223] px-4 py-3 text-left text-white shadow-[0_20px_40px_-24px_rgba(0,50,35,0.55)]"
               >
-                <div className="relative">
-                    <Button className="h-14 w-14 rounded-full shadow-xl bg-primary text-white p-0 flex items-center justify-center">
-                      <Calculator size={24} />
-                    </Button>
-                    {cart.length > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white">
-                        {cart.reduce((acc, item) => acc + item.quantity, 0)}
-                      </span>
-                    )}
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+                    <Calculator className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">
+                      {cartItemsCount > 0 ? `${cartItemsCount} item(ns) no pedido` : 'Abrir pedido'}
+                    </div>
+                    <div className="truncate text-xs text-white/75">
+                      {mobileOrderTypeOptions.find((option) => option.value === orderType)?.label || 'Balcão'} • {operatorSelected ? 'operador ok' : 'selecione operador'}
+                    </div>
+                  </div>
                 </div>
-              </div>
+                <div className="text-right">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">Total</div>
+                  <div className="text-base font-bold">{formatCurrency(getFinalTotal())}</div>
+                </div>
+              </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[90vh] flex flex-col p-0">
+            <SheetContent side="bottom" className="h-[88vh] flex flex-col p-0">
                <SheetHeader className="p-4 border-b">
-                 <SheetTitle>Pedido</SheetTitle>
+                 <SheetTitle className="flex items-center justify-between gap-3">
+                   <span>Pedido</span>
+                   <span className="text-sm font-normal text-muted-foreground">{cartItemsCount} item(ns)</span>
+                 </SheetTitle>
                </SheetHeader>
+               <div className="border-b bg-[#F8FBF8] px-4 py-3">
+                  <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                    {mobileOrderTypeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setOrderType(option.value)}
+                        className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                          orderType === option.value
+                            ? 'border-[#003223] bg-[#003223] text-white'
+                            : 'border-[#DCE6DF] bg-white text-[#003223]'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+               </div>
                
                <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {cart.length === 0 ? (

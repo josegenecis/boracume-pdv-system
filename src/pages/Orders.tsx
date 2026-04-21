@@ -59,6 +59,7 @@ const Orders = () => {
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
   const [ordersView, setOrdersView] = useState<'list' | 'kanban'>('list');
+  const [mobileStatusTab, setMobileStatusTab] = useState<'novos' | 'preparo' | 'entrega' | 'finalizados'>('novos');
   const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [deliveryDialogTab, setDeliveryDialogTab] = useState<'in_delivery' | 'delivered'>('in_delivery');
   const [bulkFinalizing, setBulkFinalizing] = useState(false);
@@ -788,7 +789,7 @@ const Orders = () => {
     return (
       <Card key={order.id} className="overflow-hidden rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.24)]">
         <CardContent className="p-4">
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <button type="button" className="w-full text-left" onClick={() => openOrderDetails(order)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -810,7 +811,7 @@ const Orders = () => {
               </div>
             </button>
 
-            <div className="grid grid-cols-2 gap-3 rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]/75 p-3">
+            <div className="grid grid-cols-3 gap-2 rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]/75 p-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Itens</div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">{order.items.length} item(s)</div>
@@ -818,6 +819,10 @@ const Orders = () => {
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Pagamento</div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">{order.payment_method.toUpperCase()}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tipo</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{getOrderTypeLabel(order.order_type)}</div>
               </div>
             </div>
 
@@ -827,30 +832,55 @@ const Orders = () => {
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#FF6400]" />
                   <span>{order.customer_address}</span>
                 </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-9 flex-1 rounded-2xl border-[#003223]/10 bg-white text-xs text-[#003223] hover:bg-[#F5EBE1]"
+                    onClick={() => copyLocation(order)}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copiar
+                  </Button>
+                  {order.google_maps_link && (
+                    <Button
+                      variant="outline"
+                      className="h-9 flex-1 rounded-2xl border-[#003223]/10 bg-white text-xs text-[#003223] hover:bg-[#F5EBE1]"
+                      onClick={() => window.open(order.google_maps_link, '_blank')}
+                    >
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                      Maps
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
+            {primaryAction && (
+              <Button
+                className={`h-12 rounded-2xl text-sm font-semibold ${primaryAction.className}`}
+                onClick={() => updateOrderStatus(order.id, primaryAction.status)}
+                disabled={updatingOrderIds.has(order.id)}
+              >
+                {updatingOrderIds.has(order.id) ? 'Atualizando...' : primaryAction.label}
+              </Button>
+            )}
+
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => openOrderDetails(order)}>
+              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => openOrderDetails(order)}>
                 <Eye className="mr-2 h-4 w-4" />
                 Ver
               </Button>
-              <Button variant="outline" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleWhatsAppShare(order)}>
+              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleWhatsAppShare(order)}>
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Whats
               </Button>
-              <Button variant="outline" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => PrinterService.printOrder(order)}>
+              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => PrinterService.printOrder(order)}>
                 <Printer className="mr-2 h-4 w-4" />
                 Imprimir
               </Button>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
-              {primaryAction && (
-                <Button className={`h-12 rounded-2xl text-sm font-semibold ${primaryAction.className}`} onClick={() => updateOrderStatus(order.id, primaryAction.status)} disabled={updatingOrderIds.has(order.id)}>
-                  {updatingOrderIds.has(order.id) ? 'Atualizando...' : primaryAction.label}
-                </Button>
-              )}
               {order.status === 'pending' && (
                 <Button variant="outline" className="h-11 rounded-2xl border-red-200 bg-white text-red-500 hover:bg-red-50" onClick={() => requestCancelOrder(order.id)}>
                   Cancelar pedido
@@ -869,6 +899,20 @@ const Orders = () => {
   const inDeliveryOrders = filteredOrders.filter(order => order.status === 'in_delivery');
   const deliveredOrders = filteredOrders.filter(order => order.status === 'delivered' || order.status === 'completed');
   const cancelledOrders = filteredOrders.filter(order => order.status === 'cancelled');
+  const mobileTypeFilters = [
+    { value: 'all', label: 'Todos' },
+    { value: 'delivery', label: 'Entrega' },
+    { value: 'pickup', label: 'Retirada' },
+    { value: 'dine_in', label: 'Salão' },
+  ];
+  const mobileBulkActionConfig =
+    mobileStatusTab === 'novos'
+      ? { action: 'accept_all' as const, orderIds: pendingOrders.map((order) => order.id), label: 'Aceitar fila' }
+      : mobileStatusTab === 'preparo'
+        ? { action: 'ready_all' as const, orderIds: activeOrders.map((order) => order.id), label: 'Marcar prontos' }
+        : mobileStatusTab === 'entrega'
+          ? { action: 'deliver_all' as const, orderIds: completedOrders.map((order) => order.id), label: 'Enviar para entrega' }
+          : null;
 
   if (loading) {
     return (
@@ -1047,7 +1091,7 @@ const Orders = () => {
               </Button>
             </div>
 
-            <div className="flex flex-col gap-4 md:hidden">
+            <div className="flex flex-col gap-3 md:hidden">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
@@ -1058,32 +1102,22 @@ const Orders = () => {
                 />
               </div>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Status</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="preparing">Preparando</SelectItem>
-                  <SelectItem value="ready">Pronto</SelectItem>
-                  <SelectItem value="in_delivery">Saiu para Entrega</SelectItem>
-                  <SelectItem value="delivered">Finalizado</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Tipos</SelectItem>
-                  <SelectItem value="delivery">Entrega</SelectItem>
-                  <SelectItem value="pickup">Retirada</SelectItem>
-                  <SelectItem value="dine_in">No Local</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                {mobileTypeFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setTypeFilter(filter.value)}
+                    className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                      typeFilter === filter.value
+                        ? 'border-[#003223] bg-[#003223] text-white'
+                        : 'border-[#DCE6DF] bg-white text-[#003223]'
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1100,7 +1134,7 @@ const Orders = () => {
             </div>
             <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Entrega</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{inDeliveryOrders.length}</div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">{completedOrders.length}</div>
             </div>
           </div>
 
@@ -1113,13 +1147,23 @@ const Orders = () => {
             </Button>
           </div>
 
-          <Tabs defaultValue="novos" className="w-full">
+          <Tabs value={mobileStatusTab} onValueChange={(value) => setMobileStatusTab(value as typeof mobileStatusTab)} className="w-full">
             <TabsList className="grid h-auto grid-cols-4 rounded-[24px] border border-[#FF6400]/10 bg-white p-1">
               <TabsTrigger value="novos" className="rounded-2xl text-xs">Novos</TabsTrigger>
               <TabsTrigger value="preparo" className="rounded-2xl text-xs">Preparo</TabsTrigger>
               <TabsTrigger value="entrega" className="rounded-2xl text-xs">Entrega</TabsTrigger>
               <TabsTrigger value="finalizados" className="rounded-2xl text-xs">Finalizados</TabsTrigger>
             </TabsList>
+
+            {mobileBulkActionConfig && mobileBulkActionConfig.orderIds.length > 0 && (
+              <div className="mt-3">
+                <OrdersBulkActionButton
+                  orderIds={mobileBulkActionConfig.orderIds}
+                  action={mobileBulkActionConfig.action}
+                  onBulkAction={handleBulkAction}
+                />
+              </div>
+            )}
 
             <TabsContent value="novos" className="mt-4 space-y-3">
               {pendingOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido novo.</CardContent></Card> : pendingOrders.map(renderMobileOrderCard)}
@@ -1128,7 +1172,7 @@ const Orders = () => {
               {activeOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido em preparo.</CardContent></Card> : activeOrders.map(renderMobileOrderCard)}
             </TabsContent>
             <TabsContent value="entrega" className="mt-4 space-y-3">
-              {inDeliveryOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido em entrega.</CardContent></Card> : inDeliveryOrders.map(renderMobileOrderCard)}
+              {completedOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido aguardando entrega.</CardContent></Card> : completedOrders.map(renderMobileOrderCard)}
             </TabsContent>
             <TabsContent value="finalizados" className="mt-4 space-y-3">
               {deliveredOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido finalizado.</CardContent></Card> : deliveredOrders.map(renderMobileOrderCard)}
