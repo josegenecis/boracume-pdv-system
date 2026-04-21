@@ -186,6 +186,17 @@ const deriveTableStatus = ({
   return 'occupied'
 }
 
+const resolveTableRecordStatus = ({
+  hasSession,
+  dueAmount,
+}: {
+  hasSession: boolean
+  dueAmount: number
+}) => {
+  if (!hasSession || isEffectivelyZero(dueAmount)) return 'available'
+  return 'occupied'
+}
+
 async function requireOpenCashSession(supabase: any, restaurantId: string) {
   const { data, error } = await supabase
     .from('cash_register_sessions')
@@ -684,18 +695,19 @@ async function refreshSessionStatus(supabase: any, sessionId: string) {
   }
 
   let nextSessionStatus = 'open'
-  let nextTableStatus = 'occupied'
 
   if (snapshot.accountRows.length === 0 || (metrics.total > 0 && isEffectivelyZero(metrics.dueAmount))) {
     nextSessionStatus = 'closed'
-    nextTableStatus = 'available'
   } else if (String(snapshot.sessionRow.status) === 'payment_pending') {
     nextSessionStatus = 'payment_pending'
-    nextTableStatus = 'payment_pending'
   } else if (metrics.kitchenStatus === 'ready' || metrics.kitchenStatus === 'preparing' || metrics.kitchenStatus === 'sent') {
     nextSessionStatus = 'serving'
-    nextTableStatus = 'serving'
   }
+
+  const nextTableStatus = resolveTableRecordStatus({
+    hasSession: nextSessionStatus !== 'closed',
+    dueAmount: metrics.dueAmount,
+  })
 
   const { error: updateSessionError } = await supabase
     .from('table_sessions')
@@ -1159,7 +1171,7 @@ Deno.serve(async (req: Request) => {
 
       const { error: tableError } = await supabase
         .from('tables')
-        .update({ status: 'payment_pending' })
+        .update({ status: 'occupied' })
         .eq('id', snapshot.sessionRow.table_id)
 
       if (tableError) throw tableError
@@ -1232,7 +1244,7 @@ Deno.serve(async (req: Request) => {
 
       const { error: nextTableError } = await supabase
         .from('tables')
-        .update({ status: snapshot.sessionRow.status === 'payment_pending' ? 'payment_pending' : 'occupied' })
+        .update({ status: 'occupied' })
         .eq('id', targetTableId)
 
       if (nextTableError) throw nextTableError
