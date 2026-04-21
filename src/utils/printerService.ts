@@ -90,6 +90,11 @@ function getKitchenCustomerLabel(order: any) {
   return 'Balcão';
 }
 
+function shouldPrintTicketCode(order: any) {
+  const orderType = String(order?.order_type || '').trim().toLowerCase();
+  return orderType === 'dine_in' || orderType === 'counter' || (!orderType && !order?.delivery_zone_id);
+}
+
 function normalizePrintConfig(settings: any): NormalizedPrintConfig {
   const paperWidth = String(settings?.paper_width || '80mm').trim() === '58mm' ? '58mm' : '80mm';
   const fontSizeRaw = String(settings?.font_size || 'normal').trim();
@@ -544,7 +549,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           <div class="center">${new Date(order.created_at).toLocaleString('pt-BR')}</div>
           <div class="divider"></div>
           
-          <div class="center bold ticket-code">SENHA: ${order.order_number?.slice(-4) || '----'}</div>
+          ${shouldPrintTicketCode(order) ? `<div class="center bold ticket-code">SENHA: ${order.order_number?.slice(-4) || '----'}</div>` : ''}
           <div class="center">Pedido #${order.order_number}</div>
           
           <div class="divider"></div>
@@ -681,7 +686,7 @@ function buildKitchenTicketHtml(order: any, config: any) {
           <div class="center muted">${new Date(order.created_at || Date.now()).toLocaleString('pt-BR')}</div>
           <div class="divider"></div>
 
-          <div class="center bold ticket-code">SENHA: ${ticketCode}</div>
+          ${shouldPrintTicketCode(order) ? `<div class="center bold ticket-code">SENHA: ${ticketCode}</div>` : ''}
           <div class="center">Pedido #${orderNumber}</div>
           <div class="center">${orderTypeLabel}</div>
 
@@ -756,7 +761,7 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
   line();
 
   bold(true);
-  commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
+  if (shouldPrintTicketCode(order)) commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
   bold(false);
   commands += text(`Pedido #${order.order_number || '----'}`);
   commands += text(`Tipo: ${getOrderTypeLabel(order)}`);
@@ -1204,7 +1209,7 @@ export const PrinterService = {
 
     // Senha/Pedido
     bold(true);
-    commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
+    if (shouldPrintTicketCode(order)) commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
     bold(false);
     commands += text(`Pedido #${order.order_number}`);
     line();

@@ -189,6 +189,14 @@ export type WaiterPaymentInput = {
   amount: number;
 };
 
+export type WaiterPixCheckout = {
+  correlationID: string;
+  brCode: string;
+  qrCodeImage?: string;
+  paymentLinkUrl?: string;
+  paymentId?: string;
+};
+
 type CacheEnvelope<T> = {
   cachedAt: number;
   data: T;
@@ -842,6 +850,69 @@ export async function recordWaiterPayments(sessionId: string, payments: WaiterPa
 
   storeSessionSnapshot(sessionId, response.session);
   return response;
+}
+
+export async function startWaiterPixCheckout(input: {
+  sessionId: string;
+  accountId: string;
+  amount: number;
+  accountName: string;
+  tableLabel: string;
+}) {
+  const session = requireSession();
+  const amount = Number(input.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Informe um valor valido para gerar o PIX.');
+  }
+
+  const response = await invokeFunction<{
+    ok?: boolean;
+    error?: string;
+    message?: string;
+    correlationID?: string;
+    brCode?: string;
+    qrCodeImage?: string;
+    paymentLinkUrl?: string;
+    paymentId?: string;
+  }>('pix-start-checkout', {
+    restaurantUserId: session.profile.restaurantId,
+    preferredMethod: 'pix',
+    orderPayload: {
+      source: 'WAITER_WEB_PIX',
+      payment_method: 'pix',
+      total: amount,
+      delivery_fee: 0,
+      order_type: 'dine_in',
+      customer_name: input.accountName || input.tableLabel || 'Comanda',
+      waiter_session_id: input.sessionId,
+      waiter_account_id: input.accountId,
+      waiter_id: session.profile.id,
+      variations: {
+        source: 'WAITER_WEB_PIX',
+        waiter: {
+          session_id: input.sessionId,
+          account_id: input.accountId,
+          account_name: input.accountName,
+          table_label: input.tableLabel,
+          waiter_id: session.profile.id,
+        },
+      },
+    },
+  });
+
+  if (!response?.ok || !response?.correlationID || !response?.brCode) {
+    throw new Error(
+      getErrorMessage(response) || 'Nao foi possivel gerar o QR Code PIX para esta comanda.',
+    );
+  }
+
+  return {
+    correlationID: String(response.correlationID),
+    brCode: String(response.brCode),
+    qrCodeImage: response.qrCodeImage ? String(response.qrCodeImage) : undefined,
+    paymentLinkUrl: response.paymentLinkUrl ? String(response.paymentLinkUrl) : undefined,
+    paymentId: response.paymentId ? String(response.paymentId) : undefined,
+  } as WaiterPixCheckout;
 }
 
 export function formatCpf(value: string) {

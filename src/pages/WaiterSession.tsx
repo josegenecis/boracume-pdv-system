@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { useToast } from '@/hooks/use-toast';
 import {
   addWaiterItem,
@@ -34,11 +35,13 @@ import {
   requestWaiterCheck,
   sendAllWaiterSessionItems,
   sendWaiterAccountItems,
+  startWaiterPixCheckout,
   TableAccount,
   TableSession,
   transferWaiterAccount,
   transferWaiterTable,
   updateWaiterDraftItem,
+  WaiterPixCheckout,
   WaiterPaymentInput,
 } from '@/services/waiterWebClient';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -68,6 +71,11 @@ type PaymentLine = {
   accountId: string;
   method: PaymentMethod;
   amount: string;
+};
+
+type WaiterPixCheckoutState = WaiterPixCheckout & {
+  accountId: string;
+  amount: number;
 };
 
 const createPaymentLine = (accountId: string, amount: number, method: PaymentMethod = 'pix'): PaymentLine => ({
@@ -104,6 +112,7 @@ const WaiterSessionPage = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
+  const [pixCheckout, setPixCheckout] = useState<WaiterPixCheckoutState | null>(null);
   const [moveItemId, setMoveItemId] = useState('');
   const [moveTargetAccountId, setMoveTargetAccountId] = useState('');
   const [moveQuantity, setMoveQuantity] = useState('1');
@@ -330,6 +339,15 @@ const WaiterSessionPage = () => {
     setSelectedCategoryId('all');
   };
 
+  const returnToProductBrowse = () => {
+    setEditingItemId('');
+    setSelectedProductId('');
+    setSelectedOptions({});
+    setQuantity('1');
+    setItemNotes('');
+    setProductDialogStep('browse');
+  };
+
   const toggleOption = (group: Product['variations'][number], option: ProductOption) => {
     setSelectedOptions((current) => {
       const existing = current[group.id] || [];
@@ -449,7 +467,11 @@ const WaiterSessionPage = () => {
           });
 
       applySession(response.session);
-      resetProductDialog();
+      if (editingItem) {
+        resetProductDialog();
+      } else {
+        returnToProductBrowse();
+      }
       toast({
         title: editingItem ? 'Item atualizado' : 'Item adicionado',
         description: `${selectedProduct.name} foi salvo na comanda.`,
@@ -535,16 +557,17 @@ const WaiterSessionPage = () => {
     }
   };
 
-  const openPaymentDialog = (account?: TableAccount) => {
-    if (!session) return;
+  const openPaymentDialog = (account?: TableAccount, sourceSession?: TableSession) => {
+    const baseSession = sourceSession || session;
+    if (!baseSession) return;
 
     const lines = account
       ? [createPaymentLine(account.id, account.dueAmount || account.total)]
-      : session.accounts
+      : baseSession.accounts
           .filter((current) => current.dueAmount > 0)
           .map((current) => createPaymentLine(current.id, current.dueAmount));
 
-    setPaymentLines(lines.length ? lines : [createPaymentLine(session.accounts[0]?.id || '', 0)]);
+    setPaymentLines(lines.length ? lines : [createPaymentLine(baseSession.accounts[0]?.id || '', 0)]);
     setPaymentDialogOpen(true);
   };
 
@@ -574,6 +597,60 @@ const WaiterSessionPage = () => {
       return;
     }
 
+    const pixPayments = payload.filter((line) => line.method === 'pix');
+    if (pixPayments.length > 0) {
+      if (payload.length !== 1 || pixPayments.length !== 1) {
+        toast({
+          title: 'PIX por comanda',
+          description: 'Para pagar com PIX, selecione uma unica comanda por vez e gere um QR Code para ela.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const pixPayment = pixPayments[0];
+      const targetAccount = session.accounts.find((account) => account.id === pixPayment.accountId);
+      if (!targetAccount) {
+        toast({
+          title: 'Comanda invalida',
+          description: 'Selecione a comanda correta antes de gerar o PIX.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const checkout = await startWaiterPixCheckout({
+          sessionId: session.id,
+          accountId: pixPayment.accountId,
+          amount: pixPayment.amount,
+          accountName: targetAccount.name,
+          tableLabel: session.tableLabel,
+        });
+
+        setPaymentDialogOpen(false);
+        setPixCheckout({
+          ...checkout,
+          accountId: pixPayment.accountId,
+          amount: pixPayment.amount,
+        });
+        toast({
+          title: 'PIX gerado',
+          description: `QR Code pronto para receber ${targetAccount.name}.`,
+        });
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao gerar PIX',
+          description: error?.message || 'Nao foi possivel iniciar o pagamento PIX desta comanda.',
+          variant: 'destructive',
+        });
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     setSubmitting(true);
     try {
       const response = await recordWaiterPayments(session.id, payload);
@@ -587,6 +664,48 @@ const WaiterSessionPage = () => {
       toast({
         title: 'Erro ao registrar pagamento',
         description: error?.message || 'Nao foi possivel salvar os pagamentos.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePixCheckoutClosed = () => {
+    setPixCheckout(null);
+    if (session?.dueAmount && session.dueAmount > 0) {
+      openPaymentDialog(undefined, session);
+    }
+  };
+
+  const handlePixPaymentConfirmed = async () => {
+    if (!session) return;
+
+    setSubmitting(true);
+    try {
+      const response = await getWaiterSessionDetails(session.id);
+      applySession(response.session);
+      setPixCheckout(null);
+
+      const hasRemainingBalance = response.session.accounts.some((account) => account.dueAmount > 0);
+      if (hasRemainingBalance) {
+        openPaymentDialog(undefined, response.session);
+        toast({
+          title: 'PIX confirmado',
+          description: 'Pagamento confirmado. O restante da mesa continua disponivel para recebimento.',
+        });
+      } else {
+        setPaymentDialogOpen(false);
+        toast({
+          title: 'PIX confirmado',
+          description: 'Pagamento confirmado e mesa atualizada com sucesso.',
+        });
+      }
+    } catch (error: any) {
+      setPixCheckout(null);
+      toast({
+        title: 'PIX confirmado, mas faltou sincronizar',
+        description: error?.message || 'O pagamento foi confirmado, mas nao conseguimos atualizar a mesa agora.',
         variant: 'destructive',
       });
     } finally {
@@ -1257,6 +1376,21 @@ const WaiterSessionPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {pixCheckout ? (
+        <PixCheckoutModal
+          isOpen={!!pixCheckout}
+          onClose={handlePixCheckoutClosed}
+          correlationID={pixCheckout.correlationID}
+          brCode={pixCheckout.brCode}
+          qrCodeImage={pixCheckout.qrCodeImage}
+          paymentLinkUrl={pixCheckout.paymentLinkUrl}
+          paymentId={pixCheckout.paymentId}
+          onPaymentConfirmed={() => {
+            void handlePixPaymentConfirmed();
+          }}
+        />
+      ) : null}
 
       <Dialog open={productDialogOpen} onOpenChange={(open) => (open ? setProductDialogOpen(true) : resetProductDialog())}>
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden rounded-[28px] border-0 p-0">

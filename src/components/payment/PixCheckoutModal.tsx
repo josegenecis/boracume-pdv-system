@@ -20,10 +20,11 @@ interface PixCheckoutModalProps {
   paymentLinkUrl?: string;
   paymentId?: string;
   onPaid?: (orderId: string) => void;
+  onPaymentConfirmed?: () => void;
 }
 
 export default function PixCheckoutModal(props: PixCheckoutModalProps) {
-  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl, paymentId, onPaid } = props;
+  const { isOpen, onClose, correlationID, brCode, qrCodeImage, paymentLinkUrl, paymentId, onPaid, onPaymentConfirmed } = props;
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<'CREATED' | 'PAID' | 'ERROR'>('CREATED');
@@ -76,9 +77,15 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
         const nextStatus = String(data.status || '').toUpperCase();
         setRemoteStatus(nextStatus || 'CREATED');
 
-        if (nextStatus === 'PAID' && data.order_id) {
+        if (nextStatus === 'PAID') {
           setStatus('PAID');
-          const orderId = String(data.order_id);
+          if (onPaymentConfirmed) {
+            active = false;
+            onPaymentConfirmed();
+            return;
+          }
+
+          const orderId = data.order_id ? String(data.order_id) : '';
           clearAllMenuCartStorage();
           if (onPaid) {
             active = false;
@@ -86,8 +93,11 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             onClose();
             return;
           }
-          window.location.href = `/track/${orderId}`;
-          return;
+
+          if (orderId) {
+            window.location.href = `/track/${orderId}`;
+            return;
+          }
         }
 
         setStatus('CREATED');

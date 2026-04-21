@@ -259,6 +259,11 @@ class PrinterService extends EventEmitter {
     return String(data?.order_type || '').trim().toLowerCase() === 'dine_in' ? 'Mesa' : 'Balcão';
   }
 
+  shouldPrintTicketCode(data) {
+    const orderType = String(data?.order_type || '').trim().toLowerCase();
+    return orderType === 'dine_in' || orderType === 'counter' || (!orderType && !data?.delivery_zone_id);
+  }
+
   wrapText(text, width) {
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) return [''];
@@ -535,7 +540,9 @@ class PrinterService extends EventEmitter {
     printer.alignLeft();
     printer.bold(true);
     printer.setTextSize(1, 1);
-    printer.println(`SENHA: ${String(data.order_number || '----').slice(-4) || '----'}`);
+    if (this.shouldPrintTicketCode(data)) {
+      printer.println(`SENHA: ${String(data.order_number || '----').slice(-4) || '----'}`);
+    }
     printer.bold(false);
     printer.setTextNormal();
     if (data.order_number) {

@@ -8,6 +8,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-pix-secret',
 }
 
+const isWaiterPixPayload = (payload: any) => {
+  const source = String(payload?.source || payload?.variations?.source || '').trim().toUpperCase()
+  return source === 'WAITER_WEB_PIX'
+}
+
+const recordWaiterPixPayment = async (supabase: any, checkout: any, payload: any) => {
+  const sessionId = String(payload?.waiter_session_id || payload?.session_id || payload?.variations?.waiter?.session_id || '').trim()
+  const accountId = String(payload?.waiter_account_id || payload?.account_id || payload?.variations?.waiter?.account_id || '').trim()
+  const waiterId = String(payload?.waiter_id || payload?.variations?.waiter?.waiter_id || '').trim()
+  const amount = Number(payload?.total || 0)
+
+  if (!sessionId || !accountId || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error('waiter_pix_payload_invalid')
+  }
+
+  const { data: account, error: accountError } = await supabase
+    .from('table_accounts')
+    .select('id, session_id')
+    .eq('id', accountId)
+    .maybeSingle()
+
+  if (accountError) throw accountError
+  if (!account || String(account.session_id || '') !== sessionId) {
+    throw new Error('waiter_pix_account_invalid')
+  }
+
+  const { error: paymentError } = await supabase
+    .from('payments')
+    .insert({
+      session_id: sessionId,
+      account_id: accountId,
+      user_id: checkout.restaurant_user_id,
+      waiter_id: waiterId || null,
+      method: 'pix',
+      amount,
+    })
+
+  if (paymentError) throw paymentError
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -148,9 +188,9 @@ serve(async (req) => {
 
       console.log(`[PixWebhook] Checkout found. Status: ${checkout.status}, Provider: ${checkout.provider}`);
 
-      if (checkout.status === 'PAID' && checkout.order_id) {
-        console.log(`[PixWebhook] Checkout already PAID. Order ID: ${checkout.order_id}`);
-        return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      if (checkout.status === 'PAID') {
+        console.log(`[PixWebhook] Checkout already PAID. Order ID: ${checkout.order_id || 'n/a'}`);
+        return new Response(JSON.stringify({ ok: true, idempotent: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       if (String(checkout.provider).toLowerCase() === 'mercadopago') {
@@ -316,8 +356,28 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true, orderId: targetOrderId }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
         }
 
-        console.log(`[PixWebhook] Creating Order...`);
         const payload = checkout.order_payload || {}
+        if (isWaiterPixPayload(payload)) {
+          try {
+            await recordWaiterPixPayment(supabase, checkout, payload)
+          } catch (error) {
+            console.error('[PixWebhook] Waiter PIX payment error:', error)
+            await supabase
+              .from('pix_checkouts')
+              .update({ status: 'PENDING', updated_at: new Date().toISOString() })
+              .eq('id', checkout.id)
+            return new Response(JSON.stringify({ error: 'waiter_payment_record_failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          }
+
+          await supabase
+            .from('pix_checkouts')
+            .update({ status: 'PAID', updated_at: new Date().toISOString() })
+            .eq('id', checkout.id)
+
+          return new Response(JSON.stringify({ ok: true, waiterPayment: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
+        console.log(`[PixWebhook] Creating Order...`);
         const payloadSource = String(payload?.variations?.source || payload?.source || '')
         const isPdv = payloadSource.toUpperCase() === 'PDV'
         // ... (rest of order creation)
@@ -400,11 +460,27 @@ serve(async (req) => {
       if (chkErr || !checkout) {
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
-      if (checkout.status === 'PAID' && checkout.order_id) {
-        return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      if (checkout.status === 'PAID') {
+        return new Response(JSON.stringify({ ok: true, idempotent: true, orderId: checkout.order_id || null }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
       const payload = checkout.order_payload || {}
+      if (isWaiterPixPayload(payload)) {
+        try {
+          await recordWaiterPixPayment(supabase, checkout, payload)
+        } catch (error) {
+          console.error('[PixWebhook] Legacy waiter PIX payment error:', error)
+          return new Response(JSON.stringify({ error: 'waiter_payment_record_failed' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+
+        await supabase
+          .from('pix_checkouts')
+          .update({ status: 'PAID', updated_at: new Date().toISOString() })
+          .eq('id', checkout.id)
+
+        return new Response(JSON.stringify({ ok: true, waiterPayment: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
       const orderNumber = payload?.order_number || `PIX-${correlationID.slice(0, 8)}`
 
       const insertData: any = {
