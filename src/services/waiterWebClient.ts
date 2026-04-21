@@ -1,9 +1,10 @@
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from '@/integrations/supabase/client';
 
-export type TableStatus = 'free' | 'occupied' | 'serving' | 'payment_pending';
+export type TableStatus = 'free' | 'occupied' | 'preparing' | 'ready' | 'check_requested' | 'partially_paid';
 export type SessionStatus = 'open' | 'serving' | 'payment_pending' | 'closed';
-export type AccountStatus = 'open' | 'paid';
-export type OrderItemStatus = 'draft' | 'sent' | 'cancelled';
+export type AccountStatus = 'open' | 'preparing' | 'ready' | 'check_requested' | 'partially_paid' | 'paid';
+export type KitchenStatus = 'idle' | 'sent' | 'preparing' | 'ready' | 'delivered';
+export type OrderItemStatus = 'draft' | 'sent' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type PaymentMethod = 'cash' | 'pix' | 'card';
 
 export type WaiterWebProfile = {
@@ -21,37 +22,52 @@ export type WaiterWebStoredSession = {
   expiresAt: string;
 };
 
+export type WaiterTableChoice = {
+  id: string;
+  number: number;
+  location?: string | null;
+  capacity: number;
+  status: 'free' | 'occupied' | 'current';
+  sessionId?: string | null;
+  canReceiveTableTransfer: boolean;
+  canReceiveAccountTransfer: boolean;
+};
+
 export type RestaurantTable = {
   id: string;
   number: number;
+  label: string;
   capacity: number;
   location?: string | null;
   status: TableStatus;
   total: number;
+  paidTotal: number;
+  dueAmount: number;
   openMinutes: number;
   sessionId?: string | null;
+  accountCount: number;
+  itemCount: number;
+  sentItemsCount: number;
+  readyItemsCount: number;
+  notes: string;
 };
 
-export type TableSession = {
-  id: string;
-  tableId: string;
-  tableNumber: number;
-  openedAt: string;
-  closedAt?: string | null;
-  guestCount: number;
-  status: SessionStatus;
-  accounts: TableAccount[];
-  history: SessionHistoryEntry[];
-};
-
-export type TableAccount = {
+export type PaymentEntry = {
   id: string;
   sessionId: string;
-  name: string;
-  total: number;
-  status: AccountStatus;
+  accountId?: string | null;
+  method: PaymentMethod;
+  amount: number;
+  createdAt: string;
+};
+
+export type AccountTicket = {
+  id: string;
+  orderNumber?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
   itemCount: number;
-  items: OrderItem[];
 };
 
 export type OrderItemOption = {
@@ -66,6 +82,7 @@ export type ProductOption = {
   id: string;
   name: string;
   price: number;
+  quantity?: number;
 };
 
 export type ProductVariationGroup = {
@@ -81,6 +98,7 @@ export type Product = {
   categoryId: string | null;
   name: string;
   description?: string | null;
+  imageUrl?: string | null;
   price: number;
   featured: boolean;
   sendToKds: boolean;
@@ -97,6 +115,8 @@ export type OrderItem = {
   id: string;
   sessionId: string;
   accountId: string;
+  orderId?: string | null;
+  orderStatus?: string | null;
   productId: string;
   productName: string;
   quantity: number;
@@ -104,9 +124,31 @@ export type OrderItem = {
   totalPrice: number;
   notes: string;
   status: OrderItemStatus;
+  kitchenStatus: KitchenStatus;
   createdAt: string;
   sentAt?: string | null;
   options: OrderItemOption[];
+};
+
+export type TableAccount = {
+  id: string;
+  sessionId: string;
+  name: string;
+  notes: string;
+  accountNumber: number;
+  total: number;
+  paidTotal: number;
+  dueAmount: number;
+  status: AccountStatus;
+  kitchenStatus: KitchenStatus;
+  itemCount: number;
+  draftCount: number;
+  sentCount: number;
+  readyCount: number;
+  deliveredCount: number;
+  payments: PaymentEntry[];
+  tickets: AccountTicket[];
+  items: OrderItem[];
 };
 
 export type SessionHistoryEntry = {
@@ -117,8 +159,44 @@ export type SessionHistoryEntry = {
   amount?: number;
 };
 
+export type TableSession = {
+  id: string;
+  tableId: string;
+  tableNumber: number;
+  tableLabel: string;
+  openedAt: string;
+  closedAt?: string | null;
+  guestCount: number;
+  status: SessionStatus;
+  notes: string;
+  total: number;
+  paidTotal: number;
+  dueAmount: number;
+  itemCount: number;
+  sentItemsCount: number;
+  readyItemsCount: number;
+  accountCount: number;
+  accounts: TableAccount[];
+  history: SessionHistoryEntry[];
+  tableChoices: WaiterTableChoice[];
+};
+
+export type WaiterPaymentInput = {
+  accountId: string;
+  method: PaymentMethod;
+  amount: number;
+};
+
+type CacheEnvelope<T> = {
+  cachedAt: number;
+  data: T;
+};
+
 const WAITER_WEB_SESSION_KEY = 'waiter_web_session';
 const WAITER_WEB_TIMEOUT_MS = 15000;
+const WAITER_BOOTSTRAP_CACHE_KEY = 'waiter_web_bootstrap_cache';
+const WAITER_CATALOG_CACHE_KEY = 'waiter_web_catalog_cache';
+const WAITER_SESSION_CACHE_PREFIX = 'waiter_web_session_cache:';
 
 const normalizeCpf = (value: string) => value.replace(/\D/g, '');
 
@@ -153,10 +231,8 @@ const isSessionAccessError = (error: unknown) => {
     message.includes('sess') ||
     message.includes('expirada') ||
     message.includes('invalida') ||
-    message.includes('inválida') ||
     message.includes('inativo') ||
-    message.includes('nao liberado') ||
-    message.includes('não liberado')
+    message.includes('nao liberado')
   );
 };
 
@@ -179,6 +255,35 @@ async function withTimeout<T>(
       clearTimeout(timeoutId);
     }
   }
+}
+
+function readCache<T>(key: string, maxAgeMs = 1000 * 60 * 30) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CacheEnvelope<T>;
+    if (!parsed?.cachedAt || !('data' in parsed)) return null;
+    if (Date.now() - parsed.cachedAt > maxAgeMs) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache<T>(key: string, data: T) {
+  try {
+    const payload: CacheEnvelope<T> = {
+      cachedAt: Date.now(),
+      data,
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch {}
+}
+
+function clearCache(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
 }
 
 async function invokeFunctionDirect<T>(name: string, body: Record<string, unknown>, token?: string) {
@@ -225,7 +330,7 @@ async function invokeFunction<T>(name: string, body: Record<string, unknown>, to
       throw error;
     }
 
-    if (data?.error) {
+    if ((data as any)?.error) {
       throw new Error(getErrorMessage(data));
     }
 
@@ -259,12 +364,37 @@ export const waiterWebSessionStorage = {
   },
 };
 
+function requireSession() {
+  const session = waiterWebSessionStorage.load();
+  if (!session?.token) {
+    throw new Error('Sessao do garcom nao encontrada.');
+  }
+  return session;
+}
+
+function storeSessionSnapshot(sessionId: string, session: TableSession) {
+  writeCache(`${WAITER_SESSION_CACHE_PREFIX}${sessionId}`, session);
+}
+
+export function loadWaiterBootstrapCache() {
+  return readCache<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>(WAITER_BOOTSTRAP_CACHE_KEY);
+}
+
+export function loadWaiterCatalogCache() {
+  return readCache<{ categories: ProductCategory[] }>(WAITER_CATALOG_CACHE_KEY);
+}
+
+export function loadWaiterSessionCache(sessionId: string) {
+  return readCache<TableSession>(`${WAITER_SESSION_CACHE_PREFIX}${sessionId}`);
+}
+
 export async function loginWaiterWeb(cpf: string, password: string) {
   const response = await invokeFunction<{ session: WaiterWebStoredSession }>('waiter-web-auth', {
     action: 'login',
     cpf: normalizeCpf(cpf),
     password,
   });
+
   waiterWebSessionStorage.save(response.session);
   return response.session;
 }
@@ -304,23 +434,37 @@ export async function logoutWaiterWeb() {
       await invokeFunction('waiter-web-auth', { action: 'logout' }, session.token);
     }
   } catch {}
-  waiterWebSessionStorage.clear();
-}
 
-function requireSession() {
-  const session = waiterWebSessionStorage.load();
-  if (!session?.token) {
-    throw new Error('Sessao do garcom nao encontrada.');
-  }
-  return session;
+  waiterWebSessionStorage.clear();
+  clearCache(WAITER_BOOTSTRAP_CACHE_KEY);
+  clearCache(WAITER_CATALOG_CACHE_KEY);
 }
 
 export async function bootstrapWaiterWeb() {
   const session = requireSession();
-  return invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>(
+  const response = await invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>(
     'waiter-web',
     {
       action: 'bootstrap',
+    },
+    session.token,
+  );
+
+  writeCache(WAITER_BOOTSTRAP_CACHE_KEY, response);
+  return response;
+}
+
+export async function createWaiterTable(input: {
+  tableNumber: number;
+  capacity: number;
+  location?: string;
+}) {
+  const session = requireSession();
+  return invokeFunction<{ table: WaiterTableChoice }>(
+    'waiter-web',
+    {
+      action: 'create_table',
+      ...input,
     },
     session.token,
   );
@@ -342,7 +486,7 @@ export async function openWaiterTableSession(tableId: string, tableNumber: numbe
 
 export async function getWaiterSessionDetails(sessionId: string) {
   const session = requireSession();
-  return invokeFunction<{ session: TableSession }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'session_details',
@@ -350,37 +494,108 @@ export async function getWaiterSessionDetails(sessionId: string) {
     },
     session.token,
   );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
 }
 
-export async function createWaiterAccount(sessionId: string, name: string) {
+export async function updateWaiterSessionNote(sessionId: string, notes: string) {
   const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'update_session_note',
+      sessionId,
+      notes,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
+}
+
+export async function requestWaiterCheck(sessionId: string) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'request_check',
+      sessionId,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
+}
+
+export async function releaseWaiterTable(sessionId: string) {
+  const session = requireSession();
+  clearCache(`${WAITER_SESSION_CACHE_PREFIX}${sessionId}`);
   return invokeFunction<{ ok: true }>(
+    'waiter-web',
+    {
+      action: 'release_table',
+      sessionId,
+    },
+    session.token,
+  );
+}
+
+export async function transferWaiterTable(sessionId: string, targetTableId: string) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'transfer_table',
+      sessionId,
+      targetTableId,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
+}
+
+export async function createWaiterAccount(sessionId: string, name: string, notes = '') {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'create_account',
       sessionId,
       name,
+      notes,
     },
     session.token,
   );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
 }
 
-export async function renameWaiterAccount(accountId: string, name: string) {
+export async function renameWaiterAccount(accountId: string, name: string, notes = '') {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'rename_account',
       accountId,
       name,
+      notes,
     },
     session.token,
   );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
 }
 
 export async function removeWaiterAccount(accountId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'remove_account',
@@ -388,17 +603,55 @@ export async function removeWaiterAccount(accountId: string) {
     },
     session.token,
   );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
+}
+
+export async function mergeWaiterAccounts(sourceAccountId: string, targetAccountId: string) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'merge_accounts',
+      sourceAccountId,
+      targetAccountId,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
+}
+
+export async function transferWaiterAccount(accountId: string, targetTableId: string) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession; transferredSessionId?: string }>(
+    'waiter-web',
+    {
+      action: 'transfer_account',
+      accountId,
+      targetTableId,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
 }
 
 export async function listWaiterCatalog() {
   const session = requireSession();
-  return invokeFunction<{ categories: ProductCategory[] }>(
+  const response = await invokeFunction<{ categories: ProductCategory[] }>(
     'waiter-web',
     {
       action: 'catalog',
     },
     session.token,
   );
+
+  writeCache(WAITER_CATALOG_CACHE_KEY, response);
+  return response;
 }
 
 export async function addWaiterItem(input: {
@@ -410,7 +663,7 @@ export async function addWaiterItem(input: {
   selectedOptions: ProductOption[];
 }) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'add_item',
@@ -418,11 +671,53 @@ export async function addWaiterItem(input: {
     },
     session.token,
   );
+
+  storeSessionSnapshot(input.sessionId, response.session);
+  return response;
+}
+
+export async function updateWaiterDraftItem(input: {
+  itemId: string;
+  quantity: number;
+  notes: string;
+  selectedOptions: ProductOption[];
+}) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'update_draft_item',
+      ...input,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
+}
+
+export async function moveWaiterItem(input: {
+  itemId: string;
+  targetAccountId: string;
+  quantity: number;
+}) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: TableSession }>(
+    'waiter-web',
+    {
+      action: 'move_item',
+      ...input,
+    },
+    session.token,
+  );
+
+  storeSessionSnapshot(response.session.id, response.session);
+  return response;
 }
 
 export async function cancelWaiterDraftItem(itemId: string, accountId: string, sessionId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'cancel_draft_item',
@@ -432,11 +727,14 @@ export async function cancelWaiterDraftItem(itemId: string, accountId: string, s
     },
     session.token,
   );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
 }
 
 export async function sendWaiterAccountItems(sessionId: string, accountId: string) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
       action: 'send_account',
@@ -445,26 +743,25 @@ export async function sendWaiterAccountItems(sessionId: string, accountId: strin
     },
     session.token,
   );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
 }
 
-export async function recordWaiterPayment(
-  sessionId: string,
-  accountId: string | null,
-  amount: number,
-  method: PaymentMethod,
-) {
+export async function recordWaiterPayments(sessionId: string, payments: WaiterPaymentInput[]) {
   const session = requireSession();
-  return invokeFunction<{ ok: true }>(
+  const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
     {
-      action: 'record_payment',
+      action: 'record_payments',
       sessionId,
-      accountId,
-      amount,
-      method,
+      payments,
     },
     session.token,
   );
+
+  storeSessionSnapshot(sessionId, response.session);
+  return response;
 }
 
 export function formatCpf(value: string) {
