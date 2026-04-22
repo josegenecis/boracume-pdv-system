@@ -1196,9 +1196,9 @@ const PDV = () => {
         <TabsContent value="products" className="flex-1 overflow-hidden data-[state=active]:flex flex-col lg:flex-row mt-0 min-h-0">
           {/* Left Column: Products (Scrollable) */}
           <div className="flex-1 overflow-y-auto scrollbar-hide px-2 pb-2 pt-0 sm:px-4 sm:pb-4 sm:pt-0 lg:border-r">
-            <div className="sticky top-0 z-20 mb-3 flex flex-col gap-3 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-2 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] sm:px-4 lg:px-6">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <TabsList className="grid h-9 w-full grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm xl:w-64">
+            <div className="sticky top-0 z-20 mb-3 flex flex-col gap-2 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-2 pb-2 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] sm:px-4 lg:px-6">
+              <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                <TabsList className="hidden h-9 w-full grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm lg:grid xl:w-64">
                   <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
                   <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
                 </TabsList>
@@ -1212,6 +1212,14 @@ const PDV = () => {
                       className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/85 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
                     />
                   </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setActiveTab(activeTab === 'products' ? 'accounts' : 'products')}
+                    className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] lg:hidden"
+                  >
+                    {activeTab === 'products' ? <UtensilsCrossed size={14} className="text-[#003223]/70" /> : <Store size={14} className="text-[#003223]/70" />}
+                  </Button>
                   <Button variant="outline" size="icon" onClick={() => fetchData()} className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] xl:h-9 xl:w-9 xl:rounded-xl">
                     <RefreshCw size={16} className="text-[#003223]/70" />
                   </Button>
@@ -1236,13 +1244,13 @@ const PDV = () => {
                 </div>
               </div>
               <div className="space-y-1.5 lg:hidden">
-                <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+                <div className="scrollbar-hide flex gap-1.5 overflow-x-auto">
                   {mobileOrderTypeOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => setOrderType(option.value)}
-                      className={`shrink-0 rounded-[16px] border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                      className={`shrink-0 rounded-[14px] border px-2 py-1 text-[9px] font-semibold transition-colors ${
                         orderType === option.value
                           ? 'border-[#003223] bg-[#003223] text-white'
                           : 'border-[#FF6400]/15 bg-white/90 text-[#003223]'
@@ -1273,6 +1281,7 @@ const PDV = () => {
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
               <div className={`flex-1 ${isMobile ? 'pb-28' : 'pb-24 lg:pb-0'}`}>
+<<<<<<< HEAD
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500">
@@ -1294,37 +1303,73 @@ const PDV = () => {
                         onClick={(e) => handleProductClick(product, e)}
                       >
                         <div className="relative aspect-[0.9/1] overflow-hidden bg-gray-100">
+=======
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">
+                      {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-1 sm:grid-cols-[repeat(auto-fill,minmax(130px,1fr))] xl:gap-2">
+                    {filteredProducts.map((product) => (
+                      (() => {
+                        const track = !!(product as any)?.track_stock;
+                        const qty = Number((product as any)?.stock_quantity ?? 0) || 0;
+                        const threshold = Number((product as any)?.low_stock_threshold ?? 0) || 0;
+                        const isLowStock = track && qty <= threshold;
+                        return (
+                      <Card 
+                        key={product.id} 
+                        className={`cursor-pointer group flex aspect-square flex-col overflow-hidden rounded-[18px] border border-[#DCE6DF] bg-white transition-all duration-150 hover:shadow-sm active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
+                        onClick={(e) => handleProductClick(product, e)}
+                      >
+                        <div className="relative m-1 overflow-hidden rounded-[14px] bg-gray-100">
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
                               src={normalizeImageUrlForDisplay(product.image_url)} 
                               alt={product.name} 
-                              className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                              className="h-10 w-full object-cover transition-transform duration-300 group-hover:scale-105"
                               loading="lazy"
                             />
                           ) : (
                             <div 
                               id={`product-img-${product.id}`}
-                              className="w-full h-full flex items-center justify-center"
+                              className="flex h-10 w-full items-center justify-center"
                             >
+<<<<<<< HEAD
                               <Store className="text-gray-300 w-6 h-6" />
+=======
+                              <Store className="h-4 w-4 text-gray-300" />
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                             </div>
                           )}
-                          <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
+                          <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1 py-0.5 text-[8px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
                             {formatCurrency(product.price)}
                           </div>
                           {isLowStock && (
                             <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1 py-0.5 text-[7px] font-bold text-white shadow-sm">
+<<<<<<< HEAD
                               Baixo
                             </div>
                           )}
                         </div>
                         <CardContent className="flex flex-1 flex-col justify-between bg-white p-1">
                           <h3 className="mb-1 font-medium text-[9px] leading-tight line-clamp-2 sm:text-xs" title={product.name}>
+=======
+                              Estoque baixo
+                            </div>
+                          )}
+                        </div>
+                        <CardContent className="flex flex-1 flex-col justify-between bg-white px-1.5 pb-1.5 pt-0.5">
+                          <h3 className="mb-1 min-h-[1.8rem] font-medium text-[8px] leading-tight line-clamp-2" title={product.name}>
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-5 w-full border border-[#8CC850]/70 bg-white px-1 text-[8px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white sm:h-6 sm:text-[10px]"
+                            className="h-5 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[8px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
                             size="sm"
                             variant="ghost"
                           >
@@ -1396,7 +1441,7 @@ const PDV = () => {
                                 type="button"
                                 variant="outline"
                                 size="icon"
-                                className="h-6 w-6"
+                                className="h-5 w-5"
                                 onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                               >
                                 <Minus size={12} />
@@ -1406,7 +1451,7 @@ const PDV = () => {
                                 type="button"
                                 variant="outline"
                                 size="icon"
-                                className="h-6 w-6"
+                                className="h-5 w-5"
                                 onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                               >
                                 <Plus size={12} />
@@ -1616,31 +1661,7 @@ const PDV = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                       if (orderType === 'dine_in') {
-                         addToTable();
-                       } else {
-                         setOrderType('dine_in');
-                         setCustomerName('');
-                       }
-                    }}
-                    disabled={processing || cart.length === 0}
-                    className="w-full h-10 text-xs font-bold border-blue-200 text-blue-700 hover:bg-blue-50"
-                  >
-                    {processing && orderType === 'dine_in' ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-700"></div>
-                    ) : (
-                      <>
-                        <UtensilsCrossed className="mr-1 h-3 w-3" />
-                        {orderType === 'dine_in' ? 'Confirmar' : 'Mesa'}
-                      </>
-                    )}
-                  </Button>
-                  
-                  <Button
+                <div className="grid grid-cols-2 gap-2">                  <Button
                     onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0}
                     className="w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-bold shadow-sm"
@@ -1668,6 +1689,7 @@ const PDV = () => {
                 type="button"
                 id="mobile-cart-btn" 
                 ref={mobileCartBtnRef}
+<<<<<<< HEAD
                 className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.7rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-[320px] -translate-x-1/2 items-center justify-between rounded-full border border-[#FF6400]/25 bg-[#FF6400] px-3 py-2.5 text-left text-white shadow-[0_20px_40px_-24px_rgba(255,100,0,0.55)]"
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -1679,6 +1701,19 @@ const PDV = () => {
                       {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
                     </div>
                     <div className="truncate pt-1 text-[10px] text-white/85">
+=======
+                className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+4.6rem)] right-3 z-40 flex items-center gap-2 rounded-full border border-[#003223]/12 bg-[#003223] px-3 py-2 text-left text-white shadow-[0_20px_40px_-24px_rgba(0,50,35,0.55)]"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+                    <Calculator className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold">
+                      {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
+                    </div>
+                    <div className="truncate text-[9px] text-white/75">
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                       {mobileOrderTypeOptions.find((option) => option.value === orderType)?.label || 'Balcão'} • {operatorSelected ? 'operador ok' : 'selecione operador'}
                     </div>
                   </div>
@@ -1689,6 +1724,7 @@ const PDV = () => {
                 </div>
               </button>
             </SheetTrigger>
+<<<<<<< HEAD
             <SheetContent side="bottom" className="flex h-[74vh] flex-col rounded-t-[28px] p-0">
                <SheetHeader className="border-b px-4 py-3">
                  <SheetTitle className="flex items-center justify-between gap-3">
@@ -1832,9 +1868,170 @@ const PDV = () => {
 
                     <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
+=======
+            <SheetContent side="bottom" className="h-[74vh] flex flex-col p-0">
+               <SheetHeader className="p-4 border-b">
+                 <SheetTitle className="flex items-center justify-between gap-3">
+                   <span>Sacola</span>
+                   <span className="text-sm font-normal text-muted-foreground">{cartItemsCount} item(ns)</span>
+                 </SheetTitle>
+               </SheetHeader>
+               <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+                  {cart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
+                      <Store size={48} />
+                      <p>Sem itens</p>
+                    </div>
+                  ) : (
+                    cart.map((item, index) => {
+                      const formattedVariations = formatSelectedVariations(item.selectedVariations);
+                      const seq = String(index + 1).padStart(2, '0');
+                      return (
+                        <div key={item.cartItemId} className="flex flex-col rounded-[14px] border bg-gray-50 p-2">
+                          <div className="mb-1.5 flex items-start justify-between">
+                            <div className="flex-1 mr-2">
+                              <span className="font-medium text-[11px] line-clamp-1">
+                                <span className="text-muted-foreground mr-1">{seq}.</span>
+                                {item.name}
+                              </span>
+                              <span className="block text-[9px] text-muted-foreground">
+                                {formatCurrency(item.price)} un.
+                              </span>
+                            </div>
+                            <span className="font-bold text-[11px]">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
+                          </div>
+                          
+                          {formattedVariations.length > 0 && (
+                            <div className="mb-1.5 border-l-2 border-gray-200 pl-2 text-[10px] text-gray-500">
+                              {formattedVariations.map((v, i) => (
+                                <div key={i}>{v}</div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {item.notes && (
+                            <div className="mb-1.5 rounded bg-amber-50 p-1 text-[10px] italic text-amber-600">
+                              Obs: {item.notes}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-end gap-1">
+                             <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-5 w-5"
+                              onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                            >
+                              <Minus size={12} />
+                            </Button>
+                            <span className="w-5 text-center text-[11px] font-medium">{item.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-5 w-5"
+                              onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                            >
+                              <Plus size={12} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="ml-1 h-5 w-5 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => removeFromCart(item.cartItemId)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+               </div>
+
+               {/* Mobile Checkout Form */}
+               <div className="border-t bg-white p-3">
+                  <div className="mb-3 space-y-2">
+                    <div className="hidden gap-2">
+                      <Input
+                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                      <Input
+                        placeholder="Telefone"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    {false && orderType === 'delivery' && (
+                      <>
+                        <Input
+                          placeholder="Endereço Completo *"
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          className="h-9 text-sm"
+                        />
+                        <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Selecione o Bairro *" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {deliveryZones.map((zone) => (
+                              <SelectItem key={zone.id} value={zone.id}>
+                                {zone.name} (+{formatCurrency(zone.delivery_fee)})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    )}
+
+                   {false && orderType === 'dine_in' ? (
+                     <div className="flex gap-2 items-center">
+                        <Select value={selectedTable} onValueChange={setSelectedTable}>
+                           <SelectTrigger className="h-9 text-sm flex-1">
+                             <SelectValue placeholder="Selecione a Mesa *" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {tables.length > 0 ? (
+                               tables.map((table) => (
+                                 <SelectItem key={table.id} value={table.id}>
+                                   Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                                 </SelectItem>
+                               ))
+                             ) : (
+                               <div className="p-2 text-xs text-center text-muted-foreground">
+                                 Nenhuma mesa cadastrada
+                               </div>
+                             )}
+                           </SelectContent>
+                         </Select>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="h-9 w-9 text-red-500 hover:bg-red-50"
+                           onClick={() => {
+                             setOrderType('delivery');
+                             setSelectedTable('');
+                           }}
+                         >
+                           <Minus size={16} />
+                         </Button>
+                     </div>
+                   ) : null}
+                    
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                         <Button
                           type="button"
                           variant={paymentMethod === 'pix' ? 'default' : 'outline'}
+                          className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
                           className="h-8 rounded-xl text-[11px]"
                         >
@@ -1843,6 +2040,7 @@ const PDV = () => {
                         <Button
                           type="button"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
+                          className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
                           className="h-8 rounded-xl text-[11px]"
                         >
@@ -1851,9 +2049,11 @@ const PDV = () => {
                         <Button
                           type="button"
                           variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
+                          className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
                           className="h-8 rounded-xl text-[11px]"
                         >
+<<<<<<< HEAD
                           Dinheiro
                         </Button>
                       </div>
@@ -1870,9 +2070,28 @@ const PDV = () => {
                         tefSettings.enabled ? (
                           <div className="space-y-2">
                             <div className="grid grid-cols-2 gap-2">
+=======
+                          Dinheiro
+                        </Button>
+                      </div>
+                      {paymentMethod === 'dinheiro' && (
+                        <Input
+                          placeholder="Valor pago"
+                          value={changeAmount}
+                          onChange={(e) => setChangeAmount(e.target.value)}
+                          className="h-7.5 text-[10px]"
+                          type="number"
+                        />
+                      )}
+                      {paymentMethod === 'cartao' && (
+                        tefSettings.enabled ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
                               <Button
                                 type="button"
                                 variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
+                                className="h-7.5 text-[10px]"
                                 onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
                                 className="h-8 rounded-xl text-[11px]"
                               >
@@ -1881,9 +2100,11 @@ const PDV = () => {
                               <Button
                                 type="button"
                                 variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
+                                className="h-7.5 text-[10px]"
                                 onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
                                 className="h-8 rounded-xl text-[11px]"
                               >
+<<<<<<< HEAD
                                 TEF
                               </Button>
                             </div>
@@ -1939,6 +2160,61 @@ const PDV = () => {
         </TabsContent>
 
           <TabsContent value="accounts" className="mt-0 flex-1 overflow-y-auto">
+=======
+                                TEF
+                              </Button>
+                            </div>
+                            {cardProcessingMode === 'tef' && (
+                              <Button type="button" variant="outline" className="h-7.5 w-full text-[10px]" onClick={() => setTefOpen(true)}>
+                                Editar dados TEF
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">Cartão via maquininha</div>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mb-3 space-y-1 text-[12px]">
+                    <div className="flex justify-between text-gray-500">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(getTotalValue())}</span>
+                    </div>
+                    {getDeliveryFee() > 0 && (
+                      <div className="flex justify-between text-gray-500">
+                        <span>Entrega</span>
+                        <span>{formatCurrency(getDeliveryFee())}</span>
+                      </div>
+                    )}
+                    <div className="mt-2 flex justify-between border-t pt-2 text-[14px] font-bold">
+                      <span>Total</span>
+                      <span>{formatCurrency(getFinalTotal())}</span>
+                    </div>
+                  </div>                  <Button
+                    onClick={handleFinalizeSale}
+                    disabled={processing || cart.length === 0 || !cashSession?.id || !operatorSelected}
+                    className="h-9 w-full rounded-xl bg-green-600 text-[12px] font-bold hover:bg-green-700"
+                  >
+                    {processing && orderType !== 'dine_in' ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        Finalizar
+                        <span className="ml-2 text-[10px] font-normal opacity-90">
+                          {formatCurrency(getFinalTotal())}
+                        </span>
+                      </>
+                    )}
+                  </Button>
+               </div>
+            </SheetContent>
+          </Sheet>
+        </TabsContent>
+
+          <TabsContent value="accounts" className="flex-1 overflow-y-auto mt-0">
+>>>>>>> f018f94 (Compacta PDV e caixa mobile)
             <div className="sticky top-0 z-20 hidden border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] lg:block">
               <TabsList className="grid h-9 w-full max-w-64 grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm">
                 <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
@@ -2244,3 +2520,5 @@ const PDV = () => {
 };
 
 export default PDV;
+
+

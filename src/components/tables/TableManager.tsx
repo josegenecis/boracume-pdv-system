@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
+import { useSidebar } from '@/contexts/SidebarContext';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
 import TableDetailsModal from './TableDetailsModal';
 import AddProductToTableModal from './AddProductToTableModal';
@@ -36,11 +36,12 @@ const TableManager: React.FC = () => {
   const [formData, setFormData] = useState({
     table_number: '',
     capacity: 4,
-    location: ''
+    location: '',
   });
   const { toast } = useToast();
   const { user } = useAuth();
   const confirm = useConfirmDialog();
+  const { isMobile } = useSidebar();
 
   useEffect(() => {
     if (!user?.id) {
@@ -49,26 +50,26 @@ const TableManager: React.FC = () => {
       return;
     }
 
-    fetchTables();
+    void fetchTables();
   }, [user?.id]);
 
   const fetchTables = async () => {
     try {
       setLoading(true);
       const data = await ensureDefaultTables(user?.id);
-      
-      const transformedTables = (data || []).map(table => ({
+
+      const transformedTables = (data || []).map((table) => ({
         ...table,
-        status: table.status as 'available' | 'occupied' | 'reserved'
+        status: table.status as 'available' | 'occupied' | 'reserved',
       }));
-      
+
       setTables(transformedTables);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao carregar mesas.",
-        variant: "destructive"
+        title: 'Erro',
+        description: 'Erro ao carregar mesas.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -83,40 +84,38 @@ const TableManager: React.FC = () => {
           .update({
             table_number: parseInt(formData.table_number),
             capacity: formData.capacity,
-            location: formData.location
+            location: formData.location,
           })
           .eq('id', editingTable.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('tables')
-          .insert({
-            user_id: user?.id,
-            table_number: parseInt(formData.table_number),
-            capacity: formData.capacity,
-            location: formData.location,
-            status: 'available'
-          });
+        const { error } = await supabase.from('tables').insert({
+          user_id: user?.id,
+          table_number: parseInt(formData.table_number),
+          capacity: formData.capacity,
+          location: formData.location,
+          status: 'available',
+        });
 
         if (error) throw error;
       }
 
       toast({
-        title: "Sucesso",
+        title: 'Sucesso',
         description: `Mesa ${editingTable ? 'atualizada' : 'criada'} com sucesso.`,
       });
 
       setShowForm(false);
       setEditingTable(null);
       setFormData({ table_number: '', capacity: 4, location: '' });
-      fetchTables();
+      void fetchTables();
     } catch (error) {
       console.error('Erro ao salvar mesa:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao salvar mesa.",
-        variant: "destructive"
+        title: 'Erro',
+        description: 'Erro ao salvar mesa.',
+        variant: 'destructive',
       });
     }
   };
@@ -132,25 +131,22 @@ const TableManager: React.FC = () => {
     if (!ok) return;
 
     try {
-      const { error } = await supabase
-        .from('tables')
-        .delete()
-        .eq('id', tableId);
+      const { error } = await supabase.from('tables').delete().eq('id', tableId);
 
       if (error) throw error;
 
       toast({
-        title: "Sucesso",
-        description: "Mesa excluída com sucesso.",
+        title: 'Sucesso',
+        description: 'Mesa excluida com sucesso.',
       });
 
-      fetchTables();
+      void fetchTables();
     } catch (error) {
       console.error('Erro ao excluir mesa:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao excluir mesa.",
-        variant: "destructive"
+        title: 'Erro',
+        description: 'Erro ao excluir mesa.',
+        variant: 'destructive',
       });
     }
   };
@@ -195,11 +191,24 @@ const TableManager: React.FC = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'available':
-        return 'Disponível';
+        return 'Disponivel';
       case 'occupied':
         return 'Ocupada';
       case 'reserved':
         return 'Reservada';
+      default:
+        return status;
+    }
+  };
+
+  const getMobileStatusLabel = (status: string) => {
+    switch (status) {
+      case 'available':
+        return 'Livre';
+      case 'occupied':
+        return 'Uso';
+      case 'reserved':
+        return 'Res.';
       default:
         return status;
     }
@@ -210,40 +219,43 @@ const TableManager: React.FC = () => {
   const reservedCount = tables.filter((table) => table.status === 'reserved').length;
 
   if (loading) {
-    return <div className="text-center py-8">Carregando mesas...</div>;
+    return <div className="py-8 text-center">Carregando mesas...</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">OperaÃ§Ã£o de Mesas</h2>
-          <p className="text-sm text-muted-foreground">Abra, acompanhe, transfira e feche contas sem sair do salÃ£o.</p>
-        </div>
+    <div className={isMobile ? 'space-y-3' : 'space-y-6'}>
+      <div className={`flex ${isMobile ? 'items-center justify-end' : 'items-center justify-between'}`}>
+        {!isMobile && (
+          <div>
+            <h2 className="text-2xl font-bold">Operacao de Mesas</h2>
+            <p className="text-sm text-muted-foreground">Abra, acompanhe, transfira e feche contas sem sair do salao.</p>
+          </div>
+        )}
         <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogTrigger asChild>
-            <Button onClick={() => {
-              setEditingTable(null);
-              setFormData({ table_number: '', capacity: 4, location: '' });
-            }}>
-              <Plus size={16} className="mr-2" />
-              Nova Mesa
+            <Button
+              className={isMobile ? 'h-8 rounded-xl px-3 text-[11px]' : ''}
+              onClick={() => {
+                setEditingTable(null);
+                setFormData({ table_number: '', capacity: 4, location: '' });
+              }}
+            >
+              <Plus size={16} className={isMobile ? '' : 'mr-2'} />
+              {isMobile ? 'Nova' : 'Nova Mesa'}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>
-                {editingTable ? 'Editar Mesa' : 'Nova Mesa'}
-              </DialogTitle>
+              <DialogTitle>{editingTable ? 'Editar Mesa' : 'Nova Mesa'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="table_number">Número da Mesa</Label>
+                <Label htmlFor="table_number">Numero da Mesa</Label>
                 <Input
                   id="table_number"
                   type="number"
                   value={formData.table_number}
-                  onChange={(e) => setFormData(prev => ({ ...prev, table_number: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, table_number: e.target.value }))}
                   placeholder="Ex: 1"
                 />
               </div>
@@ -253,17 +265,17 @@ const TableManager: React.FC = () => {
                   id="capacity"
                   type="number"
                   value={formData.capacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) || 4 }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, capacity: parseInt(e.target.value) || 4 }))}
                   placeholder="Ex: 4"
                 />
               </div>
               <div>
-                <Label htmlFor="location">Localização (opcional)</Label>
+                <Label htmlFor="location">Localizacao (opcional)</Label>
                 <Input
                   id="location"
                   value={formData.location}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                  placeholder="Ex: Varanda, Salão principal"
+                  onChange={(e) => setFormData((prev) => ({ ...prev, location: e.target.value }))}
+                  placeholder="Ex: Varanda, Salao principal"
                 />
               </div>
               <div className="flex gap-2">
@@ -279,81 +291,79 @@ const TableManager: React.FC = () => {
         </Dialog>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Card className="border-emerald-100 bg-emerald-50/60">
-          <CardContent className="p-4">
-            <div className="text-sm text-emerald-700">Mesas livres</div>
-            <div className="mt-1 text-3xl font-black text-emerald-900">{availableCount}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-100 bg-amber-50/70">
-          <CardContent className="p-4">
-            <div className="text-sm text-amber-700">Em atendimento</div>
-            <div className="mt-1 text-3xl font-black text-amber-900">{occupiedCount}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-slate-200 bg-slate-50">
-          <CardContent className="p-4">
-            <div className="text-sm text-slate-600">Reservadas</div>
-            <div className="mt-1 text-3xl font-black text-slate-900">{reservedCount}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {!isMobile && (
+        <>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card className="border-emerald-100 bg-emerald-50/60">
+              <CardContent className="p-4">
+                <div className="text-sm text-emerald-700">Mesas livres</div>
+                <div className="mt-1 text-3xl font-black text-emerald-900">{availableCount}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-amber-100 bg-amber-50/70">
+              <CardContent className="p-4">
+                <div className="text-sm text-amber-700">Em atendimento</div>
+                <div className="mt-1 text-3xl font-black text-amber-900">{occupiedCount}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200 bg-slate-50">
+              <CardContent className="p-4">
+                <div className="text-sm text-slate-600">Reservadas</div>
+                <div className="mt-1 text-3xl font-black text-slate-900">{reservedCount}</div>
+              </CardContent>
+            </Card>
+          </div>
 
-      <div className="mb-4 p-4 bg-boracume-orange/5 rounded-xl border border-boracume-orange/20">
-        <div className="flex items-center gap-2 mb-2">
-          <MousePointer size={16} className="text-boracume-orange" />
-          <span className="font-semibold text-boracume-dark-green">Fluxo rÃ¡pido de operaÃ§Ã£o:</span>
-        </div>
-        <p className="text-sm text-gray-600">
-          <strong>Clique na mesa</strong> para acompanhar a conta, imprimir parcial, transferir ou fechar com pagamento.
-          <strong className="ml-1">Botão carrinho</strong> para adicionar produtos à mesa.
-        </p>
-      </div>
+          <div className="mb-4 rounded-xl border border-boracume-orange/20 bg-boracume-orange/5 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <MousePointer size={16} className="text-boracume-orange" />
+              <span className="font-semibold text-boracume-dark-green">Fluxo rapido de operacao:</span>
+            </div>
+            <p className="text-sm text-gray-600">
+              <strong>Clique na mesa</strong> para acompanhar a conta, imprimir parcial, transferir ou fechar com pagamento.
+              <strong className="ml-1">Botao carrinho</strong> para adicionar produtos a mesa.
+            </p>
+          </div>
+        </>
+      )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+      <div className={isMobile ? 'grid grid-cols-3 gap-1.5' : 'grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'}>
         {tables.map((table) => (
-          <Card 
-            key={table.id} 
-            className={`cursor-pointer border-t-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${getBorderColor(table.status)}`}
+          <Card
+            key={table.id}
+            className={`cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${isMobile ? 'aspect-square rounded-[18px] border-0 shadow-sm' : `border-t-4 ${getBorderColor(table.status)}`}`}
             onClick={() => handleTableClick(table)}
           >
-            <CardHeader className="space-y-2 px-3 pb-1 pt-3">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-base leading-none">Mesa {table.table_number}</CardTitle>
-                <Badge variant="outline" className={`${getStatusColor(table.status)} px-2 py-0 text-[10px]`}>
-                  {getStatusLabel(table.status)}
+            <CardHeader className={isMobile ? 'space-y-1 px-2 pb-0 pt-2' : 'space-y-2 px-3 pb-1 pt-3'}>
+              <div className="flex items-start justify-between">
+                <CardTitle className={isMobile ? 'text-[11px] leading-none' : 'text-base leading-none'}>Mesa {table.table_number}</CardTitle>
+                <Badge variant="outline" className={`${getStatusColor(table.status)} ${isMobile ? 'px-1.5 py-0 text-[8px]' : 'px-2 py-0 text-[10px]'}`}>
+                  {isMobile ? getMobileStatusLabel(table.status) : getStatusLabel(table.status)}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="px-3 pb-3 pt-0">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+            <CardContent className={isMobile ? 'px-2 pb-2 pt-1' : 'px-3 pb-3 pt-0'}>
+              <div className={isMobile ? 'space-y-1' : 'space-y-1.5'}>
+                <div className={`flex items-center gap-1.5 text-gray-600 ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
                   <Users size={12} />
                   <span>{table.capacity} pessoas</span>
                 </div>
-                {table.location && (
+                {!isMobile && table.location && (
                   <div className="flex items-center gap-1.5 text-xs text-gray-600">
                     <MousePointer size={12} className="opacity-0" />
-                    <span className="truncate">📍 {table.location}</span>
-                  </div>
-                )}
-                {table.status === 'occupied' && (
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-blue-600">
-                    <MousePointer size={12} />
-                    <span>Clique para ver detalhes</span>
+                    <span className="truncate">Local: {table.location}</span>
                   </div>
                 )}
               </div>
-              <div className="mt-3 flex gap-1.5 border-t border-gray-100 pt-3" onClick={(e) => e.stopPropagation()}>
+              <div className={`${isMobile ? 'mt-2 flex gap-1 border-t border-gray-100 pt-2' : 'mt-3 flex gap-1.5 border-t border-gray-100 pt-3'}`} onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => handleAddProductsClick(table, e)}
-                  className="h-8 flex-1 px-2 hover:bg-boracume-green/10 hover:text-boracume-green hover:border-boracume-green/50"
+                  className={`${isMobile ? 'h-7 flex-1 rounded-xl px-1.5' : 'h-8 flex-1 px-2'} hover:border-boracume-green/50 hover:bg-boracume-green/10 hover:text-boracume-green`}
                   title="Adicionar produtos"
                 >
-                  <ShoppingCart size={14} />
+                  <ShoppingCart size={isMobile ? 12 : 14} />
                 </Button>
                 <Button
                   variant="outline"
@@ -364,24 +374,24 @@ const TableManager: React.FC = () => {
                     setFormData({
                       table_number: table.table_number.toString(),
                       capacity: table.capacity,
-                      location: table.location || ''
+                      location: table.location || '',
                     });
                     setShowForm(true);
                   }}
-                  className="h-8 px-2 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                  className={`${isMobile ? 'h-7 rounded-xl px-1.5' : 'h-8 px-2'} hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600`}
                 >
-                  <Edit size={14} />
+                  <Edit size={isMobile ? 12 : 14} />
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(table.id);
+                    void handleDelete(table.id);
                   }}
-                  className="h-8 px-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                  className={`${isMobile ? 'h-7 rounded-xl px-1.5' : 'h-8 px-2'} hover:border-red-200 hover:bg-red-50 hover:text-red-600`}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={isMobile ? 12 : 14} />
                 </Button>
               </div>
             </CardContent>
@@ -391,12 +401,9 @@ const TableManager: React.FC = () => {
 
       {tables.length === 0 && (
         <Card>
-          <CardContent className="text-center py-8">
+          <CardContent className="py-8 text-center">
             <p className="text-gray-500">Nenhuma mesa cadastrada.</p>
-            <Button
-              onClick={() => setShowForm(true)}
-              className="mt-3"
-            >
+            <Button onClick={() => setShowForm(true)} className="mt-3">
               <Plus size={16} className="mr-2" />
               Criar Primeira Mesa
             </Button>
@@ -404,7 +411,6 @@ const TableManager: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal de Detalhes da Mesa */}
       <TableDetailsModal
         table={selectedTable}
         isOpen={showTableDetails}
@@ -416,7 +422,6 @@ const TableManager: React.FC = () => {
         availableTables={tables}
       />
 
-      {/* Modal de Adicionar Produtos */}
       <AddProductToTableModal
         table={tableForProducts}
         isOpen={showAddProducts}
