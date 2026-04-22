@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ProductVariationSelector from './ProductVariationSelector';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 interface Product {
   id: string;
@@ -36,6 +37,8 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   variations,
   onAddToCart
 }) => {
+  const { isMobile } = useSidebar();
+
   const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string) => {
     onAddToCart(product, quantity, selectedVariations, notes);
     onClose();
@@ -43,17 +46,19 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Personalizar {product.name}</DialogTitle>
+      <DialogContent className={isMobile ? "max-w-[calc(100vw-1rem)] rounded-[24px] p-0" : "max-w-2xl max-h-[90vh] overflow-y-auto"}>
+        <DialogHeader className={isMobile ? "border-b px-4 py-3" : ""}>
+          <DialogTitle className={isMobile ? "text-[15px]" : ""}>Personalizar {product.name}</DialogTitle>
         </DialogHeader>
-        
-        <ProductVariationSelector
-          product={product}
-          variations={variations}
-          onAddToCart={handleAddToCart}
-          onClose={onClose}
-        />
+
+        <div className={isMobile ? "max-h-[76vh] overflow-y-auto px-4 py-3" : ""}>
+          <ProductVariationSelector
+            product={product}
+            variations={variations}
+            onAddToCart={handleAddToCart}
+            onClose={onClose}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   );

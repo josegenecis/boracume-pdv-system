@@ -877,12 +877,12 @@ const Products = () => {
   );
 
   const renderMobileProductCard = (product: ProductItem) => (
-    <Card key={product.id} className={`overflow-hidden rounded-[28px] border bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.22)] ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'border-red-200' : 'border-[#FF6400]/12'}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
+    <Card key={product.id} className={`overflow-hidden rounded-[20px] border bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.22)] ${product.track_stock && product.stock_quantity <= product.low_stock_threshold ? 'border-red-200' : 'border-[#FF6400]/12'}`}>
+      <CardContent className="p-3">
+        <div className="flex items-start gap-2.5">
           <button type="button" className="shrink-0" onClick={() => handleEditProduct(product)}>
             {normalizeImageUrl(product.image_url) ? (
-              <div className="h-20 w-20 overflow-hidden rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]">
+              <div className="h-16 w-16 overflow-hidden rounded-[16px] border border-[#FF6400]/10 bg-[#FFF8F2]">
                 <img
                   src={normalizeImageUrl(product.image_url)}
                   alt={product.name}
@@ -895,8 +895,8 @@ const Products = () => {
                 />
               </div>
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]">
-                <Package className="h-7 w-7 text-[#FF6400]/55" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-[16px] border border-[#FF6400]/10 bg-[#FFF8F2]">
+                <Package className="h-6 w-6 text-[#FF6400]/55" />
               </div>
             )}
           </button>
@@ -904,24 +904,24 @@ const Products = () => {
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <button type="button" className="min-w-0 text-left" onClick={() => handleEditProduct(product)}>
-                <div className="truncate text-base font-bold text-slate-900">{product.name}</div>
-                <div className="mt-1 text-sm text-slate-500">{product.category || 'Sem categoria'}</div>
+                <div className="truncate text-[15px] font-bold text-slate-900">{product.name}</div>
+                <div className="mt-0.5 text-[12px] text-slate-500">{product.category || 'Sem categoria'}</div>
               </button>
-              <Badge variant={product.available ? "default" : "secondary"} className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${product.available ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : 'bg-slate-200 text-slate-600'}`}>
+              <Badge variant={product.available ? "default" : "secondary"} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${product.available ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : 'bg-slate-200 text-slate-600'}`}>
                 {product.available ? 'Ativo' : 'Inativo'}
               </Badge>
             </div>
 
             {product.description && (
-              <div className="mt-2 line-clamp-2 text-sm text-slate-500">{product.description}</div>
+              <div className="mt-1.5 line-clamp-2 text-[12px] leading-5 text-slate-500">{product.description}</div>
             )}
 
-            <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="mt-2 flex items-center justify-between gap-2">
               <div onClick={(e) => e.stopPropagation()}>
                 {renderInlinePriceEditor(product)}
               </div>
               {product.track_stock && product.stock_quantity <= product.low_stock_threshold && (
-                <span className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600">
+                <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">
                   Estoque baixo
                 </span>
               )}
@@ -929,17 +929,17 @@ const Products = () => {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => toggleProductAvailability(product)}>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => toggleProductAvailability(product)}>
             {product.available ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleEditProduct(product)}>
+          <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleEditProduct(product)}>
             <Edit className="h-4 w-4" />
           </Button>
-          <div className="flex items-center justify-center rounded-2xl border border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]">
+          <div className="flex items-center justify-center rounded-[14px] border border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]">
             <ProductVariationsButton productId={product.id} compact />
           </div>
-          <Button variant="outline" size="icon" className="h-11 rounded-2xl border-red-200 bg-white text-red-500 hover:bg-red-50" onClick={() => handleDeleteProduct(product.id)}>
+          <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-red-200 bg-white text-red-500 hover:bg-red-50" onClick={() => handleDeleteProduct(product.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>

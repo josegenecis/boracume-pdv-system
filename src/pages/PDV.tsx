@@ -1280,7 +1280,7 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(130px,1fr))]">
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))] sm:gap-2">
                     {filteredProducts.map((product) => (
                       (() => {
                         const track = !!(product as any)?.track_stock;
@@ -1290,10 +1290,10 @@ const PDV = () => {
                         return (
                       <Card 
                         key={product.id} 
-                        className={`cursor-pointer group flex flex-col overflow-hidden border border-[#8CC850]/60 shadow-[0_0_0_1px_rgba(140,200,80,0.08),0_0_18px_-12px_rgba(140,200,80,0.85)] transition-all duration-150 hover:shadow-[0_0_0_1px_rgba(140,200,80,0.16),0_0_22px_-10px_rgba(140,200,80,0.95)] active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
+                        className={`cursor-pointer group flex flex-col overflow-hidden rounded-[18px] border border-[#8CC850]/60 shadow-[0_0_0_1px_rgba(140,200,80,0.08),0_0_18px_-12px_rgba(140,200,80,0.85)] transition-all duration-150 hover:shadow-[0_0_0_1px_rgba(140,200,80,0.16),0_0_22px_-10px_rgba(140,200,80,0.95)] active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
                         onClick={(e) => handleProductClick(product, e)}
                       >
-                        <div className="aspect-[4/3] relative overflow-hidden bg-gray-100">
+                        <div className="aspect-square relative overflow-hidden bg-gray-100">
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
@@ -1307,24 +1307,24 @@ const PDV = () => {
                               id={`product-img-${product.id}`}
                               className="w-full h-full flex items-center justify-center"
                             >
-                              <Store className="text-gray-300 w-8 h-8" />
+                              <Store className="text-gray-300 w-6 h-6" />
                             </div>
                           )}
-                          <div className="absolute top-2 right-2 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[11px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
+                          <div className="absolute right-1.5 top-1.5 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
                             {formatCurrency(product.price)}
                           </div>
                           {isLowStock && (
-                            <div className="absolute top-2 left-2 bg-red-600 text-white rounded-full px-1.5 py-0.5 text-[9px] font-bold shadow-sm">
-                              Estoque baixo
+                            <div className="absolute left-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm">
+                              Baixo
                             </div>
                           )}
                         </div>
-                        <CardContent className="p-1.5 flex-1 flex flex-col justify-between bg-white">
-                          <h3 className="font-medium text-[11px] sm:text-xs line-clamp-2 leading-tight mb-1.5" title={product.name}>
+                        <CardContent className="flex flex-1 flex-col justify-between bg-white p-1.5">
+                          <h3 className="mb-1 min-h-[1.85rem] text-[10px] font-semibold leading-[1.15] line-clamp-2 sm:text-[11px]" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-6 w-full border border-[#8CC850]/70 bg-white text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white text-[10px] font-semibold"
+                            className="h-6 w-full rounded-xl border border-[#8CC850]/70 bg-white px-1 text-[9px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
                             size="sm"
                             variant="ghost"
                           >
@@ -1668,44 +1668,44 @@ const PDV = () => {
                 type="button"
                 id="mobile-cart-btn" 
                 ref={mobileCartBtnRef}
-                className="mobile-safe-x lg:hidden fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+5.8rem)] z-40 flex w-full items-center justify-between rounded-[26px] border border-[#003223]/12 bg-[#003223] px-4 py-3 text-left text-white shadow-[0_20px_40px_-24px_rgba(0,50,35,0.55)]"
+                className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.7rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-[320px] -translate-x-1/2 items-center justify-between rounded-full border border-[#FF6400]/25 bg-[#FF6400] px-3 py-2.5 text-left text-white shadow-[0_20px_40px_-24px_rgba(255,100,0,0.55)]"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
-                    <Calculator className="h-5 w-5" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/18">
+                    <Calculator className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold">
-                      {cartItemsCount > 0 ? `${cartItemsCount} item(ns) no pedido` : 'Abrir pedido'}
+                    <div className="text-[13px] font-semibold leading-none">
+                      {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
                     </div>
-                    <div className="truncate text-xs text-white/75">
+                    <div className="truncate pt-1 text-[10px] text-white/85">
                       {mobileOrderTypeOptions.find((option) => option.value === orderType)?.label || 'Balcão'} • {operatorSelected ? 'operador ok' : 'selecione operador'}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/70">Total</div>
-                  <div className="text-base font-bold">{formatCurrency(getFinalTotal())}</div>
+                  <div className="text-[9px] uppercase tracking-[0.16em] text-white/80">Total</div>
+                  <div className="text-[15px] font-bold leading-none">{formatCurrency(getFinalTotal())}</div>
                 </div>
               </button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[88vh] flex flex-col p-0">
-               <SheetHeader className="p-4 border-b">
+            <SheetContent side="bottom" className="flex h-[74vh] flex-col rounded-t-[28px] p-0">
+               <SheetHeader className="border-b px-4 py-3">
                  <SheetTitle className="flex items-center justify-between gap-3">
-                   <span>Pedido</span>
-                   <span className="text-sm font-normal text-muted-foreground">{cartItemsCount} item(ns)</span>
+                   <span className="text-[15px]">Sacola</span>
+                   <span className="text-[11px] font-normal text-muted-foreground">{cartItemsCount} item(ns)</span>
                  </SheetTitle>
                </SheetHeader>
-               <div className="border-b bg-[#F8FBF8] px-4 py-3">
+               <div className="border-b bg-[#FFF8F2] px-4 py-2.5">
                   <div className="scrollbar-hide flex gap-2 overflow-x-auto">
-                    {mobileOrderTypeOptions.map((option) => (
+                    {mobileOrderTypeOptions.filter((option) => option.value !== 'dine_in').map((option) => (
                       <button
                         key={option.value}
                         type="button"
                         onClick={() => setOrderType(option.value)}
-                        className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                           orderType === option.value
-                            ? 'border-[#003223] bg-[#003223] text-white'
+                            ? 'border-[#FF6400] bg-[#FF6400] text-white'
                             : 'border-[#DCE6DF] bg-white text-[#003223]'
                         }`}
                       >
@@ -1715,35 +1715,35 @@ const PDV = () => {
                   </div>
                </div>
                
-               <div className="flex-1 overflow-y-auto p-4 space-y-3">
+               <div className="flex-1 space-y-2 overflow-y-auto p-4">
                   {cart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50 space-y-2">
-                      <Store size={48} />
-                      <p>Sem itens</p>
+                    <div className="h-full flex flex-col items-center justify-center space-y-2 text-muted-foreground opacity-50">
+                      <Store size={40} />
+                      <p className="text-sm">Sem itens</p>
                     </div>
                   ) : (
                     cart.map((item, index) => {
                       const formattedVariations = formatSelectedVariations(item.selectedVariations);
                       const seq = String(index + 1).padStart(2, '0');
                       return (
-                        <div key={item.cartItemId} className="flex flex-col p-3 border rounded-lg bg-gray-50">
-                          <div className="flex justify-between items-start mb-2">
+                        <div key={item.cartItemId} className="flex flex-col rounded-2xl border border-[#003223]/8 bg-[#F8FAF8] p-3">
+                          <div className="mb-1.5 flex items-start justify-between gap-2">
                             <div className="flex-1 mr-2">
-                              <span className="font-medium text-sm line-clamp-1">
+                              <span className="line-clamp-1 text-[13px] font-semibold">
                                 <span className="text-muted-foreground mr-1">{seq}.</span>
                                 {item.name}
                               </span>
-                              <span className="text-xs text-muted-foreground block">
+                              <span className="block text-[11px] text-muted-foreground">
                                 {formatCurrency(item.price)} un.
                               </span>
                             </div>
-                            <span className="font-bold text-sm">
+                            <span className="text-[13px] font-bold">
                               {formatCurrency(item.price * item.quantity)}
                             </span>
                           </div>
                           
                           {formattedVariations.length > 0 && (
-                            <div className="text-xs text-gray-500 mb-2 pl-2 border-l-2 border-gray-200">
+                            <div className="mb-2 border-l-2 border-gray-200 pl-2 text-[11px] text-gray-500">
                               {formattedVariations.map((v, i) => (
                                 <div key={i}>{v}</div>
                               ))}
@@ -1751,7 +1751,7 @@ const PDV = () => {
                           )}
                           
                           {item.notes && (
-                            <div className="text-xs text-amber-600 mb-2 italic bg-amber-50 p-1 rounded">
+                            <div className="mb-2 rounded-xl bg-amber-50 p-1.5 text-[11px] italic text-amber-600">
                               Obs: {item.notes}
                             </div>
                           )}
@@ -1760,7 +1760,7 @@ const PDV = () => {
                              <Button
                               variant="outline"
                               size="icon"
-                              className="h-7 w-7"
+                              className="h-7 w-7 rounded-xl"
                               onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                             >
                               <Minus size={12} />
@@ -1769,7 +1769,7 @@ const PDV = () => {
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-7 w-7"
+                              className="h-7 w-7 rounded-xl"
                               onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                             >
                               <Plus size={12} />
@@ -1777,7 +1777,7 @@ const PDV = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 ml-2"
+                              className="ml-1 h-7 w-7 rounded-xl text-red-500 hover:bg-red-50 hover:text-red-700"
                               onClick={() => removeFromCart(item.cartItemId)}
                             >
                               <Trash2 size={14} />
@@ -1790,20 +1790,20 @@ const PDV = () => {
                </div>
 
                {/* Mobile Checkout Form */}
-               <div className="p-4 bg-white border-t">
-                  <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1">
+               <div className="border-t bg-white p-4">
+                  <div className="mb-3 max-h-36 space-y-2.5 overflow-y-auto pr-1">
                     <div className="flex gap-2">
                       <Input
                         placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
-                        className="h-9 text-sm"
+                        className="h-8 rounded-xl text-[12px]"
                       />
                       <Input
                         placeholder="Telefone"
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="h-9 text-sm"
+                        className="h-8 rounded-xl text-[12px]"
                       />
                     </div>
 
@@ -1813,10 +1813,10 @@ const PDV = () => {
                           placeholder="Endereço Completo *"
                           value={customerAddress}
                           onChange={(e) => setCustomerAddress(e.target.value)}
-                          className="h-9 text-sm"
+                          className="h-8 rounded-xl text-[12px]"
                         />
                         <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
-                          <SelectTrigger className="h-9 text-sm">
+                          <SelectTrigger className="h-8 rounded-xl text-[12px]">
                             <SelectValue placeholder="Selecione o Bairro *" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1830,46 +1830,13 @@ const PDV = () => {
                       </>
                     )}
 
-                   {orderType === 'dine_in' ? (
-                     <div className="flex gap-2 items-center">
-                        <Select value={selectedTable} onValueChange={setSelectedTable}>
-                           <SelectTrigger className="h-9 text-sm flex-1">
-                             <SelectValue placeholder="Selecione a Mesa *" />
-                           </SelectTrigger>
-                           <SelectContent>
-                             {tables.length > 0 ? (
-                               tables.map((table) => (
-                                 <SelectItem key={table.id} value={table.id}>
-                                   Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
-                                 </SelectItem>
-                               ))
-                             ) : (
-                               <div className="p-2 text-xs text-center text-muted-foreground">
-                                 Nenhuma mesa cadastrada
-                               </div>
-                             )}
-                           </SelectContent>
-                         </Select>
-                         <Button 
-                           variant="ghost" 
-                           size="icon" 
-                           className="h-9 w-9 text-red-500 hover:bg-red-50"
-                           onClick={() => {
-                             setOrderType('delivery');
-                             setSelectedTable('');
-                           }}
-                         >
-                           <Minus size={16} />
-                         </Button>
-                     </div>
-                   ) : null}
-                    
                     <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
                         <Button
                           type="button"
                           variant={paymentMethod === 'pix' ? 'default' : 'outline'}
                           onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
+                          className="h-8 rounded-xl text-[11px]"
                         >
                           PIX
                         </Button>
@@ -1877,6 +1844,7 @@ const PDV = () => {
                           type="button"
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
                           onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
+                          className="h-8 rounded-xl text-[11px]"
                         >
                           Cartão
                         </Button>
@@ -1884,6 +1852,7 @@ const PDV = () => {
                           type="button"
                           variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
                           onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
+                          className="h-8 rounded-xl text-[11px]"
                         >
                           Dinheiro
                         </Button>
@@ -1893,7 +1862,7 @@ const PDV = () => {
                           placeholder="Valor pago"
                           value={changeAmount}
                           onChange={(e) => setChangeAmount(e.target.value)}
-                          className="h-9 text-sm"
+                          className="h-8 rounded-xl text-[12px]"
                           type="number"
                         />
                       )}
@@ -1905,6 +1874,7 @@ const PDV = () => {
                                 type="button"
                                 variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
                                 onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
+                                className="h-8 rounded-xl text-[11px]"
                               >
                                 Maquininha
                               </Button>
@@ -1912,12 +1882,13 @@ const PDV = () => {
                                 type="button"
                                 variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
                                 onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
+                                className="h-8 rounded-xl text-[11px]"
                               >
                                 TEF
                               </Button>
                             </div>
                             {cardProcessingMode === 'tef' && (
-                              <Button type="button" variant="outline" className="h-9 text-sm w-full" onClick={() => setTefOpen(true)}>
+                              <Button type="button" variant="outline" className="h-8 w-full rounded-xl text-[11px]" onClick={() => setTefOpen(true)}>
                                 Editar dados TEF
                               </Button>
                             )}
@@ -1929,7 +1900,7 @@ const PDV = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-1 text-sm mb-4">
+                  <div className="mb-3 space-y-1 rounded-2xl bg-[#FFF8F2] p-3 text-[12px]">
                     <div className="flex justify-between text-gray-500">
                       <span>Subtotal</span>
                       <span>{formatCurrency(getTotalValue())}</span>
@@ -1940,46 +1911,23 @@ const PDV = () => {
                         <span>{formatCurrency(getDeliveryFee())}</span>
                       </div>
                     )}
-                    <div className="flex justify-between font-bold text-lg mt-2 pt-2 border-t">
+                    <div className="mt-2 flex justify-between border-t pt-2 text-[15px] font-bold text-[#003223]">
                       <span>Total</span>
                       <span>{formatCurrency(getFinalTotal())}</span>
                     </div>
                   </div>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                       if (orderType === 'dine_in') {
-                         addToTable();
-                       } else {
-                         setOrderType('dine_in');
-                         setCustomerName('');
-                       }
-                    }}
-                    disabled={processing || cart.length === 0}
-                    className="w-full h-12 text-lg font-bold border-blue-200 text-blue-700 hover:bg-blue-50"
-                  >
-                    {processing && orderType === 'dine_in' ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-700"></div>
-                    ) : (
-                      <>
-                        <UtensilsCrossed className="mr-2 h-4 w-4" />
-                        {orderType === 'dine_in' ? 'Confirmar' : 'Mesa'}
-                      </>
-                    )}
-                  </Button>
                   
                   <Button
                     onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0 || !cashSession?.id || !operatorSelected}
-                    className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold"
+                    className="h-10 w-full rounded-2xl bg-[#0B5137] text-sm font-bold text-white shadow-sm hover:bg-[#09432e] disabled:bg-slate-200 disabled:text-slate-500"
                   >
                     {processing && orderType !== 'dine_in' ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
                     ) : (
                       <>
                         Finalizar
-                        <span className="ml-2 text-sm font-normal opacity-90">
+                        <span className="ml-2 text-[11px] font-normal opacity-90">
                           {formatCurrency(getFinalTotal())}
                         </span>
                       </>
@@ -1990,8 +1938,8 @@ const PDV = () => {
           </Sheet>
         </TabsContent>
 
-          <TabsContent value="accounts" className="flex-1 overflow-y-auto mt-0">
-            <div className="sticky top-0 z-20 border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)]">
+          <TabsContent value="accounts" className="mt-0 flex-1 overflow-y-auto">
+            <div className="sticky top-0 z-20 hidden border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] lg:block">
               <TabsList className="grid h-9 w-full max-w-64 grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm">
                 <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
                 <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
