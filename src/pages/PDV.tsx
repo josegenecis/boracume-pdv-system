@@ -1203,7 +1203,7 @@ const PDV = () => {
                   <TabsTrigger value="accounts" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Mesas</TabsTrigger>
                 </TabsList>
                 <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:flex-nowrap">
-                  <div className="relative min-w-[220px] flex-1 xl:w-80 xl:flex-none">
+                  <div className="relative hidden min-w-[220px] flex-1 xl:block xl:w-80 xl:flex-none">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#003223]/40" />
                     <Input
                       placeholder="Buscar produtos..."
@@ -1212,8 +1212,8 @@ const PDV = () => {
                       className="h-9 w-full rounded-xl border-[#FF6400]/15 bg-white/85 pl-9 text-sm text-[#003223] transition-colors focus:bg-white focus-visible:ring-[#FF6400]/25"
                     />
                   </div>
-                  <Button variant="outline" size="icon" onClick={() => fetchData()} className="h-9 w-9 shrink-0 rounded-xl border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1]">
-                    <RefreshCw size={18} className="text-[#003223]/70" />
+                  <Button variant="outline" size="icon" onClick={() => fetchData()} className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] xl:h-9 xl:w-9 xl:rounded-xl">
+                    <RefreshCw size={16} className="text-[#003223]/70" />
                   </Button>
                   <Button
                     variant="outline"
@@ -1242,7 +1242,7 @@ const PDV = () => {
                       key={option.value}
                       type="button"
                       onClick={() => setOrderType(option.value)}
-                      className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                      className={`shrink-0 rounded-[18px] border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                         orderType === option.value
                           ? 'border-[#003223] bg-[#003223] text-white'
                           : 'border-[#FF6400]/15 bg-white/90 text-[#003223]'
@@ -1256,16 +1256,16 @@ const PDV = () => {
                   <button
                     type="button"
                     onClick={() => (cashSession?.id ? navigate('/caixa') : openCashDialog('open'))}
-                    className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-semibold shadow-sm ${
+                    className={`flex items-center gap-1.5 rounded-[18px] border px-2.5 py-1.5 text-left text-[11px] font-semibold shadow-sm ${
                       cashSession?.id
                         ? 'border-[#8CC850]/45 bg-[#F4FAEC] text-[#245B2B]'
                         : 'border-[#FF6400]/18 bg-white text-[#003223]'
                     }`}
                   >
-                    <Wallet className="h-4 w-4" />
+                    <Wallet className="h-3.5 w-3.5" />
                     <span>{cashSession?.id ? 'Caixa aberto' : 'Abrir caixa'}</span>
                   </button>
-                  <div className={`rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm ${operatorSelected ? 'border-[#003223]/12 bg-white text-[#003223]' : 'border-red-200 bg-red-50 text-red-600'}`}>
+                  <div className={`rounded-[18px] border px-2.5 py-1.5 text-[11px] font-semibold shadow-sm ${operatorSelected ? 'border-[#003223]/12 bg-white text-[#003223]' : 'border-red-200 bg-red-50 text-red-600'}`}>
                     {operatorSelected ? 'Operador selecionado' : 'Selecione o operador'}
                   </div>
                 </div>

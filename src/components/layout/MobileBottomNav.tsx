@@ -17,8 +17,8 @@ const MobileBottomNav: React.FC = () => {
   ];
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[#FF6400]/10 bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-3 shadow-[0_-16px_40px_-24px_rgba(0,50,35,0.28)] backdrop-blur-xl md:hidden">
-      <div className="mx-auto flex max-w-md items-center justify-between rounded-[28px] border border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/85 px-2 py-2 shadow-[0_14px_30px_-22px_rgba(0,50,35,0.24)]">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[#FF6400]/10 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.35rem)] pt-1.5 shadow-[0_-16px_40px_-24px_rgba(0,50,35,0.28)] backdrop-blur-xl md:hidden">
+      <div className="mx-auto flex max-w-md items-center justify-between rounded-[22px] border border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/85 px-1 py-1 shadow-[0_14px_30px_-22px_rgba(0,50,35,0.24)]">
         {items.map((item) => {
           const Icon = item.icon;
 
@@ -27,14 +27,14 @@ const MobileBottomNav: React.FC = () => {
               key={item.key}
               type="button"
               onClick={item.onClick}
-              className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-2 py-2 transition-all ${
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[16px] px-1 py-1.5 transition-all ${
                 item.active
                   ? 'bg-[#003223] text-white shadow-[0_12px_24px_-16px_rgba(0,50,35,0.7)]'
                   : 'text-[#003223]/68 hover:bg-[#F5EBE1] hover:text-[#003223]'
               }`}
             >
-              <Icon className="h-[18px] w-[18px]" />
-              <span className="text-[11px] font-semibold tracking-wide">{item.label}</span>
+              <Icon className="h-[15px] w-[15px]" />
+              <span className="text-[9px] font-semibold tracking-wide">{item.label}</span>
             </button>
           );
         })}

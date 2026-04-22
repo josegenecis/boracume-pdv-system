@@ -122,20 +122,20 @@ const FixedHeader = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#E7ECE8] bg-white shadow-[0_12px_30px_-24px_rgba(0,50,35,0.16)]">
-      <div className={`flex items-center justify-between ${isMobile ? 'mobile-safe-x px-3 py-2.5' : 'px-3 py-3 sm:px-6'}`}>
+      <div className={`flex items-center justify-between ${isMobile ? 'mobile-safe-x px-3 py-2' : 'px-3 py-3 sm:px-6'}`}>
         <div className="flex items-center space-x-2 sm:space-x-4">
           <Button
             variant="ghost"
             size="sm"
             onClick={toggleSidebar}
-            className="h-9 w-9 rounded-xl border border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
+            className="h-8 w-8 rounded-[16px] border border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
           >
-            <Menu size={18} />
+            <Menu size={16} />
           </Button>
           {isMobile ? (
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400]">BoraCumê</div>
-              <div className="truncate text-base font-bold text-[#003223]">{mobileTitle}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#FF6400]">BoraCumê</div>
+              <div className="truncate text-[14px] font-bold text-[#003223]">{mobileTitle}</div>
             </div>
           ) : (
             <Logo size="sm" />
@@ -153,10 +153,10 @@ const FixedHeader = () => {
               cashStatus === 'open'
                 ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]'
                 : 'border-[#DCE6DF] bg-white text-[#003223]'
-            } ${isMobile ? 'w-9 p-0 md:hidden' : 'hidden px-4 md:inline-flex'}`}
+            } ${isMobile ? 'h-8 w-8 rounded-[16px] p-0 md:hidden' : 'hidden px-4 md:inline-flex'}`}
             onClick={() => navigate('/caixa')}
           >
-            <Wallet size={18} className={isMobile ? '' : 'mr-2'} />
+            <Wallet size={16} className={isMobile ? '' : 'mr-2'} />
             {!isMobile && 'Caixa'}
           </Button>
           <Button
@@ -176,8 +176,8 @@ const FixedHeader = () => {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'w-9 p-0' : 'px-4'}`}>
-                {isMobile ? <User size={18} /> : 'Gerencial'}
+              <Button variant="outline" size="sm" className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'h-8 w-8 rounded-[16px] p-0' : 'px-4'}`}>
+                {isMobile ? <User size={16} /> : 'Gerencial'}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -236,7 +236,7 @@ const FixedHeader = () => {
         </div>
       </div>
       {isMobile && (
-        <div className="mobile-safe-x border-t border-[#E7ECE8] bg-[#F8FBF8]/95 px-3 pb-2 pt-2 backdrop-blur">
+        <div className="mobile-safe-x border-t border-[#E7ECE8] bg-[#F8FBF8]/95 px-3 pb-1.5 pt-1.5 backdrop-blur">
           <div className="scrollbar-hide flex gap-2 overflow-x-auto">
             {mobileQuickActions.map((action) => {
               const Icon = action.icon;
@@ -246,7 +246,7 @@ const FixedHeader = () => {
                   key={action.key}
                   type="button"
                   onClick={() => navigate(action.to)}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-[18px] border px-2.5 py-1.5 text-[11px] font-semibold shadow-sm transition-colors ${
                     action.active
                       ? 'border-[#003223] bg-[#003223] text-white'
                       : action.key === 'cash' && cashStatus === 'open'
@@ -254,7 +254,7 @@ const FixedHeader = () => {
                         : 'border-[#DCE6DF] bg-white text-[#003223]'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                   <span>{action.label}</span>
                 </button>
               );
@@ -262,9 +262,9 @@ const FixedHeader = () => {
             <button
               type="button"
               onClick={() => navigate('/configuracoes?tab=whatsapp')}
-              className="relative inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#DCE6DF] bg-white px-3 py-2 text-xs font-semibold text-[#003223] shadow-sm"
+              className="relative inline-flex shrink-0 items-center gap-1.5 rounded-[18px] border border-[#DCE6DF] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#003223] shadow-sm"
             >
-              <MessageCircle className="h-4 w-4" />
+              <MessageCircle className="h-3.5 w-3.5" />
               <span>WhatsApp</span>
               <span className={`h-2.5 w-2.5 rounded-full ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} />
             </button>
