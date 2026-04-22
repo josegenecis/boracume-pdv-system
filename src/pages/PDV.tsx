@@ -1281,29 +1281,6 @@ const PDV = () => {
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
               <div className={`flex-1 ${isMobile ? 'pb-28' : 'pb-24 lg:pb-0'}`}>
-<<<<<<< HEAD
-                {filteredProducts.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500">
-                      {searchQuery ? 'Nenhum produto encontrado.' : 'Nenhum produto disponível.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))] sm:gap-2">
-                    {filteredProducts.map((product) => (
-                      (() => {
-                        const track = !!(product as any)?.track_stock;
-                        const qty = Number((product as any)?.stock_quantity ?? 0) || 0;
-                        const threshold = Number((product as any)?.low_stock_threshold ?? 0) || 0;
-                        const isLowStock = track && qty <= threshold;
-                        return (
-                      <Card 
-                        key={product.id} 
-                        className={`cursor-pointer group flex flex-col overflow-hidden rounded-[18px] border border-[#8CC850]/60 shadow-[0_0_0_1px_rgba(140,200,80,0.08),0_0_18px_-12px_rgba(140,200,80,0.85)] transition-all duration-150 hover:shadow-[0_0_0_1px_rgba(140,200,80,0.16),0_0_22px_-10px_rgba(140,200,80,0.95)] active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
-                        onClick={(e) => handleProductClick(product, e)}
-                      >
-                        <div className="relative aspect-[0.9/1] overflow-hidden bg-gray-100">
-=======
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500">
@@ -1325,7 +1302,6 @@ const PDV = () => {
                         onClick={(e) => handleProductClick(product, e)}
                       >
                         <div className="relative m-1 overflow-hidden rounded-[14px] bg-gray-100">
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
@@ -1339,11 +1315,7 @@ const PDV = () => {
                               id={`product-img-${product.id}`}
                               className="flex h-10 w-full items-center justify-center"
                             >
-<<<<<<< HEAD
-                              <Store className="text-gray-300 w-6 h-6" />
-=======
                               <Store className="h-4 w-4 text-gray-300" />
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                             </div>
                           )}
                           <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1 py-0.5 text-[8px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
@@ -1351,21 +1323,12 @@ const PDV = () => {
                           </div>
                           {isLowStock && (
                             <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1 py-0.5 text-[7px] font-bold text-white shadow-sm">
-<<<<<<< HEAD
-                              Baixo
-                            </div>
-                          )}
-                        </div>
-                        <CardContent className="flex flex-1 flex-col justify-between bg-white p-1">
-                          <h3 className="mb-1 font-medium text-[9px] leading-tight line-clamp-2 sm:text-xs" title={product.name}>
-=======
                               Estoque baixo
                             </div>
                           )}
                         </div>
                         <CardContent className="flex flex-1 flex-col justify-between bg-white px-1.5 pb-1.5 pt-0.5">
                           <h3 className="mb-1 min-h-[1.8rem] font-medium text-[8px] leading-tight line-clamp-2" title={product.name}>
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                             {product.name}
                           </h3>
                           <Button 
@@ -1689,19 +1652,6 @@ const PDV = () => {
                 type="button"
                 id="mobile-cart-btn" 
                 ref={mobileCartBtnRef}
-<<<<<<< HEAD
-                className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.7rem)] left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-[320px] -translate-x-1/2 items-center justify-between rounded-full border border-[#FF6400]/25 bg-[#FF6400] px-3 py-2.5 text-left text-white shadow-[0_20px_40px_-24px_rgba(255,100,0,0.55)]"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/18">
-                    <Calculator className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-semibold leading-none">
-                      {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
-                    </div>
-                    <div className="truncate pt-1 text-[10px] text-white/85">
-=======
                 className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+4.6rem)] right-3 z-40 flex items-center gap-2 rounded-full border border-[#003223]/12 bg-[#003223] px-3 py-2 text-left text-white shadow-[0_20px_40px_-24px_rgba(0,50,35,0.55)]"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -1713,162 +1663,16 @@ const PDV = () => {
                       {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
                     </div>
                     <div className="truncate text-[9px] text-white/75">
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                       {mobileOrderTypeOptions.find((option) => option.value === orderType)?.label || 'Balcão'} • {operatorSelected ? 'operador ok' : 'selecione operador'}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[9px] uppercase tracking-[0.16em] text-white/80">Total</div>
-                  <div className="text-[15px] font-bold leading-none">{formatCurrency(getFinalTotal())}</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/70">Total</div>
+                  <div className="text-[15px] font-bold">{formatCurrency(getFinalTotal())}</div>
                 </div>
               </button>
             </SheetTrigger>
-<<<<<<< HEAD
-            <SheetContent side="bottom" className="flex h-[74vh] flex-col rounded-t-[28px] p-0">
-               <SheetHeader className="border-b px-4 py-3">
-                 <SheetTitle className="flex items-center justify-between gap-3">
-                   <span className="text-[15px]">Sacola</span>
-                   <span className="text-[11px] font-normal text-muted-foreground">{cartItemsCount} item(ns)</span>
-                 </SheetTitle>
-               </SheetHeader>
-               <div className="border-b bg-[#FFF8F2] px-4 py-2.5">
-                  <div className="scrollbar-hide flex gap-2 overflow-x-auto">
-                    {mobileOrderTypeOptions.filter((option) => option.value !== 'dine_in').map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setOrderType(option.value)}
-                        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                          orderType === option.value
-                            ? 'border-[#FF6400] bg-[#FF6400] text-white'
-                            : 'border-[#DCE6DF] bg-white text-[#003223]'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-               </div>
-               
-               <div className="flex-1 space-y-2 overflow-y-auto p-4">
-                  {cart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center space-y-2 text-muted-foreground opacity-50">
-                      <Store size={40} />
-                      <p className="text-sm">Sem itens</p>
-                    </div>
-                  ) : (
-                    cart.map((item, index) => {
-                      const formattedVariations = formatSelectedVariations(item.selectedVariations);
-                      const seq = String(index + 1).padStart(2, '0');
-                      return (
-                        <div key={item.cartItemId} className="flex flex-col rounded-2xl border border-[#003223]/8 bg-[#F8FAF8] p-3">
-                          <div className="mb-1.5 flex items-start justify-between gap-2">
-                            <div className="flex-1 mr-2">
-                              <span className="line-clamp-1 text-[13px] font-semibold">
-                                <span className="text-muted-foreground mr-1">{seq}.</span>
-                                {item.name}
-                              </span>
-                              <span className="block text-[11px] text-muted-foreground">
-                                {formatCurrency(item.price)} un.
-                              </span>
-                            </div>
-                            <span className="text-[13px] font-bold">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
-                          
-                          {formattedVariations.length > 0 && (
-                            <div className="mb-2 border-l-2 border-gray-200 pl-2 text-[11px] text-gray-500">
-                              {formattedVariations.map((v, i) => (
-                                <div key={i}>{v}</div>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {item.notes && (
-                            <div className="mb-2 rounded-xl bg-amber-50 p-1.5 text-[11px] italic text-amber-600">
-                              Obs: {item.notes}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-end gap-2">
-                             <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 rounded-xl"
-                              onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
-                            >
-                              <Minus size={12} />
-                            </Button>
-                            <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 rounded-xl"
-                              onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-                            >
-                              <Plus size={12} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="ml-1 h-7 w-7 rounded-xl text-red-500 hover:bg-red-50 hover:text-red-700"
-                              onClick={() => removeFromCart(item.cartItemId)}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-               </div>
-
-               {/* Mobile Checkout Form */}
-               <div className="border-t bg-white p-4">
-                  <div className="mb-3 max-h-36 space-y-2.5 overflow-y-auto pr-1">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : "Nome *"}
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="h-8 rounded-xl text-[12px]"
-                      />
-                      <Input
-                        placeholder="Telefone"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="h-8 rounded-xl text-[12px]"
-                      />
-                    </div>
-
-                    {orderType === 'delivery' && (
-                      <>
-                        <Input
-                          placeholder="Endereço Completo *"
-                          value={customerAddress}
-                          onChange={(e) => setCustomerAddress(e.target.value)}
-                          className="h-8 rounded-xl text-[12px]"
-                        />
-                        <Select value={selectedDeliveryZone} onValueChange={setSelectedDeliveryZone}>
-                          <SelectTrigger className="h-8 rounded-xl text-[12px]">
-                            <SelectValue placeholder="Selecione o Bairro *" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {deliveryZones.map((zone) => (
-                              <SelectItem key={zone.id} value={zone.id}>
-                                {zone.name} (+{formatCurrency(zone.delivery_fee)})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </>
-                    )}
-
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-=======
             <SheetContent side="bottom" className="h-[74vh] flex flex-col p-0">
                <SheetHeader className="p-4 border-b">
                  <SheetTitle className="flex items-center justify-between gap-3">
@@ -2027,13 +1831,11 @@ const PDV = () => {
                     
                     <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                         <Button
                           type="button"
                           variant={paymentMethod === 'pix' ? 'default' : 'outline'}
                           className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
-                          className="h-8 rounded-xl text-[11px]"
                         >
                           PIX
                         </Button>
@@ -2042,7 +1844,6 @@ const PDV = () => {
                           variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
                           className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
-                          className="h-8 rounded-xl text-[11px]"
                         >
                           Cartão
                         </Button>
@@ -2051,26 +1852,7 @@ const PDV = () => {
                           variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
                           className="h-7.5 text-[10px]"
                           onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
-                          className="h-8 rounded-xl text-[11px]"
                         >
-<<<<<<< HEAD
-                          Dinheiro
-                        </Button>
-                      </div>
-                      {paymentMethod === 'dinheiro' && (
-                        <Input
-                          placeholder="Valor pago"
-                          value={changeAmount}
-                          onChange={(e) => setChangeAmount(e.target.value)}
-                          className="h-8 rounded-xl text-[12px]"
-                          type="number"
-                        />
-                      )}
-                      {paymentMethod === 'cartao' && (
-                        tefSettings.enabled ? (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-=======
                           Dinheiro
                         </Button>
                       </div>
@@ -2087,13 +1869,11 @@ const PDV = () => {
                         tefSettings.enabled ? (
                           <div className="space-y-2">
                             <div className="grid grid-cols-2 gap-2">
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
                               <Button
                                 type="button"
                                 variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
                                 className="h-7.5 text-[10px]"
                                 onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
-                                className="h-8 rounded-xl text-[11px]"
                               >
                                 Maquininha
                               </Button>
@@ -2102,65 +1882,7 @@ const PDV = () => {
                                 variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
                                 className="h-7.5 text-[10px]"
                                 onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
-                                className="h-8 rounded-xl text-[11px]"
                               >
-<<<<<<< HEAD
-                                TEF
-                              </Button>
-                            </div>
-                            {cardProcessingMode === 'tef' && (
-                              <Button type="button" variant="outline" className="h-8 w-full rounded-xl text-[11px]" onClick={() => setTefOpen(true)}>
-                                Editar dados TEF
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Cartão via maquininha</div>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mb-3 space-y-1 rounded-2xl bg-[#FFF8F2] p-3 text-[12px]">
-                    <div className="flex justify-between text-gray-500">
-                      <span>Subtotal</span>
-                      <span>{formatCurrency(getTotalValue())}</span>
-                    </div>
-                    {getDeliveryFee() > 0 && (
-                      <div className="flex justify-between text-gray-500">
-                        <span>Entrega</span>
-                        <span>{formatCurrency(getDeliveryFee())}</span>
-                      </div>
-                    )}
-                    <div className="mt-2 flex justify-between border-t pt-2 text-[15px] font-bold text-[#003223]">
-                      <span>Total</span>
-                      <span>{formatCurrency(getFinalTotal())}</span>
-                    </div>
-                  </div>
-                  
-                  <Button
-                    onClick={handleFinalizeSale}
-                    disabled={processing || cart.length === 0 || !cashSession?.id || !operatorSelected}
-                    className="h-10 w-full rounded-2xl bg-[#0B5137] text-sm font-bold text-white shadow-sm hover:bg-[#09432e] disabled:bg-slate-200 disabled:text-slate-500"
-                  >
-                    {processing && orderType !== 'dine_in' ? (
-                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        Finalizar
-                        <span className="ml-2 text-[11px] font-normal opacity-90">
-                          {formatCurrency(getFinalTotal())}
-                        </span>
-                      </>
-                    )}
-                  </Button>
-               </div>
-            </SheetContent>
-          </Sheet>
-        </TabsContent>
-
-          <TabsContent value="accounts" className="mt-0 flex-1 overflow-y-auto">
-=======
                                 TEF
                               </Button>
                             </div>
@@ -2214,7 +1936,6 @@ const PDV = () => {
         </TabsContent>
 
           <TabsContent value="accounts" className="flex-1 overflow-y-auto mt-0">
->>>>>>> f018f94 (Compacta PDV e caixa mobile)
             <div className="sticky top-0 z-20 hidden border-b border-[#FF6400]/10 bg-gradient-to-r from-[#F5EBE1] via-white to-[#FFF8F2] px-4 pb-3 pt-2 shadow-[0_18px_35px_-32px_rgba(0,50,35,0.26)] lg:block">
               <TabsList className="grid h-9 w-full max-w-64 grid-cols-2 rounded-xl border border-[#FF6400]/15 bg-white/80 p-1 shadow-sm">
                 <TabsTrigger value="products" className="h-7 rounded-lg text-sm font-semibold text-[#003223]/75 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white data-[state=active]:shadow-sm">Vendas</TabsTrigger>
