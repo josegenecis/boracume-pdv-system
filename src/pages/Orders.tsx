@@ -787,15 +787,15 @@ const Orders = () => {
     const primaryAction = getMobilePrimaryAction(order);
 
     return (
-      <Card key={order.id} className="overflow-hidden rounded-[28px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_40px_-28px_rgba(0,50,35,0.24)]">
-        <CardContent className="p-4">
-          <div className="space-y-3.5">
+      <Card key={order.id} className="overflow-hidden rounded-[22px] border border-[#FF6400]/12 bg-white/95 shadow-[0_18px_36px_-30px_rgba(0,50,35,0.22)]">
+        <CardContent className="p-3">
+          <div className="space-y-2.5">
             <button type="button" className="w-full text-left" onClick={() => openOrderDetails(order)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-base font-bold text-slate-900">Pedido {order.order_number}</div>
-                  <div className="mt-1 text-sm font-medium text-slate-700">{order.customer_name}</div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                  <div className="text-[15px] font-bold text-slate-900">Pedido {order.order_number}</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-slate-700">{order.customer_name}</div>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
                     <span className="inline-flex items-center gap-1">
                       {getOrderTypeIcon(order.order_type)}
                       {getOrderTypeLabel(order.order_type)}
@@ -806,36 +806,36 @@ const Orders = () => {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   {getStatusBadge(order.status)}
-                  <div className="text-sm font-bold text-slate-900">{formatCurrency(order.total)}</div>
+                  <div className="text-[13px] font-bold text-slate-900">{formatCurrency(order.total)}</div>
                 </div>
               </div>
             </button>
 
-            <div className="grid grid-cols-3 gap-2 rounded-[22px] border border-[#FF6400]/10 bg-[#FFF8F2]/75 p-3">
+            <div className="grid grid-cols-3 gap-1.5 rounded-[18px] border border-[#FF6400]/10 bg-[#FFF8F2]/75 p-2">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Itens</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{order.items.length} item(s)</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Itens</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-900">{order.items.length} item(s)</div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Pagamento</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{order.payment_method.toUpperCase()}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Pagamento</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-900">{order.payment_method.toUpperCase()}</div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tipo</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">{getOrderTypeLabel(order.order_type)}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tipo</div>
+                <div className="mt-0.5 text-[12px] font-semibold text-slate-900">{getOrderTypeLabel(order.order_type)}</div>
               </div>
             </div>
 
             {order.customer_address && (
-              <div className="rounded-[22px] border border-[#003223]/8 bg-white p-3">
-                <div className="flex items-start gap-2 text-sm text-slate-600">
+              <div className="rounded-[18px] border border-[#003223]/8 bg-white p-2.5">
+                <div className="flex items-start gap-2 text-[13px] text-slate-600">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#FF6400]" />
                   <span>{order.customer_address}</span>
                 </div>
                 <div className="mt-3 flex gap-2">
                   <Button
                     variant="outline"
-                    className="h-9 flex-1 rounded-2xl border-[#003223]/10 bg-white text-xs text-[#003223] hover:bg-[#F5EBE1]"
+                    className="h-8 flex-1 rounded-2xl border-[#003223]/10 bg-white text-[11px] text-[#003223] hover:bg-[#F5EBE1]"
                     onClick={() => copyLocation(order)}
                   >
                     <Copy className="mr-1.5 h-3.5 w-3.5" />
@@ -844,7 +844,7 @@ const Orders = () => {
                   {order.google_maps_link && (
                     <Button
                       variant="outline"
-                      className="h-9 flex-1 rounded-2xl border-[#003223]/10 bg-white text-xs text-[#003223] hover:bg-[#F5EBE1]"
+                      className="h-8 flex-1 rounded-2xl border-[#003223]/10 bg-white text-[11px] text-[#003223] hover:bg-[#F5EBE1]"
                       onClick={() => window.open(order.google_maps_link, '_blank')}
                     >
                       <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
@@ -857,7 +857,7 @@ const Orders = () => {
 
             {primaryAction && (
               <Button
-                className={`h-12 rounded-2xl text-sm font-semibold ${primaryAction.className}`}
+                className={`h-10 rounded-2xl text-[12px] font-semibold ${primaryAction.className}`}
                 onClick={() => updateOrderStatus(order.id, primaryAction.status)}
                 disabled={updatingOrderIds.has(order.id)}
               >
@@ -866,23 +866,23 @@ const Orders = () => {
             )}
 
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => openOrderDetails(order)}>
-                <Eye className="mr-2 h-4 w-4" />
+              <Button variant="outline" className="h-9 rounded-2xl border-[#003223]/10 bg-white px-2 text-[11px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => openOrderDetails(order)}>
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
                 Ver
               </Button>
-              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleWhatsAppShare(order)}>
-                <MessageCircle className="mr-2 h-4 w-4" />
+              <Button variant="outline" className="h-9 rounded-2xl border-[#003223]/10 bg-white px-2 text-[11px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleWhatsAppShare(order)}>
+                <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
                 Whats
               </Button>
-              <Button variant="outline" className="h-10 rounded-2xl border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => PrinterService.printOrder(order)}>
-                <Printer className="mr-2 h-4 w-4" />
+              <Button variant="outline" className="h-9 rounded-2xl border-[#003223]/10 bg-white px-2 text-[11px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => PrinterService.printOrder(order)}>
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
                 Imprimir
               </Button>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
               {order.status === 'pending' && (
-                <Button variant="outline" className="h-11 rounded-2xl border-red-200 bg-white text-red-500 hover:bg-red-50" onClick={() => requestCancelOrder(order.id)}>
+                <Button variant="outline" className="h-9 rounded-2xl border-red-200 bg-white text-[11px] text-red-500 hover:bg-red-50" onClick={() => requestCancelOrder(order.id)}>
                   Cancelar pedido
                 </Button>
               )}
@@ -1091,8 +1091,8 @@ const Orders = () => {
               </Button>
             </div>
 
-            <div className="flex flex-col gap-3 md:hidden">
-              <div className="relative flex-1">
+            <div className="flex flex-col gap-2.5 md:hidden">
+              <div className="hidden flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Buscar por número, cliente ou telefone..."
@@ -1108,7 +1108,7 @@ const Orders = () => {
                     key={filter.value}
                     type="button"
                     onClick={() => setTypeFilter(filter.value)}
-                    className={`shrink-0 rounded-2xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                    className={`shrink-0 rounded-[18px] border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                       typeFilter === filter.value
                         ? 'border-[#003223] bg-[#003223] text-white'
                         : 'border-[#DCE6DF] bg-white text-[#003223]'
@@ -1122,37 +1122,37 @@ const Orders = () => {
           </CardContent>
         </Card>
 
-        <div className="grid gap-3 md:hidden">
+        <div className="grid gap-2.5 md:hidden">
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-[24px] border border-[#FF6400]/12 bg-white/95 p-4 shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Novos</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{pendingOrders.length}</div>
+            <div className="rounded-[20px] border border-[#FF6400]/12 bg-white/95 p-3 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Novos</div>
+              <div className="mt-1.5 text-[1.8rem] font-bold leading-none text-slate-900">{pendingOrders.length}</div>
             </div>
-            <div className="rounded-[24px] border border-[#003223]/10 bg-white/95 p-4 shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Preparo</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{activeOrders.length}</div>
+            <div className="rounded-[20px] border border-[#003223]/10 bg-white/95 p-3 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Preparo</div>
+              <div className="mt-1.5 text-[1.8rem] font-bold leading-none text-slate-900">{activeOrders.length}</div>
             </div>
-            <div className="rounded-[24px] border border-[#8CC850]/20 bg-white/95 p-4 shadow-sm">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Entrega</div>
-              <div className="mt-2 text-2xl font-bold text-slate-900">{completedOrders.length}</div>
+            <div className="rounded-[20px] border border-[#8CC850]/20 bg-white/95 p-3 shadow-sm">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entrega</div>
+              <div className="mt-1.5 text-[1.8rem] font-bold leading-none text-slate-900">{completedOrders.length}</div>
             </div>
           </div>
 
           <div className="flex gap-2">
-            <Button className="h-11 flex-1 rounded-2xl bg-[#003223] text-white hover:bg-[#0a4a34]" onClick={fetchOrders}>
+            <Button className="h-9 flex-1 rounded-[18px] bg-[#003223] text-[12px] text-white hover:bg-[#0a4a34]" onClick={fetchOrders}>
               Atualizar
             </Button>
-            <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => { setDeliveryDialogOpen(true); setDeliveryDialogTab('in_delivery'); }}>
+            <Button variant="outline" className="h-9 flex-1 rounded-[18px] border-[#FF6400]/15 bg-white text-[12px] text-[#003223] hover:bg-[#F5EBE1]" onClick={() => { setDeliveryDialogOpen(true); setDeliveryDialogTab('in_delivery'); }}>
               Entregas
             </Button>
           </div>
 
           <Tabs value={mobileStatusTab} onValueChange={(value) => setMobileStatusTab(value as typeof mobileStatusTab)} className="w-full">
-            <TabsList className="grid h-auto grid-cols-4 rounded-[24px] border border-[#FF6400]/10 bg-white p-1">
-              <TabsTrigger value="novos" className="rounded-2xl text-xs">Novos</TabsTrigger>
-              <TabsTrigger value="preparo" className="rounded-2xl text-xs">Preparo</TabsTrigger>
-              <TabsTrigger value="entrega" className="rounded-2xl text-xs">Entrega</TabsTrigger>
-              <TabsTrigger value="finalizados" className="rounded-2xl text-xs">Finalizados</TabsTrigger>
+            <TabsList className="grid h-auto grid-cols-4 rounded-[20px] border border-[#FF6400]/10 bg-white p-1">
+              <TabsTrigger value="novos" className="rounded-[16px] px-1 py-1.5 text-[11px]">Novos</TabsTrigger>
+              <TabsTrigger value="preparo" className="rounded-[16px] px-1 py-1.5 text-[11px]">Preparo</TabsTrigger>
+              <TabsTrigger value="entrega" className="rounded-[16px] px-1 py-1.5 text-[11px]">Entrega</TabsTrigger>
+              <TabsTrigger value="finalizados" className="rounded-[16px] px-1 py-1.5 text-[11px]">Finalizados</TabsTrigger>
             </TabsList>
 
             {mobileBulkActionConfig && mobileBulkActionConfig.orderIds.length > 0 && (
@@ -1166,16 +1166,16 @@ const Orders = () => {
             )}
 
             <TabsContent value="novos" className="mt-4 space-y-3">
-              {pendingOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido novo.</CardContent></Card> : pendingOrders.map(renderMobileOrderCard)}
+              {pendingOrders.length === 0 ? <Card className="rounded-[22px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-8 text-center text-sm text-slate-500">Nenhum pedido novo.</CardContent></Card> : pendingOrders.map(renderMobileOrderCard)}
             </TabsContent>
             <TabsContent value="preparo" className="mt-4 space-y-3">
-              {activeOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido em preparo.</CardContent></Card> : activeOrders.map(renderMobileOrderCard)}
+              {activeOrders.length === 0 ? <Card className="rounded-[22px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-8 text-center text-sm text-slate-500">Nenhum pedido em preparo.</CardContent></Card> : activeOrders.map(renderMobileOrderCard)}
             </TabsContent>
             <TabsContent value="entrega" className="mt-4 space-y-3">
-              {completedOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido aguardando entrega.</CardContent></Card> : completedOrders.map(renderMobileOrderCard)}
+              {completedOrders.length === 0 ? <Card className="rounded-[22px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-8 text-center text-sm text-slate-500">Nenhum pedido aguardando entrega.</CardContent></Card> : completedOrders.map(renderMobileOrderCard)}
             </TabsContent>
             <TabsContent value="finalizados" className="mt-4 space-y-3">
-              {deliveredOrders.length === 0 ? <Card className="rounded-[28px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-10 text-center text-sm text-slate-500">Nenhum pedido finalizado.</CardContent></Card> : deliveredOrders.map(renderMobileOrderCard)}
+              {deliveredOrders.length === 0 ? <Card className="rounded-[22px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-8 text-center text-sm text-slate-500">Nenhum pedido finalizado.</CardContent></Card> : deliveredOrders.map(renderMobileOrderCard)}
             </TabsContent>
           </Tabs>
         </div>
