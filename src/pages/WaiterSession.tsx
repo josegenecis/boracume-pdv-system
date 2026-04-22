@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import Logo from '@/components/Logo';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -874,11 +875,11 @@ const WaiterSessionPage = () => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_42%,#072C1F_100%)] pb-24 text-slate-900">
       <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 lg:px-8">
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.08] p-3 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:p-4">
+        <div className="rounded-[24px] border border-white/10 bg-white/[0.08] p-2.5 text-white shadow-[0_24px_60px_-34px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:p-4">
           <div className="flex items-center justify-between gap-2">
             <Button
               variant="outline"
-              className="rounded-full border-white/15 bg-white/10 px-3 text-white hover:bg-white/15 hover:text-white"
+              className="h-9 rounded-full border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 hover:text-white"
               onClick={() => navigate('/waiter-dashboard')}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -889,7 +890,7 @@ const WaiterSessionPage = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                className="h-9 w-9 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
                 onClick={() => void loadSession(true)}
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
@@ -897,7 +898,7 @@ const WaiterSessionPage = () => {
               <Button
                 variant="outline"
                 size="icon"
-                className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                className="h-9 w-9 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
                 onClick={() => setTransferTableOpen(true)}
               >
                 <MoveRight className="h-4 w-4" />
@@ -906,22 +907,18 @@ const WaiterSessionPage = () => {
           </div>
 
           <div className="mt-2.5 flex flex-col items-center text-center">
-            <img
-              src="/waiter/logo-boracume.png"
-              alt="BoraCume"
-              className="h-11 w-auto object-contain drop-shadow-[0_14px_26px_rgba(0,0,0,0.32)] sm:h-14"
-            />
-            <div className="mt-1.5 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/75">
+            <Logo size="sm" theme="dark" className="justify-center" />
+            <div className="mt-1.5 inline-flex rounded-full bg-white/10 px-3 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/75">
               App web Garcom
             </div>
-            <h1 className="mt-2 text-[1.7rem] font-semibold leading-none text-white sm:mt-3 sm:text-3xl">{session.tableLabel}</h1>
-            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5 text-[11px] text-white/75 sm:text-xs">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
-                <Clock3 className="h-3.5 w-3.5 text-[#A4D65E]" />
+            <h1 className="mt-2 text-[1.35rem] font-semibold leading-none text-white sm:mt-3 sm:text-3xl">{session.tableLabel}</h1>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[10px] text-white/75 sm:text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
+                <Clock3 className="h-3 w-3 text-[#A4D65E]" />
                 {Math.max(0, Math.floor((Date.now() - new Date(session.openedAt).getTime()) / 60000))} min
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1">
-                <Users className="h-3.5 w-3.5 text-[#A4D65E]" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5">
+                <Users className="h-3 w-3 text-[#A4D65E]" />
                 {session.accountCount} comandas
               </span>
               <WaiterStatusBadge
@@ -939,59 +936,59 @@ const WaiterSessionPage = () => {
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-1.5 sm:gap-2">
-            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] px-2 py-1.5 text-left">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Total</span>
-                <ReceiptText className="h-3.5 w-3.5 text-[#A4D65E]" />
+                <ReceiptText className="h-3 w-3 text-[#A4D65E]" />
               </div>
-              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.total)}</div>
+              <div className="mt-1 text-sm font-semibold text-white sm:text-lg">{formatMoney(session.total)}</div>
             </div>
-            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] px-2 py-1.5 text-left">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Recebido</span>
-                <CircleDollarSign className="h-3.5 w-3.5 text-[#A4D65E]" />
+                <CircleDollarSign className="h-3 w-3 text-[#A4D65E]" />
               </div>
-              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.paidTotal)}</div>
+              <div className="mt-1 text-sm font-semibold text-white sm:text-lg">{formatMoney(session.paidTotal)}</div>
             </div>
-            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] px-2 py-1.5 text-left">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Saldo</span>
-                <NotebookPen className="h-3.5 w-3.5 text-[#A4D65E]" />
+                <NotebookPen className="h-3 w-3 text-[#A4D65E]" />
               </div>
-              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">{formatMoney(session.dueAmount)}</div>
+              <div className="mt-1 text-sm font-semibold text-white sm:text-lg">{formatMoney(session.dueAmount)}</div>
             </div>
-            <div className="rounded-[16px] border border-white/10 bg-white/[0.08] px-2.5 py-2 text-left">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] px-2 py-1.5 text-left">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/60">Cozinha</span>
-                <ChefHat className="h-3.5 w-3.5 text-[#A4D65E]" />
+                <ChefHat className="h-3 w-3 text-[#A4D65E]" />
               </div>
-              <div className="mt-1.5 text-base font-semibold text-white sm:text-lg">
-                {session.sentItemsCount} <span className="text-xs text-white/60">/ {session.readyItemsCount} prontos</span>
+              <div className="mt-1 text-sm font-semibold text-white sm:text-lg">
+                {session.sentItemsCount} <span className="text-[11px] text-white/60">/ {session.readyItemsCount} prontos</span>
               </div>
             </div>
           </div>
 
           <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:gap-2">
-            <Button className="h-9 rounded-xl bg-[#FF6400] px-3 text-sm text-white hover:bg-[#E25A00]" onClick={() => openAccountDialog('create')}>
-              <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+            <Button className="h-8 rounded-xl bg-[#FF6400] px-2.5 text-[11px] text-white hover:bg-[#E25A00] sm:h-9 sm:px-3 sm:text-sm" onClick={() => openAccountDialog('create')}>
+              <PlusCircle className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
               Nova
             </Button>
             <Button
               variant="outline"
-              className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white"
+              className="h-8 rounded-xl border-white/15 bg-white/10 px-2.5 text-[11px] text-white hover:bg-white/15 hover:text-white sm:h-9 sm:px-3 sm:text-sm"
               onClick={handleSendAllAccounts}
               disabled={submitting || !hasDraftAccounts}
             >
-              <Send className="mr-1.5 h-3.5 w-3.5" />
+              <Send className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" />
               Enviar tudo
             </Button>
-            <Button variant="outline" className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
+            <Button variant="outline" className="h-8 rounded-xl border-white/15 bg-white/10 px-2.5 text-[11px] text-white hover:bg-white/15 hover:text-white sm:h-9 sm:px-3 sm:text-sm" onClick={handleRequestCheck} disabled={submitting || session.dueAmount <= 0}>
               Solicitar conta
             </Button>
-            <Button className="h-9 rounded-xl bg-[#082F23] px-3 text-sm text-white hover:bg-[#0B4A36]" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
+            <Button className="h-8 rounded-xl bg-[#082F23] px-2.5 text-[11px] text-white hover:bg-[#0B4A36] sm:h-9 sm:px-3 sm:text-sm" onClick={() => openPaymentDialog()} disabled={submitting || session.dueAmount <= 0}>
               Receber
             </Button>
-            <Button variant="outline" className="h-9 rounded-xl border-white/15 bg-white/10 px-3 text-sm text-white hover:bg-white/15 hover:text-white" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
+            <Button variant="outline" className="h-8 rounded-xl border-white/15 bg-white/10 px-2.5 text-[11px] text-white hover:bg-white/15 hover:text-white sm:h-9 sm:px-3 sm:text-sm" onClick={handleReleaseTable} disabled={submitting || session.dueAmount > 0}>
               Liberar
             </Button>
           </div>
@@ -1004,21 +1001,21 @@ const WaiterSessionPage = () => {
         </div>
 
         <div className="mt-4">
-          <Card className="rounded-[26px] border border-[#DCE6D8] bg-white shadow-sm">
-            <CardContent className="space-y-4 p-3 sm:p-4">
+          <Card className="rounded-[22px] border border-[#DCE6D8] bg-white shadow-sm">
+            <CardContent className="space-y-3 p-3 sm:p-4">
               <div>
-                <h2 className="text-lg font-semibold text-[#082F23] sm:text-xl">Pedido</h2>
+                <h2 className="text-base font-semibold text-[#082F23] sm:text-xl">Pedido</h2>
               </div>
 
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'accounts' | 'timeline' | 'payments')} className="w-full">
                 <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-[#F1F5EF] p-1">
-                  <TabsTrigger value="accounts" className="rounded-xl text-sm">
+                  <TabsTrigger value="accounts" className="rounded-xl px-2 py-1.5 text-[11px] sm:text-sm">
                     Comandas
                   </TabsTrigger>
-                  <TabsTrigger value="timeline" className="rounded-xl text-sm">
+                  <TabsTrigger value="timeline" className="rounded-xl px-2 py-1.5 text-[11px] sm:text-sm">
                     Historico
                   </TabsTrigger>
-                  <TabsTrigger value="payments" className="rounded-xl text-sm">
+                  <TabsTrigger value="payments" className="rounded-xl px-2 py-1.5 text-[11px] sm:text-sm">
                     Pagamentos
                   </TabsTrigger>
                 </TabsList>
@@ -1037,61 +1034,61 @@ const WaiterSessionPage = () => {
                       }
                     />
                   ) : (
-                    <div className="grid gap-3 xl:grid-cols-2">
+                    <div className="grid gap-2.5 xl:grid-cols-2">
                       {session.accounts.map((account) => (
-                        <Card key={account.id} className="rounded-[22px] border border-[#DCE6D8] bg-[#FBFCFA] shadow-sm">
-                          <CardContent className="space-y-3 p-3">
+                        <Card key={account.id} className="rounded-[20px] border border-[#DCE6D8] bg-[#FBFCFA] shadow-sm">
+                          <CardContent className="space-y-2.5 p-2.5 sm:p-3">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="space-y-1.5">
+                              <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="text-base font-semibold text-[#082F23]">{account.name}</h3>
+                                  <h3 className="text-[15px] font-semibold text-[#082F23] sm:text-base">{account.name}</h3>
                                   <WaiterStatusBadge status={account.status} />
                                   {account.kitchenStatus !== 'idle' ? <WaiterStatusBadge status={account.kitchenStatus} /> : null}
                                 </div>
-                                <p className="text-xs leading-5 text-slate-500">
+                                <p className="text-[11px] leading-[1.125rem] text-slate-500 sm:text-xs sm:leading-5">
                                   {account.itemCount} itens, {account.draftCount} em rascunho e {account.readyCount} prontos.
                                 </p>
                               </div>
 
-                              <div className="grid min-w-[210px] grid-cols-3 gap-2">
-                                <div className="rounded-2xl bg-white p-2">
+                              <div className="grid min-w-[190px] grid-cols-3 gap-1.5 sm:min-w-[210px] sm:gap-2">
+                                <div className="rounded-[16px] bg-white p-2">
                                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Subtotal</div>
-                                  <div className="mt-1 text-sm font-semibold text-[#082F23]">{formatMoney(account.total)}</div>
+                                  <div className="mt-1 text-[12px] font-semibold text-[#082F23] sm:text-sm">{formatMoney(account.total)}</div>
                                 </div>
-                                <div className="rounded-2xl bg-white p-2">
+                                <div className="rounded-[16px] bg-white p-2">
                                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Recebido</div>
-                                  <div className="mt-1 text-sm font-semibold text-[#082F23]">{formatMoney(account.paidTotal)}</div>
+                                  <div className="mt-1 text-[12px] font-semibold text-[#082F23] sm:text-sm">{formatMoney(account.paidTotal)}</div>
                                 </div>
-                                <div className="rounded-2xl bg-white p-2">
+                                <div className="rounded-[16px] bg-white p-2">
                                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Pendente</div>
-                                  <div className="mt-1 text-sm font-semibold text-[#082F23]">{formatMoney(account.dueAmount)}</div>
+                                  <div className="mt-1 text-[12px] font-semibold text-[#082F23] sm:text-sm">{formatMoney(account.dueAmount)}</div>
                                 </div>
                               </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2">
-                              <Button className="h-10 rounded-2xl bg-[#082F23] text-sm hover:bg-[#0B4A36]" onClick={() => openProductDialog(account)}>
+                              <Button className="h-9 rounded-2xl bg-[#082F23] text-[11px] hover:bg-[#0B4A36] sm:h-10 sm:text-sm" onClick={() => openProductDialog(account)}>
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Produto
                               </Button>
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-2xl text-sm"
+                                className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm"
                                 onClick={() => handleSendAccount(account)}
                                 disabled={submitting || account.draftCount === 0}
                               >
                                 <Send className="mr-2 h-4 w-4" />
                                 Enviar
                               </Button>
-                              <Button variant="outline" className="h-10 rounded-2xl text-sm" onClick={() => openPaymentDialog(account)} disabled={account.dueAmount <= 0}>
+                              <Button variant="outline" className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm" onClick={() => openPaymentDialog(account)} disabled={account.dueAmount <= 0}>
                                 Receber
                               </Button>
-                              <Button variant="outline" className="h-10 rounded-2xl text-sm" onClick={() => openAccountDialog('edit', account)}>
+                              <Button variant="outline" className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm" onClick={() => openAccountDialog('edit', account)}>
                                 Editar
                               </Button>
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-2xl text-sm"
+                                className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm"
                                 onClick={() => {
                                   setMergeSourceAccountId(account.id);
                                   setMergeTargetAccountId('');
@@ -1102,7 +1099,7 @@ const WaiterSessionPage = () => {
                               </Button>
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-2xl text-sm"
+                                className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm"
                                 onClick={() => {
                                   setTransferAccountId(account.id);
                                   setTransferAccountTargetId('');
@@ -1112,7 +1109,7 @@ const WaiterSessionPage = () => {
                               </Button>
                               <Button
                                 variant="outline"
-                                className="h-10 rounded-2xl text-sm"
+                                className="h-9 rounded-2xl text-[11px] sm:h-10 sm:text-sm"
                                 onClick={() => void handleRemoveAccount(account)}
                                 disabled={submitting || account.itemCount > 0 || account.paidTotal > 0}
                               >
@@ -1122,29 +1119,29 @@ const WaiterSessionPage = () => {
 
                             <div className="space-y-3">
                               {account.items.length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-[#D7E2D3] bg-white px-4 py-4 text-sm text-slate-500">
+                                <div className="rounded-2xl border border-dashed border-[#D7E2D3] bg-white px-4 py-3 text-[13px] text-slate-500 sm:text-sm">
                                   Esta comanda ainda nao possui itens.
                                 </div>
                               ) : (
                                 account.items.map((item) => (
-                                  <div key={item.id} className="rounded-2xl border border-[#E7ECE4] bg-white p-3">
+                                  <div key={item.id} className="rounded-[18px] border border-[#E7ECE4] bg-white p-2.5 sm:p-3">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                       <div className="space-y-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <span className="font-semibold text-[#082F23]">
+                                          <span className="text-[13px] font-semibold text-[#082F23] sm:text-sm">
                                             {item.quantity}x {item.productName}
                                           </span>
                                           <WaiterStatusBadge status={item.status} />
                                         </div>
-                                        <div className="text-sm text-slate-500">
+                                        <div className="text-[12px] text-slate-500 sm:text-sm">
                                           {item.options.length ? item.options.map((option) => option.optionName).join(', ') : 'Sem complementos'}
                                         </div>
-                                        {item.notes ? <div className="text-sm text-slate-400">Obs: {item.notes}</div> : null}
+                                        {item.notes ? <div className="text-[12px] text-slate-400 sm:text-sm">Obs: {item.notes}</div> : null}
                                       </div>
                                       <div className="text-right">
-                                        <div className="text-base font-semibold text-[#082F23]">{formatMoney(item.totalPrice)}</div>
+                                        <div className="text-sm font-semibold text-[#082F23] sm:text-base">{formatMoney(item.totalPrice)}</div>
                                         {item.sentAt ? (
-                                          <div className="text-xs text-slate-400">
+                                          <div className="text-[11px] text-slate-400 sm:text-xs">
                                             {new Date(item.sentAt).toLocaleTimeString('pt-BR', {
                                               hour: '2-digit',
                                               minute: '2-digit',
@@ -1156,12 +1153,12 @@ const WaiterSessionPage = () => {
 
                                     {item.status === 'draft' ? (
                                       <div className="mt-3 flex flex-wrap gap-2">
-                                        <Button variant="outline" className="h-9 rounded-2xl text-sm" onClick={() => openProductDialog(account, item.id)}>
+                                        <Button variant="outline" className="h-8 rounded-2xl text-[11px] sm:h-9 sm:text-sm" onClick={() => openProductDialog(account, item.id)}>
                                           Editar item
                                         </Button>
                                         <Button
                                           variant="outline"
-                                          className="h-9 rounded-2xl text-sm"
+                                          className="h-8 rounded-2xl text-[11px] sm:h-9 sm:text-sm"
                                           onClick={() => {
                                             setMoveItemId(item.id);
                                             setMoveTargetAccountId('');
@@ -1173,7 +1170,7 @@ const WaiterSessionPage = () => {
                                         </Button>
                                         <Button
                                           variant="ghost"
-                                          className="h-9 rounded-2xl text-sm text-[#FF6400] hover:bg-[#FFF3EB] hover:text-[#E25A00]"
+                                          className="h-8 rounded-2xl text-[11px] text-[#FF6400] hover:bg-[#FFF3EB] hover:text-[#E25A00] sm:h-9 sm:text-sm"
                                           onClick={() => void handleCancelDraft(account.id, item.id)}
                                         >
                                           Remover
@@ -1186,11 +1183,11 @@ const WaiterSessionPage = () => {
                             </div>
 
                             {account.tickets.length ? (
-                              <div className="rounded-2xl bg-[#F4F8F2] p-3">
+                              <div className="rounded-2xl bg-[#F4F8F2] p-2.5 sm:p-3">
                                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Envios para cozinha</div>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {account.tickets.map((ticket) => (
-                                    <div key={ticket.id} className="rounded-full border border-[#D7E2D3] bg-white px-3 py-1 text-xs text-slate-600">
+                                    <div key={ticket.id} className="rounded-full border border-[#D7E2D3] bg-white px-2.5 py-1 text-[11px] text-slate-600 sm:text-xs">
                                       {ticket.orderNumber || 'Pedido'} - {ticket.status}
                                     </div>
                                   ))}
@@ -1319,28 +1316,28 @@ const WaiterSessionPage = () => {
           {
             key: 'accounts',
             label: 'Comandas',
-            icon: <ReceiptText className="h-5 w-5" />,
+            icon: <ReceiptText className="h-4 w-4" />,
             active: activeTab === 'accounts',
             onClick: () => setActiveTab('accounts'),
           },
           {
             key: 'payments',
             label: 'Pagamentos',
-            icon: <CircleDollarSign className="h-5 w-5" />,
+            icon: <CircleDollarSign className="h-4 w-4" />,
             active: activeTab === 'payments',
             onClick: () => setActiveTab('payments'),
           },
           {
             key: 'timeline',
             label: 'Historico',
-            icon: <Clock3 className="h-5 w-5" />,
+            icon: <Clock3 className="h-4 w-4" />,
             active: activeTab === 'timeline',
             onClick: () => setActiveTab('timeline'),
           },
           {
             key: 'tables',
             label: 'Mesas',
-            icon: <ArrowLeft className="h-5 w-5" />,
+            icon: <ArrowLeft className="h-4 w-4" />,
             onClick: () => navigate('/waiter-dashboard'),
           },
         ]}

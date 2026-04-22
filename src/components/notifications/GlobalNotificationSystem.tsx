@@ -26,7 +26,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  
+
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -42,9 +42,12 @@ const GlobalNotificationSystem: React.FC = () => {
     }
   });
 
-  // Verifica se está na página de pedidos para não mostrar notificação
-  // Adicionado '/track' para evitar notificações na tela do cliente
-  const isOnOrdersPage = ['/orders', '/pedidos', '/kitchen', '/cozinha', '/kds-view', '/customer-view', '/menu-digital'].some(path => location.pathname.startsWith(path)) || location.pathname.includes('/track');
+  // Verifica se esta na pagina de pedidos para nao mostrar notificacao.
+  // Adicionado '/track' para evitar notificacoes na tela do cliente.
+  const isOnOrdersPage =
+    ['/orders', '/pedidos', '/kitchen', '/cozinha', '/kds-view', '/customer-view', '/menu-digital'].some((path) =>
+      location.pathname.startsWith(path),
+    ) || location.pathname.includes('/track');
   const isDigitalMenu = location.pathname.includes('/menu');
 
   const isOnOrdersPageRef = useRef(isOnOrdersPage);
@@ -54,7 +57,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
   const warnedUnlockRef = useRef(false);
-  const visibleOrders = pendingOrders.filter(order => !dismissedOrders.has(order.id));
+  const visibleOrders = pendingOrders.filter((order) => !dismissedOrders.has(order.id));
 
   useEffect(() => {
     isOnOrdersPageRef.current = isOnOrdersPage;
@@ -98,45 +101,45 @@ const GlobalNotificationSystem: React.FC = () => {
       warnedUnlockRef.current = true;
       toast({
         title: 'Som bloqueado',
-        description: 'Clique/toque na tela uma vez para liberar a notificação sonora.',
+        description: 'Clique/toque na tela uma vez para liberar a notificacao sonora.',
         duration: 8000,
       });
     } catch {}
   };
 
   const showBackgroundOrderNotification = async (order: PendingOrder) => {
-    const title = 'Novo pedido recebido'
-    const body = `Pedido ${order.order_number} - ${order.customer_name || 'Cliente'}`
+    const title = 'Novo pedido recebido';
+    const body = `Pedido ${order.order_number} - ${order.customer_name || 'Cliente'}`;
 
     try {
       if ((document.visibilityState !== 'visible' || !document.hasFocus()) && window.electronAPI?.showNotification) {
-        await window.electronAPI.showNotification(title, body)
-        return
+        await window.electronAPI.showNotification(title, body);
+        return;
       }
     } catch {}
 
     try {
       if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body })
+        new Notification(title, { body });
       }
     } catch {}
-  }
+  };
 
   const handleIncomingOrderAlert = async (order: PendingOrder) => {
-    await playOrderSound()
-    await showBackgroundOrderNotification(order)
+    await playOrderSound();
+    await showBackgroundOrderNotification(order);
     if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200])
+      navigator.vibrate([200, 100, 200]);
     }
-    if (isOnOrdersPageRef.current) return
-    setIsAnimatingOut(false)
-    setIsVisible(true)
+    if (isOnOrdersPageRef.current) return;
+    setIsAnimatingOut(false);
+    setIsVisible(true);
     toast({
-      title: "🔔 Novo Pedido Recebido!",
+      title: 'Novo Pedido Recebido!',
       description: `Pedido ${order.order_number} - ${order.customer_name || 'Cliente'}`,
       duration: 5000,
-    })
-  }
+    });
+  };
 
   useEffect(() => {
     try {
@@ -146,11 +149,13 @@ const GlobalNotificationSystem: React.FC = () => {
     const unlock = async () => {
       try {
         await soundNotifications.enableSound();
-        try { localStorage.setItem('sound_unlocked', 'true'); } catch {}
+        try {
+          localStorage.setItem('sound_unlocked', 'true');
+        } catch {}
       } catch {}
       try {
         if ('Notification' in window && Notification.permission === 'default') {
-          await Notification.requestPermission()
+          await Notification.requestPermission();
         }
       } catch {}
     };
@@ -169,7 +174,7 @@ const GlobalNotificationSystem: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    if (isDigitalMenu) return; // não mostrar para clientes no cardápio digital
+    if (isDigitalMenu) return;
 
     const loadSettings = async () => {
       try {
@@ -178,11 +183,12 @@ const GlobalNotificationSystem: React.FC = () => {
           .select('sound_enabled, volume, order_sound, custom_bell_url, custom_chime_url, custom_ding_url, custom_notification_url')
           .eq('user_id', user.id)
           .maybeSingle();
-        if (error) return;
-        if (!data) return;
+        if (error || !data) return;
+
         const enabled = !!data.sound_enabled;
         const vol = Math.max(0, Math.min(1, parseFloat(String(data.volume || '80')) / 100));
         const type = String(data.order_sound || 'bell');
+
         setSoundEnabled(enabled);
         setVolume(vol);
         setSoundType(type);
@@ -204,7 +210,7 @@ const GlobalNotificationSystem: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ GlobalNotification - Erro ao carregar pedidos pendentes:', error);
+        console.error('GlobalNotification - Erro ao carregar pedidos pendentes:', error);
         return [];
       }
 
@@ -220,7 +226,6 @@ const GlobalNotificationSystem: React.FC = () => {
     loadSettings();
     loadPendingOrders();
 
-    // Escutar novos pedidos em tempo real
     const channel = supabase
       .channel(`global-notifications:${user.id}`)
       .on(
@@ -229,20 +234,19 @@ const GlobalNotificationSystem: React.FC = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'orders',
-          filter: `user_id=eq.${user.id}`
+          filter: `user_id=eq.${user.id}`,
         },
         async (payload) => {
-          console.log('🔔 GlobalNotification - Novo pedido:', payload);
-          
           const newOrder = payload.new as PendingOrder;
-          const showForInsert = 
+          const showForInsert =
             newOrder.acceptance_status === 'pending_acceptance' ||
             newOrder.acceptance_status === 'awaiting_pix_payment' ||
             (newOrder as any).status === 'pending';
+
           if (!showForInsert) return;
-          setPendingOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+          setPendingOrders((prev) => [newOrder, ...prev.filter((order) => order.id !== newOrder.id)]);
           await handleIncomingOrderAlert(newOrder);
-        }
+        },
       )
       .on(
         'postgres_changes',
@@ -250,25 +254,27 @@ const GlobalNotificationSystem: React.FC = () => {
           event: 'UPDATE',
           schema: 'public',
           table: 'orders',
-          filter: `user_id=eq.${user.id}`
+          filter: `user_id=eq.${user.id}`,
         },
         async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
-          const isPendingLike = updatedOrder.acceptance_status === 'pending_acceptance' 
-            || updatedOrder.acceptance_status === 'awaiting_pix_payment'
-            || (updatedOrder as any).status === 'pending';
+          const isPendingLike =
+            updatedOrder.acceptance_status === 'pending_acceptance' ||
+            updatedOrder.acceptance_status === 'awaiting_pix_payment' ||
+            (updatedOrder as any).status === 'pending';
+
           if (isPendingLike) {
-            setPendingOrders(prev => [updatedOrder, ...prev.filter(o => o.id !== updatedOrder.id)]);
+            setPendingOrders((prev) => [updatedOrder, ...prev.filter((order) => order.id !== updatedOrder.id)]);
             await handleIncomingOrderAlert(updatedOrder);
           } else {
-            setPendingOrders(prev => prev.filter(order => order.id !== updatedOrder.id));
-            setDismissedOrders(prev => {
-              const newDismissed = new Set([...prev, updatedOrder.id]);
-              localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
-              return newDismissed;
+            setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
+            setDismissedOrders((prev) => {
+              const nextDismissed = new Set([...prev, updatedOrder.id]);
+              localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+              return nextDismissed;
             });
             setTimeout(() => {
-              setPendingOrders(current => {
+              setPendingOrders((current) => {
                 if (current.length === 0) {
                   setIsVisible(false);
                 }
@@ -276,14 +282,14 @@ const GlobalNotificationSystem: React.FC = () => {
               });
             }, 100);
           }
-        }
+        },
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notification_settings', filter: `user_id=eq.${user.id}` },
         () => {
           loadSettings();
-        }
+        },
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -296,6 +302,7 @@ const GlobalNotificationSystem: React.FC = () => {
         loadPendingOrders();
       }
     };
+
     document.addEventListener('visibilitychange', handleVisibility);
 
     if (pollingRef.current) window.clearInterval(pollingRef.current);
@@ -303,8 +310,8 @@ const GlobalNotificationSystem: React.FC = () => {
       if (!user?.id) return;
       const next = await loadPendingOrders();
       const prev = pendingOrdersRef.current || [];
-      const prevIds = new Set(prev.map(o => o.id));
-      const newOnes = next.filter(o => !prevIds.has(o.id));
+      const prevIds = new Set(prev.map((order) => order.id));
+      const newOnes = next.filter((order) => !prevIds.has(order.id));
       if (newOnes.length === 0) return;
       await handleIncomingOrderAlert(newOnes[0]);
     }, 8000);
@@ -318,7 +325,6 @@ const GlobalNotificationSystem: React.FC = () => {
     };
   }, [user, isDigitalMenu, toast]);
 
-  // Atualizar visibilidade quando muda a página
   useEffect(() => {
     if (isOnOrdersPage) {
       soundNotifications.stopAllSounds();
@@ -330,12 +336,11 @@ const GlobalNotificationSystem: React.FC = () => {
 
   const handleGoToOrders = () => {
     soundNotifications.stopAllSounds();
-    // Adicionar todos os pedidos atuais aos dispensados
-    const currentOrderIds = pendingOrders.map(order => order.id);
-    setDismissedOrders(prev => {
-      const newDismissed = new Set([...prev, ...currentOrderIds]);
-      localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
-      return newDismissed;
+    const currentOrderIds = pendingOrders.map((order) => order.id);
+    setDismissedOrders((prev) => {
+      const nextDismissed = new Set([...prev, ...currentOrderIds]);
+      localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+      return nextDismissed;
     });
     setIsAnimatingOut(true);
     window.setTimeout(() => {
@@ -346,12 +351,11 @@ const GlobalNotificationSystem: React.FC = () => {
 
   const handleDismiss = () => {
     soundNotifications.stopAllSounds();
-    // Adicionar todos os pedidos atuais aos dispensados
-    const currentOrderIds = pendingOrders.map(order => order.id);
-    setDismissedOrders(prev => {
-      const newDismissed = new Set([...prev, ...currentOrderIds]);
-      localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
-      return newDismissed;
+    const currentOrderIds = pendingOrders.map((order) => order.id);
+    setDismissedOrders((prev) => {
+      const nextDismissed = new Set([...prev, ...currentOrderIds]);
+      localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+      return nextDismissed;
     });
     setIsAnimatingOut(true);
     window.setTimeout(() => {
@@ -362,30 +366,30 @@ const GlobalNotificationSystem: React.FC = () => {
   const handleAcceptFirst = async () => {
     const order = visibleOrders[0];
     if (!order) return;
+
     try {
       await updateOrderStatusRemote(order.id, 'preparing');
 
       try {
-        const { data: fullOrder } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', order.id)
-          .maybeSingle();
+        const { data: fullOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
         if (fullOrder) {
-          const normalized = { ...fullOrder, items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [] };
+          const normalized = {
+            ...fullOrder,
+            items: Array.isArray((fullOrder as any).items) ? (fullOrder as any).items : [],
+          };
           PrinterService.printOrderOnAccept(normalized);
         }
       } catch {}
 
       soundNotifications.stopAllSounds();
-      setDismissedOrders(prev => {
-        const newDismissed = new Set([...prev, order.id]);
-        localStorage.setItem('dismissedOrders', JSON.stringify([...newDismissed]));
-        return newDismissed;
+      setDismissedOrders((prev) => {
+        const nextDismissed = new Set([...prev, order.id]);
+        localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
+        return nextDismissed;
       });
-      setPendingOrders(prev => prev.filter(o => o.id !== order.id));
+      setPendingOrders((prev) => prev.filter((current) => current.id !== order.id));
 
-      const remainingVisibleOrders = visibleOrders.filter(candidate => candidate.id !== order.id);
+      const remainingVisibleOrders = visibleOrders.filter((candidate) => candidate.id !== order.id);
       if (remainingVisibleOrders.length === 0) {
         setIsAnimatingOut(true);
         window.setTimeout(() => {
@@ -396,8 +400,12 @@ const GlobalNotificationSystem: React.FC = () => {
         setIsAnimatingOut(false);
         setIsVisible(true);
       }
-    } catch (e: any) {
-      toast({ title: 'Erro', description: e?.message || 'Falha ao aceitar pedido', variant: 'destructive' });
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error?.message || 'Falha ao aceitar pedido',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -408,7 +416,7 @@ const GlobalNotificationSystem: React.FC = () => {
       case 'pickup':
         return <Package className="h-4 w-4 text-green-600" />;
       case 'dine_in':
-        return <div className="w-4 h-4 bg-orange-600 rounded-sm" />;
+        return <div className="h-4 w-4 rounded-sm bg-orange-600" />;
       default:
         return <Clock className="h-4 w-4" />;
     }
@@ -424,7 +432,7 @@ const GlobalNotificationSystem: React.FC = () => {
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -433,13 +441,15 @@ const GlobalNotificationSystem: React.FC = () => {
   }
 
   return (
-    <div className={`fixed top-4 right-4 z-50 max-w-sm transition-all duration-200 ${isAnimatingOut ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'}`}>
-      <Card className="border border-gray-200 bg-white shadow-lg">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-3">
+    <div
+      className={`fixed left-1/2 top-3 z-50 w-[calc(100vw-1.25rem)] max-w-[22rem] -translate-x-1/2 transition-all duration-300 sm:left-auto sm:right-4 sm:top-4 sm:w-full sm:translate-x-0 ${isAnimatingOut ? '-translate-y-6 opacity-0' : 'translate-y-0 opacity-100'}`}
+    >
+      <Card className="border border-gray-200/90 bg-white/95 shadow-[0_22px_42px_-28px_rgba(15,23,42,0.55)] backdrop-blur">
+        <CardContent className="p-3 sm:p-4">
+          <div className="mb-2.5 flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-orange-600" />
-              <span className="font-semibold text-orange-800">
+              <Bell className="h-4 w-4 text-orange-600 sm:h-5 sm:w-5" />
+              <span className="text-sm font-semibold text-orange-800 sm:text-[15px]">
                 {visibleOrders.length} Novo{visibleOrders.length > 1 ? 's' : ''} Pedido{visibleOrders.length > 1 ? 's' : ''}!
               </span>
             </div>
@@ -447,56 +457,60 @@ const GlobalNotificationSystem: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={handleDismiss}
-              className="h-6 w-6 p-0 text-gray-600 hover:bg-gray-100"
+              className="h-7 w-7 rounded-full p-0 text-gray-600 hover:bg-gray-100"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+          <div className="mb-3 max-h-56 space-y-2 overflow-y-auto sm:max-h-64">
             {visibleOrders.slice(0, 3).map((order) => (
-              <div key={order.id} className="bg-white p-2 rounded border flex items-center justify-between">
+              <div key={order.id} className="flex items-center justify-between rounded-xl border bg-white px-2.5 py-2">
                 <div className="flex items-center gap-2">
                   {getOrderTypeIcon(order.order_type)}
                   <div>
-                    <div className="font-medium text-sm">Pedido {order.order_number}</div>
+                    <div className="text-[13px] font-medium sm:text-sm">Pedido {order.order_number}</div>
                     <div className="text-xs text-muted-foreground">
                       {order.customer_name || 'Cliente'} • {formatTime(order.created_at)}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold text-sm">{formatCurrency(order.total)}</div>
-                  <Badge variant="outline" className="text-xs">Pendente</Badge>
+                  <div className="text-[13px] font-semibold sm:text-sm">{formatCurrency(order.total)}</div>
+                  <Badge variant="outline" className="text-[10px]">
+                    Pendente
+                  </Badge>
                 </div>
               </div>
             ))}
-            
+
             {visibleOrders.length > 3 && (
-              <div className="text-center text-sm text-muted-foreground">
-                +{visibleOrders.length - 3} pedido{visibleOrders.length - 3 > 1 ? 's' : ''} adicional{visibleOrders.length - 3 > 1 ? 'is' : ''}
+              <div className="text-center text-xs text-muted-foreground sm:text-sm">
+                +{visibleOrders.length - 3} pedido{visibleOrders.length - 3 > 1 ? 's' : ''} adicional
+                {visibleOrders.length - 3 > 1 ? 'is' : ''}
               </div>
             )}
           </div>
 
-          <div className="flex gap-2">
-            <Button 
+          <div className="grid grid-cols-3 gap-2">
+            <Button
               onClick={handleGoToOrders}
-              className="flex-1 bg-boracume-orange hover:bg-boracume-orange/90"
+              className="h-8 rounded-xl bg-boracume-orange px-2 text-[11px] hover:bg-boracume-orange/90 sm:h-9 sm:text-xs"
               size="sm"
             >
               Ver Pedidos
             </Button>
             <Button
               onClick={handleAcceptFirst}
-              className="bg-green-600 hover:bg-green-700"
+              className="h-8 rounded-xl bg-green-600 px-2 text-[11px] hover:bg-green-700 sm:h-9 sm:text-xs"
               size="sm"
             >
               Aceitar
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleDismiss}
+              className="h-8 rounded-xl px-2 text-[11px] sm:h-9 sm:text-xs"
               size="sm"
             >
               Dispensar
