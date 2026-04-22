@@ -1235,14 +1235,14 @@ const PDV = () => {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2 lg:hidden">
+              <div className="space-y-1.5 lg:hidden">
                 <div className="scrollbar-hide flex gap-2 overflow-x-auto">
                   {mobileOrderTypeOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => setOrderType(option.value)}
-                      className={`shrink-0 rounded-[18px] border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      className={`shrink-0 rounded-[16px] border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                         orderType === option.value
                           ? 'border-[#003223] bg-[#003223] text-white'
                           : 'border-[#FF6400]/15 bg-white/90 text-[#003223]'
@@ -1252,7 +1252,7 @@ const PDV = () => {
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="hidden grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => (cashSession?.id ? navigate('/caixa') : openCashDialog('open'))}
@@ -1272,7 +1272,7 @@ const PDV = () => {
               </div>
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
-              <div className={`flex-1 ${isMobile ? 'pb-40' : 'pb-24 lg:pb-0'}`}>
+              <div className={`flex-1 ${isMobile ? 'pb-28' : 'pb-24 lg:pb-0'}`}>
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500">
@@ -1280,7 +1280,7 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))] sm:gap-2">
+                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-[repeat(auto-fill,minmax(112px,1fr))] sm:gap-2">
                     {filteredProducts.map((product) => (
                       (() => {
                         const track = !!(product as any)?.track_stock;
@@ -1293,7 +1293,7 @@ const PDV = () => {
                         className={`cursor-pointer group flex flex-col overflow-hidden rounded-[18px] border border-[#8CC850]/60 shadow-[0_0_0_1px_rgba(140,200,80,0.08),0_0_18px_-12px_rgba(140,200,80,0.85)] transition-all duration-150 hover:shadow-[0_0_0_1px_rgba(140,200,80,0.16),0_0_22px_-10px_rgba(140,200,80,0.95)] active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
                         onClick={(e) => handleProductClick(product, e)}
                       >
-                        <div className="aspect-square relative overflow-hidden bg-gray-100">
+                        <div className="relative aspect-[0.9/1] overflow-hidden bg-gray-100">
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
@@ -1310,21 +1310,21 @@ const PDV = () => {
                               <Store className="text-gray-300 w-6 h-6" />
                             </div>
                           )}
-                          <div className="absolute right-1.5 top-1.5 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
+                          <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
                             {formatCurrency(product.price)}
                           </div>
                           {isLowStock && (
-                            <div className="absolute left-1.5 top-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm">
+                            <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1 py-0.5 text-[7px] font-bold text-white shadow-sm">
                               Baixo
                             </div>
                           )}
                         </div>
-                        <CardContent className="flex flex-1 flex-col justify-between bg-white p-1.5">
-                          <h3 className="mb-1 min-h-[1.85rem] text-[10px] font-semibold leading-[1.15] line-clamp-2 sm:text-[11px]" title={product.name}>
+                        <CardContent className="flex flex-1 flex-col justify-between bg-white p-1">
+                          <h3 className="mb-1 font-medium text-[9px] leading-tight line-clamp-2 sm:text-xs" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-6 w-full rounded-xl border border-[#8CC850]/70 bg-white px-1 text-[9px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
+                            className="h-5 w-full border border-[#8CC850]/70 bg-white px-1 text-[8px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white sm:h-6 sm:text-[10px]"
                             size="sm"
                             variant="ghost"
                           >

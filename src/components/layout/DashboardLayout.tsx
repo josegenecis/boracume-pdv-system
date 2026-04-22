@@ -102,13 +102,13 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
         <main className={`
           flex-1 transition-all duration-300 min-w-0 w-full
           ${isMobile 
-            ? 'ml-0 pt-[112px]' 
+            ? 'ml-0 pt-[60px]' 
             : isOpen
               ? 'ml-64 pt-16' 
               : 'ml-16 pt-16'
           }
         `}>
-          <div className={`${isMobile ? 'min-h-[calc(100vh-112px)] bg-[#F7F8F6]' : 'h-[calc(100vh-64px)]'} w-full`}>
+          <div className={`${isMobile ? 'min-h-[calc(100vh-60px)] bg-[#F7F8F6]' : 'h-[calc(100vh-64px)]'} w-full`}>
             <div
               className={`
                 mobile-safe-x h-full w-full max-w-full
