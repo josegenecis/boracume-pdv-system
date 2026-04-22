@@ -1307,13 +1307,13 @@ const PDV = () => {
                               id={`product-img-${product.id}`}
                               src={normalizeImageUrlForDisplay(product.image_url)} 
                               alt={product.name} 
-                              className="h-10 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              className="h-12 w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
                               loading="lazy"
                             />
                           ) : (
                             <div 
                               id={`product-img-${product.id}`}
-                              className="flex h-10 w-full items-center justify-center"
+                              className="flex h-12 w-full items-center justify-center"
                             >
                               <Store className="h-4 w-4 text-gray-300" />
                             </div>
@@ -1327,12 +1327,12 @@ const PDV = () => {
                             </div>
                           )}
                         </div>
-                        <CardContent className="flex flex-1 flex-col justify-between bg-white px-1.5 pb-1.5 pt-0.5">
-                          <h3 className="mb-1 min-h-[1.8rem] font-medium text-[8px] leading-tight line-clamp-2" title={product.name}>
+                        <CardContent className="flex flex-1 flex-col justify-between bg-white px-1.5 pb-1.5 pt-1">
+                          <h3 className="mb-1 min-h-[1.45rem] font-medium text-[7px] leading-tight line-clamp-2" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-5 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[8px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
+                            className="h-4.5 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[7px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
                             size="sm"
                             variant="ghost"
                           >
@@ -1652,23 +1652,23 @@ const PDV = () => {
                 type="button"
                 id="mobile-cart-btn" 
                 ref={mobileCartBtnRef}
-                className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+4.6rem)] right-3 z-40 flex items-center gap-2 rounded-full border border-[#003223]/12 bg-[#003223] px-3 py-2 text-left text-white shadow-[0_20px_40px_-24px_rgba(0,50,35,0.55)]"
+                className="mobile-safe-x lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom,0px)+4.65rem)] left-1/2 z-40 flex w-[calc(100%-1.75rem)] max-w-[320px] -translate-x-1/2 items-center gap-2 rounded-full border border-[#FF6400]/20 bg-[#FF6400] px-3 py-2 text-left text-white shadow-[0_20px_40px_-24px_rgba(255,100,0,0.55)]"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/18">
                     <Calculator className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <div className="text-[11px] font-semibold">
                       {cartItemsCount > 0 ? `${cartItemsCount} item(ns)` : 'Sacola'}
                     </div>
-                    <div className="truncate text-[9px] text-white/75">
+                    <div className="truncate text-[9px] text-white/80">
                       {mobileOrderTypeOptions.find((option) => option.value === orderType)?.label || 'Balcão'} • {operatorSelected ? 'operador ok' : 'selecione operador'}
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/70">Total</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/80">Total</div>
                   <div className="text-[15px] font-bold">{formatCurrency(getFinalTotal())}</div>
                 </div>
               </button>
