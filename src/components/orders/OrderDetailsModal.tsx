@@ -25,6 +25,7 @@ import {
 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSidebar } from '@/contexts/SidebarContext';
 import { PrinterService } from '@/utils/printerService';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
@@ -96,6 +97,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onStatusChange 
 }) => {
   const { toast } = useToast();
+  const { isMobile } = useSidebar();
   const [adminPinOpen, setAdminPinOpen] = useState(false);
 
   // Log detalhado quando o modal é renderizado
@@ -287,9 +289,9 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           }}
         />
         <Dialog open={isOpen} onOpenChange={onClose}>
-          <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogContent className={isMobile ? "max-h-[88vh] w-[calc(100vw-0.75rem)] max-w-none rounded-[24px] p-0" : "max-w-2xl max-h-[90vh]"}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
+            <DialogTitle className={`flex ${isMobile ? 'flex-col items-start gap-2 px-4 pt-4' : 'items-center gap-3'}`}>
               <span>Pedido {order?.order_number || 'N/A'}</span>
               <div className="flex items-center gap-2">
                 {getStatusIcon(order?.status || 'pending')}
@@ -299,7 +301,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
+                  className={isMobile ? "h-7 px-2 text-[10px]" : "h-7 text-xs"}
                   onClick={() => PrinterService.printOrder(order)}
                 >
                   <Printer className="h-3 w-3 mr-1" />
@@ -308,7 +310,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
+                  className={isMobile ? "h-7 px-2 text-[10px]" : "h-7 text-xs"}
                   onClick={async () => {
                     try {
                       const link = `${window.location.origin}/track/${order?.id}`;
@@ -326,7 +328,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs"
+                    className={isMobile ? "h-7 px-2 text-[10px]" : "h-7 text-xs"}
                     onClick={() => WhatsAppService.shareOrder(order)}
                   >
                     <MessageCircle className="h-3 w-3 mr-1" />
@@ -337,11 +339,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             </DialogTitle>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[70vh] pr-4">
-            <div className="space-y-6">
+          <ScrollArea className={isMobile ? "max-h-[calc(88vh-88px)] px-4 pb-4" : "max-h-[70vh] pr-4"}>
+            <div className={isMobile ? "space-y-4" : "space-y-6"}>
               {/* Informações do Cliente */}
               <div className="space-y-3">
-                <h3 className="text-base font-semibold flex items-center gap-2">
+                <h3 className={`${isMobile ? 'text-[15px]' : 'text-base'} font-semibold flex items-center gap-2`}>
                   <User className="h-4 w-4" />
                   Informações do Cliente
                 </h3>
@@ -395,7 +397,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
               {/* Itens do Pedido */}
               <div className="space-y-3">
-                <h3 className="text-base font-semibold">Itens do Pedido</h3>
+                <h3 className={`${isMobile ? 'text-[15px]' : 'text-base'} font-semibold`}>Itens do Pedido</h3>
                 <div className="space-y-3">
                   {order?.items && Array.isArray(order.items) && order.items.length > 0 ? (
                     order.items.map((item, index) => {
@@ -403,11 +405,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       const itemNotes = String(item?.notes || item?.observations || '').trim();
 
                       return (
-                        <div key={index} className="border rounded-lg p-3 space-y-2">
+                        <div key={index} className={`border space-y-2 ${isMobile ? 'rounded-[16px] p-2.5' : 'rounded-lg p-3'}`}>
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <h4 className="font-medium text-sm">{item?.product_name || 'Produto não informado'}</h4>
-                            <div className="text-xs text-gray-600 mt-1">
+                            <h4 className={`font-medium ${isMobile ? 'text-[13px]' : 'text-sm'}`}>{item?.product_name || 'Produto não informado'}</h4>
+                            <div className={`${isMobile ? 'text-[11px]' : 'text-xs'} text-gray-600 mt-1`}>
                               Quantidade: {itemQuantity(item)} × {formatCurrency(itemUnitPrice(item))}
                             </div>
                           </div>
@@ -498,7 +500,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 <>
                   <Separator />
                   <div className="space-y-2">
-                    <h3 className="text-base font-semibold">OBSERVAÇÕES</h3>
+                    <h3 className={`${isMobile ? 'text-[15px]' : 'text-base'} font-semibold`}>OBSERVAÇÕES</h3>
                     <p className="text-sm text-gray-600 whitespace-pre-wrap">{order.delivery_instructions}</p>
                   </div>
                 </>
@@ -508,7 +510,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
               {/* Resumo do Pedido */}
               <div className="space-y-2">
-                <h3 className="text-base font-semibold">Resumo do Pedido</h3>
+                <h3 className={`${isMobile ? 'text-[15px]' : 'text-base'} font-semibold`}>Resumo do Pedido</h3>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
@@ -548,7 +550,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
               {/* Informações Adicionais */}
               <div className="space-y-2">
-                <h3 className="text-base font-semibold">Informações Adicionais</h3>
+                <h3 className={`${isMobile ? 'text-[15px]' : 'text-base'} font-semibold`}>Informações Adicionais</h3>
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center gap-2">
                     <Clock className="h-3 w-3" />
@@ -570,7 +572,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <div className="flex gap-2">
                       <Button
                         onClick={() => handleStatusUpdate('preparing')}
-                        className="flex-1 bg-green-600 hover:bg-green-700 h-8 text-xs"
+                        className={isMobile ? "flex-1 h-10 bg-green-600 text-sm hover:bg-green-700" : "flex-1 bg-green-600 hover:bg-green-700 h-8 text-xs"}
                       >
                         <Check className="h-3 w-3 mr-1" />
                         Aceitar
@@ -578,7 +580,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                       <Button
                         onClick={() => handleStatusUpdate('cancelled')}
                         variant="destructive"
-                        className="flex-1 h-8 text-xs"
+                        className={isMobile ? "flex-1 h-10 text-sm" : "flex-1 h-8 text-xs"}
                       >
                         <XCircle className="h-3 w-3 mr-1" />
                         Cancelar
@@ -589,7 +591,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   {order.status === 'preparing' && (
                     <Button
                       onClick={() => handleStatusUpdate('ready')}
-                      className="w-full h-8 text-xs"
+                      className={isMobile ? "h-10 w-full text-sm" : "w-full h-8 text-xs"}
                     >
                       <CheckCircle className="h-3 w-3 mr-1" />
                       Marcar como Pronto
@@ -599,7 +601,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   {order.status === 'ready' && (
                     <Button
                       onClick={() => handleStatusUpdate('delivered')}
-                      className="w-full bg-blue-600 hover:bg-blue-700 h-8 text-xs"
+                      className={isMobile ? "h-10 w-full bg-blue-600 text-sm hover:bg-blue-700" : "w-full bg-blue-600 hover:bg-blue-700 h-8 text-xs"}
                     >
                       <Truck className="h-3 w-3 mr-1" />
                       Finalizar Pedido
