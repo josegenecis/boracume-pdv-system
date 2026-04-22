@@ -13,6 +13,8 @@ import type {
 } from '../types/domain';
 
 const WAITER_MOBILE_SESSION_KEY = 'waiter_mobile_session';
+const DEFAULT_FUNCTION_TIMEOUT_MS = 12000;
+const SESSION_RESTORE_TIMEOUT_MS = 4000;
 
 type WaiterFunctionName = 'waiter-web' | 'waiter-web-auth';
 
@@ -62,15 +64,51 @@ function getErrorMessage(error: unknown) {
   return 'Nao foi possivel concluir a operacao do app do garcom.';
 }
 
+function isTransientSessionError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return [
+    'timeout',
+    'tempo',
+    'network',
+    'fetch',
+    'internet',
+    'conexao',
+    'connection',
+    'offline',
+  ].some((term) => message.includes(term));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 async function invokeWaiterFunction<T>(
   name: WaiterFunctionName,
   body: Record<string, unknown>,
   token?: string,
+  timeoutMs = DEFAULT_FUNCTION_TIMEOUT_MS,
 ) {
-  const { data, error } = await supabase.functions.invoke(name, {
-    body,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const { data, error } = await withTimeout(
+    supabase.functions.invoke(name, {
+      body,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    }),
+    timeoutMs,
+    'A conexao do app do garcom demorou demais para responder.',
+  );
 
   if (error) {
     throw new Error(getErrorMessage(error));
@@ -137,11 +175,16 @@ export async function restoreWaiterSession() {
       'waiter-web-auth',
       { action: 'me' },
       stored.token,
+      SESSION_RESTORE_TIMEOUT_MS,
     );
     const session = normalizeStoredSession(response.session);
     await saveStoredSession(session);
     return session;
-  } catch {
+  } catch (error) {
+    if (isTransientSessionError(error)) {
+      return stored;
+    }
+
     await clearStoredSession();
     return null;
   }

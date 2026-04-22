@@ -19,7 +19,7 @@
     "android": {
       "package": "com.boracume.garcom",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/app-garcom.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#003223"
       },
       "edgeToEdgeEnabled": true,
