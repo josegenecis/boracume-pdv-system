@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
 import { formatCpf, loadWaiterWebSession, loginWaiterWeb } from '@/services/waiterWebClient';
 import { ArrowRight, Eye, EyeOff, Lock, UserRound } from 'lucide-react';
@@ -72,37 +73,33 @@ const WaiterLogin = () => {
 
   return (
     <div className="h-[100svh] overflow-hidden bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_38%,#072D20_100%)] px-4 py-4 text-white">
-      <div className="mx-auto flex h-full max-w-[390px] flex-col items-center justify-center gap-4">
+      <div className="mx-auto flex h-full max-w-[390px] flex-col items-center justify-center gap-3">
         <div className="w-full text-center">
-          <img
-            src="/waiter/logo-boracume.png"
-            alt="BoraCume"
-            className="mx-auto h-20 w-auto object-contain drop-shadow-[0_14px_26px_rgba(0,0,0,0.34)]"
-          />
-          <div className="mt-3 inline-flex rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/80">
+          <Logo size="md" theme="dark" className="mx-auto justify-center" />
+          <div className="mt-2.5 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">
             App web Garcom
           </div>
-          <h1 className="mt-3 text-[1.65rem] font-semibold leading-tight text-white">Opere mesas e comandas</h1>
-          <p className="mt-2 text-xs leading-5 text-white/75">
+          <h1 className="mt-2.5 text-[1.45rem] font-semibold leading-tight text-white sm:text-[1.65rem]">Opere mesas e comandas</h1>
+          <p className="mt-1.5 text-[11px] leading-[1.125rem] text-white/75 sm:text-xs sm:leading-5">
             Entre com CPF e senha para atender o salao do restaurante direto no celular.
           </p>
         </div>
 
-        <div className="w-full rounded-[28px] border border-[#F17B26] bg-[#EEF3EE] p-4 shadow-[0_24px_60px_-35px_rgba(0,0,0,0.65)]">
+        <div className="w-full rounded-[24px] border border-[#F17B26] bg-[#EEF3EE] p-3.5 shadow-[0_24px_60px_-35px_rgba(0,0,0,0.65)]">
           <form onSubmit={handleLogin} className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="cpf" className="text-sm font-semibold text-[#0B4A36]">
                 CPF
               </Label>
               <div className="relative">
-                <UserRound className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <UserRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="cpf"
                   inputMode="numeric"
                   autoFocus
                   value={cpf}
                   onChange={(event) => setCpf(formatCpf(event.target.value))}
-                  className="h-12 rounded-[20px] border-2 border-[#96CD4B] bg-white pl-11 text-base text-slate-900 shadow-none focus-visible:ring-0"
+                  className="h-11 rounded-[18px] border-2 border-[#96CD4B] bg-white pl-10 text-sm text-slate-900 shadow-none focus-visible:ring-0"
                   placeholder="000.000.000-00"
                 />
               </div>
@@ -113,20 +110,20 @@ const WaiterLogin = () => {
                 Senha
               </Label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="h-12 rounded-[20px] border-2 border-[#96CD4B] bg-white pl-11 pr-11 text-base text-slate-900 shadow-none focus-visible:ring-0"
+                  className="h-11 rounded-[18px] border-2 border-[#96CD4B] bg-white pl-10 pr-10 text-sm text-slate-900 shadow-none focus-visible:ring-0"
                   placeholder="Digite sua senha"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-1 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full text-[#0B4A36] hover:bg-transparent hover:text-[#0B4A36]"
+                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full text-[#0B4A36] hover:bg-transparent hover:text-[#0B4A36]"
                   onClick={() => setShowPassword((current) => !current)}
                   tabIndex={-1}
                 >
@@ -141,13 +138,13 @@ const WaiterLogin = () => {
               </div>
             ) : null}
 
-            <div className="rounded-[18px] bg-white px-4 py-3 text-xs leading-5 text-slate-500">
+            <div className="rounded-[16px] bg-white px-3.5 py-2.5 text-[11px] leading-[1.125rem] text-slate-500">
               O login do garcom e liberado pelo restaurante no cadastro da equipe.
             </div>
 
             <Button
               type="submit"
-              className="h-12 w-full rounded-full bg-[#FF6400] text-base font-medium text-white hover:bg-[#E25A00]"
+              className="h-11 w-full rounded-full bg-[#FF6400] text-sm font-medium text-white hover:bg-[#E25A00]"
               disabled={loading || cpf.replace(/\D/g, '').length !== 11 || !password}
             >
               {loading ? (

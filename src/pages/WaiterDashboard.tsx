@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
 import {
   bootstrapWaiterWeb,
@@ -283,24 +284,20 @@ const WaiterDashboard = () => {
           <Button
             variant="outline"
             size="icon"
-            className="rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+            className="h-9 w-9 rounded-full border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
             onClick={handleLogout}
           >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="mt-2 flex flex-col items-center text-center">
-          <img
-            src="/waiter/logo-boracume.png"
-            alt="BoraCume"
-            className="h-16 w-auto object-contain drop-shadow-[0_16px_30px_rgba(0,0,0,0.32)]"
-          />
-          <div className="mt-2 inline-flex rounded-full bg-white/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-white/80">
+        <div className="mt-1.5 flex flex-col items-center text-center">
+          <Logo size="md" theme="dark" className="justify-center" />
+          <div className="mt-2 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">
             App web Garcom
           </div>
-          <h1 className="mt-3 text-[1.95rem] font-semibold leading-tight text-white">Mesas</h1>
-          <p className="mt-1 text-xs leading-5 text-white/68">{waiterSession.profile.name}</p>
+          <h1 className="mt-2.5 text-[1.55rem] font-semibold leading-tight text-white sm:text-[1.95rem]">Mesas</h1>
+          <p className="mt-1 text-[11px] leading-4 text-white/68 sm:text-xs sm:leading-5">{waiterSession.profile.name}</p>
         </div>
 
         {loadError ? (
@@ -316,7 +313,7 @@ const WaiterDashboard = () => {
               title="Nenhuma mesa encontrada"
               description="Cadastre uma nova mesa para iniciar o atendimento no salao."
               action={
-                <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
+                <Button className="h-10 rounded-2xl bg-[#FF6400] text-sm hover:bg-[#E25A00]" onClick={() => setCreateTableOpen(true)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Cadastrar mesa
                 </Button>
@@ -351,16 +348,16 @@ const WaiterDashboard = () => {
                         setGuestCount('2');
                       }
                     }}
-                    className={`relative flex aspect-square cursor-pointer flex-col rounded-[22px] p-2 text-left shadow-[0_16px_34px_-24px_rgba(0,0,0,0.8)] transition active:scale-[0.98] sm:rounded-[24px] sm:p-3 ${tableTileTone[table.status]}`}
+                    className={`relative flex aspect-square cursor-pointer flex-col rounded-[18px] p-1.5 text-left shadow-[0_16px_34px_-24px_rgba(0,0,0,0.8)] transition active:scale-[0.98] sm:rounded-[24px] sm:p-3 ${tableTileTone[table.status]}`}
                   >
                     <div className="flex items-start justify-start">
-                      <span className="rounded-full bg-black/12 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-current">
+                      <span className="rounded-full bg-black/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-current sm:px-2 sm:py-1 sm:text-[9px]">
                         {tableOccupancyLabel(table.status)}
                       </span>
                     </div>
 
                     <div className="flex flex-1 items-center justify-center">
-                      <div className="text-[2.25rem] font-semibold leading-none tracking-tight sm:text-5xl">{table.number}</div>
+                      <div className="text-[1.8rem] font-semibold leading-none tracking-tight sm:text-5xl">{table.number}</div>
                     </div>
                   </div>
                 );
@@ -375,26 +372,26 @@ const WaiterDashboard = () => {
           {
             key: 'tables',
             label: 'Mesas',
-            icon: <LayoutGrid className="h-5 w-5" />,
+            icon: <LayoutGrid className="h-4 w-4" />,
             active: true,
             onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
           },
           {
             key: 'new',
             label: 'Nova mesa',
-            icon: <PlusCircle className="h-5 w-5" />,
+            icon: <PlusCircle className="h-4 w-4" />,
             onClick: () => setCreateTableOpen(true),
           },
           {
             key: 'refresh',
             label: 'Atualizar',
-            icon: <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />,
+            icon: <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />,
             onClick: () => void loadTables({ initialLoad: false, announceError: true }),
           },
           {
             key: 'logout',
             label: 'Sair',
-            icon: <LogOut className="h-5 w-5" />,
+            icon: <LogOut className="h-4 w-4" />,
             onClick: () => void handleLogout(),
           },
         ]}
