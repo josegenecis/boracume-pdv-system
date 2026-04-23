@@ -101,7 +101,6 @@ function AppContent() {
       
       {/* Rotas Públicas/Standalone */}
       <Route path="/landing" element={<LandingPage />} />
-      <Route path="/debug-pix" element={<DebugPix />} />
       
       {/* KDS e TV Standalone (Sem Menu Lateral) */}
       <Route path="/kds-view" element={
@@ -156,14 +155,13 @@ function AppContent() {
           <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/pix" element={<PixSetup />} />
-          {/* <Route path="/debug-pix" element={<DebugPix />} /> MOVIDO PARA PÚBLICO */}
+          {import.meta.env.DEV && <Route path="/debug-pix" element={<DebugPix />} />}
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/agente" element={<AgentDashboard />} />
           <Route path="/marketing" element={<Marketing />} />
-          <Route path="/loyalty" element={<Navigate to="/marketing?tab=loyalty" replace />} />
 
-          <Route path="/system-check" element={<SystemCheck />} />
-          <Route path="/test" element={<TestPage />} />
+          {import.meta.env.DEV && <Route path="/system-check" element={<SystemCheck />} />}
+          {import.meta.env.DEV && <Route path="/test" element={<TestPage />} />}
 
         </Route>
       </Route>

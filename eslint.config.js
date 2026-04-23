@@ -5,7 +5,20 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  {
+    ignores: [
+      "node_modules/**",
+      "dist/**",
+      "dist-*/**",
+      "dist-electron/**",
+      "dist-bridge/**",
+      "test-results/**",
+      "apps/garcom-mobile/builds/**",
+      "apps/garcom-mobile/node_modules/**",
+      "apps/garcom-mobile/android/**",
+      ".vercel/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

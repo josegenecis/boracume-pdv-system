@@ -6,6 +6,13 @@ import App from './App.tsx'
 import 'leaflet/dist/leaflet.css'
 import './index.css'
 
+if (import.meta.env.PROD) {
+  const noop = () => {};
+  console.log = noop;
+  console.debug = noop;
+  console.info = noop;
+}
+
 // Global Error Handler for debugging white screens
 window.addEventListener('error', (event) => {
   console.error('Global Error Caught:', event.error);

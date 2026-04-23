@@ -61,6 +61,7 @@ electron/BoraCumê - Instalador/
 # Local build logs/artifacts
 build_log*.txt
 test-results/
+apps/garcom-mobile/builds/
 evogo_app.js
 evogo_manager.html
 
