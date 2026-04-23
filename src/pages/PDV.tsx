@@ -1301,19 +1301,19 @@ const PDV = () => {
                         className={`cursor-pointer group flex aspect-square flex-col overflow-hidden rounded-[18px] border border-[#DCE6DF] bg-white transition-all duration-150 hover:shadow-sm active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
                         onClick={(e) => handleProductClick(product, e)}
                       >
-                        <div className="relative m-1 overflow-hidden rounded-[14px] bg-gray-100">
+                        <div className="relative mx-1 mt-1 min-h-0 flex-1 overflow-hidden rounded-[14px] bg-gray-100">
                           {normalizeImageUrlForDisplay(product.image_url) ? (
                             <img 
                               id={`product-img-${product.id}`}
                               src={normalizeImageUrlForDisplay(product.image_url)} 
                               alt={product.name} 
-                              className="h-12 w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+                              className="h-full w-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
                               loading="lazy"
                             />
                           ) : (
                             <div 
                               id={`product-img-${product.id}`}
-                              className="flex h-12 w-full items-center justify-center"
+                              className="flex h-full w-full items-center justify-center"
                             >
                               <Store className="h-4 w-4 text-gray-300" />
                             </div>
@@ -1327,12 +1327,12 @@ const PDV = () => {
                             </div>
                           )}
                         </div>
-                        <CardContent className="flex flex-1 flex-col justify-between bg-white px-1.5 pb-1.5 pt-1">
-                          <h3 className="mb-1 min-h-[1.45rem] font-medium text-[7px] leading-tight line-clamp-2" title={product.name}>
+                        <CardContent className="flex shrink-0 flex-col justify-end bg-white px-1 pb-1 pt-0.5">
+                          <h3 className="mb-0.5 min-h-[0.95rem] font-medium text-[7px] leading-tight line-clamp-1" title={product.name}>
                             {product.name}
                           </h3>
                           <Button 
-                            className="h-4.5 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[7px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
+                            className="h-4 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[7px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
                             size="sm"
                             variant="ghost"
                           >
@@ -1916,8 +1916,8 @@ const PDV = () => {
                     </div>
                   </div>                  <Button
                     onClick={handleFinalizeSale}
-                    disabled={processing || cart.length === 0 || !cashSession?.id || !operatorSelected}
-                    className="h-9 w-full rounded-xl bg-green-600 text-[12px] font-bold hover:bg-green-700"
+                    disabled={processing || cart.length === 0}
+                    className="h-9 w-full rounded-xl bg-green-600 text-[12px] font-bold text-white opacity-100 hover:bg-green-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:opacity-100"
                   >
                     {processing && orderType !== 'dine_in' ? (
                       <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
