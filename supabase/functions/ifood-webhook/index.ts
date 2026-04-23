@@ -1,90 +1,134 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+// deno-lint-ignore-file no-explicit-any
+import {
+  createServiceClient,
+  getMerchantIfoodSettings,
+  ifoodCorsHeaders,
+  okJson,
+  persistIfoodEvent,
+  processIfoodEvent,
+  sanitizeIfoodSettings,
+  upsertIfoodSettings,
+  verifyIfoodSignature,
+} from '../_shared/ifood.ts'
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-ifood-secret, x-merchant-id",
-}
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders })
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: ifoodCorsHeaders })
   }
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    })
+  if (req.method !== 'POST') {
+    return okJson({ ok: false, error: 'method_not_allowed' }, 405)
   }
 
-  const providedSecret =
-    (req.headers.get("x-ifood-secret") ?? "") ||
-    (req.headers.get("authorization") ?? "") ||
-    (new URL(req.url).searchParams.get("secret") ?? "")
-
-  const expectedSecret = Deno.env.get("IFOOD_WEBHOOK_SECRET") ?? ""
-  if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    })
-  }
-
-  const supabaseUrl =
-    Deno.env.get("SUPABASE_URL") ??
-    Deno.env.get("BORACUME_SUPABASE_URL") ??
-    ""
-  const serviceRole =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("BORACUME_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SERVICE_ROLE_KEY") ??
-    ""
-  const supabase = createClient(supabaseUrl, serviceRole)
-
-  let payload: any = {}
   try {
-    payload = await req.json()
-  } catch {
-    payload = {}
+    const supabase = createServiceClient()
+    const bodyText = await req.text()
+    let payload: any = null
+
+    try {
+      payload = bodyText ? JSON.parse(bodyText) : null
+    } catch {
+      payload = null
+    }
+
+    const events = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.events)
+        ? payload.events
+        : payload
+          ? [payload]
+          : []
+
+    const firstEvent = events[0] || {}
+    const merchantId =
+      String(
+        req.headers.get('x-ifood-merchant-id') ||
+          req.headers.get('x-merchant-id') ||
+          firstEvent?.merchantId ||
+          firstEvent?.merchant_id ||
+          '',
+      ).trim()
+
+    if (!merchantId) {
+      return okJson({ ok: false, error: 'missing_merchant_id' }, 400)
+    }
+
+    const settings = await getMerchantIfoodSettings(supabase, merchantId)
+    const currentSettings = sanitizeIfoodSettings(settings)
+    if (!settings?.client_secret || !settings?.user_id) {
+      return okJson({ ok: false, error: 'merchant_not_configured' }, 404)
+    }
+
+    const receivedSignature = String(req.headers.get('x-ifood-signature') || '').trim()
+    const signatureOk = await verifyIfoodSignature(bodyText, settings.client_secret, receivedSignature)
+    if (!signatureOk) {
+      await upsertIfoodSettings(supabase, settings.user_id, {
+        merchant_id: settings.merchant_id,
+        last_sync_at: new Date().toISOString(),
+        last_sync_status: 'signature_invalid',
+        last_sync_message: 'Webhook recebido com assinatura inválida',
+      })
+      return okJson({ ok: false, error: 'invalid_signature' }, 401)
+    }
+
+    const headers: Record<string, string> = {}
+    for (const [key, value] of req.headers.entries()) {
+      headers[key] = value
+    }
+
+    let inserted = 0
+    let duplicates = 0
+    let processed = 0
+
+    for (const event of events) {
+      const { eventRow, duplicate } = await persistIfoodEvent(supabase, settings.user_id, event, {
+        source: 'webhook',
+        headers,
+        signature: receivedSignature,
+        httpStatus: 200,
+      })
+
+      if (duplicate) duplicates += 1
+      else inserted += 1
+
+      if (!duplicate && currentSettings?.merchant_enabled) {
+        try {
+          await processIfoodEvent(supabase, settings, eventRow)
+          processed += 1
+        } catch {
+          // o evento fica persistido com o erro registrado
+        }
+      }
+    }
+
+    await upsertIfoodSettings(supabase, settings.user_id, {
+      merchant_id: settings.merchant_id,
+      last_sync_at: new Date().toISOString(),
+      last_sync_status: currentSettings?.merchant_enabled ? 'ok' : 'paused',
+      last_sync_message: currentSettings?.merchant_enabled
+        ? `${processed} evento(s) processado(s) via webhook`
+        : `${events.length} evento(s) recebido(s), integraÃ§Ã£o pausada`,
+      status: currentSettings?.merchant_enabled ? 'online' : 'offline',
+      last_event_at: new Date().toISOString(),
+    })
+
+    return okJson({
+      ok: true,
+      summary: {
+        received: events.length,
+        inserted,
+        duplicates,
+        processed,
+      },
+    })
+  } catch (error: any) {
+    return okJson(
+      {
+        ok: false,
+        error: 'ifood_webhook_error',
+        message: String(error?.message || error),
+      },
+      500,
+    )
   }
-
-  const url = new URL(req.url)
-  const merchantId =
-    (url.searchParams.get("merchant_id") ?? "") ||
-    (req.headers.get("x-merchant-id") ?? "") ||
-    (req.headers.get("x-ifood-merchant-id") ?? "") ||
-    (payload?.merchant_id ?? payload?.merchantId ?? "")
-
-  let userId: string | null = null
-  if (merchantId) {
-    const { data } = await supabase
-      .from("ifood_settings")
-      .select("user_id")
-      .eq("merchant_id", merchantId)
-      .maybeSingle()
-    userId = (data?.user_id as string) ?? null
-  }
-
-  const headersObj: Record<string, string> = {}
-  for (const [k, v] of req.headers.entries()) {
-    headersObj[k] = v
-  }
-
-  const eventType =
-    String(payload?.event_type ?? payload?.type ?? payload?.eventType ?? "")
-
-  await supabase.from("ifood_events").insert({
-    user_id: userId,
-    merchant_id: merchantId || null,
-    event_type: eventType || null,
-    payload,
-    headers: headersObj,
-  })
-
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  })
 })
-

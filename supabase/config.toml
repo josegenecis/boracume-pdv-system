@@ -84,3 +84,18 @@ entrypoint = "./functions/waiter-web-auth/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/waiter-web/index.ts"
+
+[functions.ifood-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ifood-webhook/index.ts"
+
+[functions.ifood-manager]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ifood-manager/index.ts"
+
+[functions.orders-update-status]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/orders-update-status/index.ts"

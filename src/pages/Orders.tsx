@@ -17,6 +17,7 @@ import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import { WhatsAppService } from '@/services/WhatsAppService';
 import { PrinterService } from '@/utils/printerService';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
+import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
@@ -44,6 +45,12 @@ interface Order {
   created_at: string;
   estimated_time?: string;
   user_id?: string;
+  source?: string;
+  external_order_id?: string | null;
+  customer_document?: string | null;
+  pickup_code?: string | null;
+  scheduled_at?: string | null;
+  integration_payload?: any;
 }
 
 const Orders = () => {
@@ -57,6 +64,11 @@ const Orders = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [ifoodCancelDialogOpen, setIfoodCancelDialogOpen] = useState(false);
+  const [ifoodCancelOrder, setIfoodCancelOrder] = useState<Order | null>(null);
+  const [ifoodCancelReasons, setIfoodCancelReasons] = useState<Array<{ cancelCodeId: string; description: string }>>([]);
+  const [selectedIfoodCancelCode, setSelectedIfoodCancelCode] = useState('');
+  const [loadingIfoodCancelReasons, setLoadingIfoodCancelReasons] = useState(false);
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
   const [ordersView, setOrdersView] = useState<'list' | 'kanban'>('list');
   const [mobileStatusTab, setMobileStatusTab] = useState<'novos' | 'preparo' | 'entrega' | 'finalizados'>('novos');
@@ -94,6 +106,22 @@ const Orders = () => {
     return [];
   };
 
+  const enrichOrder = (order: any): Order => {
+    const variations = order?.variations && typeof order.variations === 'object' ? order.variations : {};
+    const ifood = variations?.ifood && typeof variations.ifood === 'object' ? variations.ifood : {};
+
+    return {
+      ...order,
+      items: normalizeItems(order?.items),
+      source: order?.source || variations?.provider || null,
+      external_order_id: order?.external_order_id || variations?.externalOrderId || ifood?.id || null,
+      customer_document: order?.customer_document || variations?.customerDocument || null,
+      pickup_code: order?.pickup_code || variations?.pickupCode || ifood?.pickupCode || null,
+      scheduled_at: order?.scheduled_at || variations?.scheduledAt || ifood?.deliveryDateTimeStart || null,
+      integration_payload: order?.integration_payload || variations || null,
+    } as Order;
+  };
+
   useEffect(() => {
     if (user) {
       fetchOrders();
@@ -128,10 +156,7 @@ const Orders = () => {
             console.log('🔔 Novo pedido em tempo real:', payload);
 
             // Add new order to the list
-            const newOrder = {
-              ...payload.new,
-              items: normalizeItems((payload as any)?.new?.items)
-            } as Order;
+            const newOrder = enrichOrder((payload as any)?.new);
 
             setOrders(prev => (prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev]));
 
@@ -152,7 +177,7 @@ const Orders = () => {
             // Update order in the list
             setOrders(prev => prev.map(order =>
               order.id === payload.new.id
-                ? { ...payload.new, items: normalizeItems((payload as any)?.new?.items) } as Order
+                ? enrichOrder((payload as any)?.new)
                 : order
             ));
           }
@@ -247,10 +272,7 @@ const Orders = () => {
       if (error) throw error;
 
       // Transform the data to ensure items is always an array
-      const transformedData = (data || []).map(order => ({
-        ...order,
-        items: normalizeItems((order as any)?.items)
-      }));
+      const transformedData = (data || []).map((order) => enrichOrder(order));
 
       setOrders(transformedData);
     } catch (error) {
@@ -345,7 +367,14 @@ const Orders = () => {
     setFilteredOrders(filtered);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (
+    orderId: string,
+    newStatus: string,
+    options?: {
+      ifoodCancellationCode?: string;
+      ifoodCancellationReason?: string;
+    }
+  ) => {
     setUpdatingOrderIds(prev => new Set([...prev, orderId]));
     try {
 
@@ -418,7 +447,7 @@ const Orders = () => {
       let error: any = null;
 
       try {
-        data = await updateOrderStatusRemote(orderId, newStatus);
+        data = await updateOrderStatusRemote(orderId, newStatus, options);
       } catch (e: any) {
         error = e;
       }
@@ -543,13 +572,73 @@ const Orders = () => {
   };
 
   const requestCancelOrder = async (orderId: string) => {
+    const order = orders.find((item) => item.id === orderId);
+    if (!order) {
+      toast({
+        title: 'Pedido não encontrado',
+        description: 'Não foi possível localizar o pedido para cancelamento.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     const session = getLocalOperatorSession();
     if (canCancelOrder(session)) {
-      await updateOrderStatus(orderId, 'cancelled');
+      await continueCancelOrder(order);
       return;
     }
     setPendingCancelId(orderId);
     setAdminPinOpen(true);
+  };
+
+  const continueCancelOrder = async (order: Order) => {
+    if (order.source !== 'ifood' || !order.external_order_id) {
+      await updateOrderStatus(order.id, 'cancelled');
+      return;
+    }
+
+    try {
+      setLoadingIfoodCancelReasons(true);
+      const { data, status } = await invokeEdgeFunction('ifood-manager', {
+        action: 'cancellation_reasons',
+        orderId: order.external_order_id,
+      });
+
+      if (status >= 400 || !data?.ok) {
+        throw new Error(String(data?.message || data?.error || 'Falha ao consultar motivos do iFood'));
+      }
+
+      const reasons = (Array.isArray(data?.reasons) ? data.reasons : [])
+        .map((reason: any) => ({
+          cancelCodeId: String(reason?.cancelCodeId || reason?.cancellationCode || reason?.code || '').trim(),
+          description: String(reason?.description || reason?.reason || reason?.label || '').trim(),
+        }))
+        .filter((reason: { cancelCodeId: string; description: string }) => reason.cancelCodeId);
+      if (reasons.length === 0) {
+        throw new Error('Este pedido não retornou motivos válidos de cancelamento no iFood.');
+      }
+
+      setIfoodCancelOrder(order);
+      setIfoodCancelReasons(reasons);
+      setSelectedIfoodCancelCode(String(reasons[0]?.cancelCodeId || ''));
+      setIfoodCancelDialogOpen(true);
+    } catch (error: any) {
+      toast({
+        title: 'Não foi possível cancelar',
+        description: String(error?.message || error),
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingIfoodCancelReasons(false);
+    }
+  };
+
+  const handleOrderStatusChange = async (orderId: string, newStatus: string) => {
+    if (newStatus === 'cancelled') {
+      await requestCancelOrder(orderId);
+      return;
+    }
+    await updateOrderStatus(orderId, newStatus);
   };
 
   const updateOrderInDeliveryWithDriver = async (orderId: string, driverId: string) => {
@@ -942,11 +1031,89 @@ const Orders = () => {
               toast({ title: 'Sem permissão', description: 'PIN inválido ou não é administrador', variant: 'destructive' });
               return;
             }
-            if (pendingCancelId) await updateOrderStatus(pendingCancelId, 'cancelled');
+            if (pendingCancelId) {
+              const order = orders.find((item) => item.id === pendingCancelId);
+              if (order) {
+                await continueCancelOrder(order);
+              }
+            }
             setAdminPinOpen(false);
             setPendingCancelId(null);
           }}
         />
+        <Dialog open={ifoodCancelDialogOpen} onOpenChange={(open) => {
+          if (!loadingIfoodCancelReasons) {
+            setIfoodCancelDialogOpen(open);
+            if (!open) {
+              setIfoodCancelOrder(null);
+              setIfoodCancelReasons([]);
+              setSelectedIfoodCancelCode('');
+            }
+          }
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cancelar pedido iFood</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                O iFood exige que o operador escolha um motivo válido de cancelamento para este pedido.
+              </p>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Motivo disponível agora</div>
+                <Select value={selectedIfoodCancelCode} onValueChange={setSelectedIfoodCancelCode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ifoodCancelReasons.map((reason) => (
+                      <SelectItem key={reason.cancelCodeId} value={String(reason.cancelCodeId)}>
+                        {reason.cancelCodeId} · {reason.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIfoodCancelDialogOpen(false);
+                    setIfoodCancelOrder(null);
+                    setIfoodCancelReasons([]);
+                    setSelectedIfoodCancelCode('');
+                  }}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!ifoodCancelOrder || !selectedIfoodCancelCode}
+                  onClick={async () => {
+                    const selectedReason = ifoodCancelReasons.find(
+                      (reason) => String(reason.cancelCodeId) === String(selectedIfoodCancelCode)
+                    );
+                    if (!ifoodCancelOrder || !selectedReason) return;
+
+                    await updateOrderStatus(ifoodCancelOrder.id, 'cancelled', {
+                      ifoodCancellationCode: String(selectedReason.cancelCodeId),
+                      ifoodCancellationReason: String(selectedReason.description || ''),
+                    });
+
+                    setIfoodCancelDialogOpen(false);
+                    setIfoodCancelOrder(null);
+                    setIfoodCancelReasons([]);
+                    setSelectedIfoodCancelCode('');
+                  }}
+                >
+                  Cancelar no iFood
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={deliveryDialogOpen} onOpenChange={setDeliveryDialogOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
@@ -1711,7 +1878,7 @@ const Orders = () => {
             setIsDetailsModalOpen(false);
             setSelectedOrder(null);
           }}
-          onStatusChange={updateOrderStatus}
+          onStatusChange={handleOrderStatusChange}
         />
       </div>
     </div>

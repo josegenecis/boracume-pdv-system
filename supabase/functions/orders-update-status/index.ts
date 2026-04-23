@@ -1,6 +1,10 @@
 // deno-lint-ignore-file no-explicit-any
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  getUserIfoodSettings,
+  requestIfoodOrderAction,
+} from '../_shared/ifood.ts'
 import { notifyOrderStatus } from '../_shared/restaurant-whatsapp.ts'
 import { processLoyaltyForOrder } from '../_shared/loyalty.ts'
 
@@ -95,6 +99,61 @@ const applyStockForOrder = async (supabase: any, order: any) => {
   return { updated: updatedCount, disabled: disabledCount }
 }
 
+const callIfoodForStatus = async (supabase: any, order: any, newStatus: string, payload: any) => {
+  const variations = order?.variations && typeof order.variations === 'object'
+    ? order.variations
+    : {}
+  const ifoodData = variations?.ifood || {}
+  const ifoodOrderId = String(variations?.externalOrderId || ifoodData?.id || '').trim()
+
+  if (String(variations?.provider || '') !== 'ifood' || !ifoodOrderId) {
+    return { ok: true, skipped: true }
+  }
+
+  const settings = await getUserIfoodSettings(supabase, String(order.user_id || ''))
+  if (!settings?.client_id || !settings?.client_secret) {
+    throw new Error('Credenciais do iFood não configuradas para esta loja')
+  }
+
+  const deliveredBy = String(ifoodData?.deliveredBy || '').toUpperCase()
+
+  if (newStatus === 'preparing') {
+    return await requestIfoodOrderAction(supabase, settings, ifoodOrderId, 'confirm')
+  }
+
+  if (newStatus === 'ready') {
+    if (String(order?.order_type || '') !== 'delivery' || deliveredBy === 'IFOOD') {
+      return await requestIfoodOrderAction(supabase, settings, ifoodOrderId, 'readyToPickup')
+    }
+    return { ok: true, skipped: true }
+  }
+
+  if (newStatus === 'in_delivery') {
+    return await requestIfoodOrderAction(supabase, settings, ifoodOrderId, 'dispatch')
+  }
+
+  if (newStatus === 'cancelled') {
+    const cancellationCode = String(payload?.ifoodCancellationCode || '').trim()
+    const cancellationReason = String(payload?.ifoodCancellationReason || '').trim()
+    if (!cancellationCode) {
+      throw new Error('ifood_cancel_reason_required')
+    }
+
+    return await requestIfoodOrderAction(
+      supabase,
+      settings,
+      ifoodOrderId,
+      'requestCancellation',
+      {
+        reason: cancellationReason || 'Cancelamento solicitado no BoraCumê',
+        cancellationCode,
+      },
+    )
+  }
+
+  return { ok: true, skipped: true }
+}
+
 const getAuthUserId = async (req: Request): Promise<string> => {
   const supabaseUrl = getEnv('SUPABASE_URL', 'BORACUME_SUPABASE_URL')
   const anonKey = getEnv('SUPABASE_ANON_KEY', 'BORACUME_SUPABASE_ANON_KEY')
@@ -171,6 +230,12 @@ Deno.serve(async (req: Request) => {
 
     if (String(order.user_id) !== userId) {
       return ok({ ok: false, error: 'forbidden' })
+    }
+
+    try {
+      await callIfoodForStatus(supabase, order, newStatus, body)
+    } catch (e: any) {
+      return ok({ ok: false, error: 'ifood_action_failed', details: { message: String(e?.message || e) } })
     }
 
     const updateData =

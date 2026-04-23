@@ -79,14 +79,19 @@ interface Order {
   estimated_time?: number | string;
   delivery_instructions?: string;
   user_id?: string;
-
+  source?: string;
+  external_order_id?: string | null;
+  customer_document?: string | null;
+  pickup_code?: string | null;
+  scheduled_at?: string | null;
+  integration_payload?: any;
 }
 
 interface OrderDetailsModalProps {
   order: Order | null;
   isOpen: boolean;
   onClose: () => void;
-  onStatusChange?: (orderId: string, newStatus: string) => void;
+  onStatusChange?: (orderId: string, newStatus: string) => void | Promise<void>;
 }
 
 
@@ -188,6 +193,13 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     const couponCode = String(order?.coupon_code || '').trim();
     const isLoyaltyDiscount = couponCode.startsWith('FID');
     const mapsLink = getOrderMapsLink(order);
+    const ifoodData = order?.integration_payload?.ifood || {};
+    const paymentBrand = String(ifoodData?.paymentSummary?.brand || '').trim();
+    const paymentMethodDetail = String(ifoodData?.paymentSummary?.method || '').trim();
+    const benefitsSummary = Array.isArray(ifoodData?.benefitsSummary) ? ifoodData.benefitsSummary : [];
+    const customerDocument = String(order?.customer_document || '').trim();
+    const pickupCode = String(order?.pickup_code || ifoodData?.pickupCode || '').trim();
+    const scheduledAt = String(order?.scheduled_at || ifoodData?.deliveryDateTimeStart || '').trim();
 
     const copyLocation = async () => {
       try {
@@ -537,10 +549,39 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <span>Método de pagamento:</span>
                     <span className="font-medium">{formatPaymentMethodLabel(order?.payment_method)}</span>
                   </div>
+                  {paymentBrand && (
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>Bandeira:</span>
+                      <span className="font-medium">{paymentBrand}</span>
+                    </div>
+                  )}
+                  {paymentMethodDetail && (
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>Tipo iFood:</span>
+                      <span className="font-medium">{paymentMethodDetail}</span>
+                    </div>
+                  )}
+                  {toNumber(order?.change_amount) > 0 && (
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>Troco para:</span>
+                      <span className="font-medium">{formatCurrency(order?.change_amount)}</span>
+                    </div>
+                  )}
                   {couponCode && (
                     <div className="flex justify-between text-xs text-gray-600">
                       <span>{isLoyaltyDiscount ? 'Código fidelidade:' : 'Cupom aplicado:'}</span>
                       <span className="font-medium">{couponCode}</span>
+                    </div>
+                  )}
+                  {benefitsSummary.length > 0 && (
+                    <div className="space-y-1 pt-1 text-xs text-gray-600">
+                      <span className="font-medium">Subsídios e descontos:</span>
+                      {benefitsSummary.map((benefit: any, index: number) => (
+                        <div key={`${benefit?.description || 'benefit'}-${index}`} className="flex justify-between gap-3">
+                          <span>{String(benefit?.description || 'Desconto iFood')}</span>
+                          <span className="font-medium">- {formatCurrency(benefit?.value || 0)}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -556,6 +597,30 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     <Clock className="h-3 w-3" />
                     <span className="text-xs">Pedido realizado em: {formatDateTime(order?.created_at || '')}</span>
                   </div>
+                  {order?.source === 'ifood' && (
+                    <div className="flex items-center gap-2">
+                      <Package className="h-3 w-3" />
+                      <span className="text-xs">Canal: iFood {order?.external_order_id ? `· ID ${order.external_order_id}` : ''}</span>
+                    </div>
+                  )}
+                  {customerDocument && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3" />
+                      <span className="text-xs">CPF/CNPJ para fiscal: {customerDocument}</span>
+                    </div>
+                  )}
+                  {pickupCode && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-3 w-3" />
+                      <span className="text-xs">Código de coleta: {pickupCode}</span>
+                    </div>
+                  )}
+                  {scheduledAt && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-xs">Agendado para: {formatDateTime(scheduledAt)}</span>
+                    </div>
+                  )}
                   {order?.estimated_time && (
                     <div className="flex items-center gap-2">
                       <Clock className="h-3 w-3" />
