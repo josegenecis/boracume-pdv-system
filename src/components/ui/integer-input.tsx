@@ -52,11 +52,14 @@ export function IntegerInput({
       onBlur={(event) => {
         setIsFocused(false);
         const hasValue = String(draftValue).trim() !== '';
-        const baseValue = hasValue ? parseInt(draftValue, 10) : fallback;
+        const baseValue = hasValue ? parseInt(draftValue, 10) : undefined;
         if (typeof baseValue === 'number' && Number.isFinite(baseValue)) {
           const normalized = String(clamp(baseValue, min, max));
           setDraftValue(normalized);
           onValueChange(normalized);
+        } else if (!hasValue) {
+          setDraftValue('');
+          onValueChange('');
         }
         onBlur?.(event);
       }}

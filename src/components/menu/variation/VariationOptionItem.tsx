@@ -14,6 +14,7 @@ interface VariationOptionItemProps {
   option: VariationOption;
   selectedCount: number;
   freeSelectionsLimit?: number;
+  hidePriceLabel?: boolean;
   addDisabled: boolean;
   removeDisabled: boolean;
   onAdd: () => void;
@@ -24,6 +25,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   option,
   selectedCount,
   freeSelectionsLimit = 0,
+  hidePriceLabel = false,
   addDisabled,
   removeDisabled,
   onAdd,
@@ -31,7 +33,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
 }) => {
   const isSelected = selectedCount > 0;
   const shownPrice = Number(option.display_price ?? option.price ?? 0);
-  const priceLabel = shownPrice > 0
+  const priceLabel = !hidePriceLabel && shownPrice > 0
     ? freeSelectionsLimit > 0
       ? `+ ${formatBRL(shownPrice)} por adicional`
       : `+ ${formatBRL(shownPrice)}`

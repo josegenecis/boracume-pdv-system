@@ -416,6 +416,16 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
+  const persistVariationOverrideChanges = async (variationId: string) => {
+    const pid = product?.id || createdProductId;
+    if (!pid) return;
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const resolvedSettings = buildPersistedVariationSettings();
+    setVariationSettings(resolvedSettings);
+    syncVariationSettingsRaw(resolvedSettings);
+    await saveProductVariations(pid, selectedVariations, { silent: true, settingsOverride: resolvedSettings });
+  };
+
   const commitOptionPriceOverride = (variationId: string, optionName: string, option?: any) => {
     const fallback = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
     const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
@@ -499,6 +509,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       });
     };
     persistRaw(currentRaw);
+    void persistVariationOverrideChanges(variationId).catch(() => {});
   };
 
   const toggleOptionHidden = (variationId: string, optionName: string, option?: any) => {
@@ -532,6 +543,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         [optionName]: nextRaw
       }
     });
+
+    void persistVariationOverrideChanges(variationId).catch(() => {});
   };
 
   const clearOptionPriceOverride = (variationId: string, optionName: string) => {
@@ -560,6 +573,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         }
       };
     });
+
+    void persistVariationOverrideChanges(variationId).catch(() => {});
   };
 
   const buildPersistedVariationSettings = (
@@ -2285,26 +2300,21 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                 </div>
                                                 <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
                                                   <Label htmlFor={`option-price-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Preço</Label>
-                                                  <Input
+                                                  <CurrencyInput
                                                     id={`option-price-${v.id}-${optionIndex}`}
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={optionRaw.price}
-                                                    onChange={e => handleOptionPriceOverrideChange(v.id, optionName, e.target.value)}
+                                                    value={parseDecimalField(optionRaw.price, effectivePrice)}
+                                                    onValueChange={(value) => handleOptionPriceOverrideChange(v.id, optionName, String(value))}
                                                     onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
                                                   />
                                                 </div>
                                                 <div className="rounded-xl border border-[#003223]/10 bg-white px-3 py-2">
                                                   <Label htmlFor={`option-order-${v.id}-${optionIndex}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/55">Ordem</Label>
-                                                  <Input
+                                                  <IntegerInput
                                                     id={`option-order-${v.id}-${optionIndex}`}
-                                                    type="number"
-                                                    min="0"
-                                                    step="1"
+                                                    min={0}
                                                     value={optionRaw.order}
-                                                    onChange={e => handleOptionOverrideFieldChange(v.id, optionName, 'order', e.target.value)}
+                                                    onValueChange={(value) => handleOptionOverrideFieldChange(v.id, optionName, 'order', value)}
                                                     onBlur={() => commitOptionOverride(v.id, optionName, option)}
                                                     className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223]"
                                                   />
