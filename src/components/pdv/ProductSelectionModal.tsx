@@ -7,6 +7,9 @@ import { Search, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationSelector from './ProductVariationSelector';
+import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
+import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
+import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
 
 interface Product {
   id: string;
@@ -20,21 +23,15 @@ interface Product {
   low_stock_threshold: number;
 }
 
-interface ProductVariation {
+interface CategoryConfig extends PizzaCategoryConfig {
   id: string;
   name: string;
-  options: Array<{
-    name: string;
-    price: number;
-  }>;
-  max_selections: number;
-  required: boolean;
 }
 
 interface ProductSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number, variations?: any[], notes?: string) => void;
+  onAddToCart: (product: Product, quantity: number, variations?: any[], notes?: string, variationPrice?: number) => void;
 }
 
 const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
@@ -46,12 +43,14 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
+  const [productVariations, setProductVariations] = useState<Variation[]>([]);
+  const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [showVariations, setShowVariations] = useState(false);
 
   useEffect(() => {
     if (isOpen && user) {
       fetchProducts();
+      fetchCategories();
     }
   }, [isOpen, user]);
 
@@ -99,8 +98,27 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     }
   };
 
+  const fetchCategories = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('id, name, description')
+        .eq('user_id', user.id)
+        .eq('active', true);
+
+      if (error) throw error;
+      setCategories(((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as CategoryConfig[]);
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error);
+      setCategories([]);
+    }
+  };
+
   const fetchProductVariations = async (productId: string) => {
     try {
+      return await prefetchSimpleVariations(productId);
       let data: any[] | null = null;
       let error: any = null;
       const res1 = await supabase
@@ -153,8 +171,8 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     }
   };
 
-  const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string) => {
-    onAddToCart(product, quantity, variations, notes);
+  const handleAddToCart = (product: Product, quantity: number, variations: any[], notes: string, variationPrice: number) => {
+    onAddToCart(product, quantity, variations, notes, variationPrice);
     setShowVariations(false);
     setSelectedProduct(null);
     onClose();
@@ -175,6 +193,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           <ProductVariationSelector
             product={selectedProduct}
             variations={productVariations}
+            categoryConfig={categories.find((category) => category.id === selectedProduct.category_id)}
             onAddToCart={handleAddToCart}
             onClose={() => {
               setShowVariations(false);

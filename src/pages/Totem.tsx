@@ -38,6 +38,8 @@ interface Category {
   name: string;
   description?: string;
   display_order: number;
+  is_pizza?: boolean;
+  pizza_half_price_mode?: 'highest' | 'split_halves';
 }
 
 export default function Totem() {
@@ -230,6 +232,7 @@ export default function Totem() {
           setSelectedProduct(null);
         }}
         product={selectedProduct}
+        categoryConfig={categories.find((category: any) => category.id === selectedProduct?.category_id) as any}
         onAddToCart={handleAddToCartFromModal}
       />
 

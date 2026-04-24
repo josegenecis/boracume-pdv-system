@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { enrichCategoryWithMetadata } from '../../src/lib/category-metadata';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gcfyrcpugmducptktjic.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -193,7 +194,7 @@ async function fetchMenuPayload(userId: string) {
   return {
     ok: true,
     profile: profileResult.data || null,
-    categories: categoriesResult.data || [],
+    categories: (categoriesResult.data || []).map((category: any) => enrichCategoryWithMetadata(category)),
     products,
     deliveryZones: deliveryZonesResult.data || [],
     deliverySettings: deliverySettingsResult.data?.delivery_areas || null,

@@ -1022,7 +1022,9 @@ export type Database = {
           description: string | null
           display_order: number | null
           id: string
+          is_pizza: boolean
           name: string
+          pizza_half_price_mode: string
           updated_at: string
           user_id: string
         }
@@ -1032,7 +1034,9 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_pizza?: boolean
           name: string
+          pizza_half_price_mode?: string
           updated_at?: string
           user_id: string
         }
@@ -1042,7 +1046,9 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           id?: string
+          is_pizza?: boolean
           name?: string
+          pizza_half_price_mode?: string
           updated_at?: string
           user_id?: string
         }

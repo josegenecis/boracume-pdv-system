@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ProductVariationSelector from './ProductVariationSelector';
 import { useSidebar } from '@/contexts/SidebarContext';
+import type { Variation } from '@/hooks/useSimpleVariations';
+import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 
 interface Product {
   id: string;
@@ -14,20 +16,13 @@ interface Product {
   send_to_kds?: boolean;
 }
 
-interface ProductVariation {
-  id: string;
-  name: string;
-  required: boolean;
-  max_selections: number;
-  options: Array<{name: string; price: number}>;
-}
-
 interface ProductVariationModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product;
-  variations: ProductVariation[];
-  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string) => void;
+  variations: Variation[];
+  onAddToCart: (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => void;
+  categoryConfig?: PizzaCategoryConfig | null;
 }
 
 const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
@@ -35,12 +30,13 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
   onClose,
   product,
   variations,
-  onAddToCart
+  onAddToCart,
+  categoryConfig
 }) => {
   const { isMobile } = useSidebar();
 
-  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string) => {
-    onAddToCart(product, quantity, selectedVariations, notes);
+  const handleAddToCart = (product: Product, quantity: number, selectedVariations: any[], notes: string, variationPrice: number) => {
+    onAddToCart(product, quantity, selectedVariations, notes, variationPrice);
     onClose();
   };
 
@@ -55,6 +51,7 @@ const ProductVariationModal: React.FC<ProductVariationModalProps> = ({
           <ProductVariationSelector
             product={product}
             variations={variations}
+            categoryConfig={categoryConfig}
             onAddToCart={handleAddToCart}
             onClose={onClose}
           />

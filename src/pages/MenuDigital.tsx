@@ -53,6 +53,8 @@ interface Category {
   name: string;
   description?: string;
   display_order: number;
+  is_pizza?: boolean;
+  pizza_half_price_mode?: 'highest' | 'split_halves';
 }
 
 const MenuDigital = () => {
@@ -943,6 +945,7 @@ const MenuDigital = () => {
           setSelectedProduct(null);
         }}
         product={selectedProduct}
+        categoryConfig={categories.find((category: any) => category.id === selectedProduct?.category_id) as any}
         onAddToCart={handleAddToCartFromModal}
         maxQuantity={(() => {
           if (!selectedProduct) return null;

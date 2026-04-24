@@ -25,6 +25,7 @@ import ProductImageUpload from './ProductImageUpload';
 import ProductRecipeManager from './ProductRecipeManager';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { IntegerInput } from '@/components/ui/integer-input';
+import { buildCategoryDescriptionWithMetadata, enrichCategoryWithMetadata } from '@/lib/category-metadata';
 
 // Defining the interface here to ensure consistency
 interface ProductItem {
@@ -141,6 +142,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [loading, setLoading] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIsPizza, setNewCategoryIsPizza] = useState(false);
+  const [newCategoryPizzaHalfPriceMode, setNewCategoryPizzaHalfPriceMode] = useState<'highest' | 'split_halves'>('highest');
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
   const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
@@ -904,7 +907,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .from('product_categories')
         .insert([{ 
           name: newCategoryName.trim(),
-          user_id: user.id
+          user_id: user.id,
+          description: buildCategoryDescriptionWithMetadata('', {
+            is_pizza: newCategoryIsPizza,
+            pizza_half_price_mode: newCategoryPizzaHalfPriceMode
+          })
         }])
         .select()
         .single();
@@ -912,7 +919,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       if (error) throw error;
 
       // Atualiza a lista de categorias
-      setCategories(prev => [...prev, data]);
+      setCategories(prev => [...prev, enrichCategoryWithMetadata(data as any)]);
       
       // Seleciona a nova categoria
       setFormData(prev => ({ 
@@ -922,6 +929,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       }));
 
       setNewCategoryName('');
+      setNewCategoryIsPizza(false);
+      setNewCategoryPizzaHalfPriceMode('highest');
       setShowCreateCategory(false);
       
       toast({
@@ -968,7 +977,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         .eq('active', true);
 
       if (error) throw error;
-      setCategories(data || []);
+      setCategories(((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)));
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
     }
@@ -2139,7 +2148,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="0"
                                         value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { min: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -2151,7 +2160,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="1"
                                         value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { max: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -2165,7 +2174,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         type="number"
                                         min="0"
                                         value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { free: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -2178,7 +2187,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         min={String(Math.max(1, getVariationConfig(v.id).max_selections ?? 1))}
                                         disabled={!getVariationConfig(v.id).allow_paid_excess}
                                         value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { paidMax: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
@@ -2194,7 +2203,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         step="0.1"
                                         disabled={getVariationConfig(v.id).pricing_mode !== 'multiplier'}
                                         value={variationSettingsRaw[v.id]?.multiplier ?? String(Number(getVariationConfig(v.id).price_multiplier ?? 1))}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { multiplier: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { multiplier: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
@@ -2208,7 +2217,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                         step="0.01"
                                         disabled={getVariationConfig(v.id).pricing_mode !== 'fixed'}
                                         value={variationSettingsRaw[v.id]?.fixedPrice ?? String(Number(getVariationConfig(v.id).fixed_option_price ?? 0))}
-                                        onChange={e => updateVariationRawAndPersist(v.id, { fixedPrice: e.target.value })}
+                                        onChange={e => updateVariationRaw(v.id, { fixedPrice: e.target.value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />
@@ -2484,6 +2493,32 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                       }}
                     />
                   </div>
+                  <div className="rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/35 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label className="text-[#003223]">Categoria de pizza</Label>
+                        <p className="mt-1 text-xs text-[#003223]/60">Usa 1 sabor ou 2 metades com regra automÃ¡tica.</p>
+                      </div>
+                      <Switch checked={newCategoryIsPizza} onCheckedChange={setNewCategoryIsPizza} />
+                    </div>
+                    {newCategoryIsPizza && (
+                      <div className="mt-3 space-y-2">
+                        <Label>Regra do meio a meio</Label>
+                        <Select
+                          value={newCategoryPizzaHalfPriceMode}
+                          onValueChange={(value: 'highest' | 'split_halves') => setNewCategoryPizzaHalfPriceMode(value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="highest">Prevalece o sabor de maior valor</SelectItem>
+                            <SelectItem value="split_halves">Soma metade de cada sabor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2 justify-end">
                     <Button 
                       type="button" 
@@ -2491,6 +2526,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                       onClick={() => {
                         setShowCreateCategory(false);
                         setNewCategoryName('');
+                        setNewCategoryIsPizza(false);
+                        setNewCategoryPizzaHalfPriceMode('highest');
                       }}
                     >
                       Cancelar

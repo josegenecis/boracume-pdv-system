@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
 import { supabase } from '@/integrations/supabase/client';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import { buildCategoryDescriptionWithMetadata, enrichCategoryWithMetadata } from '@/lib/category-metadata';
 
 interface Category {
   id: string;
@@ -21,6 +22,8 @@ interface Category {
   description?: string;
   display_order: number;
   active: boolean;
+  is_pizza: boolean;
+  pizza_half_price_mode: 'highest' | 'split_halves';
 }
 
 const CategoryManager = () => {
@@ -33,7 +36,9 @@ const CategoryManager = () => {
     name: '', 
     description: '', 
     display_order: 0,
-    active: true 
+    active: true,
+    is_pizza: false,
+    pizza_half_price_mode: 'highest' as 'highest' | 'split_halves',
   });
   const { toast } = useToast();
   const { user } = useAuth();
@@ -55,7 +60,7 @@ const CategoryManager = () => {
         .order('display_order', { ascending: true });
 
       if (error) throw error;
-      setCategories(data || []);
+      setCategories(((data || []) as Category[]).map((category: any) => enrichCategoryWithMetadata(category)));
       setSelectedIds((prev) => {
         const ids = new Set((data || []).map((c: Category) => c.id));
         return new Set(Array.from(prev).filter((id) => ids.has(id)));
@@ -83,7 +88,10 @@ const CategoryManager = () => {
           .from('product_categories')
           .update({
             name: formData.name,
-            description: formData.description || null,
+            description: buildCategoryDescriptionWithMetadata(formData.description || '', {
+              is_pizza: formData.is_pizza,
+              pizza_half_price_mode: formData.pizza_half_price_mode
+            }),
             display_order: formData.display_order,
             active: formData.active
           })
@@ -101,7 +109,10 @@ const CategoryManager = () => {
           .insert({
             user_id: user.id,
             name: formData.name,
-            description: formData.description || null,
+            description: buildCategoryDescriptionWithMetadata(formData.description || '', {
+              is_pizza: formData.is_pizza,
+              pizza_half_price_mode: formData.pizza_half_price_mode
+            }),
             display_order: formData.display_order,
             active: formData.active
           });
@@ -114,7 +125,7 @@ const CategoryManager = () => {
         });
       }
       
-      setFormData({ name: '', description: '', display_order: 0, active: true });
+      setFormData({ name: '', description: '', display_order: 0, active: true, is_pizza: false, pizza_half_price_mode: 'highest' });
       setEditingCategory(null);
       setIsDialogOpen(false);
       fetchCategories();
@@ -135,7 +146,9 @@ const CategoryManager = () => {
       name: category.name,
       description: category.description || '',
       display_order: category.display_order,
-      active: category.active
+      active: category.active,
+      is_pizza: Boolean(category.is_pizza),
+      pizza_half_price_mode: category.pizza_half_price_mode === 'split_halves' ? 'split_halves' : 'highest'
     });
     setIsDialogOpen(true);
   };
@@ -251,7 +264,7 @@ const CategoryManager = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', display_order: 0, active: true });
+    setFormData({ name: '', description: '', display_order: 0, active: true, is_pizza: false, pizza_half_price_mode: 'highest' });
     setEditingCategory(null);
   };
 
@@ -353,6 +366,35 @@ const CategoryManager = () => {
                     </Button>
                   </div>
                 </div>
+                <div className="rounded-2xl border border-orange-200/80 bg-white/80 p-4 shadow-[0_10px_30px_-18px_rgba(249,115,22,0.5)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label className="font-semibold text-boracume-dark-green">Categoria de pizza</Label>
+                      <p className="mt-1 text-xs text-[#003223]/65">Ative para usar 1 sabor ou 2 metades com regra automÃ¡tica de preÃ§o.</p>
+                    </div>
+                    <Switch
+                      checked={formData.is_pizza}
+                      onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, is_pizza: checked }))}
+                    />
+                  </div>
+                  {formData.is_pizza && (
+                    <div className="mt-4">
+                      <Label className="font-semibold text-boracume-dark-green">Regra do meio a meio</Label>
+                      <Select
+                        value={formData.pizza_half_price_mode}
+                        onValueChange={(value: 'highest' | 'split_halves') => setFormData((prev) => ({ ...prev, pizza_half_price_mode: value }))}
+                      >
+                        <SelectTrigger className="mt-2 rounded-2xl border-orange-200/80 bg-white/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="highest">Prevalece o sabor de maior valor</SelectItem>
+                          <SelectItem value="split_halves">Soma metade de cada sabor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2 justify-end">
                   <Button 
                     variant="outline" 
@@ -437,6 +479,7 @@ const CategoryManager = () => {
                 <TableHead className="w-10"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Descrição</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Ordem</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -464,6 +507,18 @@ const CategoryManager = () => {
                             </TableCell>
                             <TableCell className="font-medium">{category.name}</TableCell>
                             <TableCell>{category.description || '-'}</TableCell>
+                            <TableCell>
+                              {category.is_pizza ? (
+                                <div className="space-y-1">
+                                  <span className="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">Pizza</span>
+                                  <div className="text-[11px] text-[#003223]/60">
+                                    {category.pizza_half_price_mode === 'split_halves' ? 'Metade de cada sabor' : 'Maior sabor'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-[#003223]/60">PadrÃ£o</span>
+                              )}
+                            </TableCell>
                             <TableCell>{category.display_order}</TableCell>
                             <TableCell>
                               <span className={`px-2 py-1 rounded text-xs ${category.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>

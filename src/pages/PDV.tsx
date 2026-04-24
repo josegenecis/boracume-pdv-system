@@ -34,6 +34,9 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
+import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
+import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
+import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
 
 interface Product {
   id: string;
@@ -45,6 +48,11 @@ interface Product {
   description?: string;
   weight_based?: boolean;
   send_to_kds?: boolean;
+}
+
+interface CategoryConfig extends PizzaCategoryConfig {
+  id: string;
+  name: string;
 }
 
 interface ProductVariation {
@@ -107,7 +115,8 @@ const PDV = () => {
   const [processing, setProcessing] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productVariations, setProductVariations] = useState<ProductVariation[]>([]);
+  const [productVariations, setProductVariations] = useState<Variation[]>([]);
+  const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [activeTab, setActiveTab] = useState('products');
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
@@ -402,6 +411,7 @@ const PDV = () => {
       setLoading(true);
       await Promise.all([
         fetchProducts(),
+        fetchCategories(),
         fetchDeliveryZones(),
         fetchTables()
       ]);
@@ -610,7 +620,7 @@ const PDV = () => {
   };
 
   const handleProductClick = async (product: Product) => {
-    const variations = await fetchProductVariations(product.id);
+    const variations = await prefetchSimpleVariations(product.id);
     
     if (variations.length > 0) {
       setSelectedProduct(product);
@@ -636,7 +646,13 @@ const PDV = () => {
     return { options, variationLines };
   };
 
-  const addToCart = (product: Product, quantity: number = 1, selectedVariations: SelectedVariationsPayload = [], notes: string = '') => {
+  const addToCart = (
+    product: Product,
+    quantity: number = 1,
+    selectedVariations: SelectedVariationsPayload = [],
+    notes: string = '',
+    variationPrice: number = 0
+  ) => {
     setCart(prev => {
       const variationKey = JSON.stringify(selectedVariations) + notes;
       const existing = prev.find(item => 
@@ -653,8 +669,9 @@ const PDV = () => {
         );
       }
       
-      return [...prev, { 
-        ...product, 
+      return [...prev, {
+        ...product,
+        price: Math.max(0, Number(product.price || 0) + Number(variationPrice || 0)),
         cartItemId: makeCartItemId(),
         quantity, 
         selectedVariations: (() => {
@@ -723,6 +740,22 @@ const PDV = () => {
       return parseBRL(changeAmount) - getFinalTotal();
     }
     return 0;
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('id, name, description')
+        .eq('user_id', user?.id)
+        .eq('active', true);
+
+      if (error) throw error;
+      setCategories(((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as CategoryConfig[]);
+    } catch (error) {
+      console.error('Erro ao carregar categorias do PDV:', error);
+      setCategories([]);
+    }
   };
 
   const generateOrderNumber = () => {
@@ -1953,8 +1986,9 @@ const PDV = () => {
           isOpen={showVariationModal}
           product={selectedProduct}
           variations={productVariations}
-          onAddToCart={(product, quantity, variations, notes) => {
-            addToCart({...product, available: true}, quantity, variations, notes);
+          categoryConfig={categories.find((category) => category.id === selectedProduct.category_id)}
+          onAddToCart={(product, quantity, variations, notes, variationPrice) => {
+            addToCart({...product, available: true}, quantity, variations, notes, variationPrice);
           }}
           onClose={() => {
             setShowVariationModal(false);

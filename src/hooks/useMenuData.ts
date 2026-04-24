@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
 import { hydrateSimpleVariationsCache, primeSimpleVariationPresence } from '@/hooks/useSimpleVariations';
+import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
 
 interface Product {
   id: string;
@@ -28,6 +29,8 @@ interface Category {
   name: string;
   description?: string;
   display_order: number;
+  is_pizza?: boolean;
+  pizza_half_price_mode?: 'highest' | 'split_halves';
 }
 
 interface RestaurantProfile {
@@ -215,7 +218,7 @@ async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
 
     return {
       products: (productsData || []) as any,
-      categories: (categoriesData || []) as any,
+      categories: ((categoriesData || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as any,
       profile,
       deliveryZones: (deliveryZonesData || []) as any,
       deliverySettings: deliverySettingsData?.delivery_areas || null

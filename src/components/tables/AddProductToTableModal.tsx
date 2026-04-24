@@ -175,7 +175,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     return { options, variationLines };
   };
 
-  const addToCart = (product: Product, quantity: number = 1, selected: any = [], notes: string = '') => {
+  const addToCart = (product: Product, quantity: number = 1, selected: any = [], notes: string = '', variationPrice: number = 0) => {
     const { options, variationLines } = unpackSelectedVariations(selected);
     setCartItems(prev => {
       const existing = prev.find(item => 
@@ -192,8 +192,9 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         );
       }
       
-      return [...prev, { 
-        ...product, 
+      return [...prev, {
+        ...product,
+        price: Math.max(0, Number(product.price || 0) + Number(variationPrice || 0)),
         quantity, 
         options: options.length > 0 ? options : undefined,
         variations: variationLines.length > 0 ? variationLines : undefined,

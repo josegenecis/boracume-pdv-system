@@ -13,6 +13,7 @@ import {
 } from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
+import { isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
 
 interface Product {
   id: string;
@@ -35,6 +36,7 @@ interface SimpleVariationModalProps {
     optionDetails?: SelectedVariationDetail[]
   ) => void;
   maxQuantity?: number | null;
+  categoryConfig?: PizzaCategoryConfig | null;
 }
 
 export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
@@ -42,13 +44,15 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   onClose,
   product,
   onAddToCart,
-  maxQuantity
+  maxQuantity,
+  categoryConfig
 }) => {
   const formatBRL = (value: number) =>
     `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const [variations, setVariations] = useState<any[]>([]);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string[]>>({});
+  const [pizzaFlavorMode, setPizzaFlavorMode] = useState<Record<string, 1 | 2>>({});
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const { toast } = useToast();
@@ -76,6 +80,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       if (cachedVariations.length > 0 || hasDefinitiveSimpleVariationsResult(product.id)) {
         setVariations(cachedVariations);
         setSelectedVariations({});
+        setPizzaFlavorMode({});
         setLoadingVariations(false);
         return;
       }
@@ -83,6 +88,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       if (getSimpleVariationPresence(product.id) === 'none') {
         setVariations([]);
         setSelectedVariations({});
+        setPizzaFlavorMode({});
         setLoadingVariations(false);
         return;
       }
@@ -91,6 +97,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       const productVariations = await fetchVariations(product.id);
       setVariations(productVariations);
       setSelectedVariations({});
+      setPizzaFlavorMode({});
     } catch {
       setVariations([]);
     } finally {
@@ -98,14 +105,20 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     }
   };
 
+  const getVariationMaxSelections = (variation: any) => {
+    if (!isPizzaFlavorVariation(variation, categoryConfig)) return variation.max_selections;
+    return pizzaFlavorMode[variation.id] === 2 ? Math.min(2, Number(variation.max_selections || 2)) : 1;
+  };
+
   const handleVariationChange = (variationId: string, optionName: string, isSelected: boolean) => {
     const variation = variations.find((item) => item.id === variationId);
     if (!variation) return;
+    const variationMaxSelections = getVariationMaxSelections(variation);
 
     setSelectedVariations((prev) => {
       const current = prev[variationId] || [];
 
-      if (variation.max_selections === 1) {
+      if (variationMaxSelections === 1) {
         return {
           ...prev,
           [variationId]: isSelected ? [optionName] : []
@@ -113,7 +126,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       }
 
       if (isSelected) {
-        if (current.length < variation.max_selections) {
+        if (current.length < variationMaxSelections) {
           return {
             ...prev,
             [variationId]: [...current, optionName]
@@ -137,11 +150,15 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const isValidSelection = () => {
     return variations.every((variation) => {
       const selected = selectedVariations[variation.id] || [];
-      const minSel = Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
+      const pizzaMode = pizzaFlavorMode[variation.id] || 1;
+      const minSel = isPizzaFlavorVariation(variation, categoryConfig)
+        ? pizzaMode
+        : Math.max(variation.required ? 1 : 0, Number(variation.min_selections || 0));
+      const maxSel = getVariationMaxSelections(variation);
       if (selected.length < minSel) {
         return false;
       }
-      if (selected.length > Number(variation.max_selections || 1)) {
+      if (selected.length > Number(maxSel || 1)) {
         return false;
       }
       return true;
@@ -159,9 +176,9 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
       return;
     }
 
-    const variationPrice = calculateVariationPrice(selectedVariations, variations);
+    const variationPrice = calculateVariationPrice(selectedVariations, variations, { category: categoryConfig });
     const variationTexts = getSelectedVariationsTextWithReceiptLabels(selectedVariations, variations);
-    const variationDetails = getSelectedVariationDetails(selectedVariations, variations);
+    const variationDetails = getSelectedVariationDetails(selectedVariations, variations, { category: categoryConfig });
 
     setSubmitting(true);
     onAddToCart(product, quantity, variationTexts, notes, variationPrice, variationDetails);
@@ -169,13 +186,14 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     setQuantity(1);
     setNotes('');
     setSelectedVariations({});
+    setPizzaFlavorMode({});
     setSubmitting(false);
     onClose();
   };
 
   const getTotalPrice = () => {
     if (!product) return 0;
-    const variationPrice = calculateVariationPrice(selectedVariations, variations);
+    const variationPrice = calculateVariationPrice(selectedVariations, variations, { category: categoryConfig });
     return (product.price + variationPrice) * quantity;
   };
 
@@ -229,12 +247,42 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               <div className="space-y-4">
                 <h3 className="text-base font-semibold text-gray-900">Personalize seu pedido</h3>
                 {variations.map((variation) => (
-                  <VariationGroup
-                    key={variation.id}
-                    variation={variation}
-                    selectedVariations={selectedVariations}
-                    onVariationChange={handleVariationChange}
-                  />
+                  <div key={variation.id} className="space-y-2">
+                    {isPizzaFlavorVariation(variation, categoryConfig) && (
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant={pizzaFlavorMode[variation.id] === 2 ? 'outline' : 'default'}
+                          className="h-9 rounded-xl"
+                          onClick={() => {
+                            setPizzaFlavorMode((prev) => ({ ...prev, [variation.id]: 1 }));
+                            setSelectedVariations((prev) => ({ ...prev, [variation.id]: (prev[variation.id] || []).slice(0, 1) }));
+                          }}
+                        >
+                          1 sabor
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={pizzaFlavorMode[variation.id] === 2 ? 'default' : 'outline'}
+                          className="h-9 rounded-xl"
+                          onClick={() => setPizzaFlavorMode((prev) => ({ ...prev, [variation.id]: 2 }))}
+                        >
+                          2 metades
+                        </Button>
+                      </div>
+                    )}
+                    <VariationGroup
+                      variation={{
+                        ...variation,
+                        min_selections: isPizzaFlavorVariation(variation, categoryConfig)
+                          ? (pizzaFlavorMode[variation.id] || 1)
+                          : variation.min_selections,
+                        max_selections: getVariationMaxSelections(variation)
+                      }}
+                      selectedVariations={selectedVariations}
+                      onVariationChange={handleVariationChange}
+                    />
+                  </div>
                 ))}
               </div>
             ) : null}

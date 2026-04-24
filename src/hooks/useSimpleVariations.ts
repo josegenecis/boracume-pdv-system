@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { perfStart } from '@/utils/perf';
+import { calculatePizzaFlavorPrice, isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
 
-type VariationOption = { name: string; price: number; recommended?: boolean; active?: boolean };
+type VariationOption = { name: string; price: number; base_price?: number; recommended?: boolean; active?: boolean };
 type VariationPricingMode = 'default' | 'free' | 'half' | 'multiplier' | 'fixed';
 type VariationOptionOverride = {
   price?: number;
@@ -37,6 +38,11 @@ export type SelectedVariationDetail = {
   label: string;
   value: string;
   price: number;
+};
+
+type VariationPricingContext = {
+  category?: PizzaCategoryConfig | null;
+  pizzaFlavorCounts?: Record<string, number>;
 };
 
 export type VariationPresence = 'unknown' | 'none' | 'has';
@@ -148,6 +154,7 @@ function normalizeVariation(item: any): Variation | null {
     validOptions.push({
       name: String(overrideConfig.label || optionName).trim() || optionName,
       price: Number.isFinite(adjustedPrice) ? Math.max(0, adjustedPrice) : 0,
+      base_price: safeBasePrice,
       ...(overrideConfig.recommended ? { recommended: true } : {}),
       ...(overrideConfig.display_order !== undefined ? { display_order: overrideConfig.display_order } : {})
     } as any);
@@ -643,10 +650,19 @@ export function useSimpleVariations() {
     return p;
   };
 
-  const calculateVariationPrice = (selectedVariations: Record<string, string[]>, variations: Variation[]) => {
+  const calculateVariationPrice = (
+    selectedVariations: Record<string, string[]>,
+    variations: Variation[],
+    context?: VariationPricingContext
+  ) => {
     let total = 0;
     for (const variation of variations) {
       const selected = selectedVariations[variation.id] || [];
+      if (selected.length === 0) continue;
+      if (isPizzaFlavorVariation(variation, context?.category)) {
+        total += calculatePizzaFlavorPrice(selected, variation, context?.category);
+        continue;
+      }
       let freeRemaining = Math.max(0, Number(variation.free_selections_limit || 0));
       for (const optionName of selected) {
         const option = variation.options.find((opt) => opt.name === optionName);
@@ -663,12 +679,27 @@ export function useSimpleVariations() {
 
   const getSelectedVariationDetails = (
     selectedVariations: Record<string, string[]>,
-    variations: Variation[]
+    variations: Variation[],
+    context?: VariationPricingContext
   ): SelectedVariationDetail[] => {
     const details: SelectedVariationDetail[] = [];
 
     for (const variation of variations) {
       const selected = selectedVariations[variation.id] || [];
+      if (selected.length === 0) continue;
+      if (isPizzaFlavorVariation(variation, context?.category)) {
+        const totalPrice = calculatePizzaFlavorPrice(selected, variation, context?.category);
+        const label = String(variation.receipt_label || variation.name || '').trim();
+        selected.forEach((optionName, index) => {
+          details.push({
+            key: `${variation.id}-${index}`,
+            label,
+            value: optionName,
+            price: index === 0 ? totalPrice : 0
+          });
+        });
+        continue;
+      }
       let freeRemaining = Math.max(0, Number(variation.free_selections_limit || 0));
       const label = String(variation.receipt_label || variation.name || '').trim();
 
