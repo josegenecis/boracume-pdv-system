@@ -71,3 +71,15 @@ export function calculatePizzaFlavorPrice(
 
   return Math.max(...basePrices);
 }
+
+export function getDisplayedPizzaFlavorPrice(
+  option: PizzaVariationOptionLike,
+  variation: Pick<PizzaVariationLike, 'pricing_mode'>,
+  halfCount: 1 | 2
+) {
+  const basePrice = getPizzaOptionBasePrice(option, variation.pricing_mode === 'half');
+  if (halfCount === 2) {
+    return basePrice / 2;
+  }
+  return basePrice;
+}

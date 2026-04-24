@@ -7,6 +7,7 @@ import { CheckCircle2 } from 'lucide-react';
 interface VariationOption {
   name: string;
   price: number;
+  display_price?: number;
   recommended?: boolean;
 }
 
@@ -93,7 +94,6 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
         {variation.options.map((option, index) => {
           const selectedCount = selectedOptions.filter((name) => name === option.name).length;
           const addDisabled = reachedMax;
-          const removeDisabled = selectedCount > 0 && count <= minSel;
           return (
             <VariationOptionItem
               key={`${variation.id}-${index}`}
@@ -101,7 +101,7 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
               selectedCount={selectedCount}
               freeSelectionsLimit={freeLimit}
               addDisabled={addDisabled}
-              removeDisabled={selectedCount === 0 || removeDisabled}
+              removeDisabled={selectedCount === 0}
               onAdd={() => onVariationChange(variation.id, option.name, true)}
               onRemove={() => onVariationChange(variation.id, option.name, false)}
             />

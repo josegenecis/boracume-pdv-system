@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { normalizeComplementOptionName } from '@/lib/text';
-import { Trash2, Plus, Copy, Eye, EyeOff } from 'lucide-react';
+import { Trash2, Plus, Copy, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { IntegerInput } from '@/components/ui/integer-input';
@@ -158,6 +158,12 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
       </CardHeader>
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={onCancel} className={softButtonClassName}>
+              <ArrowLeft size={16} className="mr-2" />
+              Voltar
+            </Button>
+          </div>
           <div>
             <Label htmlFor="name" className="text-boracume-dark-green font-semibold">Nome da Variação</Label>
             <Input

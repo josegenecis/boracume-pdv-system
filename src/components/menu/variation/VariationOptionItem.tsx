@@ -6,6 +6,7 @@ import { Minus, Plus } from 'lucide-react';
 interface VariationOption {
   name: string;
   price: number;
+  display_price?: number;
   recommended?: boolean;
 }
 
@@ -29,10 +30,11 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
   onRemove
 }) => {
   const isSelected = selectedCount > 0;
-  const priceLabel = option.price > 0
+  const shownPrice = Number(option.display_price ?? option.price ?? 0);
+  const priceLabel = shownPrice > 0
     ? freeSelectionsLimit > 0
-      ? `+ ${formatBRL(option.price)} por adicional`
-      : `+ ${formatBRL(option.price)}`
+      ? `+ ${formatBRL(shownPrice)} por adicional`
+      : `+ ${formatBRL(shownPrice)}`
     : '';
   return (
     <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3 py-3 ${addDisabled && !isSelected ? 'opacity-40' : ''}`}>

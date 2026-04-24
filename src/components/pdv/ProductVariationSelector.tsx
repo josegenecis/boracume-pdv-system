@@ -9,7 +9,7 @@ import { Minus, Plus } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { formatBRL } from '@/lib/currency';
 import type { Variation } from '@/hooks/useSimpleVariations';
-import { calculatePizzaFlavorPrice, isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
+import { calculatePizzaFlavorPrice, getDisplayedPizzaFlavorPrice, isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
 
 interface Product {
   id: string;
@@ -183,6 +183,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
         const maxSelections = variationLimits[variation.id] || 1;
         const isPizzaFlavor = isPizzaFlavorVariation(variation, categoryConfig);
         const selected = selectedVariations[variation.id] || [];
+        const pizzaMode = pizzaFlavorMode[variation.id] || 1;
 
         return (
           <Card key={variation.id} className={isMobile ? "rounded-[18px]" : ""}>
@@ -234,7 +235,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
                         <Label className={isMobile ? "text-[12px]" : ""} htmlFor={`${variation.id}-${option.name}`}>{option.name}</Label>
                       </div>
                       <span className={isMobile ? "text-[11px] text-muted-foreground" : "text-sm text-muted-foreground"}>
-                        {formatBRL(isPizzaFlavor ? Number(option.base_price ?? option.price ?? 0) : Number(option.price || 0))}
+                        {formatBRL(isPizzaFlavor ? getDisplayedPizzaFlavorPrice(option, variation, pizzaMode) : Number(option.price || 0))}
                       </span>
                     </div>
                   ))}
@@ -254,7 +255,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
                           <Label className={isMobile ? "text-[12px]" : ""} htmlFor={`${variation.id}-${option.name}`}>{option.name}</Label>
                         </div>
                         <span className={isMobile ? "text-[11px] text-muted-foreground" : "text-sm text-muted-foreground"}>
-                          {formatBRL(isPizzaFlavor ? Number(option.base_price ?? option.price ?? 0) : Number(option.price || 0))}
+                          {formatBRL(isPizzaFlavor ? getDisplayedPizzaFlavorPrice(option, variation, pizzaMode) : Number(option.price || 0))}
                         </span>
                       </div>
                     );

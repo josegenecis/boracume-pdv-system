@@ -13,7 +13,7 @@ import {
 } from '@/hooks/useSimpleVariations';
 import { VariationGroup } from './variation/VariationGroup';
 import { ChevronDown, Loader2 } from 'lucide-react';
-import { isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
+import { getDisplayedPizzaFlavorPrice, isPizzaFlavorVariation, type PizzaCategoryConfig } from '@/lib/pizza-pricing';
 
 interface Product {
   id: string;
@@ -248,6 +248,20 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                 <h3 className="text-base font-semibold text-gray-900">Personalize seu pedido</h3>
                 {variations.map((variation) => (
                   <div key={variation.id} className="space-y-2">
+                    {(() => {
+                      const pizzaMode = pizzaFlavorMode[variation.id] || 1;
+                      const variationWithDisplayedPrices = isPizzaFlavorVariation(variation, categoryConfig)
+                        ? {
+                            ...variation,
+                            options: variation.options.map((option: any) => ({
+                              ...option,
+                              display_price: getDisplayedPizzaFlavorPrice(option, variation, pizzaMode)
+                            }))
+                          }
+                        : variation;
+
+                      return (
+                        <>
                     {isPizzaFlavorVariation(variation, categoryConfig) && (
                       <div className="flex gap-2">
                         <Button
@@ -273,7 +287,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                     )}
                     <VariationGroup
                       variation={{
-                        ...variation,
+                        ...variationWithDisplayedPrices,
                         min_selections: isPizzaFlavorVariation(variation, categoryConfig)
                           ? (pizzaFlavorMode[variation.id] || 1)
                           : variation.min_selections,
@@ -282,6 +296,9 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                       selectedVariations={selectedVariations}
                       onVariationChange={handleVariationChange}
                     />
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
