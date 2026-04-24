@@ -1161,10 +1161,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     e.preventDefault();
 
 
-    if (!user?.id || !formData.name || !formData.category_id || (priceMode === 'simple' && formData.price <= 0)) {
+    if (!user?.id || !formData.name || !formData.category_id) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios (nome, categoria e preço).",
+        description: "Preencha todos os campos obrigatórios (nome e categoria).",
         variant: "destructive"
       });
       return;
@@ -1307,7 +1307,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       // requisitos mínimos
       if (loading) return;
       if (autoSaveInFlightRef.current) return;
-      const canCreate = !!user?.id && !!formData.name.trim() && !!formData.category_id && formData.price > 0;
+      const canCreate = !!user?.id && !!formData.name.trim() && !!formData.category_id;
       if (canCreate) {
         try {
           // se não há product.id, cria mín e atualiza
@@ -1825,7 +1825,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                   value={formatFromRaw(priceRaw)}
                   onChange={handlePriceChange}
                   placeholder="0,00"
-                  required={priceMode === 'simple'}
+                  required={false}
                   className="bg-white rounded-xl shadow-sm h-11 text-lg font-bold text-boracume-dark-green"
                 />
               </div>
