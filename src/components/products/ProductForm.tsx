@@ -586,8 +586,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       const paidMaxNum = allowPaidExcess
         ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? Number(current.paid_max_selections ?? safeMax) : Number(raw.paidMax) || safeMax))
         : null;
-      const priceMultiplier = Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
-      const fixedOptionPrice = Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)));
+      const pricingMode = getDefaultPricingMode(raw.pricingMode || current.pricing_mode);
+      const priceMultiplier = pricingMode === 'half'
+        ? 0.5
+        : Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
+      const fixedOptionPrice = pricingMode === 'fixed'
+        ? Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)))
+        : null;
       const optionPriceOverrides = Object.fromEntries(
         Object.entries(raw.optionOverrides || {}).map(([name, value]) => {
           const currentOverride = current.option_price_overrides?.[name] || {};
