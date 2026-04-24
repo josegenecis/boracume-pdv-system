@@ -25,20 +25,38 @@ export function IntegerInput({
   onBlur,
   ...props
 }: Props) {
+  const [draftValue, setDraftValue] = React.useState(String(value ?? ''));
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isFocused) {
+      setDraftValue(String(value ?? ''));
+    }
+  }, [value, isFocused]);
+
   return (
     <Input
       {...props}
       type="text"
       inputMode="numeric"
-      value={value}
+      value={draftValue}
       onChange={(event) => {
-        onValueChange(event.target.value.replace(/\D/g, ''));
+        const nextValue = event.target.value.replace(/\D/g, '');
+        setDraftValue(nextValue);
+        onValueChange(nextValue);
+      }}
+      onFocus={(event) => {
+        setIsFocused(true);
+        props.onFocus?.(event);
       }}
       onBlur={(event) => {
-        const hasValue = String(value).trim() !== '';
-        const baseValue = hasValue ? parseInt(value, 10) : fallback;
+        setIsFocused(false);
+        const hasValue = String(draftValue).trim() !== '';
+        const baseValue = hasValue ? parseInt(draftValue, 10) : fallback;
         if (typeof baseValue === 'number' && Number.isFinite(baseValue)) {
-          onValueChange(String(clamp(baseValue, min, max)));
+          const normalized = String(clamp(baseValue, min, max));
+          setDraftValue(normalized);
+          onValueChange(normalized);
         }
         onBlur?.(event);
       }}

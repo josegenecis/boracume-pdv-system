@@ -89,6 +89,7 @@ type VariationConfig = {
 };
 
 type VariationConfigRaw = {
+  pricingMode: VariationPricingMode;
   min: string;
   max: string;
   free: string;
@@ -236,6 +237,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const raw: Record<string, VariationConfigRaw> = {};
     Object.entries(settings || {}).forEach(([id, s]) => {
       raw[id] = {
+        pricingMode: getDefaultPricingMode(s?.pricing_mode),
         min: String(Math.max(0, Math.floor(Number(s?.min_selections) || 0))),
         max: String(Math.max(1, Math.floor(Number(s?.max_selections) || 1))),
         free: String(Math.max(0, Math.floor(Number(s?.free_selections_limit) || 0))),
@@ -269,8 +271,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       const safeMax = Math.max(maxNum, minNum);
       const freeNum = Math.max(0, Math.floor(raw.free === '' ? 0 : Number(raw.free) || 0));
       const paidMaxNum = current.allow_paid_excess ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? safeMax : Number(raw.paidMax) || safeMax)) : null;
-      const priceMultiplier = Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
-      const fixedOptionPrice = Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)));
+      const pricingMode = getDefaultPricingMode(raw.pricingMode || current.pricing_mode);
+      const priceMultiplier = pricingMode === 'half'
+        ? 0.5
+        : Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
+      const fixedOptionPrice = pricingMode === 'fixed'
+        ? Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)))
+        : null;
       const optionPriceOverrides = Object.fromEntries(
         Object.entries(raw.optionOverrides || {}).map(([name, value]) => {
           const currentOverride = current.option_price_overrides?.[name] || {};
@@ -325,6 +332,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       return {
         ...prev,
         [variationId]: {
+          pricingMode: prev[variationId]?.pricingMode ?? getDefaultPricingMode(currentSetting.pricing_mode),
           min: prev[variationId]?.min ?? String(currentSetting.min_selections ?? 0),
           max: prev[variationId]?.max ?? String(currentSetting.max_selections ?? 1),
           free: prev[variationId]?.free ?? String(currentSetting.free_selections_limit ?? 0),
@@ -344,6 +352,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const currentSetting = getVariationConfig(variationId);
     const currentRaw = variationSettingsRaw[variationId];
     const nextRawForVariation: VariationConfigRaw = {
+      pricingMode: currentRaw?.pricingMode ?? getDefaultPricingMode(currentSetting.pricing_mode),
       min: currentRaw?.min ?? String(currentSetting.min_selections ?? 0),
       max: currentRaw?.max ?? String(currentSetting.max_selections ?? 1),
       free: currentRaw?.free ?? String(currentSetting.free_selections_limit ?? 0),
@@ -537,7 +546,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
 
     setVariationSettingsRaw(prev => {
-      const current = prev[variationId] || { min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0', optionOverrides: {} };
+      const current = prev[variationId] || { pricingMode: 'default' as VariationPricingMode, min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0', optionOverrides: {} };
       const nextOptionOverrides = { ...(current.optionOverrides || {}) };
       delete nextOptionOverrides[optionName];
       return {
@@ -600,6 +609,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         max_selections: safeMax,
         free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
         paid_max_selections: paidMaxNum,
+        pricing_mode: pricingMode,
         price_multiplier: priceMultiplier,
         fixed_option_price: fixedOptionPrice,
         option_price_overrides: optionPriceOverrides
@@ -2075,22 +2085,32 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                   <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
                                     <Label htmlFor={`pricing-mode-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Preço no produto</Label>
                                     <Select
-                                      value={getVariationConfig(v.id).pricing_mode}
+                                      value={variationSettingsRaw[v.id]?.pricingMode ?? getVariationConfig(v.id).pricing_mode}
                                       onValueChange={(value) => {
                                         const pricingMode = value as VariationPricingMode;
                                         handleVariationSettingChange(v.id, 'pricing_mode', pricingMode);
+                                        updateVariationRaw(v.id, { pricingMode });
                                         if (pricingMode === 'half') {
                                           handleVariationSettingChange(v.id, 'price_multiplier', 0.5);
-                                          updateVariationRaw(v.id, { multiplier: '0.5' });
+                                          handleVariationSettingChange(v.id, 'fixed_option_price', null);
+                                          updateVariationRaw(v.id, { pricingMode, multiplier: '0.5', fixedPrice: '0' });
                                         }
                                         if (pricingMode === 'default') {
                                           handleVariationSettingChange(v.id, 'price_multiplier', 1);
                                           handleVariationSettingChange(v.id, 'fixed_option_price', null);
-                                          updateVariationRaw(v.id, { multiplier: '1', fixedPrice: '0' });
+                                          updateVariationRaw(v.id, { pricingMode, multiplier: '1', fixedPrice: '0' });
                                         }
                                         if (pricingMode === 'free') {
                                           handleVariationSettingChange(v.id, 'fixed_option_price', 0);
-                                          updateVariationRaw(v.id, { fixedPrice: '0' });
+                                          updateVariationRaw(v.id, { pricingMode, fixedPrice: '0' });
+                                        }
+                                        if (pricingMode === 'multiplier') {
+                                          handleVariationSettingChange(v.id, 'fixed_option_price', null);
+                                          updateVariationRaw(v.id, { pricingMode, fixedPrice: '0' });
+                                        }
+                                        if (pricingMode === 'fixed') {
+                                          handleVariationSettingChange(v.id, 'price_multiplier', 1);
+                                          updateVariationRaw(v.id, { pricingMode, multiplier: '1' });
                                         }
                                       }}
                                     >
