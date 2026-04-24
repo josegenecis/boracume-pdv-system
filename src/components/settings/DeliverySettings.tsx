@@ -13,6 +13,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { parseBRL } from '@/lib/currency';
 import PolygonAreasEditor, { PolygonAreaDraft, GooglePolygonMap, loadGoogleMaps } from '@/components/settings/delivery/PolygonAreasEditor';
 import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
@@ -344,8 +346,8 @@ const DeliverySettings = () => {
     try {
       const payload = {
         name: newZone.name.trim(),
-        delivery_fee: parseFloat(newZone.delivery_fee),
-        minimum_order: parseFloat(newZone.minimum_order),
+        delivery_fee: parseBRL(newZone.delivery_fee),
+        minimum_order: parseBRL(newZone.minimum_order),
         delivery_time: newZone.delivery_time,
         active: true,
         coverage_area: { type: 'neighborhood' }
@@ -956,25 +958,21 @@ const DeliverySettings = () => {
           
           <div className="space-y-2">
             <Label htmlFor="delivery-fee">Taxa (R$)</Label>
-            <Input
+            <CurrencyTextInput
               id="delivery-fee"
-              type="number"
-              step="0.01"
-              placeholder="5.00"
+              placeholder="R$ 0,00"
               value={newZone.delivery_fee}
-              onChange={(e) => setNewZone(prev => ({ ...prev, delivery_fee: e.target.value }))}
+              onValueChange={(value) => setNewZone(prev => ({ ...prev, delivery_fee: value }))}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="minimum-order">Mínimo (R$)</Label>
-            <Input
+            <CurrencyTextInput
               id="minimum-order"
-              type="number"
-              step="0.01"
-              placeholder="25.00"
+              placeholder="R$ 0,00"
               value={newZone.minimum_order}
-              onChange={(e) => setNewZone(prev => ({ ...prev, minimum_order: e.target.value }))}
+              onValueChange={(value) => setNewZone(prev => ({ ...prev, minimum_order: value }))}
             />
           </div>
 

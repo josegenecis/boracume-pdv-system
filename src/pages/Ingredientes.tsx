@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Edit, Search, Package } from 'lucide-react';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
 interface Ingredient {
   id: string;
@@ -454,13 +455,10 @@ export default function Ingredientes() {
 
               <div className="grid gap-2">
                 <Label htmlFor="cost_price">Preço de Custo (Por unidade escolhida acima) *</Label>
-                <Input
+                <CurrencyInput
                   id="cost_price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.cost_price === 0 ? '' : formData.cost_price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cost_price: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
+                  value={formData.cost_price || 0}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, cost_price: value }))}
                   placeholder="0,00"
                   required
                 />

@@ -225,7 +225,7 @@ export function ProductCatalogScreen({ navigation, route }: Props) {
                     >
                       <Text style={[styles.optionText, active && styles.optionTextActive]}>
                         {option.name}
-                        {option.price ? ` • +${option.price.toFixed(2)}` : ''}
+                        {option.price ? ` • +${formatCurrency(option.price)}` : ''}
                       </Text>
                     </Pressable>
                   );

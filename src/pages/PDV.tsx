@@ -720,7 +720,7 @@ const PDV = () => {
 
   const getChangeValue = () => {
     if (paymentMethod === 'dinheiro' && changeAmount) {
-      return parseFloat(changeAmount) - getFinalTotal();
+      return parseBRL(changeAmount) - getFinalTotal();
     }
     return 0;
   };
@@ -901,7 +901,7 @@ const PDV = () => {
       }
     }
 
-    if (paymentMethod === 'dinheiro' && changeAmount && parseFloat(changeAmount) < getFinalTotal()) {
+    if (paymentMethod === 'dinheiro' && changeAmount && parseBRL(changeAmount) < getFinalTotal()) {
       toast({
         title: "Valor insuficiente",
         description: "O valor recebido é menor que o total do pedido.",
@@ -976,7 +976,7 @@ const PDV = () => {
         total: getFinalTotal(),
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
-        change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseFloat(changeAmount) : null,
+        change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseBRL(changeAmount) : null,
         status: paymentMethod === 'pix' ? 'pending' : 'preparing',
         acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'accepted',
         order_number: orderNumber,
@@ -1563,12 +1563,11 @@ const PDV = () => {
                         </Button>
                       </div>
                       {paymentMethod === 'dinheiro' && (
-                        <Input
+                        <CurrencyTextInput
                           placeholder="Valor pago"
                           value={changeAmount}
-                          onChange={(e) => setChangeAmount(e.target.value)}
+                          onValueChange={setChangeAmount}
                           className="h-8 text-xs"
-                          type="number"
                         />
                       )}
                       {paymentMethod === 'cartao' && (
@@ -1859,12 +1858,11 @@ const PDV = () => {
                         </Button>
                       </div>
                       {paymentMethod === 'dinheiro' && (
-                        <Input
+                        <CurrencyTextInput
                           placeholder="Valor pago"
                           value={changeAmount}
-                          onChange={(e) => setChangeAmount(e.target.value)}
+                          onValueChange={setChangeAmount}
                           className="h-7.5 text-[10px]"
-                          type="number"
                         />
                       )}
                       {paymentMethod === 'cartao' && (
@@ -2224,7 +2222,7 @@ const PDV = () => {
                 <CurrencyTextInput value={cashAmountInput} onValueChange={setCashAmountInput} placeholder="R$ 0,00" />
                 {cashCloseSummary && (
                   <div className="text-xs text-muted-foreground">
-                    Diferença: {formatCurrency(((Number.isFinite(Number(cashAmountInput.replace(',', '.'))) ? Number(cashAmountInput.replace(',', '.')) : 0) - cashCloseSummary.expectedCash))}
+                    Diferença: {formatCurrency(parseBRL(cashAmountInput) - cashCloseSummary.expectedCash)}
                   </div>
                 )}
               </div>
