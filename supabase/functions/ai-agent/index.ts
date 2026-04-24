@@ -151,6 +151,107 @@ Deno.serve(async (req) => {
         return Number.isFinite(n) ? n : NaN;
     };
 
+    const normalizeText = (value: any): string =>
+        String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+
+    const parseOptions = (raw: any): Array<{ name: string; price: number; active?: boolean }> => {
+        let parsed = raw;
+        if (typeof parsed === 'string') {
+            try {
+                parsed = JSON.parse(parsed);
+            } catch {
+                parsed = [];
+            }
+        }
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((option: any) => ({
+                name: String(option?.name || '').trim(),
+                price: Number.isFinite(parseMoney(option?.price)) ? parseMoney(option?.price) : 0,
+                active: option?.active === undefined ? true : Boolean(option?.active)
+            }))
+            .filter((option: any) => option.name);
+    };
+
+    const isPlaceholderOption = (name: any): boolean => {
+        const normalized = normalizeText(name);
+        return (
+            !normalized ||
+            normalized === 'placeholder' ||
+            normalized === 'opcao' ||
+            normalized === 'opcao de teste' ||
+            normalized === 'teste' ||
+            normalized.includes('placeholder') ||
+            normalized.includes('teste')
+        );
+    };
+
+    const countRealOptions = (raw: any): number =>
+        parseOptions(raw).filter((option) => !isPlaceholderOption(option.name)).length;
+
+    const findBestGlobalVariationMatch = async (groupName: string) => {
+        const trimmedName = String(groupName || '').trim();
+        if (!trimmedName) return { match: null, candidates: [] as any[] };
+
+        const searchTerms = Array.from(
+            new Set(
+                [
+                    trimmedName,
+                    trimmedName.replace(/\s+/g, ' ').trim(),
+                    trimmedName.replace(/\bcomplementos?\b/gi, '').trim()
+                ].filter(Boolean)
+            )
+        );
+
+        const rows: any[] = [];
+        for (const term of searchTerms) {
+            const { data, error } = await supabase
+                .from('global_variations')
+                .select('id, name, description, customer_label, receipt_label, required, max_selections, active, options, updated_at')
+                .eq('user_id', userId)
+                .ilike('name', `%${term}%`)
+                .order('updated_at', { ascending: false })
+                .limit(20);
+            if (error) throw error;
+            for (const row of data || []) {
+                if (!rows.some((existing) => existing.id === row.id)) rows.push(row);
+            }
+        }
+
+        const normalizedTarget = normalizeText(trimmedName);
+        const scored = rows.map((row) => {
+            const normalizedName = normalizeText(row.name);
+            const exact = normalizedName === normalizedTarget;
+            const startsWith = normalizedName.startsWith(normalizedTarget);
+            const realOptionCount = countRealOptions(row.options);
+            const totalOptionCount = parseOptions(row.options).length;
+            const hasPlaceholderOnly = totalOptionCount > 0 && realOptionCount === 0;
+            return {
+                ...row,
+                exact,
+                startsWith,
+                realOptionCount,
+                totalOptionCount,
+                hasPlaceholderOnly
+            };
+        });
+
+        scored.sort((a, b) => {
+            if (Number(b.exact) !== Number(a.exact)) return Number(b.exact) - Number(a.exact);
+            if (Number(b.startsWith) !== Number(a.startsWith)) return Number(b.startsWith) - Number(a.startsWith);
+            if (b.realOptionCount !== a.realOptionCount) return b.realOptionCount - a.realOptionCount;
+            if (b.totalOptionCount !== a.totalOptionCount) return b.totalOptionCount - a.totalOptionCount;
+            return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+        });
+
+        const match = scored.find((row) => row.realOptionCount > 0) || scored[0] || null;
+        return { match, candidates: scored };
+    };
+
     // =================================================================================
     // 1. Definição das TOOLS (Ferramentas que o Agente pode usar)
     // =================================================================================
@@ -308,6 +409,38 @@ Deno.serve(async (req) => {
                         max_selections: { type: "integer", description: "Número máximo de opções selecionáveis" }
                     },
                     required: ["name", "options"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "list_variation_group",
+                description: "Localiza um grupo de complementos/adicionais existente e lista as opções reais dele. Use antes de editar preços quando o usuário citar um grupo como SABORES G.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        group_name: { type: "string", description: "Nome do grupo de complementos (ex: SABORES G)" }
+                    },
+                    required: ["group_name"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
+                name: "adjust_variation_group_prices",
+                description: "Reajusta em lote os preços das opções de um grupo de complementos existente. Pode dobrar, aplicar porcentagem ou somar um valor fixo.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        group_name: { type: "string", description: "Nome do grupo de complementos (ex: SABORES G)" },
+                        multiplier: { type: "number", description: "Multiplicador dos preços. Ex: 2 dobra, 1.1 aumenta 10%" },
+                        percentage_increase: { type: "number", description: "Porcentagem de aumento. Ex: 100 dobra, 10 aumenta 10%" },
+                        absolute_increase: { type: "number", description: "Valor fixo para somar em cada opção. Ex: 2.50" },
+                        include_zero_prices: { type: "boolean", description: "Se true, também reajusta opções que hoje valem zero. Padrão false." }
+                    },
+                    required: ["group_name"]
                 }
             }
         },
@@ -495,6 +628,7 @@ Regras:
 - Não peça confirmação para passos triviais; execute e confirme o resultado.
 - Se faltar um dado indispensável (ex.: qual produto, qual período, qual categoria), faça 1 pergunta objetiva.
 - Se o pedido envolver cadastro completo de produto com tamanhos/variações e/ou complementos, use create_product_full.
+- Se o usuário pedir para listar ou alterar preços de grupos de complementos já existentes, use list_variation_group e adjust_variation_group_prices.
 - Se o pedido envolver imagem do produto, use generate_product_image ou generate_missing_product_images.
 - Mantenha respostas curtas e diretas.
 - O ID do usuário (restaurante) é: ${userId}`
@@ -506,6 +640,7 @@ Regras:
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
+- Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
 - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
@@ -916,6 +1051,131 @@ Regras:
 
                     if (varError) throw varError;
                     result = { success: true, variation: globalVar };
+                }
+
+                else if (fnName === "list_variation_group") {
+                    const groupName = String(args.group_name || '').trim();
+                    if (!groupName) {
+                        result = { success: false, error: 'Informe o nome do grupo.' };
+                    } else {
+                        const { match, candidates } = await findBestGlobalVariationMatch(groupName);
+                        if (!match) {
+                            result = { success: false, error: `Nenhum grupo encontrado para "${groupName}".` };
+                        } else {
+                            const options = parseOptions(match.options);
+                            const realOptions = options.filter((option) => !isPlaceholderOption(option.name));
+                            result = {
+                                success: true,
+                                group: {
+                                    id: match.id,
+                                    name: match.name,
+                                    description: match.description || null,
+                                    customer_label: match.customer_label || null,
+                                    receipt_label: match.receipt_label || null,
+                                    required: Boolean(match.required),
+                                    max_selections: Number(match.max_selections || 1),
+                                    active: match.active !== false,
+                                    options: realOptions.length > 0 ? realOptions : options
+                                },
+                                candidates: candidates.slice(0, 5).map((candidate) => ({
+                                    id: candidate.id,
+                                    name: candidate.name,
+                                    real_options: candidate.realOptionCount,
+                                    total_options: candidate.totalOptionCount
+                                })),
+                                warning: match.hasPlaceholderOnly
+                                    ? `O grupo "${match.name}" encontrado parece estar só com opções de teste/placeholder.`
+                                    : null
+                            };
+                        }
+                    }
+                }
+
+                else if (fnName === "adjust_variation_group_prices") {
+                    const groupName = String(args.group_name || '').trim();
+                    if (!groupName) {
+                        result = { success: false, error: 'Informe o nome do grupo.' };
+                    } else {
+                        const multiplier = Number(args.multiplier);
+                        const percentageIncrease = Number(args.percentage_increase);
+                        const absoluteIncrease = parseMoney(args.absolute_increase);
+                        const includeZeroPrices = Boolean(args.include_zero_prices);
+
+                        const hasMultiplier = Number.isFinite(multiplier) && multiplier > 0;
+                        const hasPercentage = Number.isFinite(percentageIncrease);
+                        const hasAbsolute = Number.isFinite(absoluteIncrease);
+
+                        if (!hasMultiplier && !hasPercentage && !hasAbsolute) {
+                            result = {
+                                success: false,
+                                error: 'Informe multiplier, percentage_increase ou absolute_increase para reajustar os preços.'
+                            };
+                        } else {
+                            const { match, candidates } = await findBestGlobalVariationMatch(groupName);
+                            if (!match) {
+                                result = { success: false, error: `Nenhum grupo encontrado para "${groupName}".` };
+                            } else {
+                                const options = parseOptions(match.options);
+                                const realOptions = options.filter((option) => !isPlaceholderOption(option.name));
+                                const sourceOptions = realOptions.length > 0 ? realOptions : options;
+
+                                if (sourceOptions.length === 0) {
+                                    result = {
+                                        success: false,
+                                        error: `O grupo "${match.name}" não possui opções válidas para reajuste.`
+                                    };
+                                } else {
+                                    const updatedOptions = sourceOptions.map((option) => {
+                                        const current = Number.isFinite(parseMoney(option.price)) ? parseMoney(option.price) : 0;
+                                        if (!includeZeroPrices && current <= 0) {
+                                            return { ...option, price: Number(current.toFixed(2)) };
+                                        }
+
+                                        let next = current;
+                                        if (hasMultiplier) {
+                                            next = current * multiplier;
+                                        } else if (hasPercentage) {
+                                            next = current * (1 + (percentageIncrease / 100));
+                                        } else if (hasAbsolute) {
+                                            next = current + absoluteIncrease;
+                                        }
+
+                                        return {
+                                            ...option,
+                                            price: Math.max(0, Number(next.toFixed(2)))
+                                        };
+                                    });
+
+                                    const { error } = await supabase
+                                        .from('global_variations')
+                                        .update({
+                                            options: JSON.stringify(updatedOptions),
+                                            updated_at: new Date().toISOString()
+                                        } as any)
+                                        .eq('id', match.id);
+
+                                    if (error) throw error;
+
+                                    result = {
+                                        success: true,
+                                        group: match.name,
+                                        updated_count: updatedOptions.length,
+                                        candidates: candidates.slice(0, 5).map((candidate) => ({
+                                            id: candidate.id,
+                                            name: candidate.name,
+                                            real_options: candidate.realOptionCount,
+                                            total_options: candidate.totalOptionCount
+                                        })),
+                                        preview: updatedOptions.slice(0, 10).map((option) => ({
+                                            name: option.name,
+                                            price: option.price
+                                        })),
+                                        skipped_zero_prices: !includeZeroPrices
+                                    };
+                                }
+                            }
+                        }
+                    }
                 }
 
                 else if (fnName === "generate_product_image" || fnName === "generate_missing_product_images") {
