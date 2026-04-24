@@ -56,6 +56,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { parseBRL } from '@/lib/currency';
 
 type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
@@ -278,16 +280,7 @@ const Financeiro = () => {
   const handleAddExpense = async () => {
     if (!newExpense.description || !newExpense.amount) return;
     try {
-      const parseMoney = (raw: string) => {
-        const cleaned = String(raw || '')
-          .replace(/\s/g, '')
-          .replace(/[^\d,.-]/g, '')
-          .replace(/-/g, '')
-          .replace(/\./g, '')
-          .replace(',', '.');
-        return Number(cleaned);
-      };
-      const amountValue = parseMoney(newExpense.amount);
+      const amountValue = parseBRL(newExpense.amount);
       if (!Number.isFinite(amountValue) || amountValue <= 0) {
         toast({ title: 'Valor inválido', description: 'A despesa deve ser maior que zero.', variant: 'destructive' });
         return;
@@ -312,7 +305,7 @@ const Financeiro = () => {
 
   const handleCashOperation = async () => {
     if (!user) return;
-    const amount = parseFloat(cashAmount);
+    const amount = parseBRL(cashAmount);
     if (isNaN(amount)) return;
 
     try {
@@ -775,11 +768,10 @@ const Financeiro = () => {
               <div className="space-y-4">
                 <div>
                   <Label>Valor</Label>
-                  <Input 
-                    type="number" 
+                  <CurrencyTextInput 
                     value={cashAmount} 
-                    onChange={(e) => setCashAmount(e.target.value)} 
-                    placeholder="0.00"
+                    onValueChange={setCashAmount} 
+                    placeholder="R$ 0,00"
                   />
                 </div>
                 {cashOperation !== 'open' && (
@@ -817,7 +809,7 @@ const Financeiro = () => {
                 </div>
                 <div>
                   <Label>Valor (R$)</Label>
-                  <Input type="number" value={newExpense.amount} onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})} />
+                  <CurrencyTextInput value={newExpense.amount} onValueChange={(value) => setNewExpense({...newExpense, amount: value})} placeholder="R$ 0,00" />
                 </div>
                 <div>
                   <Label>Categoria</Label>

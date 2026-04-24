@@ -8,6 +8,7 @@ import { normalizeComplementOptionName } from '@/lib/text';
 import { Trash2, Plus, Copy, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { IntegerInput } from '@/components/ui/integer-input';
 
 interface VariationOption {
   name: string;
@@ -55,6 +56,9 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
     options: variation?.options || [{ name: '', price: 0, active: true }],
     ...variation
   });
+  const [maxSelectionsRaw, setMaxSelectionsRaw] = useState(String((variation as any)?.max_selections ?? 1));
+  const [freeSelectionsRaw, setFreeSelectionsRaw] = useState(String((variation as any)?.free_selections_limit ?? 0));
+  const [paidMaxSelectionsRaw, setPaidMaxSelectionsRaw] = useState(String((variation as any)?.paid_max_selections ?? (variation as any)?.max_selections ?? 1));
   
   const { toast } = useToast();
 
@@ -222,23 +226,33 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="max_selections" className="text-boracume-dark-green font-semibold">Máximo padrão</Label>
-                <Input
+                <IntegerInput
                   id="max_selections"
-                  type="number"
-                  min="1"
-                  value={formData.max_selections ?? 1}
-                  onChange={(e) => setFormData(prev => ({ ...prev, max_selections: Math.max(1, Number(e.target.value || 1)) }))}
+                  min={1}
+                  value={maxSelectionsRaw}
+                  fallback={formData.max_selections ?? 1}
+                  onValueChange={(value) => {
+                    setMaxSelectionsRaw(value);
+                    if (value !== '') {
+                      setFormData(prev => ({ ...prev, max_selections: Math.max(1, Number(value) || 1) }));
+                    }
+                  }}
                   className={fieldClassName}
                 />
               </div>
               <div>
                 <Label htmlFor="free_selections_limit" className="text-boracume-dark-green font-semibold">Grátis até</Label>
-                <Input
+                <IntegerInput
                   id="free_selections_limit"
-                  type="number"
-                  min="0"
-                  value={formData.free_selections_limit ?? 0}
-                  onChange={(e) => setFormData(prev => ({ ...prev, free_selections_limit: Math.max(0, Number(e.target.value || 0)) }))}
+                  min={0}
+                  value={freeSelectionsRaw}
+                  fallback={formData.free_selections_limit ?? 0}
+                  onValueChange={(value) => {
+                    setFreeSelectionsRaw(value);
+                    if (value !== '') {
+                      setFormData(prev => ({ ...prev, free_selections_limit: Math.max(0, Number(value) || 0) }));
+                    }
+                  }}
                   className={fieldClassName}
                 />
               </div>
@@ -257,12 +271,17 @@ const ProductVariationForm: React.FC<ProductVariationFormProps> = ({
               >
                 {formData.allow_paid_excess ? 'Extras pagos liberados' : 'Liberar extras pagos'}
               </Button>
-              <Input
-                type="number"
-                min={String(Math.max(1, Number(formData.max_selections || 1)))}
+              <IntegerInput
+                min={Math.max(1, Number(formData.max_selections || 1))}
                 disabled={!formData.allow_paid_excess}
-                value={formData.paid_max_selections ?? formData.max_selections ?? 1}
-                onChange={(e) => setFormData(prev => ({ ...prev, paid_max_selections: Math.max(Number(prev.max_selections || 1), Number(e.target.value || prev.max_selections || 1)) }))}
+                value={paidMaxSelectionsRaw}
+                fallback={formData.paid_max_selections ?? formData.max_selections ?? 1}
+                onValueChange={(value) => {
+                  setPaidMaxSelectionsRaw(value);
+                  if (value !== '') {
+                    setFormData(prev => ({ ...prev, paid_max_selections: Math.max(Number(prev.max_selections || 1), Number(value || prev.max_selections || 1)) }));
+                  }
+                }}
                 className={fieldClassName}
               />
             </div>

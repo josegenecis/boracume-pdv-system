@@ -16,6 +16,7 @@ import { AppSheet } from '../components/AppSheet';
 import { ProductCard } from '../components/ProductCard';
 import { colors, radius, spacing } from '../config/theme';
 import { useAuthSession } from '../contexts/AuthSessionContext';
+import { formatCurrency } from '../lib/format';
 import { queryClient } from '../lib/queryClient';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { addItemToAccount, getSessionDetails, listCatalog } from '../services/waiterApp';
@@ -201,7 +202,7 @@ export function ProductCatalogScreen({ navigation, route }: Props) {
           <TextInput
             keyboardType="number-pad"
             value={quantity}
-            onChangeText={setQuantity}
+            onChangeText={(text) => setQuantity(text.replace(/\D/g, ''))}
             style={styles.input}
           />
           {selectedProduct?.variations.map((group) => (

@@ -11,6 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Json } from '@/integrations/supabase/types';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { IntegerInput } from '@/components/ui/integer-input';
+import { parseBRL } from '@/lib/currency';
 
 interface ProductVariation {
   id: string;
@@ -38,6 +41,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
     required: false,
     max_selections: 1
   });
+  const [newVariationMaxRaw, setNewVariationMaxRaw] = useState('1');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -77,7 +81,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
         product_id: productId,
         user_id: user?.id,
         name: newVariation.name.trim(),
-        price: parseFloat(newVariation.price) || 0,
+        price: parseBRL(newVariation.price),
         required: newVariation.required,
         max_selections: newVariation.max_selections,
         options: [] as Json
@@ -93,6 +97,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
 
       setVariations(prev => [...prev, data]);
       setNewVariation({ name: '', price: '', required: false, max_selections: 1 });
+      setNewVariationMaxRaw('1');
 
       toast({
         title: "Variação adicionada",
@@ -173,22 +178,25 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
 
           <div className="space-y-2">
             <Label>Preço Extra (R$)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
+            <CurrencyTextInput
+              placeholder="R$ 0,00"
               value={newVariation.price}
-              onChange={(e) => setNewVariation(prev => ({ ...prev, price: e.target.value }))}
+              onValueChange={(value) => setNewVariation(prev => ({ ...prev, price: value }))}
             />
           </div>
 
           <div className="space-y-2">
             <Label>Max. Seleções</Label>
-            <Input
-              type="number"
-              min="1"
-              value={newVariation.max_selections}
-              onChange={(e) => setNewVariation(prev => ({ ...prev, max_selections: parseInt(e.target.value) || 1 }))}
+            <IntegerInput
+              min={1}
+              value={newVariationMaxRaw}
+              fallback={1}
+              onValueChange={(value) => {
+                setNewVariationMaxRaw(value);
+                if (value !== '') {
+                  setNewVariation(prev => ({ ...prev, max_selections: parseInt(value, 10) || 1 }));
+                }
+              }}
             />
           </div>
 

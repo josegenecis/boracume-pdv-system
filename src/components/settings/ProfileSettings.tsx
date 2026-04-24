@@ -11,6 +11,8 @@ import { Upload, Save, Copy, Clock3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { formatBRL, parseBRL } from '@/lib/currency';
 
 const weekDays = [
   { key: 'monday', label: 'Segunda' },
@@ -81,8 +83,8 @@ const ProfileSettings = () => {
     email: '',
     website: '',
     openingHours: '10:00 - 22:00',
-    deliveryFee: '5.00',
-    minimumOrder: '25.00'
+    deliveryFee: formatBRL(5),
+    minimumOrder: formatBRL(25)
   });
   
   const [profileImage, setProfileImage] = useState('');
@@ -124,8 +126,8 @@ const ProfileSettings = () => {
           email: data.email || '',
           website: data.website || '',
           openingHours: data.opening_hours || '10:00 - 22:00',
-          deliveryFee: data.delivery_fee?.toString() || '5.00',
-          minimumOrder: data.minimum_order?.toString() || '25.00'
+          deliveryFee: formatBRL(data.delivery_fee ?? 5),
+          minimumOrder: formatBRL(data.minimum_order ?? 25)
         });
         setWeeklySchedule(parseWeeklySchedule(data.opening_hours));
         setProfileImage(data.logo_url || '');
@@ -285,12 +287,6 @@ const ProfileSettings = () => {
     
     setLoading(true);
     try {
-      const parseMoney = (v: string) => {
-        const cleaned = String(v || '').replace(',', '.').trim();
-        const n = Number.parseFloat(cleaned);
-        return Number.isFinite(n) ? n : 0;
-      };
-
       const profileData = {
         id: user.id,
         restaurant_name: formData.restaurantName,
@@ -300,8 +296,8 @@ const ProfileSettings = () => {
         email: formData.email,
         website: formData.website,
         opening_hours: JSON.stringify(weeklySchedule),
-        delivery_fee: parseMoney(formData.deliveryFee),
-        minimum_order: parseMoney(formData.minimumOrder),
+        delivery_fee: parseBRL(formData.deliveryFee),
+        minimum_order: parseBRL(formData.minimumOrder),
         logo_url: profileImage,
         banner_url: bannerImage,
         updated_at: new Date().toISOString()
@@ -563,23 +559,19 @@ const ProfileSettings = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="delivery-fee">Taxa de Entrega (R$)</Label>
-              <Input
+              <CurrencyTextInput
                 id="delivery-fee"
-                type="number"
-                step="0.01"
                 value={formData.deliveryFee}
-                onChange={(e) => handleInputChange('deliveryFee', e.target.value)}
+                onValueChange={(value) => handleInputChange('deliveryFee', value)}
               />
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="minimum-order">Pedido Mínimo (R$)</Label>
-              <Input
+              <CurrencyTextInput
                 id="minimum-order"
-                type="number"
-                step="0.01"
                 value={formData.minimumOrder}
-                onChange={(e) => handleInputChange('minimumOrder', e.target.value)}
+                onValueChange={(value) => handleInputChange('minimumOrder', value)}
               />
             </div>
           </div>

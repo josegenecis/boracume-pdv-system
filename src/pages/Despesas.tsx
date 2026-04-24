@@ -13,6 +13,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Plus, DollarSign, Calendar, Upload, FileText, Search, Undo2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { parseBRL } from '@/lib/currency';
 
 interface Expense {
   id: string;
@@ -184,16 +186,7 @@ export default function Despesas() {
       });
       return;
     }
-    const parseMoney = (raw: string) => {
-      const cleaned = String(raw || '')
-        .replace(/\s/g, '')
-        .replace(/[^\d,.-]/g, '')
-        .replace(/-/g, '')
-        .replace(/\./g, '')
-        .replace(',', '.');
-      return Number(cleaned);
-    };
-    const amountValue = parseMoney(amount);
+    const amountValue = parseBRL(amount);
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
       toast({
         title: 'Valor inválido',
@@ -377,14 +370,13 @@ export default function Despesas() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Valor (R$) *</Label>
-                  <Input
-                    id="amount"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value.replace(/-/g, '').replace(/[^\d,.-]/g, ''))}
-                    placeholder="0,00"
-                    required
-                  />
+                    <CurrencyTextInput
+                      id="amount"
+                      value={amount}
+                      onValueChange={setAmount}
+                      placeholder="R$ 0,00"
+                      required
+                    />
                 </div>
 
                 <div className="space-y-2">

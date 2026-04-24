@@ -11,6 +11,7 @@ import { Receipt, Settings, FileText, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { IntegerInput } from '@/components/ui/integer-input';
 
 interface FiscalConfig {
   id?: string;
@@ -63,6 +64,7 @@ const FiscalSettings: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [nfceNumeroRaw, setNfceNumeroRaw] = useState('1');
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -109,6 +111,7 @@ const FiscalSettings: React.FC = () => {
           csc_token: data.csc_token || '',
           ativo: data.ativo || false
         });
+        setNfceNumeroRaw(String(data.nfce_numero_atual || 1));
       }
     } catch (error: any) {
       console.error('Erro ao carregar configurações:', error);
@@ -424,10 +427,16 @@ const FiscalSettings: React.FC = () => {
 
                   <div className="space-y-2">
                     <Label>Próximo Número</Label>
-                    <Input
-                      type="number"
-                      value={settings.nfce_numero_atual}
-                      onChange={(e) => setSettings(prev => ({ ...prev, nfce_numero_atual: parseInt(e.target.value) || 1 }))}
+                    <IntegerInput
+                      min={1}
+                      value={nfceNumeroRaw}
+                      fallback={settings.nfce_numero_atual || 1}
+                      onValueChange={(value) => {
+                        setNfceNumeroRaw(value);
+                        if (value !== '') {
+                          setSettings(prev => ({ ...prev, nfce_numero_atual: parseInt(value, 10) || 1 }));
+                        }
+                      }}
                     />
                   </div>
 

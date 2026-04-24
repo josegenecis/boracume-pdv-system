@@ -23,6 +23,8 @@ import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea
 
 import ProductImageUpload from './ProductImageUpload';
 import ProductRecipeManager from './ProductRecipeManager';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { IntegerInput } from '@/components/ui/integer-input';
 
 // Defining the interface here to ensure consistency
 interface ProductItem {
@@ -141,6 +143,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [priceRaw, setPriceRaw] = useState<string>(String(Math.round(((product?.price ?? 0) * 100))));
   const [originalPriceRaw, setOriginalPriceRaw] = useState<string>(String(Math.round(((product?.original_price ?? 0) * 100))));
+  const [stockQuantityRaw, setStockQuantityRaw] = useState<string>(String(product?.stock_quantity ?? 0));
+  const [lowStockThresholdRaw, setLowStockThresholdRaw] = useState<string>(String(product?.low_stock_threshold ?? 5));
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const [createdProductId, setCreatedProductId] = useState<string | null>(product?.id || null);
   const createdProductIdRef = useRef<string | null>(product?.id || null);
@@ -1858,15 +1862,12 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                                         className="h-10 border-gray-100 focus-visible:ring-boracume-green"
                                                     />
                                                 </div>
-                                                <div className="w-28 relative">
-                                                    <span className="absolute left-3 top-2.5 text-sm text-gray-500 font-medium">R$</span>
-                                                    <Input 
-                                                        type="number"
+                                                <div className="w-36">
+                                                    <CurrencyInput
                                                         value={variant.price}
-                                                        onChange={(e) => handlePriceVariantChange(index, 'price', parseFloat(e.target.value) || 0)}
-                                                        placeholder="0.00"
-                                                        className="h-10 pl-8 font-bold text-boracume-dark-green border-gray-100 focus-visible:ring-boracume-green"
-                                                        step="0.01"
+                                                        onValueChange={(value) => handlePriceVariantChange(index, 'price', value)}
+                                                        placeholder="R$ 0,00"
+                                                        className="h-10 font-bold text-boracume-dark-green border-gray-100 focus-visible:ring-boracume-green"
                                                     />
                                                 </div>
                                                 <Button 
@@ -1901,26 +1902,36 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         <div className="grid grid-cols-2 gap-3 bg-boracume-light/30 p-4 rounded-2xl border border-boracume-light mt-3">
           <div className="space-y-1">
             <Label htmlFor="stock_quantity" className="text-boracume-dark-green font-semibold">Estoque</Label>
-            <Input
+            <IntegerInput
               id="stock_quantity"
-              type="number"
-              value={String(formData.stock_quantity ?? 0)}
-              onChange={(e) => setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+              value={stockQuantityRaw}
+              min={0}
+              fallback={formData.stock_quantity ?? 0}
+              onValueChange={(value) => {
+                setStockQuantityRaw(value);
+                if (value !== '') {
+                  setFormData(prev => ({ ...prev, stock_quantity: Math.max(0, parseInt(value || '0', 10) || 0) }));
+                }
+              }}
               className="bg-white rounded-xl h-11"
               disabled={!formData.track_stock}
-              min={0}
             />
           </div>
           <div className="space-y-1">
             <Label htmlFor="low_stock_threshold" className="text-boracume-dark-green font-semibold">Estoque mín.</Label>
-            <Input
+            <IntegerInput
               id="low_stock_threshold"
-              type="number"
-              value={String(formData.low_stock_threshold ?? 0)}
-              onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(e.target.value || '0', 10) || 0) }))}
+              value={lowStockThresholdRaw}
+              min={0}
+              fallback={formData.low_stock_threshold ?? 0}
+              onValueChange={(value) => {
+                setLowStockThresholdRaw(value);
+                if (value !== '') {
+                  setFormData(prev => ({ ...prev, low_stock_threshold: Math.max(0, parseInt(value || '0', 10) || 0) }));
+                }
+              }}
               className="bg-white rounded-xl h-11"
               disabled={!formData.track_stock}
-              min={0}
             />
           </div>
           <div className="col-span-2 flex items-center justify-between pt-2 border-t border-gray-100">

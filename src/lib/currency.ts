@@ -20,3 +20,27 @@ export const formatBRLFromCents = (value: number | string | null | undefined) =>
 
   return formatBRL(Number(numericValue) / 100);
 };
+
+export const parseBRL = (value: number | string | null | undefined) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const cleaned = String(value || '')
+    .replace(/\s/g, '')
+    .replace(/[^\d,.-]/g, '')
+    .replace(/-/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const formatCurrencyInput = (value: number | string | null | undefined) => {
+  const cents = typeof value === 'number'
+    ? Math.max(0, Math.round(value * 100))
+    : Math.max(0, parseInt(String(value || '').replace(/\D/g, ''), 10) || 0);
+
+  return formatBRL(cents / 100);
+};

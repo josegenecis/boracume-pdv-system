@@ -32,6 +32,8 @@ import { ensureDefaultTables } from '@/utils/tableDefaults';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useNavigate } from 'react-router-dom';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { parseBRL } from '@/lib/currency';
 
 interface Product {
   id: string;
@@ -229,7 +231,7 @@ const PDV = () => {
         const initial = Number(cashSession.initial_amount || 0);
         const expectedCash = initial + cash + inAmount - outAmount;
         setCashCloseSummary({ expectedCash, pix, card, cash, total, inAmount, outAmount, initial });
-        setCashAmountInput(String(expectedCash.toFixed(2)));
+        setCashAmountInput(formatBRL(expectedCash));
       } catch {}
       setCashCloseLoading(false);
     }
@@ -238,7 +240,7 @@ const PDV = () => {
 
   const handleCashSubmit = async () => {
     if (!user?.id) return;
-    const amount = Number(cashAmountInput.replace(',', '.'));
+    const amount = parseBRL(cashAmountInput);
     if (!Number.isFinite(amount)) {
       toast({ title: 'Valor inválido', description: 'Informe um valor válido', variant: 'destructive' });
       return;
@@ -2171,7 +2173,7 @@ const PDV = () => {
           {cashDialogMode === 'open' ? (
             <div className="space-y-2">
               <Label>Valor inicial</Label>
-              <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
+              <CurrencyTextInput value={cashAmountInput} onValueChange={setCashAmountInput} placeholder="R$ 0,00" />
             </div>
           ) : (
             <div className="space-y-4">
@@ -2219,7 +2221,7 @@ const PDV = () => {
 
               <div className="space-y-2">
                 <Label>Valor contado em dinheiro</Label>
-                <Input value={cashAmountInput} onChange={(e) => setCashAmountInput(e.target.value)} placeholder="0,00" inputMode="decimal" />
+                <CurrencyTextInput value={cashAmountInput} onValueChange={setCashAmountInput} placeholder="R$ 0,00" />
                 {cashCloseSummary && (
                   <div className="text-xs text-muted-foreground">
                     Diferença: {formatCurrency(((Number.isFinite(Number(cashAmountInput.replace(',', '.'))) ? Number(cashAmountInput.replace(',', '.')) : 0) - cashCloseSummary.expectedCash))}
