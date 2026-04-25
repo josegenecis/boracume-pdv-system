@@ -411,6 +411,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const fallback = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
     const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
     const parsedValue = Math.max(0, parseDecimalField(currentRaw.price, fallback));
+    const existingOverride = normalizeOptionOverride((variationSettings[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]);
 
     setVariationSettings(prev => ({
       ...prev,
@@ -422,8 +423,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             ...normalizeOptionOverride((prev[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]),
             price: parsedValue,
             label: String(currentRaw.label || '').trim(),
-            hidden: Boolean(currentRaw.hidden),
-            recommended: Boolean(currentRaw.recommended),
+            hidden: Boolean(existingOverride.hidden),
+            recommended: Boolean(existingOverride.recommended),
             ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})
           }
         }
@@ -462,12 +463,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const currentRaw = option ? getOptionOverrideRawState(variationId, option) : (variationSettingsRaw[variationId]?.optionOverrides?.[optionName] || toOptionOverrideRaw(getVariationConfig(variationId).option_price_overrides?.[optionName]));
     const persistRaw = (rawValue: VariationOptionOverrideRaw) => {
       const fallbackPrice = getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 });
+      const existingOverride = normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]);
       const normalized: VariationOptionOverride = {
-        ...normalizeOptionOverride(getVariationConfig(variationId).option_price_overrides?.[optionName]),
+        ...existingOverride,
         price: Math.max(0, parseDecimalField(rawValue.price, fallbackPrice)),
         label: normalizeComplementOptionName(String(rawValue.label || '')),
-        hidden: Boolean(rawValue.hidden),
-        recommended: Boolean(rawValue.recommended),
+        hidden: Boolean(existingOverride.hidden),
+        recommended: Boolean(existingOverride.recommended),
         ...(String(rawValue.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(rawValue.order) || 0)) } : {})
       };
 
