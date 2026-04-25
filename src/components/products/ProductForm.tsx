@@ -526,7 +526,18 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       }
     };
     const nextSettings = buildPersistedVariationSettings(variationSettings, nextRawState);
-    void persistVariationOverrideChanges(variationId, nextRawState, nextSettings).catch(() => {});
+    setVariationSettings(nextSettings);
+    setVariationSettingsRaw(nextRawState);
+
+    const pid = product?.id || createdProductId;
+    if (!pid) return;
+    if (variationSaveTimerRef.current) {
+      window.clearTimeout(variationSaveTimerRef.current);
+      variationSaveTimerRef.current = null;
+    }
+    void persistSingleVariationLinkOverride(pid, variationId, nextSettings).catch(async () => {
+      await persistVariationOverrideChanges(variationId, nextRawState, nextSettings);
+    });
   };
 
   const clearOptionPriceOverride = (variationId: string, optionName: string) => {
@@ -1455,6 +1466,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }
 
     return { data, error };
+  };
+
+  const persistSingleVariationLinkOverride = async (
+    productId: string,
+    variationId: string,
+    settingsSource: Record<string, VariationConfig>
+  ) => {
+    const currentIndex = Math.max(selectedVariations.findIndex((id) => id === variationId), 0);
+    const payload = buildVariationLinkPayload(productId, variationId, currentIndex, settingsSource);
+    const { error } = await supabase
+      .from('product_global_variation_links')
+      .update({
+        option_price_overrides: payload.option_price_overrides,
+        pricing_mode: payload.pricing_mode,
+        price_multiplier: payload.price_multiplier,
+        fixed_option_price: payload.fixed_option_price
+      } as any)
+      .eq('product_id', productId)
+      .eq('global_variation_id', variationId);
+    if (error) throw error;
   };
 
   const openApplyVariationDialog = (variationId: string) => {
