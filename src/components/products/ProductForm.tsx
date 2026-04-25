@@ -1455,14 +1455,45 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       ['product_id', 'global_variation_id']
     ] as const;
 
-    for (const allowedKeys of insertAttempts) {
+    const advancedUpdateAttempts = [
+      ['required', 'min_selections', 'max_selections', 'free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'display_order', 'pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
+      ['free_selections_limit', 'allow_paid_excess', 'paid_max_selections', 'pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
+      ['pricing_mode', 'price_multiplier', 'fixed_option_price', 'option_price_overrides'],
+      ['option_price_overrides']
+    ] as const;
+
+    const applyAdvancedFields = async (link: Record<string, any>) => {
+      for (const allowedKeys of advancedUpdateAttempts) {
+        const payload = Object.fromEntries(
+          Object.entries(link).filter(([key, value]) => key !== 'product_id' && key !== 'global_variation_id' && value !== undefined && allowedKeys.includes(key as typeof allowedKeys[number]))
+        );
+        if (Object.keys(payload).length === 0) return null;
+        const res = await supabase
+          .from('product_global_variation_links')
+          .update(payload as any)
+          .eq('product_id', link.product_id)
+          .eq('global_variation_id', link.global_variation_id);
+        const updateError = (res as any).error;
+        if (!updateError) return null;
+      }
+      return null;
+    };
+
+    for (const [attemptIndex, allowedKeys] of insertAttempts.entries()) {
       const payload = links.map((link) => Object.fromEntries(
         Object.entries(link).filter(([key]) => allowedKeys.includes(key as typeof allowedKeys[number]))
       ));
       const res = await supabase.from('product_global_variation_links').insert(payload as any);
       data = (res as any).data;
       error = (res as any).error;
-      if (!error) break;
+      if (!error) {
+        if (attemptIndex > 0) {
+          for (const link of links) {
+            await applyAdvancedFields(link);
+          }
+        }
+        break;
+      }
     }
 
     return { data, error };
