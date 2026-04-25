@@ -256,75 +256,49 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   };
 
   const commitVariationMinMax = (variationId: string) => {
-    setVariationSettings(prev => {
-      const current = prev?.[variationId] || getVariationDefaults();
-      const raw = variationSettingsRaw?.[variationId] || {
-        min: String(current.min_selections ?? 0),
-        max: String(current.max_selections ?? 1),
-        free: String(current.free_selections_limit ?? 0),
-        paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1),
-        multiplier: String(Number(current.price_multiplier ?? 1)),
-        fixedPrice: String(Number(current.fixed_option_price ?? 0)),
-        optionOverrides: Object.fromEntries(
-          Object.entries(current.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
-        )
-      };
-      const minNum = Math.max(0, Math.floor(raw.min === '' ? 0 : Number(raw.min) || 0));
-      const maxNum = Math.max(1, Math.floor(raw.max === '' ? 1 : Number(raw.max) || 1));
-      const safeMax = Math.max(maxNum, minNum);
-      const freeNum = Math.max(0, Math.floor(raw.free === '' ? 0 : Number(raw.free) || 0));
-      const paidMaxNum = current.allow_paid_excess ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? safeMax : Number(raw.paidMax) || safeMax)) : null;
-      const pricingMode = getDefaultPricingMode(raw.pricingMode || current.pricing_mode);
-      const priceMultiplier = pricingMode === 'half'
-        ? 0.5
-        : Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
-      const fixedOptionPrice = pricingMode === 'fixed'
-        ? Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)))
-        : null;
-      const optionPriceOverrides = Object.fromEntries(
-        Object.entries(raw.optionOverrides || {}).map(([name, value]) => {
-          const currentOverride = current.option_price_overrides?.[name] || {};
-          const normalized = {
-            ...normalizeOptionOverride(currentOverride),
-            price: Math.max(0, parseDecimalField(value?.price ?? '', Number(currentOverride?.price ?? 0))),
-            label: normalizeComplementOptionName(String(value?.label || '')),
-            hidden: Boolean(value?.hidden),
-            recommended: Boolean(value?.recommended),
-            ...(String(value?.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(value.order) || 0)) } : {})
-          };
-          return [name, normalized];
-        })
-      );
-
-      setVariationSettingsRaw(prevRaw => ({
-        ...prevRaw,
-        [variationId]: {
-          min: String(minNum),
-          max: String(safeMax),
-          free: String(Math.min(freeNum, paidMaxNum ?? safeMax)),
-          paidMax: String(paidMaxNum ?? safeMax),
-          multiplier: String(priceMultiplier),
-          fixedPrice: String(fixedOptionPrice),
-          optionOverrides: Object.fromEntries(
-            Object.entries(optionPriceOverrides).map(([name, value]) => [name, toOptionOverrideRaw(value)])
-          )
-        }
-      }));
-
-      return {
-        ...prev,
-        [variationId]: {
-          ...current,
-          min_selections: minNum,
-          max_selections: safeMax,
-          free_selections_limit: Math.min(freeNum, paidMaxNum ?? safeMax),
-          paid_max_selections: paidMaxNum,
-          price_multiplier: priceMultiplier,
-          fixed_option_price: fixedOptionPrice,
-          option_price_overrides: optionPriceOverrides
-        }
-      };
-    });
+    const current = variationSettings?.[variationId] || getVariationDefaults();
+    const raw = variationSettingsRaw?.[variationId] || {
+      pricingMode: getDefaultPricingMode(current.pricing_mode),
+      min: String(current.min_selections ?? 0),
+      max: String(current.max_selections ?? 1),
+      free: String(current.free_selections_limit ?? 0),
+      paidMax: String(current.paid_max_selections ?? current.max_selections ?? 1),
+      multiplier: String(Number(current.price_multiplier ?? 1)),
+      fixedPrice: String(Number(current.fixed_option_price ?? 0)),
+      optionOverrides: Object.fromEntries(
+        Object.entries(current.option_price_overrides || {}).map(([name, value]) => [name, toOptionOverrideRaw(value)])
+      )
+    };
+    const minNum = Math.max(0, Math.floor(raw.min === '' ? Number(current.min_selections ?? 0) : Number(raw.min) || 0));
+    const maxNum = Math.max(1, Math.floor(raw.max === '' ? Number(current.max_selections ?? 1) : Number(raw.max) || 1));
+    const safeMax = Math.max(maxNum, minNum);
+    const freeNum = Math.max(0, Math.floor(raw.free === '' ? Number(current.free_selections_limit ?? 0) : Number(raw.free) || 0));
+    const paidMaxNum = current.allow_paid_excess
+      ? Math.max(safeMax, Math.floor(raw.paidMax === '' ? Number(current.paid_max_selections ?? safeMax) : Number(raw.paidMax) || safeMax))
+      : null;
+    const pricingMode = getDefaultPricingMode(raw.pricingMode || current.pricing_mode);
+    const priceMultiplier = pricingMode === 'half'
+      ? 0.5
+      : Math.max(0, parseDecimalField(raw.multiplier, Number(current.price_multiplier ?? 1)));
+    const fixedOptionPrice = pricingMode === 'fixed'
+      ? Math.max(0, parseDecimalField(raw.fixedPrice, Number(current.fixed_option_price ?? 0)))
+      : null;
+    const nextRawState = {
+      ...variationSettingsRaw,
+      [variationId]: {
+        pricingMode,
+        min: raw.min === '' ? '' : String(minNum),
+        max: raw.max === '' ? '' : String(safeMax),
+        free: raw.free === '' ? '' : String(Math.min(freeNum, paidMaxNum ?? safeMax)),
+        paidMax: raw.paidMax === '' ? '' : String(paidMaxNum ?? safeMax),
+        multiplier: raw.multiplier === '' ? '' : String(priceMultiplier),
+        fixedPrice: raw.fixedPrice === '' ? '' : String(fixedOptionPrice ?? 0),
+        optionOverrides: raw.optionOverrides || {}
+      }
+    };
+    const resolvedSettings = buildPersistedVariationSettings(variationSettings, nextRawState);
+    setVariationSettings(resolvedSettings);
+    setVariationSettingsRaw(nextRawState);
   };
 
   const getVariationConfig = (variationId: string) => variationSettings?.[variationId] || getVariationDefaults();
@@ -416,13 +390,20 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
   };
 
-  const persistVariationOverrideChanges = async (variationId: string) => {
+  const persistVariationOverrideChanges = async (
+    variationId: string,
+    nextRawState: Record<string, VariationConfigRaw>,
+    nextSettings?: Record<string, VariationConfig>
+  ) => {
     const pid = product?.id || createdProductId;
-    if (!pid) return;
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    const resolvedSettings = buildPersistedVariationSettings();
+    const resolvedSettings = nextSettings || buildPersistedVariationSettings(variationSettings, nextRawState);
     setVariationSettings(resolvedSettings);
-    syncVariationSettingsRaw(resolvedSettings);
+    setVariationSettingsRaw(nextRawState);
+    if (!pid) return;
+    if (variationSaveTimerRef.current) {
+      window.clearTimeout(variationSaveTimerRef.current);
+      variationSaveTimerRef.current = null;
+    }
     await saveProductVariations(pid, selectedVariations, { silent: true, settingsOverride: resolvedSettings });
   };
 
@@ -490,26 +471,30 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         ...(String(rawValue.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(rawValue.order) || 0)) } : {})
       };
 
-      setVariationSettings(prev => ({
-        ...prev,
+      const currentVariation = variationSettings[variationId] || getVariationDefaults();
+      const nextRawState = {
+        ...variationSettingsRaw,
         [variationId]: {
-          ...(prev[variationId] || getVariationDefaults()),
-          option_price_overrides: {
-            ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
-            [optionName]: normalized
+          ...(variationSettingsRaw[variationId] || {
+            pricingMode: getDefaultPricingMode(currentVariation.pricing_mode),
+            min: String(currentVariation.min_selections ?? 0),
+            max: String(currentVariation.max_selections ?? 1),
+            free: String(currentVariation.free_selections_limit ?? 0),
+            paidMax: String(currentVariation.paid_max_selections ?? currentVariation.max_selections ?? 1),
+            multiplier: String(Number(currentVariation.price_multiplier ?? 1)),
+            fixedPrice: String(Number(currentVariation.fixed_option_price ?? 0)),
+            optionOverrides: {}
+          }),
+          optionOverrides: {
+            ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+            [optionName]: toOptionOverrideRaw(normalized)
           }
         }
-      }));
-
-      updateVariationRaw(variationId, {
-        optionOverrides: {
-          ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
-          [optionName]: toOptionOverrideRaw(normalized)
-        }
-      });
+      };
+      const nextSettings = buildPersistedVariationSettings(variationSettings, nextRawState);
+      void persistVariationOverrideChanges(variationId, nextRawState, nextSettings).catch(() => {});
     };
     persistRaw(currentRaw);
-    void persistVariationOverrideChanges(variationId).catch(() => {});
   };
 
   const toggleOptionHidden = (variationId: string, optionName: string, option?: any) => {
@@ -518,63 +503,53 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       ...currentRaw,
       hidden: !currentRaw.hidden
     };
-
-    setVariationSettings(prev => ({
-      ...prev,
+    const currentVariation = variationSettings[variationId] || getVariationDefaults();
+    const nextRawState = {
+      ...variationSettingsRaw,
       [variationId]: {
-        ...(prev[variationId] || getVariationDefaults()),
-        option_price_overrides: {
-          ...((prev[variationId] || getVariationDefaults()).option_price_overrides || {}),
-          [optionName]: {
-            ...normalizeOptionOverride((prev[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]),
-            price: Math.max(0, parseDecimalField(nextRaw.price, getVariationEffectiveOptionPrice(variationId, option || { name: optionName, price: 0 }))),
-            label: normalizeComplementOptionName(String(nextRaw.label || '')),
-            hidden: Boolean(nextRaw.hidden),
-            recommended: Boolean(nextRaw.recommended),
-            ...(String(nextRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(nextRaw.order) || 0)) } : {})
-          }
+        ...(variationSettingsRaw[variationId] || {
+          pricingMode: getDefaultPricingMode(currentVariation.pricing_mode),
+          min: String(currentVariation.min_selections ?? 0),
+          max: String(currentVariation.max_selections ?? 1),
+          free: String(currentVariation.free_selections_limit ?? 0),
+          paidMax: String(currentVariation.paid_max_selections ?? currentVariation.max_selections ?? 1),
+          multiplier: String(Number(currentVariation.price_multiplier ?? 1)),
+          fixedPrice: String(Number(currentVariation.fixed_option_price ?? 0)),
+          optionOverrides: {}
+        }),
+        optionOverrides: {
+          ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
+          [optionName]: nextRaw
         }
       }
-    }));
-
-    updateVariationRaw(variationId, {
-      optionOverrides: {
-        ...(variationSettingsRaw[variationId]?.optionOverrides || {}),
-        [optionName]: nextRaw
-      }
-    });
-
-    void persistVariationOverrideChanges(variationId).catch(() => {});
+    };
+    const nextSettings = buildPersistedVariationSettings(variationSettings, nextRawState);
+    void persistVariationOverrideChanges(variationId, nextRawState, nextSettings).catch(() => {});
   };
 
   const clearOptionPriceOverride = (variationId: string, optionName: string) => {
-    setVariationSettings(prev => {
-      const current = prev[variationId] || getVariationDefaults();
-      const nextOverrides = { ...(current.option_price_overrides || {}) };
-      delete nextOverrides[optionName];
-      return {
-        ...prev,
-        [variationId]: {
-          ...current,
-          option_price_overrides: nextOverrides
-        }
-      };
-    });
-
-    setVariationSettingsRaw(prev => {
-      const current = prev[variationId] || { pricingMode: 'default' as VariationPricingMode, min: '0', max: '1', free: '0', paidMax: '1', multiplier: '1', fixedPrice: '0', optionOverrides: {} };
-      const nextOptionOverrides = { ...(current.optionOverrides || {}) };
-      delete nextOptionOverrides[optionName];
-      return {
-        ...prev,
-        [variationId]: {
-          ...current,
-          optionOverrides: nextOptionOverrides
-        }
-      };
-    });
-
-    void persistVariationOverrideChanges(variationId).catch(() => {});
+    const currentVariation = variationSettings[variationId] || getVariationDefaults();
+    const currentRaw = variationSettingsRaw[variationId] || {
+      pricingMode: getDefaultPricingMode(currentVariation.pricing_mode),
+      min: String(currentVariation.min_selections ?? 0),
+      max: String(currentVariation.max_selections ?? 1),
+      free: String(currentVariation.free_selections_limit ?? 0),
+      paidMax: String(currentVariation.paid_max_selections ?? currentVariation.max_selections ?? 1),
+      multiplier: String(Number(currentVariation.price_multiplier ?? 1)),
+      fixedPrice: String(Number(currentVariation.fixed_option_price ?? 0)),
+      optionOverrides: {}
+    };
+    const nextOptionOverrides = { ...(currentRaw.optionOverrides || {}) };
+    delete nextOptionOverrides[optionName];
+    const nextRawState = {
+      ...variationSettingsRaw,
+      [variationId]: {
+        ...currentRaw,
+        optionOverrides: nextOptionOverrides
+      }
+    };
+    const nextSettings = buildPersistedVariationSettings(variationSettings, nextRawState);
+    void persistVariationOverrideChanges(variationId, nextRawState, nextSettings).catch(() => {});
   };
 
   const buildPersistedVariationSettings = (
@@ -1538,7 +1513,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     const resolvedSettings = options?.settingsOverride || buildPersistedVariationSettings();
     if (!options?.settingsOverride) {
       setVariationSettings(resolvedSettings);
-      syncVariationSettingsRaw(resolvedSettings);
     }
     console.log('🔄 Iniciando saveProductVariations:', { 
       productId, 
@@ -2158,24 +2132,22 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                     <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
                                       <Label htmlFor={`min-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Mín.</Label>
-                                      <Input
+                                      <IntegerInput
                                         id={`min-selections-${v.id}`}
-                                        type="number"
-                                        min="0"
+                                        min={0}
                                         value={variationSettingsRaw[v.id]?.min ?? String(getVariationConfig(v.id).min_selections ?? 0)}
-                                        onChange={e => updateVariationRaw(v.id, { min: e.target.value })}
+                                        onValueChange={value => updateVariationRaw(v.id, { min: value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
                                     </div>
                                     <div className="rounded-xl border border-[#FF6400]/15 bg-white/95 px-3 py-2">
                                       <Label htmlFor={`max-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Máx.</Label>
-                                      <Input
+                                      <IntegerInput
                                         id={`max-selections-${v.id}`}
-                                        type="number"
-                                        min="1"
+                                        min={1}
                                         value={variationSettingsRaw[v.id]?.max ?? String(getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRaw(v.id, { max: e.target.value })}
+                                        onValueChange={value => updateVariationRaw(v.id, { max: value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#FF6400]/20 bg-[#F5EBE1]/45 text-center text-sm font-semibold text-[#003223]"
                                       />
@@ -2184,25 +2156,23 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                     <div className="rounded-xl border border-[#8CC850]/25 bg-white/95 px-3 py-2">
                                       <Label htmlFor={`free-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Grátis</Label>
-                                      <Input
+                                      <IntegerInput
                                         id={`free-selections-${v.id}`}
-                                        type="number"
-                                        min="0"
+                                        min={0}
                                         value={variationSettingsRaw[v.id]?.free ?? String(getVariationConfig(v.id).free_selections_limit ?? 0)}
-                                        onChange={e => updateVariationRaw(v.id, { free: e.target.value })}
+                                        onValueChange={value => updateVariationRaw(v.id, { free: value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#8CC850]/35 bg-[#8CC850]/12 text-center text-sm font-semibold text-[#003223]"
                                       />
                                     </div>
                                     <div className="rounded-xl border border-[#003223]/12 bg-white/95 px-3 py-2">
                                       <Label htmlFor={`paid-max-selections-${v.id}`} className="text-[10px] font-semibold uppercase tracking-wide text-[#003223]/60">Total</Label>
-                                      <Input
+                                      <IntegerInput
                                         id={`paid-max-selections-${v.id}`}
-                                        type="number"
-                                        min={String(Math.max(1, getVariationConfig(v.id).max_selections ?? 1))}
+                                        min={Math.max(1, getVariationConfig(v.id).max_selections ?? 1)}
                                         disabled={!getVariationConfig(v.id).allow_paid_excess}
                                         value={variationSettingsRaw[v.id]?.paidMax ?? String(getVariationConfig(v.id).paid_max_selections ?? getVariationConfig(v.id).max_selections ?? 1)}
-                                        onChange={e => updateVariationRaw(v.id, { paidMax: e.target.value })}
+                                        onValueChange={value => updateVariationRaw(v.id, { paidMax: value })}
                                         onBlur={() => commitVariationMinMax(v.id)}
                                         className="mt-1 h-9 rounded-lg border-[#003223]/15 bg-[#003223]/[0.04] text-center text-sm font-semibold text-[#003223] disabled:opacity-50"
                                       />

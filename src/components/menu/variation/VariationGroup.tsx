@@ -94,7 +94,7 @@ export const VariationGroup: React.FC<VariationGroupProps> = ({
         {variation.options.map((option, index) => {
           const selectedCount = selectedOptions.filter((name) => name === option.name).length;
           const addDisabled = reachedMax;
-          const hidePriceLabel = variation.pricing_mode === 'free' || freeLimit >= maxSel;
+          const hidePriceLabel = variation.pricing_mode === 'free' || freeLimit > 0;
           return (
             <VariationOptionItem
               key={`${variation.id}-${index}`}
