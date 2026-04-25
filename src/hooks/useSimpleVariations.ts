@@ -251,6 +251,23 @@ function clearVariationCache(productId: string) {
   } catch {}
 }
 
+function clearVariationPresenceCache(productId: string) {
+  const key = String(productId || '').trim();
+  if (!key) return;
+  presenceCache.delete(key);
+  try {
+    localStorage.removeItem(lsPresenceKey(key));
+  } catch {}
+}
+
+export function invalidateSimpleVariationCaches(productId: string) {
+  const key = String(productId || '').trim();
+  if (!key) return;
+  inflight.delete(key);
+  clearVariationCache(key);
+  clearVariationPresenceCache(key);
+}
+
 function setVariationPresence(productId: string, status: Exclude<VariationPresence, 'unknown'>) {
   const key = String(productId || '').trim();
   if (!key) return;

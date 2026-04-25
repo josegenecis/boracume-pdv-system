@@ -26,6 +26,7 @@ import ProductRecipeManager from './ProductRecipeManager';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { IntegerInput } from '@/components/ui/integer-input';
 import { buildCategoryDescriptionWithMetadata, enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import { invalidateSimpleVariationCaches } from '@/hooks/useSimpleVariations';
 
 // Defining the interface here to ensure consistency
 interface ProductItem {
@@ -423,8 +424,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             ...normalizeOptionOverride((prev[variationId] || getVariationDefaults()).option_price_overrides?.[optionName]),
             price: parsedValue,
             label: String(currentRaw.label || '').trim(),
-            hidden: Boolean(existingOverride.hidden),
-            recommended: Boolean(existingOverride.recommended),
+            hidden: Boolean(currentRaw.hidden),
+            recommended: Boolean(currentRaw.recommended),
             ...(String(currentRaw.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(currentRaw.order) || 0)) } : {})
           }
         }
@@ -468,8 +469,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
         ...existingOverride,
         price: Math.max(0, parseDecimalField(rawValue.price, fallbackPrice)),
         label: normalizeComplementOptionName(String(rawValue.label || '')),
-        hidden: Boolean(existingOverride.hidden),
-        recommended: Boolean(existingOverride.recommended),
+        hidden: Boolean(rawValue.hidden),
+        recommended: Boolean(rawValue.recommended),
         ...(String(rawValue.order || '').trim() ? { display_order: Math.max(0, Math.floor(Number(rawValue.order) || 0)) } : {})
       };
 
@@ -535,9 +536,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       window.clearTimeout(variationSaveTimerRef.current);
       variationSaveTimerRef.current = null;
     }
-    void persistSingleVariationLinkOverride(pid, variationId, nextSettings).catch(async () => {
-      await persistVariationOverrideChanges(variationId, nextRawState, nextSettings);
-    });
+    invalidateSimpleVariationCaches(pid);
+    void saveProductVariations(pid, selectedVariations, { silent: true, settingsOverride: nextSettings }).catch(() => {});
   };
 
   const clearOptionPriceOverride = (variationId: string, optionName: string) => {
@@ -1468,26 +1468,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     return { data, error };
   };
 
-  const persistSingleVariationLinkOverride = async (
-    productId: string,
-    variationId: string,
-    settingsSource: Record<string, VariationConfig>
-  ) => {
-    const currentIndex = Math.max(selectedVariations.findIndex((id) => id === variationId), 0);
-    const payload = buildVariationLinkPayload(productId, variationId, currentIndex, settingsSource);
-    const { error } = await supabase
-      .from('product_global_variation_links')
-      .update({
-        option_price_overrides: payload.option_price_overrides,
-        pricing_mode: payload.pricing_mode,
-        price_multiplier: payload.price_multiplier,
-        fixed_option_price: payload.fixed_option_price
-      } as any)
-      .eq('product_id', productId)
-      .eq('global_variation_id', variationId);
-    if (error) throw error;
-  };
-
   const openApplyVariationDialog = (variationId: string) => {
     setApplyVariationId(variationId);
     setApplyTargetProductIds([]);
@@ -1555,6 +1535,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     });
     
     try {
+      invalidateSimpleVariationCaches(productId);
       // Primeiro, deletar vínculos existentes
       console.log('🗑️ Deletando vínculos existentes para produto:', productId);
       const { error: deleteError } = await supabase
