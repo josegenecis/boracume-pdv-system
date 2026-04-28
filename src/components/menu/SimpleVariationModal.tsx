@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -58,6 +58,8 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
   const { toast } = useToast();
   const [loadingVariations, setLoadingVariations] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const variationSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const {
     isLoading,
     fetchVariations,
@@ -110,6 +112,28 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
     return pizzaFlavorMode[variation.id] === 2 ? Math.min(2, Number(variation.max_selections || 2)) : 1;
   };
 
+  const scrollToNextVariation = (variationId: string) => {
+    const currentIndex = variations.findIndex((item) => item.id === variationId);
+    if (currentIndex === -1) return;
+
+    const nextVariation = variations[currentIndex + 1];
+    const container = contentScrollRef.current;
+    const nextSection = nextVariation ? variationSectionRefs.current[nextVariation.id] : null;
+
+    if (!container || !nextSection) return;
+
+    window.requestAnimationFrame(() => {
+      const containerRect = container.getBoundingClientRect();
+      const nextRect = nextSection.getBoundingClientRect();
+      const targetTop = container.scrollTop + (nextRect.top - containerRect.top) - 12;
+
+      container.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: 'smooth'
+      });
+    });
+  };
+
   const handleVariationChange = (variationId: string, optionName: string, isSelected: boolean) => {
     const variation = variations.find((item) => item.id === variationId);
     if (!variation) return;
@@ -117,29 +141,41 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
 
     setSelectedVariations((prev) => {
       const current = prev[variationId] || [];
+      let nextSelection = current;
 
       if (variationMaxSelections === 1) {
-        return {
+        nextSelection = isSelected ? [optionName] : [];
+        const nextState = {
           ...prev,
-          [variationId]: isSelected ? [optionName] : []
+          [variationId]: nextSelection
         };
+        if (isSelected && current.length < variationMaxSelections && nextSelection.length >= variationMaxSelections) {
+          scrollToNextVariation(variationId);
+        }
+        return nextState;
       }
 
       if (isSelected) {
         if (current.length < variationMaxSelections) {
-          return {
+          nextSelection = [...current, optionName];
+          const nextState = {
             ...prev,
-            [variationId]: [...current, optionName]
+            [variationId]: nextSelection
           };
+          if (current.length < variationMaxSelections && nextSelection.length >= variationMaxSelections) {
+            scrollToNextVariation(variationId);
+          }
+          return nextState;
         }
       } else {
         const removeIndex = current.lastIndexOf(optionName);
         if (removeIndex === -1) return prev;
         const next = [...current];
         next.splice(removeIndex, 1);
+        nextSelection = next;
         return {
           ...prev,
-          [variationId]: next
+          [variationId]: nextSelection
         };
       }
 
@@ -223,7 +259,11 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6">
+          <div
+            ref={contentScrollRef}
+            data-variation-scroll-container="true"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] px-4 py-4 space-y-6"
+          >
             <div className="space-y-2">
               <DialogTitle className="text-2xl font-extrabold text-gray-900 leading-tight">
                 {product.name}
@@ -247,7 +287,14 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               <div className="space-y-4">
                 <h3 className="text-base font-semibold text-gray-900">Personalize seu pedido</h3>
                 {variations.map((variation) => (
-                  <div key={variation.id} className="space-y-2">
+                  <div
+                    key={variation.id}
+                    data-variation-section={variation.id}
+                    ref={(element) => {
+                      variationSectionRefs.current[variation.id] = element;
+                    }}
+                    className="space-y-2"
+                  >
                     {(() => {
                       const pizzaMode = pizzaFlavorMode[variation.id] || 1;
                       const variationWithDisplayedPrices = isPizzaFlavorVariation(variation, categoryConfig)
