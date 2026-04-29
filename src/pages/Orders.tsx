@@ -60,6 +60,7 @@ const Orders = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [adminPinOpen, setAdminPinOpen] = useState(false);
@@ -92,6 +93,7 @@ const Orders = () => {
   const { toast } = useToast();
   const { sendToKitchen } = useKitchenIntegration();
   const realtimeOkRef = useRef(false);
+  const hasLoadedOrdersRef = useRef(false);
 
   const normalizeItems = (value: any) => {
     if (Array.isArray(value)) return value;
@@ -132,7 +134,7 @@ const Orders = () => {
         pollTimer = window.setInterval(() => {
           if (document.visibilityState !== 'visible') return;
           if (realtimeOkRef.current) return;
-          fetchOrders();
+          fetchOrders({ background: true });
         }, 3000);
       };
 
@@ -260,9 +262,14 @@ const Orders = () => {
     filterOrders();
   }, [orders, searchQuery, statusFilter, typeFilter]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (options: { background?: boolean } = {}) => {
+    const showInitialLoading = !hasLoadedOrdersRef.current && !options.background;
     try {
-      setLoading(true);
+      if (showInitialLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       const { data, error } = await supabase
         .from('orders')
         .select('*')
@@ -275,6 +282,7 @@ const Orders = () => {
       const transformedData = (data || []).map((order) => enrichOrder(order));
 
       setOrders(transformedData);
+      hasLoadedOrdersRef.current = true;
     } catch (error) {
       console.error('Erro ao carregar pedidos:', error);
       toast({
@@ -283,7 +291,8 @@ const Orders = () => {
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      if (showInitialLoading) setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -1253,8 +1262,8 @@ const Orders = () => {
               >
                 Entregas/Despachados
               </Button>
-              <Button onClick={fetchOrders} variant="outline">
-                Atualizar
+              <Button onClick={() => fetchOrders({ background: true })} variant="outline">
+                {refreshing ? 'Atualizando...' : 'Atualizar'}
               </Button>
             </div>
 

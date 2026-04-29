@@ -16,10 +16,15 @@ function escHtml(v: string) {
 function normalizeAbsoluteUrl(value: string) {
   const raw = String(value || '').trim();
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (raw.startsWith('//')) return `https:${raw}`;
-  if (raw.startsWith('/')) return `https://boracume.com${raw}`;
-  return raw;
+  const clean = raw.replace(/^['"]+|['"]+$/g, '').trim();
+  if (!clean || clean === 'null' || clean === 'undefined' || clean === '[object Object]') return '';
+  if (/^https?:\/\//i.test(clean)) return clean.replace(/^http:\/\//i, 'https://');
+  if (clean.startsWith('//')) return `https:${clean}`;
+  if (clean.startsWith('/')) return `https://boracume.com${clean}`;
+  if (clean.includes('supabase.co/storage/v1/')) return `https://${clean}`;
+  if (clean.includes('ifood-static.com') || clean.includes('storage.googleapis.com')) return `https://${clean}`;
+  if (clean.includes('/')) return `${SUPABASE_URL}/storage/v1/object/public/profile-images/${clean}`;
+  return '';
 }
 
 async function fetchProfile(userId: string) {
@@ -39,10 +44,6 @@ async function fetchProfile(userId: string) {
   return Array.isArray(data) && data.length > 0 ? data[0] : null;
 }
 
-function isCrawler(userAgent: string) {
-  return /facebookexternalhit|facebot|whatsapp|telegrambot|twitterbot|slackbot|discordbot|linkedinbot|googlebot|bingbot|meta-externalagent|meta-externalfetcher|skypeuripreview|crawler|spider|bot/i.test(userAgent);
-}
-
 export default async function handler(req: any, res: any) {
   try {
     const id = String(req?.query?.id || '').trim();
@@ -54,19 +55,12 @@ export default async function handler(req: any, res: any) {
     }
 
     const redirectUrl = `/menu-digital?userId=${encodeURIComponent(id)}`;
-    const userAgent = String(req?.headers?.['user-agent'] || '');
-    if (!isCrawler(userAgent)) {
-      res.statusCode = 307;
-      res.setHeader('location', redirectUrl);
-      res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-      res.end();
-      return;
-    }
-
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
-    const logoUrl = normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png'));
+    const logoUrl =
+      normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || '')) ||
+      'https://boracume.com/LOGOMARCA/logo-sistema.png';
     const originalPath = String(req?.url || '').includes(`/menu/${id}`) ? `/menu/${encodeURIComponent(id)}` : `/share/menu/${encodeURIComponent(id)}`;
     const pageUrl = `https://boracume.com${originalPath}`;
 
@@ -82,6 +76,8 @@ export default async function handler(req: any, res: any) {
     <meta property="og:description" content="${escHtml(description)}" />
     <meta property="og:image" content="${escHtml(logoUrl)}" />
     <meta property="og:image:secure_url" content="${escHtml(logoUrl)}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${escHtml(`Logo do restaurante ${restaurantName}`)}" />
     <meta property="og:site_name" content="${escHtml(restaurantName)}" />
     <meta property="og:url" content="${escHtml(pageUrl)}" />

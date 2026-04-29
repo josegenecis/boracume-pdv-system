@@ -6,7 +6,7 @@ import { RefreshCw, Clock, ChefHat, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const KDSView = () => {
-  const { orders, updateOrderStatus, recallOrder, loading, refresh } = useKDS();
+  const { orders, updateOrderStatus, recallOrder, loading, refreshing, refresh } = useKDS();
 
   // Categorize orders
   const columns = useMemo(() => {
@@ -71,8 +71,8 @@ const KDSView = () => {
             {new Date().toLocaleTimeString()}
           </div>
           <Button variant="outline" size="sm" onClick={() => refresh()} className="bg-gray-800 border-gray-700 hover:bg-gray-700 text-white">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Atualizar
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Atualizando' : 'Atualizar'}
           </Button>
         </div>
       </header>

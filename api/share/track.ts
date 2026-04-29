@@ -13,6 +13,20 @@ function escHtml(v: string) {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeAbsoluteUrl(value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const clean = raw.replace(/^['"]+|['"]+$/g, '').trim();
+  if (!clean || clean === 'null' || clean === 'undefined' || clean === '[object Object]') return '';
+  if (/^https?:\/\//i.test(clean)) return clean.replace(/^http:\/\//i, 'https://');
+  if (clean.startsWith('//')) return `https:${clean}`;
+  if (clean.startsWith('/')) return `https://boracume.com${clean}`;
+  if (clean.includes('supabase.co/storage/v1/')) return `https://${clean}`;
+  if (clean.includes('ifood-static.com') || clean.includes('storage.googleapis.com')) return `https://${clean}`;
+  if (clean.includes('/')) return `${SUPABASE_URL}/storage/v1/object/public/profile-images/${clean}`;
+  return '';
+}
+
 async function fetchProfile(userId: string) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/profiles`);
   url.searchParams.set('select', 'restaurant_name,description,logo_url,banner_url');
@@ -47,7 +61,9 @@ export default async function handler(req: any, res: any) {
 
     const restaurantName = String(profile?.restaurant_name || 'Acompanhar pedido');
     const description = String(profile?.description || 'Acompanhe o andamento do seu pedido.');
-    const logoUrl = String(profile?.logo_url || profile?.banner_url || 'https://boracume.com/LOGOMARCA/logo-sistema.png');
+    const logoUrl =
+      normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || '')) ||
+      'https://boracume.com/LOGOMARCA/logo-sistema.png';
     const title = orderNumber ? `${restaurantName} • Pedido ${orderNumber}` : `${restaurantName} • Acompanhar pedido`;
     const pageUrl = `https://boracume.com/share/track/${encodeURIComponent(orderId)}`;
     const redirectUrl = `/track/${encodeURIComponent(orderId)}`;
@@ -63,11 +79,16 @@ export default async function handler(req: any, res: any) {
     <meta property="og:title" content="${escHtml(title)}" />
     <meta property="og:description" content="${escHtml(description)}" />
     <meta property="og:image" content="${escHtml(logoUrl)}" />
+    <meta property="og:image:secure_url" content="${escHtml(logoUrl)}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${escHtml(`Logo do restaurante ${restaurantName}`)}" />
     <meta property="og:url" content="${escHtml(pageUrl)}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escHtml(title)}" />
     <meta name="twitter:description" content="${escHtml(description)}" />
     <meta name="twitter:image" content="${escHtml(logoUrl)}" />
+    <meta name="twitter:image:alt" content="${escHtml(`Logo do restaurante ${restaurantName}`)}" />
     <meta http-equiv="refresh" content="0; url=${escHtml(redirectUrl)}" />
   </head>
   <body>

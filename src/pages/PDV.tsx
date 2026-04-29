@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,11 +112,13 @@ const PDV = () => {
   const [changeAmount, setChangeAmount] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [showVariationModal, setShowVariationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<Variation[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
+  const [activeCategoryId, setActiveCategoryId] = useState('all');
   const [activeTab, setActiveTab] = useState('products');
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
@@ -149,6 +151,7 @@ const PDV = () => {
   // Refs for animation
   const cartContainerRef = useRef<HTMLDivElement>(null);
   const mobileCartBtnRef = useRef<HTMLDivElement>(null);
+  const hasLoadedDataRef = useRef(false);
 
   useEffect(() => {
     if (user) {
@@ -406,15 +409,21 @@ const PDV = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (options: { background?: boolean } = {}) => {
+    const showInitialLoading = !hasLoadedDataRef.current && !options.background;
     try {
-      setLoading(true);
+      if (showInitialLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       await Promise.all([
         fetchProducts(),
         fetchCategories(),
         fetchDeliveryZones(),
         fetchTables()
       ]);
+      hasLoadedDataRef.current = true;
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error);
       toast({
@@ -423,7 +432,8 @@ const PDV = () => {
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      if (showInitialLoading) setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -460,7 +470,7 @@ const PDV = () => {
       setProducts(data || []);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
-      setProducts([]);
+      if (!hasLoadedDataRef.current) setProducts([]);
     }
   };
 
@@ -475,7 +485,7 @@ const PDV = () => {
 
       if (zonesError) {
         console.error('Erro ao carregar delivery_zones:', zonesError);
-        setDeliveryZones([]);
+        if (!hasLoadedDataRef.current) setDeliveryZones([]);
         return;
       }
 
@@ -489,7 +499,7 @@ const PDV = () => {
       setDeliveryZones(deliveryAreas);
     } catch (error) {
       console.error('Erro ao carregar bairros de entrega:', error);
-      setDeliveryZones([]);
+      if (!hasLoadedDataRef.current) setDeliveryZones([]);
     }
   };
 
@@ -499,13 +509,65 @@ const PDV = () => {
       setTables(data || []);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
-      setTables([]);
+      if (!hasLoadedDataRef.current) setTables([]);
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const categoryById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category]));
+  }, [categories]);
+
+  const categoryOptions = useMemo(() => {
+    const categoriesWithProducts = categories.filter((category) =>
+      products.some((product) => product.category_id === category.id)
+    );
+    const uncategorizedCount = products.filter((product) => !product.category_id || !categoryById.has(product.category_id)).length;
+    return {
+      categoriesWithProducts,
+      hasUncategorized: uncategorizedCount > 0,
+    };
+  }, [categories, categoryById, products]);
+
+  const filteredProducts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch = !query || product.name.toLowerCase().includes(query);
+      const matchesCategory =
+        activeCategoryId === 'all' ||
+        (activeCategoryId === 'uncategorized' && (!product.category_id || !categoryById.has(product.category_id))) ||
+        product.category_id === activeCategoryId;
+      return matchesSearch && matchesCategory;
+    });
+  }, [activeCategoryId, categoryById, products, searchQuery]);
+
+  const groupedProducts = useMemo(() => {
+    const groups: Array<{ id: string; name: string; products: Product[] }> = [];
+    const productsByCategory = new Map<string, Product[]>();
+    const uncategorized: Product[] = [];
+
+    for (const product of filteredProducts) {
+      if (product.category_id && categoryById.has(product.category_id)) {
+        const current = productsByCategory.get(product.category_id) || [];
+        current.push(product);
+        productsByCategory.set(product.category_id, current);
+      } else {
+        uncategorized.push(product);
+      }
+    }
+
+    for (const category of categories) {
+      const categoryProducts = productsByCategory.get(category.id);
+      if (categoryProducts?.length) {
+        groups.push({ id: category.id, name: category.name, products: categoryProducts });
+      }
+    }
+
+    if (uncategorized.length > 0) {
+      groups.push({ id: 'uncategorized', name: 'Sem categoria', products: uncategorized });
+    }
+
+    return groups;
+  }, [categories, categoryById, filteredProducts]);
 
   const fetchProductVariations = async (productId: string): Promise<ProductVariation[]> => {
     try {
@@ -744,17 +806,36 @@ const PDV = () => {
 
   const fetchCategories = async () => {
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+
+      const res1 = await supabase
         .from('product_categories')
-        .select('id, name, description')
+        .select('id, name, description, display_order')
         .eq('user_id', user?.id)
-        .eq('active', true);
+        .eq('active', true)
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      data = res1.data as any;
+      error = res1.error as any;
+
+      if (error && String(error.message || '').includes('display_order')) {
+        const res2 = await supabase
+          .from('product_categories')
+          .select('id, name, description')
+          .eq('user_id', user?.id)
+          .eq('active', true)
+          .order('name', { ascending: true });
+        data = res2.data as any;
+        error = res2.error as any;
+      }
 
       if (error) throw error;
       setCategories(((data || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as CategoryConfig[]);
     } catch (error) {
       console.error('Erro ao carregar categorias do PDV:', error);
-      setCategories([]);
+      if (!hasLoadedDataRef.current) setCategories([]);
     }
   };
 
@@ -1255,8 +1336,8 @@ const PDV = () => {
                   >
                     {activeTab === 'products' ? <UtensilsCrossed size={14} className="text-[#003223]/70" /> : <Store size={14} className="text-[#003223]/70" />}
                   </Button>
-                  <Button variant="outline" size="icon" onClick={() => fetchData()} className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] xl:h-9 xl:w-9 xl:rounded-xl">
-                    <RefreshCw size={16} className="text-[#003223]/70" />
+                  <Button variant="outline" size="icon" onClick={() => fetchData({ background: true })} className="h-8 w-8 shrink-0 rounded-[16px] border-[#FF6400]/15 bg-white/85 hover:bg-[#F5EBE1] xl:h-9 xl:w-9 xl:rounded-xl">
+                    <RefreshCw size={16} className={`text-[#003223]/70 ${refreshing ? 'animate-spin' : ''}`} />
                   </Button>
                   <Button
                     variant="outline"
@@ -1313,6 +1394,48 @@ const PDV = () => {
                   </div>
                 </div>
               </div>
+              {(categories.length > 0 || categoryOptions.hasUncategorized) && (
+                <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategoryId('all')}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      activeCategoryId === 'all'
+                        ? 'border-[#003223] bg-[#003223] text-white shadow-sm'
+                        : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {categoryOptions.categoriesWithProducts.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => setActiveCategoryId(category.id)}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        activeCategoryId === category.id
+                          ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
+                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                      }`}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                  {categoryOptions.hasUncategorized && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategoryId('uncategorized')}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        activeCategoryId === 'uncategorized'
+                          ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
+                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                      }`}
+                    >
+                      Sem categoria
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <Card className="h-full flex flex-col border-none shadow-none bg-transparent">
               <div className={`flex-1 ${isMobile ? 'pb-28' : 'pb-24 lg:pb-0'}`}>
@@ -1323,60 +1446,70 @@ const PDV = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-1 sm:grid-cols-[repeat(auto-fill,minmax(130px,1fr))] xl:gap-2">
-                    {filteredProducts.map((product) => (
-                      (() => {
-                        const track = !!(product as any)?.track_stock;
-                        const qty = Number((product as any)?.stock_quantity ?? 0) || 0;
-                        const threshold = Number((product as any)?.low_stock_threshold ?? 0) || 0;
-                        const isLowStock = track && qty <= threshold;
-                        return (
-                      <Card 
-                        key={product.id} 
-                        className={`cursor-pointer group flex aspect-square flex-col overflow-hidden rounded-[18px] border border-[#DCE6DF] bg-white transition-all duration-150 hover:shadow-sm active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
-                        onClick={(e) => handleProductClick(product, e)}
-                      >
-                        <div className="relative mx-1 mt-1 min-h-0 flex-1 overflow-hidden rounded-[14px] bg-gray-100">
-                          {normalizeImageUrlForDisplay(product.image_url) ? (
-                            <img 
-                              id={`product-img-${product.id}`}
-                              src={normalizeImageUrlForDisplay(product.image_url)} 
-                              alt={product.name} 
-                              className="h-full w-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div 
-                              id={`product-img-${product.id}`}
-                              className="flex h-full w-full items-center justify-center"
-                            >
-                              <Store className="h-4 w-4 text-gray-300" />
-                            </div>
-                          )}
-                          <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1 py-0.5 text-[8px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
-                            {formatCurrency(product.price)}
-                          </div>
-                          {isLowStock && (
-                            <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1 py-0.5 text-[7px] font-bold text-white shadow-sm">
-                              Estoque baixo
-                            </div>
-                          )}
+                  <div className="space-y-5">
+                    {groupedProducts.map((group) => (
+                      <section key={group.id} className="space-y-2">
+                        <div className="flex items-center gap-2 px-1">
+                          <h2 className="text-sm font-bold text-[#003223] sm:text-base">{group.name}</h2>
+                          <span className="rounded-full bg-[#F5EBE1] px-2 py-0.5 text-[10px] font-semibold text-[#0B5137]">
+                            {group.products.length}
+                          </span>
                         </div>
-                        <CardContent className="flex shrink-0 flex-col justify-end bg-white px-1 pb-1 pt-0.5">
-                          <h3 className="mb-0.5 min-h-[0.95rem] font-medium text-[7px] leading-tight line-clamp-1" title={product.name}>
-                            {product.name}
-                          </h3>
-                          <Button 
-                            className="h-4 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[7px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white"
-                            size="sm"
-                            variant="ghost"
-                          >
-                            Adicionar
-                          </Button>
-                        </CardContent>
-                      </Card>
-                        );
-                      })()
+                        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] xl:gap-2">
+                          {group.products.map((product) => {
+                            const track = !!(product as any)?.track_stock;
+                            const qty = Number((product as any)?.stock_quantity ?? 0) || 0;
+                            const threshold = Number((product as any)?.low_stock_threshold ?? 0) || 0;
+                            const isLowStock = track && qty <= threshold;
+                            return (
+                              <Card
+                                key={product.id}
+                                className={`cursor-pointer group flex aspect-square flex-col overflow-hidden rounded-[16px] border border-[#DCE6DF] bg-white transition-all duration-150 hover:shadow-sm active:scale-95 ${isLowStock ? 'animate-stock-pulse border-red-500 shadow-none' : ''}`}
+                                onClick={() => handleProductClick(product)}
+                              >
+                                <div className="relative mx-1.5 mt-1.5 min-h-0 flex-1 overflow-hidden rounded-[12px] bg-gray-100">
+                                  {normalizeImageUrlForDisplay(product.image_url) ? (
+                                    <img
+                                      id={`product-img-${product.id}`}
+                                      src={normalizeImageUrlForDisplay(product.image_url)}
+                                      alt={product.name}
+                                      className="h-full w-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div
+                                      id={`product-img-${product.id}`}
+                                      className="flex h-full w-full items-center justify-center"
+                                    >
+                                      <Store className="h-5 w-5 text-gray-300" />
+                                    </div>
+                                  )}
+                                  <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
+                                    {formatCurrency(product.price)}
+                                  </div>
+                                  {isLowStock && (
+                                    <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm">
+                                      Estoque baixo
+                                    </div>
+                                  )}
+                                </div>
+                                <CardContent className="flex shrink-0 flex-col justify-end bg-white px-1.5 pb-1.5 pt-1">
+                                  <h3 className="mb-1 min-h-[1.7rem] font-semibold text-[10px] leading-tight text-[#003223] line-clamp-2 sm:text-[11px]" title={product.name}>
+                                    {product.name}
+                                  </h3>
+                                  <Button
+                                    className="h-6 w-full rounded-xl border border-[#D7E2D3] bg-[#F8FAF8] px-1 text-[9px] font-semibold text-[#0B5137] shadow-none hover:border-[#FF6400] hover:bg-[#FF6400] hover:text-white sm:text-[10px]"
+                                    size="sm"
+                                    variant="ghost"
+                                  >
+                                    Adicionar
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </section>
                     ))}
                   </div>
                 )}

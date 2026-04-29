@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
 const Kitchen = () => {
-  const { orders, updateOrderStatus, recallOrder, loading, refresh } = useKDS();
+  const { orders, updateOrderStatus, recallOrder, loading, refreshing, refresh } = useKDS();
   const [selectedKitchen, setSelectedKitchen] = useState('main');
   const navigate = useNavigate();
 
@@ -65,8 +65,8 @@ const Kitchen = () => {
           </Button>
 
           <Button size="sm" onClick={() => refresh()}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Atualizar
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Atualizando' : 'Atualizar'}
           </Button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -23,8 +23,10 @@ export interface KitchenOrder {
 export const useKDS = () => {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const hasLoadedOrdersRef = useRef(false);
   const printedIds = (globalThis as any).__boracumePrintedKdsOrders || new Set<string>();
   (globalThis as any).__boracumePrintedKdsOrders = printedIds;
 
@@ -71,9 +73,14 @@ export const useKDS = () => {
     }
   }, [user]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (options: { background?: boolean } = {}) => {
+    const showInitialLoading = !hasLoadedOrdersRef.current && !options.background;
     try {
-      setLoading(true);
+      if (showInitialLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       // Fetch orders relevant to the kitchen: pending, accepted, preparing, ready
       const { data, error } = await supabase
         .from('orders')
@@ -85,6 +92,7 @@ export const useKDS = () => {
       if (error) throw error;
       
       setOrders((data || []) as any);
+      hasLoadedOrdersRef.current = true;
     } catch (error) {
       console.error('Error fetching KDS orders:', error);
       toast({
@@ -93,7 +101,8 @@ export const useKDS = () => {
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      if (showInitialLoading) setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -218,8 +227,9 @@ export const useKDS = () => {
   return {
     orders,
     loading,
+    refreshing,
     updateOrderStatus,
     recallOrder,
-    refresh: fetchOrders
+    refresh: () => fetchOrders({ background: true })
   };
 };
