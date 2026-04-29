@@ -814,8 +814,7 @@ const PDV = () => {
         .select('id, name, description, display_order')
         .eq('user_id', user?.id)
         .eq('active', true)
-        .order('display_order', { ascending: true })
-        .order('name', { ascending: true });
+        .order('display_order', { ascending: true });
 
       data = res1.data as any;
       error = res1.error as any;
