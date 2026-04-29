@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -151,7 +151,74 @@ const PDV = () => {
   // Refs for animation
   const cartContainerRef = useRef<HTMLDivElement>(null);
   const mobileCartBtnRef = useRef<HTMLDivElement>(null);
+  const categoryScrollerRef = useRef<HTMLDivElement>(null);
+  const categoryAutoScrollRef = useRef<number | null>(null);
   const hasLoadedDataRef = useRef(false);
+  const [categoryScrollState, setCategoryScrollState] = useState({ canLeft: false, canRight: false });
+
+  const updateCategoryScrollState = () => {
+    const scroller = categoryScrollerRef.current;
+    if (!scroller) return;
+
+    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    const nextState = {
+      canLeft: scroller.scrollLeft > 2,
+      canRight: scroller.scrollLeft < maxScrollLeft - 2,
+    };
+
+    setCategoryScrollState((current) => {
+      if (current.canLeft === nextState.canLeft && current.canRight === nextState.canRight) {
+        return current;
+      }
+
+      return nextState;
+    });
+  };
+
+  const scrollCategories = (direction: 'left' | 'right', behavior: ScrollBehavior = 'smooth') => {
+    const scroller = categoryScrollerRef.current;
+    if (!scroller) return;
+
+    scroller.scrollBy({
+      left: direction === 'left' ? -Math.round(scroller.clientWidth * 0.75) : Math.round(scroller.clientWidth * 0.75),
+      behavior,
+    });
+  };
+
+  const stopCategoryAutoScroll = () => {
+    if (categoryAutoScrollRef.current) {
+      window.clearInterval(categoryAutoScrollRef.current);
+      categoryAutoScrollRef.current = null;
+    }
+  };
+
+  const startCategoryAutoScroll = (direction: 'left' | 'right') => {
+    stopCategoryAutoScroll();
+    categoryAutoScrollRef.current = window.setInterval(() => {
+      const scroller = categoryScrollerRef.current;
+      if (!scroller) return;
+
+      const step = direction === 'left' ? -18 : 18;
+      scroller.scrollBy({ left: step, behavior: 'auto' });
+      updateCategoryScrollState();
+
+      const isAtLeftEdge = scroller.scrollLeft <= 2;
+      const isAtRightEdge = scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 2;
+      if ((direction === 'left' && isAtLeftEdge) || (direction === 'right' && isAtRightEdge)) {
+        stopCategoryAutoScroll();
+      }
+    }, 16);
+  };
+
+  useEffect(() => {
+    updateCategoryScrollState();
+    window.addEventListener('resize', updateCategoryScrollState);
+
+    return () => {
+      window.removeEventListener('resize', updateCategoryScrollState);
+      stopCategoryAutoScroll();
+    };
+  }, [categories.length, products.length]);
 
   useEffect(() => {
     if (user) {
@@ -1394,19 +1461,38 @@ const PDV = () => {
                 </div>
               </div>
               {(categories.length > 0 || categoryOptions.hasUncategorized) && (
-                <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-0.5">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setActiveCategoryId('all')}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      activeCategoryId === 'all'
-                        ? 'border-[#003223] bg-[#003223] text-white shadow-sm'
-                        : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
-                    }`}
+                    aria-label="Rolar categorias para a esquerda"
+                    onClick={() => scrollCategories('left')}
+                    onMouseEnter={() => startCategoryAutoScroll('left')}
+                    onMouseLeave={stopCategoryAutoScroll}
+                    onMouseDown={() => startCategoryAutoScroll('left')}
+                    onMouseUp={stopCategoryAutoScroll}
+                    disabled={!categoryScrollState.canLeft}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] disabled:pointer-events-none disabled:opacity-35"
                   >
-                    Todas
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
-                  {categoryOptions.categoriesWithProducts.map((category) => (
+                  <div
+                    ref={categoryScrollerRef}
+                    onScroll={updateCategoryScrollState}
+                    onMouseLeave={stopCategoryAutoScroll}
+                    className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategoryId('all')}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        activeCategoryId === 'all'
+                          ? 'border-[#003223] bg-[#003223] text-white shadow-sm'
+                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                      }`}
+                    >
+                      Todas
+                    </button>
+                    {categoryOptions.categoriesWithProducts.map((category) => (
                     <button
                       key={category.id}
                       type="button"
@@ -1419,20 +1505,34 @@ const PDV = () => {
                     >
                       {category.name}
                     </button>
-                  ))}
-                  {categoryOptions.hasUncategorized && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategoryId('uncategorized')}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        activeCategoryId === 'uncategorized'
-                          ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
-                          : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
-                      }`}
-                    >
-                      Sem categoria
-                    </button>
-                  )}
+                    ))}
+                    {categoryOptions.hasUncategorized && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategoryId('uncategorized')}
+                        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          activeCategoryId === 'uncategorized'
+                            ? 'border-[#FF6400] bg-[#FF6400] text-white shadow-sm'
+                            : 'border-[#FF6400]/15 bg-white/90 text-[#003223] hover:bg-[#F5EBE1]'
+                        }`}
+                      >
+                        Sem categoria
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Rolar categorias para a direita"
+                    onClick={() => scrollCategories('right')}
+                    onMouseEnter={() => startCategoryAutoScroll('right')}
+                    onMouseLeave={stopCategoryAutoScroll}
+                    onMouseDown={() => startCategoryAutoScroll('right')}
+                    onMouseUp={stopCategoryAutoScroll}
+                    disabled={!categoryScrollState.canRight}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] disabled:pointer-events-none disabled:opacity-35"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
               )}
             </div>
