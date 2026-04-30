@@ -152,46 +152,17 @@ const PDV = () => {
   const cartContainerRef = useRef<HTMLDivElement>(null);
   const mobileCartBtnRef = useRef<HTMLDivElement>(null);
   const categoryScrollerRef = useRef<HTMLDivElement>(null);
-  const categoryAutoScrollRef = useRef<number | null>(null);
   const hasLoadedDataRef = useRef(false);
 
-  const scrollCategories = (direction: 'left' | 'right', behavior: ScrollBehavior = 'smooth') => {
+  const scrollCategories = (direction: 'left' | 'right') => {
     const scroller = categoryScrollerRef.current;
     if (!scroller) return;
 
     scroller.scrollBy({
       left: direction === 'left' ? -Math.round(scroller.clientWidth * 0.75) : Math.round(scroller.clientWidth * 0.75),
-      behavior,
+      behavior: 'smooth',
     });
   };
-
-  const stopCategoryAutoScroll = () => {
-    if (categoryAutoScrollRef.current) {
-      window.clearInterval(categoryAutoScrollRef.current);
-      categoryAutoScrollRef.current = null;
-    }
-  };
-
-  const startCategoryAutoScroll = (direction: 'left' | 'right') => {
-    stopCategoryAutoScroll();
-    categoryAutoScrollRef.current = window.setInterval(() => {
-      const scroller = categoryScrollerRef.current;
-      if (!scroller) return;
-
-      const step = direction === 'left' ? -18 : 18;
-      scroller.scrollBy({ left: step, behavior: 'auto' });
-
-      const isAtLeftEdge = scroller.scrollLeft <= 2;
-      const isAtRightEdge = scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 2;
-      if ((direction === 'left' && isAtLeftEdge) || (direction === 'right' && isAtRightEdge)) {
-        stopCategoryAutoScroll();
-      }
-    }, 16);
-  };
-
-  useEffect(() => {
-    return stopCategoryAutoScroll;
-  }, []);
 
   useEffect(() => {
     if (user) {
@@ -1439,17 +1410,12 @@ const PDV = () => {
                     type="button"
                     aria-label="Rolar categorias para a esquerda"
                     onClick={() => scrollCategories('left')}
-                    onMouseEnter={() => startCategoryAutoScroll('left')}
-                    onMouseLeave={stopCategoryAutoScroll}
-                    onMouseDown={() => startCategoryAutoScroll('left')}
-                    onMouseUp={stopCategoryAutoScroll}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <div
                     ref={categoryScrollerRef}
-                    onMouseLeave={stopCategoryAutoScroll}
                     className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5"
                   >
                     <button
@@ -1495,10 +1461,6 @@ const PDV = () => {
                     type="button"
                     aria-label="Rolar categorias para a direita"
                     onClick={() => scrollCategories('right')}
-                    onMouseEnter={() => startCategoryAutoScroll('right')}
-                    onMouseLeave={stopCategoryAutoScroll}
-                    onMouseDown={() => startCategoryAutoScroll('right')}
-                    onMouseUp={stopCategoryAutoScroll}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#FF6400]/15 bg-white/95 text-[#003223] shadow-sm transition-colors hover:bg-[#F5EBE1] active:scale-95"
                   >
                     <ChevronRight className="h-4 w-4" />
