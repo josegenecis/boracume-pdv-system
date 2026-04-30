@@ -201,6 +201,10 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
 
 export const getFeatureDefinition = (feature: FeatureKey) => FEATURE_DEFINITIONS[feature];
 
+// Temporarily keep paid plan enforcement disabled so restaurants can access the system
+// while billing is being stabilized. Coming-soon modules remain blocked.
+export const BILLING_ENFORCEMENT_ENABLED = false;
+
 export const getRequiredPlan = (feature: FeatureKey) => {
   const definition = getFeatureDefinition(feature);
   return getPlanCatalogItem(definition.requiredPlanId) || PLAN_CATALOG[0];
@@ -212,6 +216,7 @@ export const hasFeatureAccess = (
 ) => {
   const definition = getFeatureDefinition(feature);
   if (definition.comingSoon) return false;
+  if (!BILLING_ENFORCEMENT_ENABLED) return true;
 
   const status = String(subscription?.status || '').toLowerCase();
   if (status.includes('trial')) {

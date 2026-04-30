@@ -16,7 +16,7 @@ const Subscription = () => {
   const { subscription, refreshSubscription, user } = useAuth();
   const { plans, isLoading } = useSubscription();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const [loadingPlanId, setLoadingPlanId] = useState<number | null>(null);
 
   useEffect(() => {
     refreshSubscription();
@@ -43,26 +43,37 @@ const Subscription = () => {
       return;
     }
 
-    setLoading(true);
+    setLoadingPlanId(planId);
     try {
       const { data, error } = await supabase.functions.invoke('create-stripe-subscription', {
         body: { planId }
       });
 
-      if (error) throw error;
+      if (error) {
+        let message = error.message;
+        const context = (error as any).context;
+        if (context?.json) {
+          const body = await context.json().catch(() => null);
+          message = body?.message || body?.error || message;
+        }
+        throw new Error(message);
+      }
 
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
+      } else {
+        throw new Error('Checkout da Stripe nao retornou URL.');
       }
     } catch (error: any) {
       console.error('Erro ao criar assinatura:', error);
+      const errorMessage = error?.message || "Nao foi possivel processar o pagamento. Tente novamente.";
       toast({
         title: "Erro ao processar pagamento",
-        description: "Não foi possível processar o pagamento. Tente novamente.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setLoadingPlanId(null);
     }
   };
 
@@ -157,7 +168,7 @@ const Subscription = () => {
             <Button 
               onClick={() => handleSubscribeStripe(2)} 
               className="w-full bg-amber-600 hover:bg-amber-700"
-              disabled={loading}
+              disabled={loadingPlanId !== null}
             >
               <Crown size={16} className="mr-2" />
               Fazer Upgrade Agora
@@ -259,6 +270,7 @@ const Subscription = () => {
           {plans.map((plan) => {
             const isCurrentPlan = subscription?.plan_id === plan.id;
             const display = getPlanDisplay(plan);
+            const isProcessing = loadingPlanId === plan.id;
 
             return (
               <Card
@@ -312,7 +324,7 @@ const Subscription = () => {
                   <Button
                     className={`w-full rounded-2xl text-base font-semibold text-white ${display.palette.button}`}
                     onClick={() => handleSubscribeStripe(plan.id)}
-                    disabled={loading || isCurrentPlan}
+                    disabled={loadingPlanId !== null || isCurrentPlan}
                     variant={isCurrentPlan ? "outline" : "default"}
                     size="lg"
                   >
@@ -320,7 +332,7 @@ const Subscription = () => {
                       "Plano Atual"
                     ) : (
                       <>
-                        {loading ? "Processando..." : `Assinar ${display.name}`}
+                        {isProcessing ? "Processando..." : `Assinar ${display.name}`}
                         <ArrowRight size={16} className="ml-2" />
                       </>
                     )}
@@ -343,10 +355,10 @@ const Subscription = () => {
                   onClick={() => handleSubscribeStripe(2)} 
                   variant="secondary" 
                   size="lg"
-                  disabled={loading}
+                  disabled={loadingPlanId !== null}
                 >
                   <Crown size={16} className="mr-2" />
-                  {loading ? "Processando..." : "Fazer Upgrade Agora"}
+                  {loadingPlanId === 2 ? "Processando..." : "Fazer Upgrade Agora"}
                 </Button>
               </div>
             </CardContent>

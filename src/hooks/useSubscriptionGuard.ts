@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { BILLING_ENFORCEMENT_ENABLED } from '@/lib/featureAccess';
 
 interface SubscriptionGuardOptions {
   redirectTo?: string;
@@ -25,6 +26,7 @@ export const useSubscriptionGuard = (options: SubscriptionGuardOptions = {}) => 
 
   const hasAccess = () => {
     if (!user) return false;
+    if (!BILLING_ENFORCEMENT_ENABLED) return true;
     if (!subscription) return false;
 
     const status = String(subscription.status || '').toLowerCase();

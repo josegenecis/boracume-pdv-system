@@ -18,15 +18,23 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SERVICE_ROLE_KEY") ?? ""
+    );
 
     const authHeader = req.headers.get("Authorization")!;
     const token = authHeader.replace("Bearer ", "");
     const { data } = await supabaseClient.auth.getUser(token);
     const user = data.user;
     
-    if (!user?.email) throw new Error("User not authenticated");
+    if (!user?.email) throw new Error("Usuário não autenticado.");
 
     const { planId } = await req.json();
+    const normalizedPlanId = Number(planId);
+    if (!Number.isInteger(normalizedPlanId) || normalizedPlanId < 1) {
+      throw new Error("Plano inválido.");
+    }
     
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2023-10-16",
@@ -47,13 +55,16 @@ serve(async (req) => {
     }
 
     // Get plan details
-    const { data: plan } = await supabaseClient
+    const { data: plan, error: planError } = await supabaseAdmin
       .from('subscription_plans')
       .select('*')
-      .eq('id', planId)
+      .eq('id', normalizedPlanId)
       .single();
 
-    if (!plan) throw new Error("Plan not found");
+    if (planError) {
+      console.error("Plan lookup error:", planError);
+    }
+    if (!plan) throw new Error("Plano não encontrado no banco.");
 
     // Create subscription session
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
@@ -66,12 +77,12 @@ serve(async (req) => {
       cancel_url: `${req.headers.get("origin")}/subscription?canceled=true`,
       metadata: {
         user_id: user.id,
-        plan_id: planId.toString()
+        plan_id: normalizedPlanId.toString()
       },
       subscription_data: {
         metadata: {
           user_id: user.id,
-          plan_id: planId.toString()
+          plan_id: normalizedPlanId.toString()
         }
       }
     };
@@ -91,7 +102,13 @@ serve(async (req) => {
       };
     }
 
-    const session = await stripe.checkout.sessions.create(sessionConfig);
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create(sessionConfig);
+    } catch (stripeError) {
+      console.error("Stripe checkout error:", stripeError);
+      throw new Error((stripeError as Error)?.message || "Erro ao criar checkout na Stripe.");
+    }
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -99,7 +116,10 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({
+      error: "checkout_failed",
+      message: (error as Error)?.message || "Erro ao processar pagamento.",
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
