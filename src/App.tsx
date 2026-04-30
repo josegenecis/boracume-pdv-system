@@ -14,6 +14,8 @@ import GlobalNotificationSystem from '@/components/notifications/GlobalNotificat
 import { soundNotifications } from '@/utils/soundUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmDialogProvider } from '@/contexts/ConfirmDialogContext';
+import { FeatureGateProvider } from '@/components/subscription/FeatureGateProvider';
+import { FeatureRoute } from '@/components/subscription/FeatureRoute';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -105,12 +107,12 @@ function AppContent() {
       {/* KDS e TV Standalone (Sem Menu Lateral) */}
       <Route path="/kds-view" element={
         <RouteGuard>
-          <KDSView />
+          <FeatureRoute feature="kds"><KDSView /></FeatureRoute>
         </RouteGuard>
       } />
       <Route path="/tv-view" element={
         <RouteGuard>
-          <CustomerView />
+          <FeatureRoute feature="kds"><CustomerView /></FeatureRoute>
         </RouteGuard>
       } />
       
@@ -122,43 +124,43 @@ function AppContent() {
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
-        <Route path="/desktop" element={<DesktopApp />} />
+        <Route path="/desktop" element={<FeatureRoute feature="desktop"><DesktopApp /></FeatureRoute>} />
       </Route>
 
 
       <Route element={<RouteGuard><Outlet /></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/produtos" element={<Products />} />
-          <Route path="/estoque" element={<Ingredientes />} />
-          <Route path="/inteligencia/cmv" element={<InteligenciaCMV />} />
-          <Route path="/inteligencia/curva-abc" element={<InteligenciaCMV />} />
-          <Route path="/pedidos" element={<Orders />} />
+          <Route path="/dashboard" element={<FeatureRoute feature="dashboard"><Dashboard /></FeatureRoute>} />
+          <Route path="/produtos" element={<FeatureRoute feature="products"><Products /></FeatureRoute>} />
+          <Route path="/estoque" element={<FeatureRoute feature="stock"><Ingredientes /></FeatureRoute>} />
+          <Route path="/inteligencia/cmv" element={<FeatureRoute feature="cmv"><InteligenciaCMV /></FeatureRoute>} />
+          <Route path="/inteligencia/curva-abc" element={<FeatureRoute feature="cmv"><InteligenciaCMV /></FeatureRoute>} />
+          <Route path="/pedidos" element={<FeatureRoute feature="orders"><Orders /></FeatureRoute>} />
           <Route path="/orders" element={<Navigate to="/pedidos" replace />} />
-          <Route path="/cozinha" element={<Kitchen />} />
-          <Route path="/pdv" element={<PDV />} />
-          <Route path="/mesas" element={<Mesas />} />
-          <Route path="/relatorios" element={<Relatorios />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
+          <Route path="/cozinha" element={<FeatureRoute feature="kds"><Kitchen /></FeatureRoute>} />
+          <Route path="/pdv" element={<FeatureRoute feature="pdv"><PDV /></FeatureRoute>} />
+          <Route path="/mesas" element={<FeatureRoute feature="tables"><Mesas /></FeatureRoute>} />
+          <Route path="/relatorios" element={<FeatureRoute feature="reports"><Relatorios /></FeatureRoute>} />
+          <Route path="/configuracoes" element={<FeatureRoute feature="settings"><Configuracoes /></FeatureRoute>} />
           <Route path="/subscription" element={<Subscription />} />
-          <Route path="/loyalty" element={<Loyalty />} />
-          <Route path="/bairros-entrega" element={<BairrosEntrega />} />
-          <Route path="/entregadores" element={<Entregadores />} />
+          <Route path="/loyalty" element={<FeatureRoute feature="marketing"><Loyalty /></FeatureRoute>} />
+          <Route path="/bairros-entrega" element={<FeatureRoute feature="delivery"><BairrosEntrega /></FeatureRoute>} />
+          <Route path="/entregadores" element={<FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute>} />
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
-          <Route path="/garcons" element={<Garcons />} />
-          <Route path="/nfce" element={<NFCe />} />
-          <Route path="/caixa" element={<Financeiro />} />
-          <Route path="/financeiro" element={<Financeiro />} />
+          <Route path="/garcons" element={<FeatureRoute feature="team"><Garcons /></FeatureRoute>} />
+          <Route path="/nfce" element={<FeatureRoute feature="nfce"><NFCe /></FeatureRoute>} />
+          <Route path="/caixa" element={<FeatureRoute feature="finance"><Financeiro /></FeatureRoute>} />
+          <Route path="/financeiro" element={<FeatureRoute feature="finance"><Financeiro /></FeatureRoute>} />
           <Route path="/financeiro/despesas" element={<Navigate to="/despesas" replace />} />
-          <Route path="/despesas" element={<Despesas />} />
-          <Route path="/security" element={<SecurityDashboard />} />
-          <Route path="/whatsapp-bot" element={<WhatsAppBot />} />
-          <Route path="/downloads" element={<Downloads />} />
-          <Route path="/pix" element={<PixSetup />} />
+          <Route path="/despesas" element={<FeatureRoute feature="finance"><Despesas /></FeatureRoute>} />
+          <Route path="/security" element={<FeatureRoute feature="security"><SecurityDashboard /></FeatureRoute>} />
+          <Route path="/whatsapp-bot" element={<FeatureRoute feature="whatsapp"><WhatsAppBot /></FeatureRoute>} />
+          <Route path="/downloads" element={<FeatureRoute feature="desktop"><Downloads /></FeatureRoute>} />
+          <Route path="/pix" element={<FeatureRoute feature="pix"><PixSetup /></FeatureRoute>} />
           {import.meta.env.DEV && <Route path="/debug-pix" element={<DebugPix />} />}
-          <Route path="/cardapio" element={<Menu />} />
-          <Route path="/agente" element={<AgentDashboard />} />
-          <Route path="/marketing" element={<Marketing />} />
+          <Route path="/cardapio" element={<FeatureRoute feature="menu"><Menu /></FeatureRoute>} />
+          <Route path="/agente" element={<FeatureRoute feature="agent"><AgentDashboard /></FeatureRoute>} />
+          <Route path="/marketing" element={<FeatureRoute feature="marketing"><Marketing /></FeatureRoute>} />
 
           {import.meta.env.DEV && <Route path="/system-check" element={<SystemCheck />} />}
           {import.meta.env.DEV && <Route path="/test" element={<TestPage />} />}
@@ -183,10 +185,12 @@ function App() {
               <ConfirmDialogProvider>
                 <Router>
                   <ErrorBoundary>
-                    <AppContent />
-                    <GlobalNotificationSystem />
-                    <SonnerToaster />
-                    <ShadcnToaster />
+                    <FeatureGateProvider>
+                      <AppContent />
+                      <GlobalNotificationSystem />
+                      <SonnerToaster />
+                      <ShadcnToaster />
+                    </FeatureGateProvider>
                   </ErrorBoundary>
                 </Router>
               </ConfirmDialogProvider>

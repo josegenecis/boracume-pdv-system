@@ -30,8 +30,9 @@ const DashboardHeader: React.FC = () => {
 
   const getSubscriptionBadge = () => {
     if (!subscription) return null;
+    const status = String(subscription.status || '').toLowerCase();
 
-    if (subscription.status === 'trial') {
+    if (status.includes('trial')) {
       return (
         <Badge variant="outline" className="border-amber-300 text-amber-700 bg-amber-50">
           <Crown className="w-3 h-3 mr-1" />
@@ -40,7 +41,7 @@ const DashboardHeader: React.FC = () => {
       );
     }
 
-    if (subscription.status === 'active') {
+    if (status === 'active') {
       return (
         <Badge variant="default" className="bg-green-100 text-green-700 border-green-300">
           <Crown className="w-3 h-3 mr-1" />
@@ -57,7 +58,8 @@ const DashboardHeader: React.FC = () => {
   };
 
   const hasActiveSubscription = () => {
-    return subscription?.status === 'active' || subscription?.status === 'trial';
+    const status = String(subscription?.status || '').toLowerCase();
+    return status === 'active' || status.includes('trial');
   };
 
   return (

@@ -80,7 +80,8 @@ const SecurityMonitor: React.FC = () => {
       }
 
       // Calculate security score and status
-      const subscriptionValid = subscription?.status === 'active' || subscription?.status === 'trial';
+      const subscriptionStatus = String(subscription?.status || '').toLowerCase();
+      const subscriptionValid = subscriptionStatus === 'active' || subscriptionStatus.includes('trial');
       const securityScore = calculateSecurityScore({
         subscriptionValid,
         dataBackupEnabled: true,

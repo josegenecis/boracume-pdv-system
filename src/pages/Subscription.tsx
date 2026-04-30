@@ -223,6 +223,8 @@ const Subscription = () => {
     );
   };
 
+  const isTrialSubscription = String(subscription?.status || '').toLowerCase().includes('trial');
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff4ea_0%,#fff_45%,#f8fafc_100%)] py-8 px-4">
       <div className="mx-auto max-w-6xl">
@@ -249,7 +251,7 @@ const Subscription = () => {
           </div>
         </div>
 
-        {subscription?.status === 'trial' && renderTrialInfo()}
+        {isTrialSubscription && renderTrialInfo()}
 
         {subscription?.status === 'active' && renderCurrentPlan()}
 
@@ -329,7 +331,7 @@ const Subscription = () => {
           })}
         </div>
 
-        {subscription?.status === 'trial' && (
+        {isTrialSubscription && (
           <Card className="border-0 bg-gradient-to-r from-[#FF6400] to-[#ff8d4d] text-white shadow-[0_25px_80px_-40px_rgba(255,100,0,0.7)]">
             <CardContent className="pt-6">
               <div className="text-center">

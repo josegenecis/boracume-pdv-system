@@ -2,17 +2,28 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, ClipboardList, CreditCard, Wallet, Ellipsis } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { FeatureKey } from '@/lib/featureAccess';
+import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 
 const MobileBottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toggleSidebar } = useSidebar();
+  const { canAccessFeature, openFeatureDialog } = useFeatureGate();
+
+  const goToFeature = (path: string, feature: FeatureKey) => {
+    if (!canAccessFeature(feature)) {
+      openFeatureDialog(feature);
+      return;
+    }
+    navigate(path);
+  };
 
   const items = [
-    { key: 'home', label: 'Início', icon: Home, onClick: () => navigate('/dashboard'), active: location.pathname === '/dashboard' },
-    { key: 'orders', label: 'Pedidos', icon: ClipboardList, onClick: () => navigate('/pedidos'), active: location.pathname === '/pedidos' },
-    { key: 'pdv', label: 'PDV', icon: CreditCard, onClick: () => navigate('/pdv'), active: location.pathname === '/pdv' },
-    { key: 'cash', label: 'Caixa', icon: Wallet, onClick: () => navigate('/caixa'), active: location.pathname === '/caixa' || location.pathname === '/financeiro' },
+    { key: 'home', label: 'Início', icon: Home, onClick: () => goToFeature('/dashboard', 'dashboard'), active: location.pathname === '/dashboard' },
+    { key: 'orders', label: 'Pedidos', icon: ClipboardList, onClick: () => goToFeature('/pedidos', 'orders'), active: location.pathname === '/pedidos' },
+    { key: 'pdv', label: 'PDV', icon: CreditCard, onClick: () => goToFeature('/pdv', 'pdv'), active: location.pathname === '/pdv' },
+    { key: 'cash', label: 'Caixa', icon: Wallet, onClick: () => goToFeature('/caixa', 'finance'), active: location.pathname === '/caixa' || location.pathname === '/financeiro' },
     { key: 'more', label: 'Mais', icon: Ellipsis, onClick: () => toggleSidebar(), active: false },
   ];
 

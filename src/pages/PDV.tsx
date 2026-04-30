@@ -1243,7 +1243,6 @@ const PDV = () => {
           title: "Venda finalizada!",
           description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
         });
-        setNfceModalOpen(true);
         setCart([]);
         setMobileCartOpen(false);
         setCustomerName('');
@@ -2206,7 +2205,6 @@ const PDV = () => {
                   title: "Pagamento confirmado!",
                   description: "Pedido entrou em preparo e foi enviado para impressão.",
                 });
-                setNfceModalOpen(true);
                 setCart([]);
                 setCustomerName('');
                 setCustomerPhone('');
@@ -2243,7 +2241,6 @@ const PDV = () => {
               title: "Pagamento confirmado!",
               description: "Pedido entrou em preparo e foi enviado para impressão.",
             });
-            setNfceModalOpen(true);
             setCart([]);
             setCustomerName('');
             setCustomerPhone('');

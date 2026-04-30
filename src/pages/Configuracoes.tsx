@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import MarketingSettings from '@/components/marketing/MarketingSettings';
 import ProfileSettings from '@/components/settings/ProfileSettings';
 import NotificationSettings from '@/components/settings/NotificationSettings';
@@ -26,23 +27,49 @@ import { useSearchParams } from 'react-router-dom';
 
 
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
+import { FeatureKey, getFeatureDefinition } from '@/lib/featureAccess';
+import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 
 const Configuracoes: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { subscription } = useAuth();
+  const { canAccessFeature, openFeatureDialog } = useFeatureGate();
   const { ensureSubscribed } = usePushNotifications();
   const isDesktopApp = typeof window !== 'undefined' && !!(window as typeof window & { electronAPI?: unknown }).electronAPI;
   
-  const hasMarketingFeature = () => {
-    if (subscription?.status === 'trial') {
-      return true;
-    }
-    
-    if (subscription?.status === 'active' && (subscription?.plan_id || 0) >= 2) {
-      return true;
-    }
-    
-    return false;
+  const tabFeatures: Record<string, FeatureKey> = {
+    profile: 'settings',
+    appearance: 'settings',
+    delivery: 'delivery',
+    'payment-methods': 'pix',
+    pix: 'pix',
+    whatsapp: 'whatsapp',
+    'whatsapp-api': 'whatsapp',
+    fiscal: 'fiscal',
+    hardware: 'hardware',
+    ifood: 'ifood',
+    users: 'team',
+    notifications: 'settings',
+    marketing: 'marketing',
+  };
+
+  const canOpenTab = (nextTab: string) => {
+    const feature = tabFeatures[nextTab];
+    return !feature || canAccessFeature(feature);
+  };
+
+  const tabLabel = (label: React.ReactNode, feature?: FeatureKey) => {
+    const definition = feature ? getFeatureDefinition(feature) : null;
+    return (
+      <span className="flex items-center gap-2">
+        <span className="flex items-center">{label}</span>
+        {definition?.comingSoon && (
+          <Badge className="border-[#FF6400]/25 bg-[#FFF1E8] px-1.5 py-0 text-[9px] text-[#C14E00] hover:bg-[#FFF1E8]">
+            Em breve
+          </Badge>
+        )}
+      </span>
+    );
   };
 
   const getInitialTab = () => {
@@ -63,13 +90,19 @@ const Configuracoes: React.FC = () => {
       'marketing'
     ];
     if (!allowed.includes(requested)) return 'profile';
-    if (requested === 'marketing' && !hasMarketingFeature()) return 'profile';
+    if (!canOpenTab(requested)) return 'profile';
     return requested;
   };
 
   const [tab, setTab] = useState(getInitialTab);
 
   const setTabAndUrl = (nextTab: string) => {
+    const feature = tabFeatures[nextTab];
+    if (feature && !canAccessFeature(feature)) {
+      openFeatureDialog(feature);
+      return;
+    }
+
     setTab(nextTab);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -81,6 +114,10 @@ const Configuracoes: React.FC = () => {
   useEffect(() => {
     const requested = searchParams.get('tab');
     if (!requested) return;
+    const requestedFeature = tabFeatures[requested];
+    if (requestedFeature && !canAccessFeature(requestedFeature)) {
+      openFeatureDialog(requestedFeature);
+    }
     const next = getInitialTab();
     if (next !== tab) setTab(next);
   }, [searchParams, tab]);
@@ -106,11 +143,11 @@ const Configuracoes: React.FC = () => {
               <option value="whatsapp">WhatsApp Mensagens</option>
               {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
               <option value="hardware">Impressoras e Balanças</option>
-              <option value="fiscal">Fiscal</option>
-              <option value="ifood">iFood</option>
+              <option value="fiscal">Fiscal / NFC-e (em breve)</option>
+              <option value="ifood">iFood (em breve)</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
-              {hasMarketingFeature() && (<option value="marketing">Marketing</option>)}
+              <option value="marketing">Marketing</option>
             </select>
           </div>
         </Tabs>
@@ -118,26 +155,22 @@ const Configuracoes: React.FC = () => {
 
       <Tabs value={tab} onValueChange={setTabAndUrl} className="w-full">
         <TabsList className="mb-4 hidden sm:flex flex-wrap justify-start overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="appearance">Cores do Cardápio</TabsTrigger>
-          <TabsTrigger value="delivery">Delivery</TabsTrigger>
-          <TabsTrigger value="payment-methods">Formas de Pagamento</TabsTrigger>
-          <TabsTrigger value="pix">PIX</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp Mensagens</TabsTrigger>
+          <TabsTrigger value="profile">{tabLabel('Perfil', 'settings')}</TabsTrigger>
+          <TabsTrigger value="appearance">{tabLabel('Cores do Cardápio', 'settings')}</TabsTrigger>
+          <TabsTrigger value="delivery">{tabLabel('Delivery', 'delivery')}</TabsTrigger>
+          <TabsTrigger value="payment-methods">{tabLabel('Formas de Pagamento', 'pix')}</TabsTrigger>
+          <TabsTrigger value="pix">{tabLabel('PIX', 'pix')}</TabsTrigger>
+          <TabsTrigger value="whatsapp">{tabLabel('WhatsApp Mensagens', 'whatsapp')}</TabsTrigger>
           {subscription?.plan_id === 2 && <TabsTrigger value="whatsapp-api">WhatsApp Global (Admin)</TabsTrigger>}
-          <TabsTrigger value="hardware">Impressoras e Balanças</TabsTrigger>
-          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+          <TabsTrigger value="hardware">{tabLabel('Impressoras e Balanças', 'hardware')}</TabsTrigger>
+          <TabsTrigger value="fiscal">{tabLabel('Fiscal / NFC-e', 'fiscal')}</TabsTrigger>
           <TabsTrigger value="ifood">
-            <div className="flex items-center gap-2">
-              <IfoodLogo className="h-4 w-auto" />
-            </div>
+            {tabLabel(<IfoodLogo className="h-4 w-auto" />, 'ifood')}
           </TabsTrigger>
-          <TabsTrigger value="users">Usuários e Equipe</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
+          <TabsTrigger value="users">{tabLabel('Usuários e Equipe', 'team')}</TabsTrigger>
+          <TabsTrigger value="notifications">{tabLabel('Notificações', 'settings')}</TabsTrigger>
 
-          {hasMarketingFeature() && (
-            <TabsTrigger value="marketing">Marketing</TabsTrigger>
-          )}
+          <TabsTrigger value="marketing">{tabLabel('Marketing', 'marketing')}</TabsTrigger>
         </TabsList>
         
         <TabsContent value="profile">
@@ -247,11 +280,9 @@ const Configuracoes: React.FC = () => {
           <Garcons />
         </TabsContent>
 
-        {hasMarketingFeature() && (
-          <TabsContent value="marketing">
-            <MarketingSettings />
-          </TabsContent>
-        )}
+        <TabsContent value="marketing">
+          <MarketingSettings />
+        </TabsContent>
       </Tabs>
     </div>
   );

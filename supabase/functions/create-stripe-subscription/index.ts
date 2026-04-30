@@ -56,7 +56,7 @@ serve(async (req) => {
     if (!plan) throw new Error("Plan not found");
 
     // Create subscription session
-    const sessionConfig = {
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
       line_items: [{
         quantity: 1,
@@ -67,6 +67,12 @@ serve(async (req) => {
       metadata: {
         user_id: user.id,
         plan_id: planId.toString()
+      },
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan_id: planId.toString()
+        }
       }
     };
 

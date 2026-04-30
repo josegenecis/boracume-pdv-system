@@ -2,12 +2,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
+import { FeatureKey, getFeatureDefinition } from '@/lib/featureAccess';
+import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
 
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -40,6 +43,7 @@ import {
 const CollapsibleSidebar = () => {
   const { isOpen, isMobile, isPinned, setPinned, toggleSidebar, closeSidebar, openSidebar } = useSidebar();
   const { profile, subscription, user, signOut } = useAuth();
+  const { canAccessFeature, openFeatureDialog } = useFeatureGate();
   const [ifoodStatus, setIfoodStatus] = useState<'online' | 'offline' | 'paused' | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
@@ -87,8 +91,18 @@ const CollapsibleSidebar = () => {
     }
   }, [user]);
 
-  const mainLinks = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial' },
+  type SidebarLink = {
+    to: string;
+    icon?: React.ComponentType<{ size?: number; className?: string }>;
+    label: React.ReactNode;
+    title?: string;
+    detail?: string;
+    accent?: boolean;
+    feature?: FeatureKey;
+  };
+
+  const mainLinks: SidebarLink[] = [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial', feature: 'dashboard' },
   ];
 
   const groups = [
@@ -97,9 +111,9 @@ const CollapsibleSidebar = () => {
       icon: CreditCard,
       label: 'Caixa & PDV',
       items: [
-        { to: '/caixa', label: 'Caixa Geral' },
-        { to: '/pdv', label: 'PDV / Frente de Caixa' },
-        { to: '/mesas', label: 'Gestão de Mesas' },
+        { to: '/caixa', label: 'Caixa Geral', feature: 'finance' },
+        { to: '/pdv', label: 'PDV / Frente de Caixa', feature: 'pdv' },
+        { to: '/mesas', label: 'Gestão de Mesas', feature: 'tables' },
       ]
     },
     {
@@ -107,8 +121,8 @@ const CollapsibleSidebar = () => {
       icon: DollarSign,
       label: 'Financeiro',
       items: [
-        { to: '/financeiro', label: 'Resumo' },
-        { to: '/despesas', label: 'Despesas' },
+        { to: '/financeiro', label: 'Resumo', feature: 'finance' },
+        { to: '/despesas', label: 'Despesas', feature: 'finance' },
       ]
     },
     {
@@ -116,7 +130,7 @@ const CollapsibleSidebar = () => {
       icon: Package,
       label: 'Estoque & Insumos',
       items: [
-        { to: '/estoque', label: 'Gestão de Insumos' },
+        { to: '/estoque', label: 'Gestão de Insumos', feature: 'stock' },
       ]
     },
     {
@@ -124,7 +138,7 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Inteligência',
       items: [
-        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC' },
+        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC', feature: 'cmv' },
       ]
     },
     {
@@ -132,8 +146,8 @@ const CollapsibleSidebar = () => {
       icon: FileText,
       label: 'Pedidos',
       items: [
-        { to: '/pedidos', label: 'Gestor de pedidos' },
-        { to: '/cozinha', label: 'Cozinha (KDS)' },
+        { to: '/pedidos', label: 'Gestor de pedidos', feature: 'orders' },
+        { to: '/cozinha', label: 'Cozinha (KDS)', feature: 'kds' },
       ]
     },
     {
@@ -141,10 +155,10 @@ const CollapsibleSidebar = () => {
       icon: ShoppingBag,
       label: 'Cardápio',
       items: [
-        { to: '/produtos', label: 'Produtos' },
-        { to: '/produtos?tab=categories', label: 'Categorias' },
-        { to: '/produtos?tab=global-variations', label: 'Variações' },
-        { to: '/cardapio', label: 'Acessar cardápio' },
+        { to: '/produtos', label: 'Produtos', feature: 'products' },
+        { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products' },
+        { to: '/produtos?tab=global-variations', label: 'Variações', feature: 'products' },
+        { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu' },
       ]
     },
     {
@@ -152,7 +166,7 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Relatórios',
       items: [
-        { to: '/relatorios', label: 'Relatórios' },
+        { to: '/relatorios', label: 'Relatórios', feature: 'reports' },
       ]
     },
     {
@@ -160,13 +174,13 @@ const CollapsibleSidebar = () => {
       icon: Megaphone,
       label: 'Marketing',
       items: [
-        { to: '/marketing?tab=banners', label: 'Banners' },
-        { to: '/marketing?tab=coupons', label: 'Cupons' },
-        { to: '/marketing?tab=highlights', label: 'Destaques' },
-        { to: '/marketing?tab=upsells', label: 'Upsells' },
-        { to: '/marketing?tab=loyalty', label: 'Fidelidade' },
-        { to: '/marketing?tab=pixels', label: 'Pixels' },
-        { to: '/whatsapp-bot', label: 'WhatsApp Bot' },
+        { to: '/marketing?tab=banners', label: 'Banners', feature: 'marketing' },
+        { to: '/marketing?tab=coupons', label: 'Cupons', feature: 'marketing' },
+        { to: '/marketing?tab=highlights', label: 'Destaques', feature: 'marketing' },
+        { to: '/marketing?tab=upsells', label: 'Upsells', feature: 'marketing' },
+        { to: '/marketing?tab=loyalty', label: 'Fidelidade', feature: 'marketing' },
+        { to: '/marketing?tab=pixels', label: 'Pixels', feature: 'marketing' },
+        { to: '/whatsapp-bot', label: 'WhatsApp Bot', feature: 'whatsapp' },
       ]
     },
     {
@@ -174,20 +188,20 @@ const CollapsibleSidebar = () => {
       icon: Settings,
       label: 'Configurações',
       items: [
-        { to: '/configuracoes?tab=general', label: 'Geral' },
-        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças' },
-        { to: '/configuracoes?tab=menu', label: 'QR Code & Links' },
-        { to: '/configuracoes?tab=devices', label: 'Sessões ativas' },
-        { to: '/configuracoes?tab=profile', label: 'Perfil' },
-        { to: '/configuracoes?tab=notifications', label: 'Notificações' },
-        { to: '/configuracoes?tab=appearance', label: 'Aparência' },
-        { to: '/configuracoes?tab=delivery', label: 'Delivery' },
-        { to: '/entregadores', label: 'Motoboys & Entregas' },
-        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp' },
-        { to: '/configuracoes?tab=fiscal', label: 'Fiscal' },
-        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos' },
-        { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div> },
-        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe' },
+        { to: '/configuracoes?tab=general', label: 'Geral', feature: 'settings' },
+        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças', feature: 'hardware' },
+        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu' },
+        { to: '/configuracoes?tab=devices', label: 'Sessões ativas', feature: 'settings' },
+        { to: '/configuracoes?tab=profile', label: 'Perfil', feature: 'settings' },
+        { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings' },
+        { to: '/configuracoes?tab=appearance', label: 'Aparência', feature: 'settings' },
+        { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery' },
+        { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam' },
+        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp' },
+        { to: '/configuracoes?tab=fiscal', label: 'Fiscal / NFC-e', feature: 'fiscal' },
+        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix' },
+        { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood' },
+        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team' },
       ]
     },
   ];
@@ -201,9 +215,17 @@ const CollapsibleSidebar = () => {
     return 'Plano';
   }, [subscription]);
 
-  const standaloneLinks = [
-    { to: '/agente', icon: Bot, label: 'Assistente' },
-    { to: '/downloads', icon: Download, label: 'App Desktop' },
+  const trialDaysLeft = useMemo(() => {
+    const status = String(subscription?.status || '').toLowerCase();
+    if (!status.includes('trial') || !subscription?.trial_end) return null;
+
+    const diff = new Date(subscription.trial_end).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }, [subscription]);
+
+  const standaloneLinks: SidebarLink[] = [
+    { to: '/agente', icon: Bot, label: 'Assistente', feature: 'agent' },
+    { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },
   ];
 
@@ -212,6 +234,32 @@ const CollapsibleSidebar = () => {
     if (isMobile) {
       closeSidebar();
     }
+  };
+
+  const handleFeatureLinkClick = (event: React.MouseEvent, feature?: FeatureKey) => {
+    if (feature && !canAccessFeature(feature)) {
+      event.preventDefault();
+      openFeatureDialog(feature);
+      return;
+    }
+    handleLinkClick();
+  };
+
+  const renderLabel = (link: SidebarLink) => {
+    const definition = link.feature ? getFeatureDefinition(link.feature) : null;
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate flex items-center">{link.label}</span>
+        {definition?.comingSoon && (
+          <Badge className="shrink-0 border-[#FF6400]/25 bg-[#FFF1E8] px-1.5 py-0 text-[9px] text-[#C14E00] hover:bg-[#FFF1E8]">
+            Em breve
+          </Badge>
+        )}
+        {link.feature && !definition?.comingSoon && !canAccessFeature(link.feature) && (
+          <Lock size={12} className="shrink-0 text-[#F5EBE1]/70" />
+        )}
+      </span>
+    );
   };
 
   const isActivePath = (to: string) => {
@@ -295,13 +343,13 @@ const CollapsibleSidebar = () => {
                 <li key={link.to}>
                   <Link
                     to={link.to}
-                    onClick={handleLinkClick}
+                    onClick={(event) => handleFeatureLinkClick(event, link.feature)}
                     className={`flex items-center justify-center px-3 py-2 text-sm rounded-xl transition-colors ${
                       isActive
                         ? 'bg-[#FF6400] text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
                         : `${(link as any).accent ? 'text-[#8CC850]' : 'text-[#F5EBE1]'} hover:bg-[#8CC850] hover:text-[#003223]`
                     }`}
-                    title={typeof link.label === 'string' ? `${link.label}${(link as any).detail ? ` - ${(link as any).detail}` : ''}` : ''}
+                    title={typeof link.label === 'string' ? `${link.label}${link.detail ? ` - ${link.detail}` : ''}` : link.title || ''}
                   >
                     <Icon size={18} className="flex-shrink-0" />
                   </Link>
@@ -319,7 +367,7 @@ const CollapsibleSidebar = () => {
                   <li key={link.to}>
                     <Link
                       to={link.to}
-                      onClick={handleLinkClick}
+                      onClick={(event) => handleFeatureLinkClick(event, link.feature)}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
                           ? 'bg-[#FF6400] font-medium text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
@@ -327,7 +375,7 @@ const CollapsibleSidebar = () => {
                       }`}
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
-                      <span className="truncate flex items-center">{link.label}</span>
+                      {renderLabel(link)}
                     </Link>
                   </li>
                 );
@@ -355,14 +403,14 @@ const CollapsibleSidebar = () => {
                             <Link
                               key={item.to}
                               to={item.to}
-                              onClick={handleLinkClick}
+                              onClick={(event) => handleFeatureLinkClick(event, item.feature as FeatureKey | undefined)}
                               className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
                                 isActive
                                   ? 'bg-[#FF6400] font-medium text-white shadow-[0_10px_20px_-18px_rgba(255,100,0,0.65)]'
                                   : 'text-[#F5EBE1]/95 hover:bg-[#8CC850] hover:text-[#003223]'
                               }`}
                             >
-                              <span className="truncate flex items-center">{item.label}</span>
+                              {renderLabel(item as SidebarLink)}
                             </Link>
                           );
                         })}
@@ -381,7 +429,7 @@ const CollapsibleSidebar = () => {
                   <li key={link.to}>
                     <Link
                       to={link.to}
-                      onClick={handleLinkClick}
+                      onClick={(event) => handleFeatureLinkClick(event, link.feature)}
                       className={`flex items-center px-3 py-2 text-sm rounded-xl transition-colors ${
                         isActive
                           ? 'bg-[#FF6400] font-medium text-white shadow-[0_12px_24px_-18px_rgba(255,100,0,0.7)]'
@@ -390,7 +438,7 @@ const CollapsibleSidebar = () => {
                     >
                       <Icon size={18} className="mr-3 flex-shrink-0" />
                       <div className="min-w-0">
-                        <span className="block truncate">{link.label}</span>
+                        <span className="block truncate">{renderLabel(link)}</span>
                         {link.detail && (
                           <span className={`block truncate text-[10px] font-semibold ${isActive ? 'text-white/85' : 'text-[#F5EBE1]/70'}`}>
                             {link.detail}
@@ -423,7 +471,12 @@ const CollapsibleSidebar = () => {
                   <p className="truncate text-xs text-[#F5EBE1]/70" title={user?.email}>
                     {user?.email}
                   </p>
-                  {ifoodStatus && (
+                  {trialDaysLeft !== null && (
+                    <span className="mt-1 inline-flex rounded-full border border-amber-300/50 bg-amber-100/95 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 shadow-sm">
+                      TESTE {trialDaysLeft} {trialDaysLeft === 1 ? 'Dia' : 'Dias'}
+                    </span>
+                  )}
+                  {ifoodStatus && canAccessFeature('ifood') && (
                     <span className="mt-0.5 flex items-center gap-1.5 text-[10px] leading-tight text-[#F5EBE1]/75">
                       <span className="relative flex h-2 w-2">
                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${ifoodStatus === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></span>
