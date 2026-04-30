@@ -1416,7 +1416,8 @@ const PDV = () => {
                   </button>
                   <div
                     ref={categoryScrollerRef}
-                    className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5"
+                    onWheel={(event) => event.preventDefault()}
+                    className="scrollbar-hide flex min-w-0 flex-1 gap-2 overflow-x-hidden pb-0.5"
                   >
                     <button
                       type="button"
