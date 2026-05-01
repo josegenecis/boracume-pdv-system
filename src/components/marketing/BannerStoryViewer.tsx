@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, ExternalLink, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Instagram, Plus, X } from 'lucide-react';
 
 export interface StoryBanner {
   id: string;
@@ -11,6 +11,8 @@ export interface StoryBanner {
   link?: string;
   bannerType?: 'wide' | 'tile';
   productId?: string | null;
+  mediaSource?: 'file' | 'instagram';
+  externalVideoUrl?: string | null;
 }
 
 export interface StoryLinkedProduct {
@@ -35,6 +37,10 @@ interface BannerStoryViewerProps {
 const IMAGE_STORY_DURATION = 5000;
 
 const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
+const isInstagramStory = (banner?: StoryBanner | null) => {
+  if (!banner) return false;
+  return banner.mediaSource === 'instagram' || Boolean(String(banner.externalVideoUrl || '').trim());
+};
 
 const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   open,
@@ -61,7 +67,9 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   const currentBanner = banners[currentIndex] || null;
   const linkedProduct = currentBanner?.productId ? linkedProducts[String(currentBanner.productId)] : undefined;
   const totalStories = banners.length;
+  const isInstagram = isInstagramStory(currentBanner);
   const isVideo = isVideoAsset(currentBanner?.imageUrl);
+  const mediaImageUrl = linkedProduct?.imageUrl || currentBanner?.imageUrl || '';
 
   const progressSegments = useMemo(() => {
     return banners.map((_, index) => {
@@ -175,9 +183,15 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
             </div>
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/10">
-                  <img src={linkedProduct?.imageUrl || currentBanner.imageUrl} alt={currentBanner.title} className="h-full w-full object-cover" />
-                </div>
+                {mediaImageUrl ? (
+                  <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/10">
+                    <img src={mediaImageUrl} alt={currentBanner.title} className="h-full w-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
+                    <Instagram className="h-6 w-6" />
+                  </div>
+                )}
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-white/80">
                     Story {currentIndex + 1} de {totalStories}
@@ -198,7 +212,18 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
           </div>
 
           <div className="relative z-10 flex h-full w-full items-center justify-center">
-            {isVideo ? (
+            {isInstagram ? (
+              <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] px-8 text-center">
+                <Instagram className="mb-4 h-16 w-16" />
+                <div className="max-w-[320px] text-xl font-bold">{currentBanner.title}</div>
+                {currentBanner.description ? (
+                  <div className="mt-2 max-w-[320px] text-sm text-white/85">{currentBanner.description}</div>
+                ) : null}
+                <div className="mt-5 rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white">
+                  Toque em Instagram para assistir
+                </div>
+              </div>
+            ) : isVideo ? (
               <video
                 ref={videoRef}
                 src={currentBanner.imageUrl}
@@ -231,20 +256,40 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
             aria-label="Próximo story"
           />
 
-          {(linkedProduct || currentBanner.link) ? (
-            <div className="absolute bottom-5 right-5 z-20 sm:bottom-6 sm:right-6">
+          {(linkedProduct || (!isInstagram && currentBanner.link)) ? (
+            <div className="absolute bottom-5 right-4 z-20 sm:bottom-6 sm:right-6">
               <Button
                 type="button"
-                className="h-11 rounded-full bg-white/92 px-4 text-sm font-semibold text-slate-900 shadow-[0_18px_45px_-18px_rgba(0,0,0,0.75)] hover:bg-white"
+                className="h-10 rounded-full bg-white/92 px-2.5 pr-3 text-xs font-semibold text-slate-900 shadow-[0_18px_45px_-18px_rgba(0,0,0,0.75)] hover:bg-white"
                 onClick={linkedProduct ? handleQuickAdd : handleOpenLink}
                 disabled={runningAction !== null}
               >
-                {linkedProduct ? <Plus className="mr-2 h-4 w-4" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+                {linkedProduct && linkedProduct.imageUrl ? (
+                  <img src={linkedProduct.imageUrl} alt="" className="mr-2 h-7 w-7 rounded-full object-cover" />
+                ) : linkedProduct ? (
+                  <Plus className="mr-1.5 h-4 w-4" />
+                ) : (
+                  <ExternalLink className="mr-1.5 h-4 w-4" />
+                )}
                 {runningAction === 'quick-add'
                   ? 'Adicionando...'
                   : linkedProduct
                     ? 'Adicionar'
                     : 'Abrir'}
+              </Button>
+            </div>
+          ) : null}
+
+          {isInstagram && currentBanner.link ? (
+            <div className="absolute bottom-5 left-4 z-20 sm:bottom-6 sm:left-6">
+              <Button
+                type="button"
+                className="h-10 rounded-full bg-white/92 px-3 text-xs font-semibold text-slate-900 shadow-[0_18px_45px_-18px_rgba(0,0,0,0.75)] hover:bg-white"
+                onClick={handleOpenLink}
+                disabled={runningAction !== null}
+              >
+                <Instagram className="mr-1.5 h-4 w-4" />
+                Instagram
               </Button>
             </div>
           ) : null}

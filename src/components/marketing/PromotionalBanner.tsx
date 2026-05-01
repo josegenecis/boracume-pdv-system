@@ -10,6 +10,15 @@ interface Banner extends StoryBanner {}
 
 const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
 
+const isInstagramUrl = (value?: string) => {
+  try {
+    const url = new URL(String(value || '').trim());
+    return /(^|\.)instagram\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
 interface PromotionalBannerProps {
   autoPlay?: boolean;
   interval?: number;
@@ -70,7 +79,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
 
         const res1 = await supabase
           .from('promotional_banners')
-          .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,banner_type,product_id')
+          .select('id,title,description,image_url,link_url,external_video_url,media_source,active,display_order,start_date,end_date,banner_type,product_id')
           .eq('user_id', userId)
           .eq('active', true)
           .eq('banner_type', variant)
@@ -78,7 +87,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         promoBanners = res1.data as any;
         promoError = res1.error as any;
 
-        if (promoError && String(promoError.message || '').includes('banner_type')) {
+        if (promoError && (String(promoError.message || '').includes('banner_type') || String(promoError.message || '').includes('external_video_url') || String(promoError.message || '').includes('media_source'))) {
           const res2 = await supabase
             .from('promotional_banners')
             .select('id,title,description,image_url,link_url,active,display_order,start_date,end_date,product_id')
@@ -99,7 +108,9 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             description: banner.description,
             link: banner.link_url,
             bannerType: banner.banner_type,
-            productId: banner.product_id
+            productId: banner.product_id,
+            mediaSource: banner.media_source || (isInstagramUrl(banner.external_video_url || banner.link_url) ? 'instagram' : 'file'),
+            externalVideoUrl: banner.external_video_url || (isInstagramUrl(banner.link_url) ? banner.link_url : '')
           }));
           setBanners(convertedBanners);
         } else {
@@ -150,7 +161,7 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   }, [userId]);
   
   const clickables = useMemo(() => {
-    return banners.filter((b) => String(b.imageUrl || '').trim());
+    return banners.filter((b) => String(b.imageUrl || b.externalVideoUrl || b.link || '').trim());
   }, [banners]);
   
   useEffect(() => {
@@ -197,7 +208,11 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               className="group block w-full overflow-hidden rounded-[22px] border border-white/80 bg-white shadow-[0_16px_36px_-22px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-1"
             >
               <div className="relative aspect-[2/3] w-full bg-gray-100">
-                {isVideoAsset(b.imageUrl) ? (
+                {b.mediaSource === 'instagram' ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
+                    <span className="rounded-full bg-black/25 px-2 py-1 text-[10px] font-semibold">Instagram</span>
+                  </div>
+                ) : isVideoAsset(b.imageUrl) ? (
                   <video
                     src={b.imageUrl}
                     className="absolute inset-0 h-full w-full object-cover"
@@ -244,10 +259,16 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               onClick={() => handleBannerClick(index)}
               aria-label={`Banner promocional ${banner.title}`}
             >
-              <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: `url(${banner.imageUrl})` }}
-              />
+              {banner.mediaSource === 'instagram' ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
+                  <span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">Instagram</span>
+                </div>
+              ) : (
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${banner.imageUrl})` }}
+                />
+              )}
             </button>
           ))}
         </div>

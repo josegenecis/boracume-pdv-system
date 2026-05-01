@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, ImageIcon, Upload, X, Eye, EyeOff } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Plus, Pencil, Trash2, ImageIcon, Upload, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -22,6 +22,8 @@ interface Banner {
   description?: string;
   image_url?: string;
   link_url?: string;
+  external_video_url?: string | null;
+  media_source?: 'file' | 'instagram';
   product_id?: string | null;
   start_date?: string;
   end_date?: string;
@@ -32,6 +34,24 @@ interface Banner {
 
 const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
 
+const isInstagramUrl = (value?: string) => {
+  try {
+    const url = new URL(String(value || '').trim());
+    return /(^|\.)instagram\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const normalizeInstagramUrl = (value: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const url = new URL(withProtocol);
+  url.protocol = 'https:';
+  return url.toString();
+};
+
 const BannerManager = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; price: number }>>([]);
@@ -40,7 +60,7 @@ const BannerManager = () => {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
-  const [assetKind, setAssetKind] = useState<'image' | 'video'>('image');
+  const [assetKind, setAssetKind] = useState<'image' | 'video' | 'instagram'>('image');
   const [assetDurationSeconds, setAssetDurationSeconds] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -48,6 +68,8 @@ const BannerManager = () => {
     title: '',
     description: '',
     link_url: '',
+    external_video_url: '',
+    media_source: 'file' as 'file' | 'instagram',
     product_id: '__none__',
     display_order: 0,
     active: true,
@@ -67,7 +89,7 @@ const BannerManager = () => {
   const fetchProducts = async () => {
     try {
       const { data, error } = await (supabase.from('products') as any)
-        .select('id,name,price')
+        .select('id,name,price,image_url')
         .eq('user_id', user?.id)
         .eq('is_available', true)
         .eq('show_in_delivery', true)
@@ -231,8 +253,24 @@ const BannerManager = () => {
       setIsLoading(true);
       
       let imageUrl = editingBanner?.image_url || '';
+      let externalVideoUrl = '';
+      const mediaSource = formData.media_source;
+
+      if (mediaSource === 'instagram') {
+        try {
+          externalVideoUrl = normalizeInstagramUrl(formData.external_video_url);
+        } catch {
+          throw new Error('Informe um link valido do Instagram.');
+        }
+
+        if (!isInstagramUrl(externalVideoUrl)) {
+          throw new Error('Informe um link do Instagram, como um Reel ou Story.');
+        }
+
+        imageUrl = '';
+      }
       
-      if (imageFile) {
+      if (mediaSource === 'file' && imageFile) {
         const uploadedUrl = await uploadImage(imageFile);
         if (uploadedUrl) {
           imageUrl = uploadedUrl;
@@ -248,7 +286,9 @@ const BannerManager = () => {
             title: formData.title,
             description: formData.description || null,
             image_url: imageUrl || null,
-            link_url: formData.link_url || null,
+            link_url: mediaSource === 'instagram' ? externalVideoUrl : formData.link_url || null,
+            external_video_url: externalVideoUrl || null,
+            media_source: mediaSource,
             product_id: formData.product_id === '__none__' ? null : formData.product_id,
             start_date: null,
             end_date: null,
@@ -272,7 +312,9 @@ const BannerManager = () => {
             title: formData.title,
             description: formData.description || null,
             image_url: imageUrl || null,
-            link_url: formData.link_url || null,
+            link_url: mediaSource === 'instagram' ? externalVideoUrl : formData.link_url || null,
+            external_video_url: externalVideoUrl || null,
+            media_source: mediaSource,
             product_id: formData.product_id === '__none__' ? null : formData.product_id,
             start_date: null,
             end_date: null,
@@ -304,12 +346,15 @@ const BannerManager = () => {
   };
 
   const handleEdit = (banner: Banner) => {
-    const nextKind = isVideoAsset(banner.image_url) ? 'video' : 'image';
+    const isInstagram = banner.media_source === 'instagram' || isInstagramUrl(banner.external_video_url || banner.link_url || '');
+    const nextKind = isInstagram ? 'instagram' : isVideoAsset(banner.image_url) ? 'video' : 'image';
     setEditingBanner(banner);
     setFormData({
       title: banner.title,
       description: banner.description || '',
-      link_url: banner.link_url || '',
+      link_url: isInstagram ? '' : banner.link_url || '',
+      external_video_url: banner.external_video_url || (isInstagram ? banner.link_url || '' : ''),
+      media_source: isInstagram ? 'instagram' : 'file',
       product_id: banner.product_id ? String(banner.product_id) : '__none__',
       display_order: banner.display_order,
       active: banner.active,
@@ -317,7 +362,7 @@ const BannerManager = () => {
     });
     setAssetKind(nextKind);
     setAssetDurationSeconds(null);
-    setImagePreview(banner.image_url || '');
+    setImagePreview(isInstagram ? banner.external_video_url || banner.link_url || '' : banner.image_url || '');
     setIsDialogOpen(true);
   };
 
@@ -387,6 +432,8 @@ const BannerManager = () => {
       title: '',
       description: '',
       link_url: '',
+      external_video_url: '',
+      media_source: 'file',
       product_id: '__none__',
       display_order: 0,
       active: true,
@@ -433,8 +480,13 @@ const BannerManager = () => {
                     <div>
                       <Label>Tipo de banner</Label>
                       <Select value={formData.banner_type} onValueChange={(v: any) => {
-                        setFormData(prev => ({ ...prev, banner_type: v }));
-                        if (v !== 'tile' && assetKind === 'video') {
+                        setFormData(prev => ({
+                          ...prev,
+                          banner_type: v,
+                          media_source: v !== 'tile' ? 'file' : prev.media_source,
+                          external_video_url: v !== 'tile' ? '' : prev.external_video_url
+                        }));
+                        if (v !== 'tile' && (assetKind === 'video' || assetKind === 'instagram')) {
                           removeImage();
                         }
                       }}>
@@ -455,6 +507,37 @@ const BannerManager = () => {
                         </div>
                       ) : null}
                     </div>
+                    {formData.banner_type === 'tile' ? (
+                      <div>
+                        <Label>Origem do vÃ­deo</Label>
+                        <Select
+                          value={formData.media_source}
+                          onValueChange={(value: 'file' | 'instagram') => {
+                            setFormData(prev => ({
+                              ...prev,
+                              media_source: value,
+                              link_url: value === 'instagram' ? '' : prev.link_url,
+                              external_video_url: value === 'file' ? '' : prev.external_video_url
+                            }));
+                            setImageFile(null);
+                            setAssetDurationSeconds(null);
+                            setAssetKind(value === 'instagram' ? 'instagram' : 'image');
+                            setImagePreview(value === 'instagram' ? formData.external_video_url : '');
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="file">Arquivo no sistema</SelectItem>
+                            <SelectItem value="instagram">Link do Instagram</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Link do Instagram economiza storage e abre o Reel ou Story fora do cardÃ¡pio.
+                        </div>
+                      </div>
+                    ) : null}
                     <div>
                       <Label>Vincular a um produto (opcional)</Label>
                       <Select value={formData.product_id} onValueChange={(v) => setFormData(prev => ({ ...prev, product_id: v }))}>
@@ -493,15 +576,34 @@ const BannerManager = () => {
                         rows={3}
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="link_url">Link (opcional)</Label>
-                      <Input
-                        id="link_url"
-                        value={formData.link_url}
-                        onChange={(e) => setFormData(prev => ({ ...prev, link_url: e.target.value }))}
-                        placeholder="https://..."
-                      />
-                    </div>
+                    {formData.media_source === 'instagram' ? (
+                      <div>
+                        <Label htmlFor="external_video_url">Link do Instagram *</Label>
+                        <Input
+                          id="external_video_url"
+                          value={formData.external_video_url}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setFormData(prev => ({ ...prev, external_video_url: value }));
+                            setImagePreview(value);
+                          }}
+                          placeholder="https://www.instagram.com/reel/..."
+                        />
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Use link de Reel, Story ou post. Se houver produto vinculado, o cliente tambÃ©m vÃª o atalho de adicionar.
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="link_url">Link (opcional)</Label>
+                        <Input
+                          id="link_url"
+                          value={formData.link_url}
+                          onChange={(e) => setFormData(prev => ({ ...prev, link_url: e.target.value }))}
+                          placeholder="https://..."
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <Label>Status do banner</Label>
@@ -530,9 +632,17 @@ const BannerManager = () => {
                     </div>
                   </div>
                   <div>
-                    <Label>{formData.banner_type === 'tile' ? 'Mídia do Banner' : 'Imagem do Banner'}</Label>
+                    <Label>{formData.media_source === 'instagram' ? 'Preview do Instagram' : formData.banner_type === 'tile' ? 'Mídia do Banner' : 'Imagem do Banner'}</Label>
                     <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center h-[250px] bg-muted/50 relative">
-                      {imagePreview ? (
+                      {formData.media_source === 'instagram' ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center rounded bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] p-4 text-center text-white">
+                          <Instagram className="mb-3 h-10 w-10" />
+                          <div className="text-sm font-semibold">Vídeo externo do Instagram</div>
+                          <div className="mt-2 max-w-full truncate rounded-full bg-black/25 px-3 py-1 text-[11px]">
+                            {formData.external_video_url || 'Cole o link do Reel ou Story'}
+                          </div>
+                        </div>
+                      ) : imagePreview ? (
                         <div className="relative w-full h-full">
                           {assetKind === 'video' ? (
                             <video
