@@ -46,7 +46,7 @@ async function fetchProfile(userId: string) {
 
 export default async function handler(req: any, res: any) {
   try {
-    const id = String(req?.query?.id || '').trim();
+    const id = String(req?.query?.id || req?.query?.userId || '').trim();
     if (!id) {
       res.statusCode = 400;
       res.setHeader('content-type', 'text/plain; charset=utf-8');
@@ -54,15 +54,14 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const redirectUrl = `/menu-digital?userId=${encodeURIComponent(id)}`;
+    const redirectUrl = `/menu/${encodeURIComponent(id)}`;
     const profile = await fetchProfile(id).catch(() => null);
     const restaurantName = String(profile?.restaurant_name || 'Cardápio Digital');
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
     const logoUrl =
       normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || '')) ||
       'https://boracume.com/LOGOMARCA/logo-sistema.png';
-    const originalPath = String(req?.url || '').includes(`/menu/${id}`) ? `/menu/${encodeURIComponent(id)}` : `/share/menu/${encodeURIComponent(id)}`;
-    const pageUrl = `https://boracume.com${originalPath}`;
+    const pageUrl = `https://boracume.com/menu/${encodeURIComponent(id)}`;
 
     const html = `<!doctype html>
 <html lang="pt-BR">

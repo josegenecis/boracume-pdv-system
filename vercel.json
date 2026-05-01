@@ -27,7 +27,104 @@
     }
   ],
   "routes": [
-    { "src": "^/menu/(.+)$", "dest": "/api/share/menu?id=$1" },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "WhatsApp" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "facebookexternalhit" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "Facebot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "Twitterbot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "TelegramBot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "LinkedInBot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "Slackbot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu/(.+)$",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": { "pre": "Discordbot" }
+        }
+      ],
+      "dest": "/api/share/menu?id=$1"
+    },
+    {
+      "src": "^/menu-digital$",
+      "has": [
+        {
+          "type": "query",
+          "key": "userId"
+        }
+      ],
+      "dest": "/api/share/menu"
+    },
     { "src": "^/share/menu/(.+)$", "dest": "/api/share/menu?id=$1" },
     { "src": "^/share/track/(.+)$", "dest": "/api/share/track?id=$1" },
     { "handle": "filesystem" },
