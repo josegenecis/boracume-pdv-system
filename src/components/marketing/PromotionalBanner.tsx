@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Instagram, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import BannerStoryViewer, { StoryBanner, StoryLinkedProduct } from '@/components/marketing/BannerStoryViewer';
@@ -61,6 +61,14 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
   const handleBannerClick = (index: number) => {
     setStoryIndex(index);
     setStoryOpen(true);
+  };
+
+  const getBannerThumbnail = (banner: Banner) => {
+    if (banner.productId) {
+      const productImage = linkedProducts?.[String(banner.productId)]?.imageUrl;
+      if (productImage) return productImage;
+    }
+    return banner.imageUrl || '';
   };
   
   useEffect(() => {
@@ -200,6 +208,8 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
         <div className="w-full">
           <div className="grid grid-cols-4 gap-2 sm:gap-3">
             {clickables.map((b, index) => {
+              const thumbnailUrl = getBannerThumbnail(b);
+
               return (
             <button
               key={b.id}
@@ -209,8 +219,19 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
             >
               <div className="relative aspect-[2/3] w-full bg-gray-100">
                 {b.mediaSource === 'instagram' ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
-                    <span className="rounded-full bg-black/25 px-2 py-1 text-[10px] font-semibold">Instagram</span>
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
+                    {thumbnailUrl ? (
+                      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${thumbnailUrl})` }} />
+                    ) : null}
+                    <div className="absolute inset-0 bg-black/15" />
+                    <div className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#E1306C] shadow-sm">
+                      <Instagram className="h-4 w-4" />
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white shadow-lg">
+                        <Play className="ml-0.5 h-5 w-5 fill-current" />
+                      </span>
+                    </div>
                   </div>
                 ) : isVideoAsset(b.imageUrl) ? (
                   <video
@@ -251,26 +272,42 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
           className="flex h-full w-full transition-transform duration-700 ease-in-out"
           style={{ transform: `translateX(-${(currentIndex % clickables.length) * 100}%)` }}
         >
-          {clickables.map((banner, index) => (
-            <button
-              key={banner.id}
-              type="button"
-              className="relative block h-full min-w-full"
-              onClick={() => handleBannerClick(index)}
-              aria-label={`Banner promocional ${banner.title}`}
-            >
-              {banner.mediaSource === 'instagram' ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
-                  <span className="rounded-full bg-black/25 px-3 py-1 text-xs font-semibold">Instagram</span>
-                </div>
-              ) : (
-                <div
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${banner.imageUrl})` }}
-                />
-              )}
-            </button>
-          ))}
+          {clickables.map((banner, index) => {
+            const thumbnailUrl = getBannerThumbnail(banner);
+
+            return (
+              <button
+                key={banner.id}
+                type="button"
+                className="relative block h-full min-w-full"
+                onClick={() => handleBannerClick(index)}
+                aria-label={`Banner promocional ${banner.title?.trim() || 'Instagram'}`}
+              >
+                {banner.mediaSource === 'instagram' ? (
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] text-white">
+                    {thumbnailUrl ? (
+                      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${thumbnailUrl})` }} />
+                    ) : null}
+                    <div className="absolute inset-0 bg-black/20" />
+                    <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-[#E1306C] shadow-sm">
+                      <Instagram className="h-3.5 w-3.5" />
+                      Instagram
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white shadow-lg">
+                        <Play className="ml-0.5 h-5 w-5 fill-current" />
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url(${banner.imageUrl})` }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {clickables.length > 1 ? (
