@@ -44,9 +44,10 @@ const isInstagramStory = (banner?: StoryBanner | null) => {
 
 const getInstagramEmbedUrl = (value?: string | null) => {
   try {
-    const url = new URL(String(value || '').trim());
+    const raw = String(value || '').trim();
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
     if (!/(^|\.)instagram\.com$/i.test(url.hostname)) return '';
-    const match = url.pathname.match(/^\/(reel|p|tv)\/([^/?#]+)/i);
+    const match = url.pathname.match(/(?:^|\/)(reel|p|tv)\/([^/?#]+)/i);
     if (!match) return '';
     return `https://www.instagram.com/${match[1].toLowerCase()}/${match[2]}/embed`;
   } catch {
@@ -83,6 +84,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   const isVideo = isVideoAsset(currentBanner?.imageUrl);
   const mediaImageUrl = linkedProduct?.imageUrl || currentBanner?.imageUrl || '';
   const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(currentBanner?.externalVideoUrl || currentBanner?.link) : '';
+  const displayTitle = currentBanner?.title?.trim() || 'Banner promocional';
 
   const progressSegments = useMemo(() => {
     return banners.map((_, index) => {
@@ -198,7 +200,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
               <div className="flex min-w-0 items-center gap-3">
                 {mediaImageUrl ? (
                   <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/10 bg-white/10">
-                    <img src={mediaImageUrl} alt={currentBanner.title} className="h-full w-full object-cover" />
+                    <img src={mediaImageUrl} alt={displayTitle} className="h-full w-full object-cover" />
                   </div>
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
@@ -209,7 +211,9 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
                   <div className="truncate text-sm font-semibold text-white/80">
                     Story {currentIndex + 1} de {totalStories}
                   </div>
-                  <div className="truncate text-lg font-bold">{currentBanner.title}</div>
+                  {currentBanner.title?.trim() ? (
+                    <div className="truncate text-lg font-bold">{currentBanner.title}</div>
+                  ) : null}
                 </div>
               </div>
               <Button
@@ -229,7 +233,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
               instagramEmbedUrl ? (
                 <div className="flex h-full w-full items-center justify-center px-3 pb-20 pt-24 sm:px-6">
                   <iframe
-                    title={currentBanner.title}
+                    title={displayTitle}
                     src={instagramEmbedUrl}
                     className="h-[min(78dvh,760px)] w-full max-w-[540px] rounded-2xl border-0 bg-white"
                     loading="lazy"
@@ -240,7 +244,9 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] px-8 text-center">
                   <Instagram className="mb-4 h-16 w-16" />
-                  <div className="max-w-[320px] text-xl font-bold">{currentBanner.title}</div>
+                  {currentBanner.title?.trim() ? (
+                    <div className="max-w-[320px] text-xl font-bold">{currentBanner.title}</div>
+                  ) : null}
                   {currentBanner.description ? (
                     <div className="mt-2 max-w-[320px] text-sm text-white/85">{currentBanner.description}</div>
                   ) : null}
@@ -265,7 +271,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
                 onEnded={goNext}
               />
             ) : (
-              <img src={currentBanner.imageUrl} alt={currentBanner.title} className="h-full w-full object-contain" />
+              <img src={currentBanner.imageUrl} alt={displayTitle} className="h-full w-full object-contain" />
             )}
           </div>
 

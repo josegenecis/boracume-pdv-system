@@ -247,7 +247,7 @@ const BannerManager = () => {
   };
 
   const handleSave = async () => {
-    if (!user || !formData.title.trim()) return;
+    if (!user) return;
 
     try {
       setIsLoading(true);
@@ -283,7 +283,7 @@ const BannerManager = () => {
         const { error } = await supabase
           .from('promotional_banners')
           .update({
-            title: formData.title,
+            title: formData.title.trim(),
             description: formData.description || null,
             image_url: imageUrl || null,
             link_url: mediaSource === 'instagram' ? externalVideoUrl : formData.link_url || null,
@@ -309,7 +309,7 @@ const BannerManager = () => {
           .from('promotional_banners')
           .insert({
             user_id: user.id,
-            title: formData.title,
+            title: formData.title.trim(),
             description: formData.description || null,
             image_url: imageUrl || null,
             link_url: mediaSource === 'instagram' ? externalVideoUrl : formData.link_url || null,
@@ -558,12 +558,12 @@ const BannerManager = () => {
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="title">Título *</Label>
+                      <Label htmlFor="title">Título</Label>
                       <Input
                         id="title"
                         value={formData.title}
                         onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                        placeholder="Título do banner"
+                        placeholder="Título do banner (opcional)"
                       />
                     </div>
                     <div>
@@ -716,7 +716,7 @@ const BannerManager = () => {
                   </Button>
                   <Button 
                     onClick={handleSave} 
-                    disabled={isLoading || uploading || !formData.title.trim()}
+                    disabled={isLoading || uploading}
                   >
                     {isLoading ? 'Salvando...' : (editingBanner ? 'Atualizar' : 'Criar')}
                   </Button>
@@ -768,7 +768,7 @@ const BannerManager = () => {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{banner.title}</TableCell>
+                  <TableCell className="font-medium">{banner.title?.trim() || 'Sem título'}</TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded text-xs ${banner.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                       {banner.active ? 'Ativo' : 'Inativo'}
