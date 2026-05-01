@@ -216,7 +216,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
                 </div>
               )}
               <p className={isMobile ? "text-[11px] text-muted-foreground" : "text-sm text-muted-foreground"}>
-                {maxSelections === 1 ? 'Selecione uma opÃ§Ã£o' : `Selecione atÃ© ${maxSelections} opÃ§Ãµes`}
+                {maxSelections === 1 ? 'Selecione uma opção' : `Selecione até ${maxSelections} opções`}
               </p>
             </CardHeader>
             <CardContent className={isMobile ? "px-3 pb-3" : ""}>
@@ -269,10 +269,10 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
 
       <div className={isMobile ? "space-y-3" : "space-y-4"}>
         <div>
-          <Label htmlFor="notes">ObservaÃ§Ãµes</Label>
+          <Label htmlFor="notes">Observações</Label>
           <Textarea
             id="notes"
-            placeholder="ObservaÃ§Ãµes especiais para este item..."
+            placeholder="Observações especiais para este item..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className={isMobile ? "mt-1 min-h-[68px] rounded-xl text-[12px]" : "mt-1"}

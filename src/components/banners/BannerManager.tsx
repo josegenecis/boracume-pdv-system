@@ -468,7 +468,7 @@ const BannerManager = () => {
                 Novo Banner
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-3xl overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingBanner ? 'Editar Banner' : 'Novo Banner'}
@@ -509,7 +509,7 @@ const BannerManager = () => {
                     </div>
                     {formData.banner_type === 'tile' ? (
                       <div>
-                        <Label>Origem do vÃ­deo</Label>
+                        <Label>Origem do vídeo</Label>
                         <Select
                           value={formData.media_source}
                           onValueChange={(value: 'file' | 'instagram') => {
@@ -534,7 +534,7 @@ const BannerManager = () => {
                           </SelectContent>
                         </Select>
                         <div className="text-xs text-muted-foreground mt-1">
-                          Link do Instagram economiza storage e abre o Reel ou Story fora do cardÃ¡pio.
+                          Link do Instagram economiza storage e abre o Reel ou Story fora do cardápio.
                         </div>
                       </div>
                     ) : null}
@@ -590,7 +590,7 @@ const BannerManager = () => {
                           placeholder="https://www.instagram.com/reel/..."
                         />
                         <div className="text-xs text-muted-foreground mt-1">
-                          Use link de Reel, Story ou post. Se houver produto vinculado, o cliente tambÃ©m vÃª o atalho de adicionar.
+                          Use link de Reel, Story ou post. Se houver produto vinculado, o cliente também vê o atalho de adicionar.
                         </div>
                       </div>
                     ) : (
@@ -707,7 +707,7 @@ const BannerManager = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2 border-t bg-background/95 px-6 py-4 backdrop-blur">
                   <Button 
                     variant="outline" 
                     onClick={() => setIsDialogOpen(false)}

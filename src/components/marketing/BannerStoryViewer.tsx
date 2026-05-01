@@ -42,6 +42,18 @@ const isInstagramStory = (banner?: StoryBanner | null) => {
   return banner.mediaSource === 'instagram' || Boolean(String(banner.externalVideoUrl || '').trim());
 };
 
+const getInstagramEmbedUrl = (value?: string | null) => {
+  try {
+    const url = new URL(String(value || '').trim());
+    if (!/(^|\.)instagram\.com$/i.test(url.hostname)) return '';
+    const match = url.pathname.match(/^\/(reel|p|tv)\/([^/?#]+)/i);
+    if (!match) return '';
+    return `https://www.instagram.com/${match[1].toLowerCase()}/${match[2]}/embed`;
+  } catch {
+    return '';
+  }
+};
+
 const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   open,
   banners,
@@ -70,6 +82,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   const isInstagram = isInstagramStory(currentBanner);
   const isVideo = isVideoAsset(currentBanner?.imageUrl);
   const mediaImageUrl = linkedProduct?.imageUrl || currentBanner?.imageUrl || '';
+  const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(currentBanner?.externalVideoUrl || currentBanner?.link) : '';
 
   const progressSegments = useMemo(() => {
     return banners.map((_, index) => {
@@ -102,7 +115,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   };
 
   useEffect(() => {
-    if (!open || !currentBanner || isVideo) return;
+    if (!open || !currentBanner || isVideo || isInstagram) return;
 
     let frame = 0;
     const startedAt = performance.now();
@@ -118,7 +131,7 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
 
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [open, currentBanner, isVideo, currentIndex]);
+  }, [open, currentBanner, isVideo, isInstagram, currentIndex]);
 
   useEffect(() => {
     if (!open || !currentBanner || !isVideo || !videoRef.current) return;
@@ -213,16 +226,29 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
 
           <div className="relative z-10 flex h-full w-full items-center justify-center">
             {isInstagram ? (
-              <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] px-8 text-center">
-                <Instagram className="mb-4 h-16 w-16" />
-                <div className="max-w-[320px] text-xl font-bold">{currentBanner.title}</div>
-                {currentBanner.description ? (
-                  <div className="mt-2 max-w-[320px] text-sm text-white/85">{currentBanner.description}</div>
-                ) : null}
-                <div className="mt-5 rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white">
-                  Toque em Instagram para assistir
+              instagramEmbedUrl ? (
+                <div className="flex h-full w-full items-center justify-center px-3 pb-20 pt-24 sm:px-6">
+                  <iframe
+                    title={currentBanner.title}
+                    src={instagramEmbedUrl}
+                    className="h-[min(78dvh,760px)] w-full max-w-[540px] rounded-2xl border-0 bg-white"
+                    loading="lazy"
+                    allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] px-8 text-center">
+                  <Instagram className="mb-4 h-16 w-16" />
+                  <div className="max-w-[320px] text-xl font-bold">{currentBanner.title}</div>
+                  {currentBanner.description ? (
+                    <div className="mt-2 max-w-[320px] text-sm text-white/85">{currentBanner.description}</div>
+                  ) : null}
+                  <div className="mt-5 rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white">
+                    Story do Instagram abre pelo botão abaixo
+                  </div>
+                </div>
+              )
             ) : isVideo ? (
               <video
                 ref={videoRef}
@@ -243,18 +269,22 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            className="absolute inset-y-0 left-0 z-20 w-1/3 cursor-pointer bg-transparent"
-            onClick={goPrevious}
-            aria-label="Story anterior"
-          />
-          <button
-            type="button"
-            className="absolute inset-y-0 right-0 z-20 w-1/3 cursor-pointer bg-transparent"
-            onClick={goNext}
-            aria-label="Próximo story"
-          />
+          {!isInstagram ? (
+            <button
+              type="button"
+              className="absolute inset-y-0 left-0 z-20 w-1/3 cursor-pointer bg-transparent"
+              onClick={goPrevious}
+              aria-label="Story anterior"
+            />
+          ) : null}
+          {!isInstagram ? (
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 z-20 w-1/3 cursor-pointer bg-transparent"
+              onClick={goNext}
+              aria-label="Próximo story"
+            />
+          ) : null}
 
           {(linkedProduct || (!isInstagram && currentBanner.link)) ? (
             <div className="absolute bottom-5 right-4 z-20 sm:bottom-6 sm:right-6">
