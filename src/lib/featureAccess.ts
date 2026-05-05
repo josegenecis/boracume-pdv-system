@@ -181,21 +181,18 @@ export const FEATURE_DEFINITIONS: Record<FeatureKey, FeatureDefinition> = {
     name: 'Notas fiscais',
     description: 'Configurações fiscais e emissão de documentos fiscais.',
     requiredPlanId: 3,
-    comingSoon: true,
   },
   nfce: {
     key: 'nfce',
     name: 'NFC-e',
     description: 'Emissão de Nota Fiscal de Consumidor Eletrônica.',
     requiredPlanId: 3,
-    comingSoon: true,
   },
   fiscalCoupons: {
     key: 'fiscalCoupons',
     name: 'Cupons fiscais',
     description: 'Gerenciamento e emissão de cupons fiscais eletrônicos.',
     requiredPlanId: 3,
-    comingSoon: true,
   },
 };
 

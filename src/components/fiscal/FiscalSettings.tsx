@@ -210,17 +210,27 @@ const FiscalSettings: React.FC = () => {
     try {
       setLoading(true);
       
-      // Simular teste de conexão com a Sefaz
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!settings.id) {
+        await saveSettings();
+      }
+
+      const { data, error } = await supabase.functions.invoke('nfce-operations', {
+        body: { operation: 'testar_conexao' }
+      });
+
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.motivo || 'A Sefaz retornou falha no status do servico.');
+      }
       
       toast({
         title: "Conexão testada",
-        description: "Conexão com a Sefaz funcionando corretamente!",
+        description: `Sefaz ${data.uf}/${data.ambiente}: ${data.cStat} - ${data.motivo}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro na conexão",
-        description: "Erro ao testar conexão com a Sefaz.",
+        description: error.message || "Erro ao testar conexão com a Sefaz.",
         variant: "destructive"
       });
     } finally {

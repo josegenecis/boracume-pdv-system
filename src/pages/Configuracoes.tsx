@@ -146,7 +146,7 @@ const Configuracoes: React.FC = () => {
               <option value="whatsapp">WhatsApp Mensagens</option>
               {subscription?.plan_id === 2 && <option value="whatsapp-api">WhatsApp Global (Admin)</option>}
               <option value="hardware">Impressoras e Balanças</option>
-              <option value="fiscal">Fiscal / NFC-e (em breve)</option>
+              <option value="fiscal">Fiscal / NFC-e</option>
               <option value="ifood">iFood (em breve)</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
