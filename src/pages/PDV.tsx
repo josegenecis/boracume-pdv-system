@@ -142,6 +142,8 @@ const PDV = () => {
   const [tefData, setTefData] = useState<{ nsu: string; auth: string; brand: string; acquirer: string; installments: string } | null>(null);
   const [cardProcessingMode, setCardProcessingMode] = useState<'maquininha' | 'tef'>('maquininha');
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [tableLaunchOpen, setTableLaunchOpen] = useState(false);
+  const [tableLaunchId, setTableLaunchId] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
   const { isMobile } = useSidebar();
@@ -153,6 +155,39 @@ const PDV = () => {
   const mobileCartBtnRef = useRef<HTMLDivElement>(null);
   const categoryScrollerRef = useRef<HTMLDivElement>(null);
   const hasLoadedDataRef = useRef(false);
+  const draftRestoredUserIdRef = useRef<string | null>(null);
+
+  const getPdvDraftKey = () => `boracume_pdv_draft_v1:${user?.id || 'anonymous'}`;
+
+  const isDefaultPdvDraft = (payload: {
+    cart: CartItem[];
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    orderType: string;
+    selectedDeliveryZone: string;
+    selectedTable: string;
+    paymentMethod: string;
+    changeAmount: string;
+  }) => {
+    return (
+      payload.cart.length === 0 &&
+      !payload.customerName &&
+      !payload.customerPhone &&
+      !payload.customerAddress &&
+      payload.orderType === 'counter' &&
+      !payload.selectedDeliveryZone &&
+      !payload.selectedTable &&
+      payload.paymentMethod === 'pix' &&
+      !payload.changeAmount
+    );
+  };
+
+  const clearPdvDraft = () => {
+    try {
+      localStorage.removeItem(getPdvDraftKey());
+    } catch {}
+  };
 
   const scrollCategories = (direction: 'left' | 'right') => {
     const scroller = categoryScrollerRef.current;
@@ -171,6 +206,65 @@ const PDV = () => {
       checkFirstOperator();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id || draftRestoredUserIdRef.current === user.id) return;
+    draftRestoredUserIdRef.current = user.id;
+
+    try {
+      const raw = localStorage.getItem(getPdvDraftKey());
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const restoredCart = Array.isArray(parsed?.cart)
+        ? parsed.cart
+            .filter((item: any) => item?.id && item?.name && Number(item?.quantity) > 0)
+            .map((item: any) => ({
+              ...item,
+              cartItemId: item.cartItemId || makeCartItemId(),
+              price: Number(item.price || 0),
+              quantity: Math.max(1, Number(item.quantity || 1)),
+              available: item.available !== false
+            }))
+        : [];
+
+      if (restoredCart.length > 0) setCart(restoredCart);
+      if (typeof parsed?.customerName === 'string') setCustomerName(parsed.customerName);
+      if (typeof parsed?.customerPhone === 'string') setCustomerPhone(parsed.customerPhone);
+      if (typeof parsed?.customerAddress === 'string') setCustomerAddress(parsed.customerAddress);
+      if (['delivery', 'pickup', 'dine_in', 'counter'].includes(parsed?.orderType)) setOrderType(parsed.orderType);
+      if (typeof parsed?.selectedDeliveryZone === 'string') setSelectedDeliveryZone(parsed.selectedDeliveryZone);
+      if (typeof parsed?.selectedTable === 'string') setSelectedTable(parsed.selectedTable);
+      if (typeof parsed?.paymentMethod === 'string') setPaymentMethod(parsed.paymentMethod);
+      if (typeof parsed?.changeAmount === 'string') setChangeAmount(parsed.changeAmount);
+    } catch {
+      clearPdvDraft();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || draftRestoredUserIdRef.current !== user.id) return;
+
+    const payload = {
+      cart,
+      customerName,
+      customerPhone,
+      customerAddress,
+      orderType,
+      selectedDeliveryZone,
+      selectedTable,
+      paymentMethod,
+      changeAmount,
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      if (isDefaultPdvDraft(payload)) {
+        localStorage.removeItem(getPdvDraftKey());
+      } else {
+        localStorage.setItem(getPdvDraftKey(), JSON.stringify(payload));
+      }
+    } catch {}
+  }, [user?.id, cart, customerName, customerPhone, customerAddress, orderType, selectedDeliveryZone, selectedTable, paymentMethod, changeAmount]);
 
   useEffect(() => {
     if (!tefSettings.enabled) {
@@ -815,6 +909,22 @@ const PDV = () => {
     return 0;
   };
 
+  const resetCurrentSale = (nextOrderType: 'delivery' | 'pickup' | 'dine_in' | 'counter' = 'counter') => {
+    clearPdvDraft();
+    setCart([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
+    setSelectedDeliveryZone('');
+    setSelectedTable('');
+    setTableLaunchId('');
+    setChangeAmount('');
+    setTefData(null);
+    setCardProcessingMode('maquininha');
+    setPaymentMethod('pix');
+    setOrderType(nextOrderType);
+  };
+
   const fetchCategories = async () => {
     try {
       let data: any[] | null = null;
@@ -853,7 +963,8 @@ const PDV = () => {
     return Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   };
 
-  const addToTable = async () => {
+  const addToTable = async (tableIdOverride?: string) => {
+    const targetTableId = tableIdOverride || selectedTable;
     if (cart.length === 0) {
       toast({
         title: "Pedido vazio",
@@ -863,7 +974,7 @@ const PDV = () => {
       return;
     }
 
-    if (!selectedTable) {
+    if (!targetTableId) {
       toast({
         title: "Mesa obrigatória",
         description: "Por favor, selecione uma mesa.",
@@ -902,7 +1013,7 @@ const PDV = () => {
       const { data: existingAccount } = await supabase
         .from('table_accounts')
         .select('*')
-        .eq('table_id', selectedTable)
+        .eq('table_id', targetTableId)
         .eq('status', 'open')
         .maybeSingle();
 
@@ -937,7 +1048,7 @@ const PDV = () => {
           .from('table_accounts')
           .insert({
             user_id: user?.id,
-            table_id: selectedTable,
+            table_id: targetTableId,
             items: orderItems,
             total: total,
             status: 'open'
@@ -948,7 +1059,7 @@ const PDV = () => {
         await supabase
           .from('tables')
           .update({ status: 'occupied' })
-          .eq('id', selectedTable);
+          .eq('id', targetTableId);
       }
 
       toast({
@@ -956,9 +1067,9 @@ const PDV = () => {
         description: "Os produtos foram adicionados à conta da mesa.",
       });
 
-      setCart([]);
       setMobileCartOpen(false);
-      setSelectedTable('');
+      setTableLaunchOpen(false);
+      resetCurrentSale('counter');
       fetchTables();
     } catch (error: any) {
       console.error('Erro ao adicionar à mesa:', error);
@@ -970,6 +1081,19 @@ const PDV = () => {
     } finally {
       setProcessing(false);
     }
+  };
+
+  const openTableLaunch = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Pedido vazio",
+        description: "Adicione produtos ao pedido antes de lançar em uma mesa.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setTableLaunchId(selectedTable || '');
+    setTableLaunchOpen(true);
   };
 
   const handleFinalizeSale = async () => {
@@ -1243,16 +1367,8 @@ const PDV = () => {
           title: "Venda finalizada!",
           description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
         });
-        setCart([]);
         setMobileCartOpen(false);
-        setCustomerName('');
-        setCustomerPhone('');
-        setCustomerAddress('');
-        setSelectedDeliveryZone('');
-        setSelectedTable('');
-        setChangeAmount('');
-        setPaymentMethod('pix');
-        setOrderType('delivery');
+        resetCurrentSale('counter');
       }
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
@@ -1838,6 +1954,15 @@ const PDV = () => {
                       </>
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openTableLaunch}
+                    disabled={processing || cart.length === 0}
+                    className="h-10 w-full border-[#003223]/20 text-sm font-bold text-[#003223] hover:bg-[#F5EBE1]"
+                  >
+                    Lançar mesa
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2127,6 +2252,15 @@ const PDV = () => {
                       </>
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openTableLaunch}
+                    disabled={processing || cart.length === 0}
+                    className="mt-2 h-9 w-full rounded-xl border-[#003223]/20 text-[12px] font-bold text-[#003223] hover:bg-[#F5EBE1] disabled:bg-slate-100"
+                  >
+                    Lançar em mesa
+                  </Button>
                </div>
             </SheetContent>
           </Sheet>
@@ -2161,6 +2295,52 @@ const PDV = () => {
           }}
         />
       )}
+
+      <Dialog open={tableLaunchOpen} onOpenChange={setTableLaunchOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lançar pedido em mesa</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+              <div className="flex justify-between">
+                <span>Itens</span>
+                <span className="font-semibold">{cartItemsCount}</span>
+              </div>
+              <div className="mt-1 flex justify-between">
+                <span>Total</span>
+                <span className="font-bold">{formatCurrency(getTotalValue())}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Mesa</Label>
+              <Select value={tableLaunchId} onValueChange={setTableLaunchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a mesa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.length > 0 ? (
+                    tables.map((table) => (
+                      <SelectItem key={table.id} value={table.id}>
+                        Mesa {table.table_number} {table.status !== 'available' ? '(Ocupada)' : ''}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="p-2 text-sm text-center text-muted-foreground">Nenhuma mesa cadastrada</div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTableLaunchOpen(false)}>Cancelar</Button>
+            <Button onClick={() => addToTable(tableLaunchId)} disabled={processing || !tableLaunchId || cart.length === 0}>
+              Lançar na mesa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {mpPixCheckout ? (
         <PixCheckoutModal
@@ -2205,15 +2385,7 @@ const PDV = () => {
                   title: "Pagamento confirmado!",
                   description: "Pedido entrou em preparo e foi enviado para impressão.",
                 });
-                setCart([]);
-                setCustomerName('');
-                setCustomerPhone('');
-                setCustomerAddress('');
-                setSelectedDeliveryZone('');
-                setSelectedTable('');
-                setChangeAmount('');
-                setPaymentMethod('pix');
-                setOrderType('delivery');
+                resetCurrentSale('counter');
               } catch (e: any) {
                 console.error(e);
                 toast({ title: 'Erro', description: e?.message || 'Não foi possível concluir a venda.', variant: 'destructive' });
@@ -2241,15 +2413,7 @@ const PDV = () => {
               title: "Pagamento confirmado!",
               description: "Pedido entrou em preparo e foi enviado para impressão.",
             });
-            setCart([]);
-            setCustomerName('');
-            setCustomerPhone('');
-            setCustomerAddress('');
-            setSelectedDeliveryZone('');
-            setSelectedTable('');
-            setChangeAmount('');
-            setPaymentMethod('pix');
-            setOrderType('delivery');
+            resetCurrentSale('counter');
           } catch (e) {
             console.error(e);
           }

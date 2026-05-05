@@ -31,6 +31,7 @@ interface ProductItem {
   category_id?: string;
   image_url?: string;
   available: boolean;
+  is_available?: boolean;
   weight_based: boolean;
   send_to_kds: boolean;
   show_in_pdv: boolean;
@@ -202,6 +203,7 @@ const Products = () => {
       let transformedProducts = (data || []).map((product: any) => ({
         ...product,
         category: product.category || 'Sem categoria',
+        available: product.available !== undefined && product.available !== null ? product.available : product.is_available !== false,
         show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
         show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
         weight_based: product.weight_based !== undefined ? product.weight_based : false,
@@ -229,6 +231,7 @@ const Products = () => {
           transformedProducts = (retry.data || []).map((product: any) => ({
             ...product,
             category: product.category || 'Sem categoria',
+            available: product.available !== undefined && product.available !== null ? product.available : product.is_available !== false,
             show_in_pdv: product.show_in_pdv !== undefined ? product.show_in_pdv : true,
             show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
             weight_based: product.weight_based !== undefined ? product.weight_based : false,
@@ -302,6 +305,34 @@ const Products = () => {
     }
 
     setFilteredProducts(filtered);
+  };
+
+  const updateProductAvailabilityFields = async (productId: string, isAvailable: boolean) => {
+    let payload: Record<string, any> = {
+      available: isAvailable,
+      is_available: isAvailable
+    };
+    const removed = new Set<string>();
+
+    while (true) {
+      const { error } = await supabase
+        .from('products')
+        .update(payload)
+        .eq('id', productId)
+        .eq('user_id', activeUserIdSync);
+
+      if (!error) return;
+
+      const message = String(error?.message || '');
+      const missingColumn = ['available', 'is_available'].find((column) => message.includes(`'${column}'`) || message.includes(`"${column}"`) || message.includes(column));
+      if (String((error as any)?.code || '') === 'PGRST204' && missingColumn && !removed.has(missingColumn)) {
+        removed.add(missingColumn);
+        delete payload[missingColumn];
+        continue;
+      }
+
+      throw error;
+    }
   };
 
   const canReorderProducts = displayOrderSupported;
@@ -421,12 +452,8 @@ const Products = () => {
   const toggleProductAvailability = async (product: ProductItem) => {
     try {
       setIsLoading(true);
-      const { error } = await supabase
-        .from('products')
-        .update({ available: !product.available })
-        .eq('id', product.id);
-
-      if (error) throw error;
+      const nextAvailable = !product.available;
+      await updateProductAvailabilityFields(product.id, nextAvailable);
 
       toast({
         title: 'Produto atualizado',

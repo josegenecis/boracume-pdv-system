@@ -384,6 +384,7 @@ const Orders = () => {
       ifoodCancellationReason?: string;
     }
   ) => {
+    let optimisticOrderSnapshot: Order | null = null;
     setUpdatingOrderIds(prev => new Set([...prev, orderId]));
     try {
 
@@ -433,6 +434,15 @@ const Orders = () => {
         : newStatus === 'cancelled'
           ? { status: newStatus, acceptance_status: 'rejected' }
           : { status: newStatus };
+
+      if (newStatus === 'cancelled') {
+        optimisticOrderSnapshot = existingOrder;
+        setOrders(prev => prev.map(order =>
+          order.id === orderId
+            ? { ...order, ...updateData }
+            : order
+        ));
+      }
 
       console.log('📝 Dados para update:', updateData);
 
@@ -542,6 +552,11 @@ const Orders = () => {
       }
 
     } catch (error: any) {
+      if (newStatus === 'cancelled' && optimisticOrderSnapshot) {
+        setOrders(prev => prev.map(order =>
+          order.id === orderId ? optimisticOrderSnapshot as Order : order
+        ));
+      }
 
       console.error('❌ Erro completo ao atualizar status:', {
         error,
@@ -979,7 +994,7 @@ const Orders = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-2">
-              {order.status === 'pending' && (
+              {!['cancelled', 'delivered', 'completed'].includes(order.status) && (
                 <Button variant="outline" className="h-9 rounded-2xl border-red-200 bg-white text-[11px] text-red-500 hover:bg-red-50" onClick={() => requestCancelOrder(order.id)}>
                   Cancelar pedido
                 </Button>
@@ -1043,7 +1058,7 @@ const Orders = () => {
             if (pendingCancelId) {
               const order = orders.find((item) => item.id === pendingCancelId);
               if (order) {
-                await continueCancelOrder(order);
+                void continueCancelOrder(order);
               }
             }
             setAdminPinOpen(false);
@@ -1688,6 +1703,17 @@ const Orders = () => {
                           </Button>
                           <Button
                             size="sm"
+                            variant="destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestCancelOrder(order.id);
+                            }}
+                            className="w-full sm:flex-1"
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1783,6 +1809,17 @@ const Orders = () => {
                               Finalizar
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestCancelOrder(order.id);
+                            }}
+                            className="w-full sm:flex-1"
+                          >
+                            Cancelar
+                          </Button>
                         </div>
                       </div>
                     </CardContent>

@@ -164,9 +164,15 @@ async function runAutoUpdateFlow() {
 
   return await new Promise((resolve) => {
     let decided = false;
+    let updateInProgress = false;
+    let checkTimeout = null;
     const done = (result) => {
       if (decided) return;
       decided = true;
+      if (checkTimeout) {
+        clearTimeout(checkTimeout);
+        checkTimeout = null;
+      }
       try {
         autoUpdater.removeAllListeners();
       } catch {}
@@ -202,6 +208,11 @@ async function runAutoUpdateFlow() {
       setProgress(15);
     });
     autoUpdater.on('update-available', () => {
+      updateInProgress = true;
+      if (checkTimeout) {
+        clearTimeout(checkTimeout);
+        checkTimeout = null;
+      }
       setStatus('Baixando atualização...');
       setProgress(20);
     });
@@ -211,6 +222,7 @@ async function runAutoUpdateFlow() {
       setTimeout(() => done(true), 400);
     });
     autoUpdater.on('download-progress', (p) => {
+      updateInProgress = true;
       const percent = Number(p?.percent || 0);
       setStatus(`Baixando atualização... ${Math.round(percent)}%`);
       setProgress(20 + (percent * 0.8));
@@ -236,7 +248,9 @@ async function runAutoUpdateFlow() {
       done(true);
     });
 
-    setTimeout(() => done(true), 12000);
+    checkTimeout = setTimeout(() => {
+      if (!updateInProgress) done(true);
+    }, 45000);
   });
 }
 

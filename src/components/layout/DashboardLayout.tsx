@@ -8,8 +8,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import SupportFab from '@/components/support/SupportFab';
-import { SupportChatProvider } from '@/contexts/SupportChatContext';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -122,9 +120,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
       </div>
       <MobileBottomNav />
       <SoundPermissionHelper />
-      <SupportChatProvider>
-        <SupportFab />
-      </SupportChatProvider>
     </div>
   );
 };

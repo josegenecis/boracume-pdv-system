@@ -328,7 +328,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
                           className="h-9 rounded-xl"
                           onClick={() => setPizzaFlavorMode((prev) => ({ ...prev, [variation.id]: 2 }))}
                         >
-                          2 metades
+                          2 sabores
                         </Button>
                       </div>
                     )}

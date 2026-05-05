@@ -20,6 +20,7 @@ import IfoodSettings from '@/components/settings/IfoodSettings';
 import PaymentMethodsSettings from '@/components/settings/PaymentMethodsSettings';
 import PixSetup from '@/pages/PixSetup';
 import HardwareSettings from '@/components/settings/HardwareSettings';
+import SupportSettings from '@/components/settings/SupportSettings';
 import Garcons from '@/pages/Garcons';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,6 +52,7 @@ const Configuracoes: React.FC = () => {
     users: 'team',
     notifications: 'settings',
     marketing: 'marketing',
+    support: 'settings',
   };
 
   const canOpenTab = (nextTab: string) => {
@@ -87,7 +89,8 @@ const Configuracoes: React.FC = () => {
       'ifood',
       'users',
       'notifications',
-      'marketing'
+      'marketing',
+      'support'
     ];
     if (!allowed.includes(requested)) return 'profile';
     if (!canOpenTab(requested)) return 'profile';
@@ -148,6 +151,7 @@ const Configuracoes: React.FC = () => {
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
               <option value="marketing">Marketing</option>
+              <option value="support">Suporte</option>
             </select>
           </div>
         </Tabs>
@@ -171,6 +175,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="notifications">{tabLabel('Notificações', 'settings')}</TabsTrigger>
 
           <TabsTrigger value="marketing">{tabLabel('Marketing', 'marketing')}</TabsTrigger>
+          <TabsTrigger value="support">{tabLabel('Suporte', 'settings')}</TabsTrigger>
         </TabsList>
         
         <TabsContent value="profile">
@@ -282,6 +287,10 @@ const Configuracoes: React.FC = () => {
 
         <TabsContent value="marketing">
           <MarketingSettings />
+        </TabsContent>
+
+        <TabsContent value="support">
+          <SupportSettings />
         </TabsContent>
       </Tabs>
     </div>

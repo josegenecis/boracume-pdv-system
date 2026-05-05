@@ -142,7 +142,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
       if (names.length === 0) continue;
       const label = String(variation.receipt_label || variation.name || '').trim();
       const prefix = isPizzaFlavorVariation(variation, categoryConfig)
-        ? `${label} (${pizzaFlavorMode[variation.id] === 2 ? '2 metades' : '1 sabor'})`
+        ? `${label} (${pizzaFlavorMode[variation.id] === 2 ? '2 sabores' : '1 sabor'})`
         : label;
       selectedOptions.push(...names);
       variationLines.push(`${prefix}: ${names.join(', ')}`);
@@ -211,7 +211,7 @@ const ProductVariationSelector: React.FC<ProductVariationSelectorProps> = ({
                     className={isMobile ? "h-8 rounded-xl text-[11px]" : "h-9 rounded-xl"}
                     onClick={() => setPizzaFlavorMode((prev) => ({ ...prev, [variation.id]: 2 }))}
                   >
-                    2 metades
+                    2 sabores
                   </Button>
                 </div>
               )}

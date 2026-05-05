@@ -15,6 +15,7 @@ import { useCustomerLookup } from '@/hooks/useCustomerLookup';
 import { SimpleVariationModal } from '@/components/menu/SimpleVariationModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import { getOrderItemDetailGroups } from '@/lib/orderDetails';
+import { useToast } from '@/hooks/use-toast';
 
 interface CartItem {
   product: {
@@ -156,6 +157,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   isStoreOpen = true,
   storeClosedMessage = 'A loja está fechada no momento.'
 }) => {
+  const { toast } = useToast();
   const formatBRL = (value: number) =>
     `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const menuPrimaryColor = 'var(--menu-primary, #85C441)';
@@ -970,14 +972,25 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           const suggestedIds = Array.from(new Set(applicable.map((r: any) => String(r.suggested_product_id || '')).filter(Boolean)));
           if (suggestedIds.length === 0) return [];
 
-          const productsRes = await (supabase.from('products') as any)
-            .select('id,name,description,price,image_url')
+          let productsRes = await (supabase.from('products') as any)
+            .select('id,name,description,price,image_url,available,is_available')
             .eq('user_id', userId)
-            .eq('is_available', true)
             .eq('show_in_delivery', true)
             .in('id', suggestedIds);
+          if (productsRes.error && String(productsRes.error.message || '').includes('is_available')) {
+            productsRes = await (supabase.from('products') as any)
+              .select('id,name,description,price,image_url,available')
+              .eq('user_id', userId)
+              .eq('show_in_delivery', true)
+              .in('id', suggestedIds);
+          }
           if (productsRes.error) return [];
-          const byId = new Map((productsRes.data || []).map((p: any) => [String(p.id), p]));
+          const byId = new Map((productsRes.data || [])
+            .filter((p: any) => {
+              const available = p?.is_available !== undefined && p?.is_available !== null ? p.is_available : p?.available;
+              return available !== false;
+            })
+            .map((p: any) => [String(p.id), p]));
 
           const out: UpsellOffer[] = [];
           for (const r of applicable) {
@@ -1015,9 +1028,11 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       setUpsellOpen(true);
     } catch (error: any) {
       console.error('Erro ao finalizar pedido:', error);
-      alert(`Erro ao finalizar pedido: ${getCheckoutErrorMessage(error)}`);
-      return;
-      alert(`Erro ao finalizar pedido: ${error.message || error}. Se for pagamento online, verifique se o PIX/checkout está configurado para o restaurante.`);
+      toast({
+        title: 'Erro ao finalizar pedido',
+        description: getCheckoutErrorMessage(error),
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }

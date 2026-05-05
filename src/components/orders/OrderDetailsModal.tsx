@@ -654,23 +654,43 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   )}
                   
                   {order.status === 'preparing' && (
-                    <Button
-                      onClick={() => handleStatusUpdate('ready')}
-                      className={isMobile ? "h-10 w-full text-sm" : "w-full h-8 text-xs"}
-                    >
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Marcar como Pronto
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleStatusUpdate('ready')}
+                        className={isMobile ? "h-10 flex-1 text-sm" : "flex-1 h-8 text-xs"}
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Marcar como Pronto
+                      </Button>
+                      <Button
+                        onClick={() => handleStatusUpdate('cancelled')}
+                        variant="destructive"
+                        className={isMobile ? "h-10 flex-1 text-sm" : "flex-1 h-8 text-xs"}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Cancelar
+                      </Button>
+                    </div>
                   )}
                   
                   {order.status === 'ready' && (
-                    <Button
-                      onClick={() => handleStatusUpdate('delivered')}
-                      className={isMobile ? "h-10 w-full bg-blue-600 text-sm hover:bg-blue-700" : "w-full bg-blue-600 hover:bg-blue-700 h-8 text-xs"}
-                    >
-                      <Truck className="h-3 w-3 mr-1" />
-                      Finalizar Pedido
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleStatusUpdate('delivered')}
+                        className={isMobile ? "h-10 flex-1 bg-blue-600 text-sm hover:bg-blue-700" : "flex-1 bg-blue-600 hover:bg-blue-700 h-8 text-xs"}
+                      >
+                        <Truck className="h-3 w-3 mr-1" />
+                        Finalizar Pedido
+                      </Button>
+                      <Button
+                        onClick={() => handleStatusUpdate('cancelled')}
+                        variant="destructive"
+                        className={isMobile ? "h-10 flex-1 text-sm" : "flex-1 h-8 text-xs"}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Cancelar
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}

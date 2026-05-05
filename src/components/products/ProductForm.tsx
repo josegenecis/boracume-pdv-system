@@ -772,6 +772,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       category_id: formData.category_id,
       category: formData.category,
       available: formData.available,
+      is_available: formData.available,
       weight_based: formData.weight_based,
       send_to_kds: formData.send_to_kds,
       show_in_pdv: formData.show_in_pdv,
@@ -2522,7 +2523,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <Label className="text-[#003223]">Categoria de pizza</Label>
-                        <p className="mt-1 text-xs text-[#003223]/60">Usa 1 sabor ou 2 metades com regra automÃ¡tica.</p>
+                        <p className="mt-1 text-xs text-[#003223]/60">Usa 1 sabor ou 2 sabores com regra automÃ¡tica.</p>
                       </div>
                       <Switch checked={newCategoryIsPizza} onCheckedChange={setNewCategoryIsPizza} />
                     </div>

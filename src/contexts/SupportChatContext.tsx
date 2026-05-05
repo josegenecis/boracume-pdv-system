@@ -99,7 +99,7 @@ export function SupportChatProvider(props: { children: React.ReactNode }) {
     setSending(true);
 
     const userMsg: SupportChatMessage = { id: makeId(), role: 'user', content, status: 'done' };
-    const typingMsg: SupportChatMessage = { id: makeId(), role: 'assistant', content: 'digitando…', status: 'typing' };
+    const typingMsg: SupportChatMessage = { id: makeId(), role: 'assistant', content: 'digitando...', status: 'typing' };
     setMessages((prev) => [...prev, userMsg, typingMsg]);
 
     try {

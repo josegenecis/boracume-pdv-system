@@ -372,7 +372,7 @@ const CategoryManager = () => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <Label className="font-semibold text-boracume-dark-green">Categoria de pizza</Label>
-                      <p className="mt-1 text-xs text-[#003223]/65">Ative para usar 1 sabor ou 2 metades com regra automÃ¡tica de preÃ§o.</p>
+                      <p className="mt-1 text-xs text-[#003223]/65">Ative para usar 1 sabor ou 2 sabores com regra automÃ¡tica de preÃ§o.</p>
                     </div>
                     <Switch
                       checked={formData.is_pizza}

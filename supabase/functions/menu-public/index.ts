@@ -7,16 +7,16 @@ const url = Deno.env.get('SUPABASE_URL')!
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!
 const supabase = createClient(url, serviceKey)
 
-// In-memory cache for edge function (hot instances will serve faster)
-const cache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 60 * 1000; // 1 minute server-side cache
-
 export default async function handler(req: Request): Promise<Response> {
   // Add CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
   };
 
   if (req.method === 'OPTIONS') {
@@ -36,12 +36,6 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (!userId) return new Response(JSON.stringify({ ok: false, error: 'missing_userId' }), { status: 400, headers })
 
-  // Check cache
-  const cached = cache.get(userId);
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-    return new Response(JSON.stringify({ ...cached.data, cached: true }), { headers });
-  }
-
   try {
     const [profileResult, categoriesResult, productsResult, deliveryZonesResult] = await Promise.all([
       supabase
@@ -54,12 +48,12 @@ export default async function handler(req: Request): Promise<Response> {
         .from('product_categories')
         .select('id, name, description, display_order')
         .eq('user_id', userId)
+        .eq('active', true)
         .order('display_order', { ascending: true }),
       supabase
         .from('products')
         .select('*')
         .eq('user_id', userId)
-        .eq('is_available', true)
         .eq('show_in_delivery', true)
         .order('name', { ascending: true }),
       supabase
@@ -70,16 +64,22 @@ export default async function handler(req: Request): Promise<Response> {
         .order('name', { ascending: true })
     ])
 
+    const activeCategoryIds = new Set((categoriesResult.data || []).map((category: any) => String(category.id)))
+    const visibleProducts = (productsResult.data || []).filter((product: any) => {
+      const available = product?.is_available !== undefined && product?.is_available !== null
+        ? product.is_available
+        : product?.available
+      const categoryId = String(product?.category_id || '').trim()
+      return available !== false && (!categoryId || activeCategoryIds.has(categoryId))
+    })
+
     const responseData = {
       ok: true,
       profile: profileResult.data || null,
       categories: categoriesResult.data || [],
-      products: productsResult.data || [],
+      products: visibleProducts,
       deliveryZones: deliveryZonesResult.data || []
     };
-
-    // Update cache
-    cache.set(userId, { data: responseData, timestamp: Date.now() });
 
     return new Response(JSON.stringify(responseData), { headers })
   } catch (e: any) {

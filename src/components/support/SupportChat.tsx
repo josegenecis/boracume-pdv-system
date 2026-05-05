@@ -49,7 +49,7 @@ export default function SupportChat() {
         }}
         className="flex gap-2"
       >
-        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua mensagem…" disabled={sending} />
+        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Digite sua mensagem..." disabled={sending} />
         <Button type="submit" disabled={sending || !input.trim()}>
           <Send className="h-4 w-4" />
         </Button>

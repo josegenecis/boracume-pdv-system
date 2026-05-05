@@ -7,9 +7,6 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZnlyY3B1Z21kdWNwdGt0amljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MzAwNjUsImV4cCI6MjA2MzUwNjA2NX0.G9l2LEE6DtnSGChmGx5sTCQhC7yVHZJtq6rTTsti2aE';
 
-const MENU_CACHE_TTL_MS = 60 * 1000;
-const menuCache = new Map<string, { timestamp: number; payload: any }>();
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: false,
@@ -51,39 +48,42 @@ function buildLinkedGlobalVariation(link: any, globalVariation: any) {
 }
 
 async function fetchProducts(userId: string) {
-  let productsData: any[] | null = null;
-  let productsError: any = null;
+  const selectAttempts = [
+    'id,name,description,price,original_price,discount_percentage,image_url,available,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
+    'id,name,description,price,original_price,discount_percentage,image_url,available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
+    'id,name,description,price,original_price,discount_percentage,image_url,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold',
+    'id,name,description,price,image_url,available,show_in_delivery,category_id'
+  ];
 
-  const first = await supabase
-    .from('products')
-    .select(
-      'id,name,description,price,original_price,discount_percentage,image_url,is_available,show_in_delivery,is_highlight,highlight_order,order_count,category_id,track_stock,stock_quantity,low_stock_threshold'
-    )
-    .eq('user_id', userId)
-    .eq('is_available', true)
-    .eq('show_in_delivery', true)
-    .order('name', { ascending: true });
-
-  productsData = first.data as any;
-  productsError = first.error as any;
-
-  if (productsError && String(productsError.message || '').includes('highlight_order')) {
-    const second = await supabase
+  let lastError: any = null;
+  for (const selectClause of selectAttempts) {
+    const result = await supabase
       .from('products')
-      .select(
-        'id,name,description,price,original_price,discount_percentage,image_url,is_available,show_in_delivery,is_highlight,order_count,category_id,track_stock,stock_quantity,low_stock_threshold'
-      )
+      .select(selectClause)
       .eq('user_id', userId)
-      .eq('is_available', true)
       .eq('show_in_delivery', true)
       .order('name', { ascending: true });
 
-    productsData = second.data as any;
-    productsError = second.error as any;
+    if (!result.error) {
+      return (Array.isArray(result.data) ? result.data : [])
+        .filter((product: any) => {
+          const available = product?.is_available !== undefined && product?.is_available !== null
+            ? product.is_available
+            : product?.available;
+          return available !== false;
+        })
+        .map((product: any) => ({
+          ...product,
+          is_available: product?.is_available !== undefined && product?.is_available !== null
+            ? product.is_available
+            : product?.available !== false
+        }));
+    }
+
+    lastError = result.error;
   }
 
-  if (productsError) throw productsError;
-  return Array.isArray(productsData) ? productsData : [];
+  throw lastError;
 }
 
 async function fetchMenuPayload(userId: string) {
@@ -119,7 +119,12 @@ async function fetchMenuPayload(userId: string) {
   if (deliveryZonesResult.error) throw deliveryZonesResult.error;
   if (deliverySettingsResult.error) throw deliverySettingsResult.error;
 
-  const productIds = products.map((product: any) => String(product.id || '').trim()).filter(Boolean);
+  const activeCategoryIds = new Set((categoriesResult.data || []).map((category: any) => String(category.id)));
+  const visibleProducts = products.filter((product: any) => {
+    const categoryId = String(product?.category_id || '').trim();
+    return !categoryId || activeCategoryIds.has(categoryId);
+  });
+  const productIds = visibleProducts.map((product: any) => String(product.id || '').trim()).filter(Boolean);
 
   let variationPayloadByProduct: Record<string, any[]> = {};
   let variationPresenceByProduct: Record<string, 'has' | 'none'> = {};
@@ -195,7 +200,7 @@ async function fetchMenuPayload(userId: string) {
     ok: true,
     profile: profileResult.data || null,
     categories: (categoriesResult.data || []).map((category: any) => enrichCategoryWithMetadata(category)),
-    products,
+    products: visibleProducts,
     deliveryZones: deliveryZonesResult.data || [],
     deliverySettings: deliverySettingsResult.data?.delivery_areas || null,
     variationPayloadByProduct,
@@ -213,21 +218,14 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const cached = menuCache.get(userId);
-    if (cached && Date.now() - cached.timestamp < MENU_CACHE_TTL_MS) {
-      res.statusCode = 200;
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      res.setHeader('cache-control', 'public, s-maxage=60, stale-while-revalidate=300');
-      res.end(JSON.stringify({ ...cached.payload, cached: true }));
-      return;
-    }
-
     const payload = await fetchMenuPayload(userId);
-    menuCache.set(userId, { timestamp: Date.now(), payload });
 
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json; charset=utf-8');
-    res.setHeader('cache-control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('pragma', 'no-cache');
+    res.setHeader('expires', '0');
+    res.setHeader('surrogate-control', 'no-store');
     res.end(JSON.stringify(payload));
   } catch (error: any) {
     res.statusCode = 500;

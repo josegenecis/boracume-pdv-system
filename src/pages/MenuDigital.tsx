@@ -96,7 +96,7 @@ const MenuDigital = () => {
     deliverySettings,
     isLoading: menuLoading,
     error: menuError 
-  } = useMenuData({ userId: finalUserId, enableCache: true, cacheTTL: 15 });
+  } = useMenuData({ userId: finalUserId, enableCache: false });
   const storeOpenInfo = useMemo(() => getStoreOpenInfo((profile as any)?.opening_hours), [profile]);
   const menuProductIds = useMemo(() => {
     return Array.from(

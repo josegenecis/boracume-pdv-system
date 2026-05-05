@@ -202,6 +202,7 @@ const CollapsibleSidebar = () => {
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix' },
         { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood' },
         { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team' },
+        { to: '/configuracoes?tab=support', label: 'Suporte', feature: 'settings' },
       ]
     },
   ];

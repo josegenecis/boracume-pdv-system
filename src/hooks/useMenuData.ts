@@ -119,6 +119,7 @@ async function fetchMenuDataFromApi(userId: string): Promise<MenuPayload | null>
     const res = await fetch(`/api/menu/public?userId=${encodeURIComponent(userId)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
       signal: controller.signal
     });
     if (!res.ok) throw new Error(`menu_api_${res.status}`);
@@ -170,30 +171,24 @@ async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
           .maybeSingle() as any
       ]);
 
+    const productSelectAttempts = [
+      'id, name, description, price, original_price, discount_percentage, image_url, available, is_available, show_in_delivery, is_highlight, highlight_order, order_count, category_id, track_stock, stock_quantity, low_stock_threshold',
+      'id, name, description, price, original_price, discount_percentage, image_url, available, show_in_delivery, is_highlight, highlight_order, order_count, category_id, track_stock, stock_quantity, low_stock_threshold',
+      'id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, highlight_order, order_count, category_id, track_stock, stock_quantity, low_stock_threshold',
+      'id, name, description, price, image_url, available, show_in_delivery, category_id'
+    ];
     let productsData: any[] | null = null;
     let productsError: any = null;
-    const res1 = await (supabase.from('products') as any)
-      .select(
-        'id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, highlight_order, order_count, category_id, track_stock, stock_quantity, low_stock_threshold'
-      )
-      .eq('user_id', userId)
-      .eq('is_available', true)
-      .eq('show_in_delivery', true)
-      .order('name', { ascending: true });
-    productsData = res1.data as any;
-    productsError = res1.error as any;
 
-    if (productsError && String(productsError.message || '').includes('highlight_order')) {
-      const res2 = await (supabase.from('products') as any)
-        .select(
-          'id, name, description, price, original_price, discount_percentage, image_url, is_available, show_in_delivery, is_highlight, order_count, category_id, track_stock, stock_quantity, low_stock_threshold'
-        )
+    for (const selectClause of productSelectAttempts) {
+      const res = await (supabase.from('products') as any)
+        .select(selectClause)
         .eq('user_id', userId)
-        .eq('is_available', true)
         .eq('show_in_delivery', true)
         .order('name', { ascending: true });
-      productsData = res2.data as any;
-      productsError = res2.error as any;
+      productsData = res.data as any;
+      productsError = res.error as any;
+      if (!productsError) break;
     }
 
     if (profileError && (profileError as any)?.code !== 'PGRST116') {
@@ -216,8 +211,24 @@ async function fetchMenuDataDirect(userId: string): Promise<MenuPayload> {
           opening_hours: ''
         } as RestaurantProfile);
 
+    const activeCategoryIds = new Set(((categoriesData || []) as any[]).map((category) => String(category.id)));
+    const visibleProducts = ((productsData || []) as any[])
+      .filter((product) => {
+        const available = product?.is_available !== undefined && product?.is_available !== null
+          ? product.is_available
+          : product?.available;
+        const categoryId = String(product?.category_id || '').trim();
+        return available !== false && (!categoryId || activeCategoryIds.has(categoryId));
+      })
+      .map((product) => ({
+        ...product,
+        is_available: product?.is_available !== undefined && product?.is_available !== null
+          ? product.is_available
+          : product?.available !== false
+      }));
+
     return {
-      products: (productsData || []) as any,
+      products: visibleProducts as any,
       categories: ((categoriesData || []) as any[]).map((category) => enrichCategoryWithMetadata(category)) as any,
       profile,
       deliveryZones: (deliveryZonesData || []) as any,
@@ -237,7 +248,7 @@ async function fetchMenuData(userId: string): Promise<MenuPayload> {
   return fetchMenuDataDirect(userId);
 }
 
-export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMenuDataOptions): MenuData => {
+export const useMenuData = ({ userId, enableCache = false, cacheTTL = 1 }: UseMenuDataOptions): MenuData => {
   const queryClient = useQueryClient();
   const recoverAttemptRef = useRef(false);
 
@@ -247,10 +258,10 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
     queryKey: ['menuData', userId],
     enabled: Boolean(userId),
     queryFn: () => fetchMenuData(userId),
-    staleTime: initialData ? Math.max(1, cacheTTL) * 60 * 1000 : 30_000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnMount: !initialData,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     retry: 3,
     retryDelay: (attempt) => Math.min(2000, 250 * Math.pow(2, attempt)),
@@ -296,7 +307,7 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
 
     const patch = (updater: (prev: MenuPayload) => MenuPayload) => {
       queryClient.setQueryData(['menuData', userId], (prev: MenuPayload | undefined) => {
-        const base: MenuPayload = prev || { products: [], categories: [], profile: null, deliveryZones: [] };
+        const base: MenuPayload = prev || { products: [], categories: [], profile: null, deliveryZones: [], deliverySettings: null };
         return updater(base);
       });
     };
@@ -316,7 +327,12 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
             return { ...prev, products: next.filter((p: any) => String(p.id) !== id) };
           }
 
-          const include = Boolean(newRow?.is_available) && Boolean(newRow?.show_in_delivery);
+          const available = newRow?.is_available !== undefined && newRow?.is_available !== null
+            ? newRow.is_available
+            : newRow?.available;
+          const activeCategoryIds = new Set((prev.categories || []).map((category: any) => String(category.id)));
+          const categoryId = String(newRow?.category_id || '').trim();
+          const include = available !== false && Boolean(newRow?.show_in_delivery) && (!categoryId || activeCategoryIds.has(categoryId));
           const idx = next.findIndex((p: any) => String(p.id) === id);
           if (!include) {
             if (idx >= 0) next.splice(idx, 1);
@@ -343,13 +359,26 @@ export const useMenuData = ({ userId, enableCache = true, cacheTTL = 15 }: UseMe
             return { ...prev, categories: next.filter((c: any) => String(c.id) !== id) };
           }
 
+          const include = Boolean(newRow?.active);
           const idx = next.findIndex((c: any) => String(c.id) === id);
+          if (!include) {
+            const products = (prev.products || []).filter((product: any) => String(product?.category_id || '') !== id);
+            if (idx >= 0) next.splice(idx, 1);
+            return { ...prev, categories: next as any, products };
+          }
+
           if (idx >= 0) next[idx] = { ...next[idx], ...newRow };
           else next.push(newRow);
 
           next.sort((a: any, b: any) => Number(a.display_order || 0) - Number(b.display_order || 0));
           return { ...prev, categories: next as any };
         });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` }, (payload: any) => {
+        patch((prev) => ({ ...prev, profile: payload.new || prev.profile }));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_settings', filter: `user_id=eq.${userId}` }, (payload: any) => {
+        patch((prev) => ({ ...prev, deliverySettings: payload.new?.delivery_areas || null }));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_zones', filter: `user_id=eq.${userId}` }, (payload: any) => {
         patch((prev) => {
