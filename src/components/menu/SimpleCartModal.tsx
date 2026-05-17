@@ -1070,7 +1070,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         />
       ) : null}
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg h-[100dvh] max-h-[100dvh] sm:h-[90dvh] sm:max-h-[90dvh] overflow-hidden bg-white shadow-2xl border border-gray-100 rounded-none sm:rounded-xl p-0">
+      <DialogContent className="h-[100dvh] max-h-[100dvh] w-[calc(100dvw-1rem)] max-w-[calc(100dvw-1rem)] overflow-hidden overflow-x-hidden rounded-none border border-gray-100 bg-white p-0 shadow-2xl sm:h-[90dvh] sm:max-h-[90dvh] sm:max-w-lg sm:rounded-xl">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
@@ -1089,7 +1089,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             </div>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y px-4 py-4 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-4 py-4 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
             {step === 'bag' ? (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1104,9 +1104,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                     const detailGroups = getOrderItemDetailGroups(item);
 
                     return (
-                    <Card key={item.uniqueId} className="p-4 border border-gray-100 shadow-sm rounded-xl">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
+                    <Card key={item.uniqueId} className="overflow-hidden p-4 border border-gray-100 shadow-sm rounded-xl">
+                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
                           <h4 className="font-bold text-gray-900">{item.product.name}</h4>
                           {detailGroups.length > 0 && (
                             <div className="mt-1 space-y-1">
@@ -1131,7 +1131,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                           <p className="text-sm font-bold mt-2" style={{ color: menuPrimaryColor }}>{formatBRL(item.totalPrice)}</p>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-none items-center justify-end gap-2">
                           <Button
                             variant="outline"
                             size="sm"

@@ -99,3 +99,8 @@ entrypoint = "./functions/ifood-manager/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/orders-update-status/index.ts"
+
+[functions.pix-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/pix-webhook/index.ts"

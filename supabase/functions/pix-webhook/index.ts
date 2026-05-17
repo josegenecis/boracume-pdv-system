@@ -5,7 +5,7 @@ import { notifyOrderCreated } from '../_shared/restaurant-whatsapp.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-pix-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-pix-secret, x-signature, x-request-id',
 }
 
 const isWaiterPixPayload = (payload: any) => {
@@ -182,7 +182,7 @@ serve(async (req) => {
             .maybeSingle()).data
 
       if (!checkout) {
-        console.error(`[PixWebhook] Checkout not found for CID: ${cid}`);
+        console.error(`[PixWebhook] Checkout not found for CID: ${effectiveCid}`);
         return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
