@@ -44,6 +44,7 @@ interface TableOrder {
   status: string;
   created_at: string;
   payment_method?: string;
+  source?: 'orders' | 'table_accounts';
 }
 
 interface TableDetailsModalProps {
@@ -110,11 +111,51 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
         setCurrentOrder({
           ...order,
-          items: parsedItems
+          items: parsedItems,
+          source: 'orders'
         });
         setPaymentMethod((order.payment_method as 'pix' | 'cartao' | 'dinheiro') || 'pix');
       } else {
-        setCurrentOrder(null);
+        const { data: accountData, error: accountError } = await supabase
+          .from('table_accounts')
+          .select('*')
+          .eq('table_id', table.id)
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (accountError && accountError.code !== 'PGRST116') throw accountError;
+
+        if (accountData) {
+          let parsedItems: OrderItem[] = [];
+          try {
+            if (typeof accountData.items === 'string') {
+              parsedItems = JSON.parse(accountData.items);
+            } else if (Array.isArray(accountData.items)) {
+              parsedItems = accountData.items as unknown as OrderItem[];
+            }
+          } catch (e) {
+            console.error('Error parsing table account items:', e);
+            parsedItems = [];
+          }
+
+          setCurrentOrder({
+            id: accountData.id,
+            order_number: `MESA-${table.table_number}`,
+            customer_name: `Mesa ${table.table_number}`,
+            customer_phone: '',
+            items: parsedItems,
+            total: Number(accountData.total || 0),
+            status: accountData.status || 'open',
+            created_at: accountData.created_at,
+            payment_method: 'pendente',
+            source: 'table_accounts'
+          });
+        } else {
+          setCurrentOrder(null);
+        }
         setPaymentMethod('pix');
       }
     } catch (error) {
@@ -135,9 +176,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     try {
       setLoading(true);
 
-      // Atualizar o pedido para a nova mesa
+      const sourceTable = currentOrder.source === 'table_accounts' ? 'table_accounts' : 'orders';
+
+      // Atualizar o pedido/conta para a nova mesa
       const { error: updateError } = await supabase
-        .from('orders')
+        .from(sourceTable)
         .update({ table_id: selectedTransferTable })
         .eq('id', currentOrder.id);
 
@@ -231,19 +274,31 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         return;
       }
 
-      const { error: orderUpdateError } = await supabase
-        .from('orders')
-        .update({
-          payment_method: paymentMethod,
-          cash_register_session_id: openCashSession.id,
-          acceptance_status: 'accepted',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', currentOrder.id);
+      if (currentOrder.source === 'table_accounts') {
+        const { error: accountUpdateError } = await supabase
+          .from('table_accounts')
+          .update({
+            status: 'closed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentOrder.id);
 
-      if (orderUpdateError) throw orderUpdateError;
+        if (accountUpdateError) throw accountUpdateError;
+      } else {
+        const { error: orderUpdateError } = await supabase
+          .from('orders')
+          .update({
+            payment_method: paymentMethod,
+            cash_register_session_id: openCashSession.id,
+            acceptance_status: 'accepted',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentOrder.id);
 
-      await updateOrderStatusRemote(currentOrder.id, 'completed');
+        if (orderUpdateError) throw orderUpdateError;
+
+        await updateOrderStatusRemote(currentOrder.id, 'completed');
+      }
 
       const { error: tableError } = await supabase
         .from('tables')
@@ -299,6 +354,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         return 'Preparando';
       case 'ready':
         return 'Pronto';
+      case 'open':
+        return 'Aberta';
       default:
         return status;
     }

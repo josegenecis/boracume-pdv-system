@@ -1106,11 +1106,12 @@ const PDV = () => {
 
         if (error) throw error;
 
-        await supabase
-          .from('tables')
-          .update({ status: 'occupied' })
-          .eq('id', targetTableId);
       }
+
+      await supabase
+        .from('tables')
+        .update({ status: 'occupied' })
+        .eq('id', targetTableId);
 
       toast({
         title: "Itens adicionados à mesa!",
