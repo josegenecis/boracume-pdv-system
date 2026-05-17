@@ -1,6 +1,8 @@
 import React from 'react';
 import { Star } from 'lucide-react';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import AutoplayVideo from '@/components/media/AutoplayVideo';
+import { isVideoAsset } from '@/utils/videoAutoplay';
 
 interface Product {
   id: string;
@@ -30,7 +32,10 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
       </div>
       
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-        {products.map((product, index) => (
+        {products.map((product, index) => {
+          const mediaUrl = normalizeImageUrlForDisplay(product.image_url) || product.image_url || '';
+
+          return (
           <div
             key={product.id}
             onClick={() => onProductClick(product)}
@@ -38,15 +43,23 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
           >
             <div className="relative">
               <div className="aspect-square w-full bg-gray-100">
-                {product.image_url ? (
-                  <img
-                    src={normalizeImageUrlForDisplay(product.image_url) || product.image_url}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                    loading={index < 2 ? 'eager' : 'lazy'}
-                    fetchPriority={index < 2 ? 'high' : 'auto'}
-                    decoding="async"
-                  />
+                {mediaUrl ? (
+                  isVideoAsset(mediaUrl) ? (
+                    <AutoplayVideo
+                      src={mediaUrl}
+                      className="w-full h-full object-cover"
+                      loop
+                    />
+                  ) : (
+                    <img
+                      src={mediaUrl}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                      loading={index < 2 ? 'eager' : 'lazy'}
+                      fetchPriority={index < 2 ? 'high' : 'auto'}
+                      decoding="async"
+                    />
+                  )
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
                     <span className="text-xs">Sem imagem</span>
@@ -80,7 +93,8 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

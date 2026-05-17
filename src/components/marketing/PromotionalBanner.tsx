@@ -5,10 +5,10 @@ import { ChevronLeft, ChevronRight, Instagram, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import BannerStoryViewer, { StoryBanner, StoryLinkedProduct } from '@/components/marketing/BannerStoryViewer';
+import AutoplayVideo from '@/components/media/AutoplayVideo';
+import { isVideoAsset } from '@/utils/videoAutoplay';
 
 interface Banner extends StoryBanner {}
-
-const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
 
 const isInstagramUrl = (value?: string) => {
   try {
@@ -234,13 +234,10 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                     </div>
                   </div>
                 ) : isVideoAsset(b.imageUrl) ? (
-                  <video
+                  <AutoplayVideo
                     src={b.imageUrl}
                     className="absolute inset-0 h-full w-full object-cover"
-                    autoPlay
                     loop
-                    muted
-                    playsInline
                   />
                 ) : (
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${b.imageUrl})` }} />
@@ -299,6 +296,12 @@ const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                       </span>
                     </div>
                   </div>
+                ) : isVideoAsset(banner.imageUrl) ? (
+                  <AutoplayVideo
+                    src={banner.imageUrl}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loop
+                  />
                 ) : (
                   <div
                     className="absolute inset-0 bg-cover bg-center"

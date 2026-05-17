@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { formatBRL } from '@/lib/currency';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 import { getSimpleVariationPresence, prefetchSimpleVariations } from '@/hooks/useSimpleVariations';
+import AutoplayVideo from '@/components/media/AutoplayVideo';
+import { isVideoAsset } from '@/utils/videoAutoplay';
 
 interface Product {
   id: string;
@@ -57,13 +59,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
         <div className="relative">
           <div className="aspect-square w-full bg-boracume-light/50">
             {imageUrl && !imageError ? (
-              <img
-                src={imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                loading="lazy"
-                onError={() => setImageError(true)}
-              />
+              isVideoAsset(imageUrl) ? (
+                <AutoplayVideo
+                  src={imageUrl}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  loop
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <img
+                  src={imageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  loading="lazy"
+                  onError={() => setImageError(true)}
+                />
+              )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400">
                 <span className="text-xs">Sem imagem</span>
@@ -170,13 +181,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
 
           <div className="w-20 h-20 rounded-xl overflow-hidden bg-boracume-light/50">
             {imageUrl && !imageError ? (
-              <img
-                src={imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                loading="lazy"
-                onError={() => setImageError(true)}
-              />
+              isVideoAsset(imageUrl) ? (
+                <AutoplayVideo
+                  src={imageUrl}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  loop
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <img
+                  src={imageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  loading="lazy"
+                  onError={() => setImageError(true)}
+                />
+              )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400">
                 <span className="text-xs">Sem imagem</span>

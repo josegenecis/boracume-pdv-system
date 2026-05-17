@@ -216,30 +216,30 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
   if (successOrder) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg rounded-lg">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Pedido confirmado</DialogTitle>
+            <DialogTitle className="text-3xl">Pedido confirmado</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <Card className="p-5 bg-gradient-to-r from-emerald-500 to-green-600 text-white border-0">
+            <Card className="rounded-lg border-0 bg-gradient-to-r from-emerald-600 to-green-600 p-6 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-white/90">Sua senha</div>
-                  <div className="text-5xl font-extrabold tracking-widest">{senha}</div>
+                  <div className="text-base font-bold text-white/90">Sua senha</div>
+                  <div className="text-7xl font-black tracking-widest">{senha}</div>
                 </div>
-                <CheckCircle2 className="h-10 w-10 text-white" />
+                <CheckCircle2 className="h-14 w-14 text-white" />
               </div>
-              <div className="mt-3 text-white/90 text-sm">
+              <div className="mt-3 text-base font-semibold text-white/90">
                 Pedido {successOrder?.order_number ? `#${successOrder.order_number}` : ''}
               </div>
             </Card>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <Button variant="outline" className="h-12" onClick={() => printCoupon(successOrder)}>
+              <Button variant="outline" className="h-14 rounded-lg text-base font-bold" onClick={() => printCoupon(successOrder)}>
                 <Printer className="mr-2 h-4 w-4" />
                 Imprimir novamente
               </Button>
-              <Button className="h-12 bg-boracume-orange hover:bg-boracume-orange/90" onClick={resetToNewOrder}>
+              <Button className="h-14 rounded-lg bg-boracume-orange text-base font-bold hover:bg-boracume-orange/90" onClick={resetToNewOrder}>
                 Novo pedido
               </Button>
             </div>
@@ -251,9 +251,9 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-lg">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Finalizar no Totem</DialogTitle>
+          <DialogTitle className="text-3xl">Finalizar pedido</DialogTitle>
         </DialogHeader>
 
         {pixCheckout && (
@@ -268,15 +268,15 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-3">
-            <div className="text-sm font-semibold">Itens</div>
+            <div className="text-base font-black">Itens do pedido</div>
             <div className="space-y-2">
               {cart.map((item) => (
-                <Card key={item.uniqueId} className="p-3">
+                <Card key={item.uniqueId} className="rounded-lg p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-semibold truncate">{item.product.name}</div>
+                      <div className="truncate text-lg font-black">{item.product.name}</div>
                       {item.variations?.length ? (
                         <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{item.variations.join(', ')}</div>
                       ) : null}
@@ -291,11 +291,11 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)} disabled={isSubmitting || item.quantity <= 1}>
+                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity - 1)} disabled={isSubmitting || item.quantity <= 1}>
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <div className="w-8 text-center font-semibold">{item.quantity}</div>
-                        <Button variant="outline" size="icon" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting}>
+                        <div className="w-8 text-center text-lg font-black">{item.quantity}</div>
+                        <Button variant="outline" size="icon" className="h-11 w-11 rounded-lg" onClick={() => onUpdateQuantity(item.uniqueId, item.quantity + 1)} disabled={isSubmitting}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
@@ -307,21 +307,21 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
           </div>
 
           <div className="space-y-4">
-            <Card className="p-4 bg-slate-50">
+            <Card className="rounded-lg bg-slate-50 p-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Total</div>
-                <div className="text-2xl font-extrabold">R$ {Number(total || 0).toFixed(2)}</div>
+                <div className="text-base font-bold text-muted-foreground">Total</div>
+                <div className="text-4xl font-black">R$ {Number(total || 0).toFixed(2)}</div>
               </div>
-              <div className="text-xs text-muted-foreground mt-2">Senha do pedido: {senha}</div>
+              <div className="mt-2 text-sm font-semibold text-muted-foreground">Senha do pedido: {senha}</div>
             </Card>
 
             <div className="space-y-2">
-              <div className="text-sm font-semibold">Pagamento</div>
+              <div className="text-base font-black">Forma de pagamento</div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant={payment === 'pix' ? 'default' : 'outline'}
-                  className={payment === 'pix' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                  className={`h-16 rounded-lg text-base font-black ${payment === 'pix' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
                   onClick={() => setPayment('pix')}
                   disabled={isSubmitting}
                 >
@@ -331,7 +331,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 <Button
                   type="button"
                   variant={payment === 'dinheiro' ? 'default' : 'outline'}
-                  className={payment === 'dinheiro' ? 'bg-sky-600 hover:bg-sky-700' : ''}
+                  className={`h-16 rounded-lg text-base font-black ${payment === 'dinheiro' ? 'bg-sky-600 hover:bg-sky-700' : ''}`}
                   onClick={() => setPayment('dinheiro')}
                   disabled={isSubmitting}
                 >
@@ -341,7 +341,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 <Button
                   type="button"
                   variant={payment === 'cartao_credito' ? 'default' : 'outline'}
-                  className={payment === 'cartao_credito' ? 'bg-violet-600 hover:bg-violet-700' : ''}
+                  className={`h-16 rounded-lg text-base font-black ${payment === 'cartao_credito' ? 'bg-violet-600 hover:bg-violet-700' : ''}`}
                   onClick={() => setPayment('cartao_credito')}
                   disabled={isSubmitting}
                 >
@@ -351,7 +351,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
                 <Button
                   type="button"
                   variant={payment === 'cartao_debito' ? 'default' : 'outline'}
-                  className={payment === 'cartao_debito' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+                  className={`h-16 rounded-lg text-base font-black ${payment === 'cartao_debito' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}`}
                   onClick={() => setPayment('cartao_debito')}
                   disabled={isSubmitting}
                 >
@@ -380,11 +380,11 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="outline" className="h-12 rounded-lg px-6 font-bold" onClick={onClose} disabled={isSubmitting}>
             Voltar
           </Button>
           <Button
-            className="bg-boracume-orange hover:bg-boracume-orange/90"
+            className="h-12 rounded-lg bg-boracume-orange px-6 font-black hover:bg-boracume-orange/90"
             onClick={handleConfirm}
             disabled={!canSubmit || isSubmitting}
           >

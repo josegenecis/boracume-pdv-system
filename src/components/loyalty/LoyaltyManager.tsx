@@ -13,11 +13,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { verifyAdminPin } from '@/services/adminPin';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
+import { formatBRL, parseBRL } from '@/lib/currency';
 
 interface LoyaltyProgram {
   id: string;
   type: 'points' | 'visits' | 'spending' | 'shipping';
   goal_value: number;
+  point_value?: number | null;
   reward_type: 'percent' | 'fixed_amount' | 'free_product' | 'free_shipping';
   reward_value: number;
   active: boolean;
@@ -48,6 +51,7 @@ const LoyaltyManager = () => {
   const [newProgram, setNewProgram] = useState<Partial<LoyaltyProgram>>({
     type: 'visits',
     goal_value: 10,
+    point_value: 15,
     reward_type: 'percent',
     reward_value: 10,
     active: true,
@@ -57,6 +61,11 @@ const LoyaltyManager = () => {
   const isNotifyWhatsappSchemaError = (message?: string) =>
     typeof message === 'string' &&
     message.toLowerCase().includes('notify_whatsapp') &&
+    message.toLowerCase().includes('loyalty_programs');
+
+  const isLoyaltyProgramColumnError = (message?: string, column?: string) =>
+    typeof message === 'string' &&
+    (!column || message.toLowerCase().includes(column.toLowerCase())) &&
     message.toLowerCase().includes('loyalty_programs');
 
   // New Coupon State
@@ -96,15 +105,36 @@ const LoyaltyManager = () => {
 
   const createProgram = async () => {
     try {
+      const normalizedProgram = {
+        ...newProgram,
+        point_value: newProgram.type === 'spending' ? Math.max(0, Number(newProgram.point_value || 0)) : null,
+      };
+
+      if (normalizedProgram.type === 'spending') {
+        if (!normalizedProgram.point_value) {
+          toast({ title: 'Informe o valor da estrelinha', description: 'Defina quanto o cliente precisa comprar para ganhar 1 estrelinha.', variant: 'destructive' });
+          return;
+        }
+        if (!normalizedProgram.goal_value || Number(normalizedProgram.goal_value) < Number(normalizedProgram.point_value)) {
+          toast({ title: 'Revise o prêmio', description: 'O valor total para ganhar o prêmio precisa ser maior ou igual ao valor de 1 estrelinha.', variant: 'destructive' });
+          return;
+        }
+      }
+
       const payload = {
         user_id: user?.id,
-        ...newProgram
+        ...normalizedProgram
       };
 
       let result = await supabase.from('loyalty_programs').insert(payload).select().single();
 
       if (result.error && isNotifyWhatsappSchemaError(result.error.message)) {
         const { notify_whatsapp, ...fallbackPayload } = payload;
+        result = await supabase.from('loyalty_programs').insert(fallbackPayload).select().single();
+      }
+
+      if (result.error && isLoyaltyProgramColumnError(result.error.message, 'point_value')) {
+        const { point_value, ...fallbackPayload } = payload;
         result = await supabase.from('loyalty_programs').insert(fallbackPayload).select().single();
       }
 
@@ -116,6 +146,7 @@ const LoyaltyManager = () => {
       setNewProgram({
         type: 'visits',
         goal_value: 10,
+        point_value: 15,
         reward_type: 'percent',
         reward_value: 10,
         active: true,
@@ -246,24 +277,51 @@ const LoyaltyManager = () => {
                   <Label>Tipo de Meta</Label>
                   <Select 
                     value={newProgram.type} 
-                    onValueChange={(v: any) => setNewProgram({...newProgram, type: v})}
+                    onValueChange={(v: any) => setNewProgram({
+                      ...newProgram,
+                      type: v,
+                      point_value: v === 'spending' ? (newProgram.point_value || 15) : null
+                    })}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="visits">A cada X Pedidos (Frequência)</SelectItem>
-                      <SelectItem value="spending">A cada R$ X Gastos (Acumulado)</SelectItem>
+                      <SelectItem value="spending">Valor acumulado com estrelinhas</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Valor da Meta {newProgram.type === 'visits' ? '(Qtd Pedidos)' : '(Reais)'}</Label>
-                  <Input 
-                    type="number" 
-                    value={newProgram.goal_value} 
-                    onChange={e => setNewProgram({...newProgram, goal_value: Number(e.target.value)})}
-                  />
-                </div>
+                {newProgram.type === 'spending' ? (
+                  <>
+                    <div className="space-y-2 rounded-lg border border-green-100 bg-green-50/50 p-3">
+                      <Label>Valor mínimo para ganhar 1 estrelinha</Label>
+                      <CurrencyTextInput
+                        value={formatBRL(newProgram.point_value || 0)}
+                        onValueChange={(value) => setNewProgram({ ...newProgram, point_value: parseBRL(value) })}
+                      />
+                      <p className="text-xs text-gray-600">Exemplo: se colocar R$ 15,00, cada R$ 15,00 em compras entregues vira 1 estrelinha.</p>
+                    </div>
+
+                    <div className="space-y-2 rounded-lg border border-orange-100 bg-orange-50/50 p-3">
+                      <Label>Valor total acumulado para ganhar o prêmio</Label>
+                      <CurrencyTextInput
+                        value={formatBRL(newProgram.goal_value || 0)}
+                        onValueChange={(value) => setNewProgram({ ...newProgram, goal_value: parseBRL(value) })}
+                      />
+                      <p className="text-xs text-gray-600">O desconto só é liberado quando o cliente acumular esse total. Antes disso ele apenas junta estrelinhas.</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Quantidade de pedidos para ganhar o prêmio</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={newProgram.goal_value}
+                      onChange={e => setNewProgram({...newProgram, goal_value: Number(e.target.value)})}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Tipo de Recompensa</Label>
@@ -283,11 +341,18 @@ const LoyaltyManager = () => {
                 {newProgram.reward_type !== 'free_shipping' && (
                   <div className="space-y-2">
                     <Label>Valor da Recompensa</Label>
-                    <Input 
-                      type="number" 
-                      value={newProgram.reward_value} 
-                      onChange={e => setNewProgram({...newProgram, reward_value: Number(e.target.value)})}
-                    />
+                    {newProgram.reward_type === 'fixed_amount' ? (
+                      <CurrencyTextInput
+                        value={formatBRL(newProgram.reward_value || 0)}
+                        onValueChange={(value) => setNewProgram({ ...newProgram, reward_value: parseBRL(value) })}
+                      />
+                    ) : (
+                      <Input
+                        type="number"
+                        value={newProgram.reward_value}
+                        onChange={e => setNewProgram({...newProgram, reward_value: Number(e.target.value)})}
+                      />
+                    )}
                   </div>
                 )}
 
@@ -319,13 +384,16 @@ const LoyaltyManager = () => {
                   <CardContent className="pt-6 flex justify-between items-center">
                     <div>
                       <h3 className="font-bold text-lg flex items-center gap-2">
-                        {prog.type === 'visits' ? `A cada ${prog.goal_value} Pedidos` : `A cada R$ ${prog.goal_value} Gastos`}
+                        {prog.type === 'visits' ? `A cada ${prog.goal_value} pedidos` : `${formatBRL(prog.point_value || prog.goal_value)} = 1 estrelinha`}
                         {prog.notify_whatsapp && <MessageCircle className="h-4 w-4 text-green-500" title="Notifica via WhatsApp" />}
                       </h3>
                       <p className="text-gray-500">
+                        {prog.type === 'spending' && (
+                          <span className="block text-sm text-gray-500">Prêmio ao acumular {formatBRL(prog.goal_value)}</span>
+                        )}
                         Ganha: {prog.reward_type === 'free_shipping' ? 'Frete Grátis' : 
                                 prog.reward_type === 'percent' ? `${prog.reward_value}% OFF` : 
-                                `R$ ${prog.reward_value} OFF`}
+                                `${formatBRL(prog.reward_value)} OFF`}
                       </p>
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => requestDeleteProgram(prog.id)}>
@@ -380,21 +448,27 @@ const LoyaltyManager = () => {
                   {newCoupon.discount_type !== 'shipping' && (
                     <div className="space-y-2">
                       <Label>Valor</Label>
-                      <Input 
-                        type="number" 
-                        value={newCoupon.discount_value} 
-                        onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})}
-                      />
+                      {newCoupon.discount_type === 'fixed' ? (
+                        <CurrencyTextInput
+                          value={formatBRL(newCoupon.discount_value || 0)}
+                          onValueChange={(value) => setNewCoupon({ ...newCoupon, discount_value: parseBRL(value) })}
+                        />
+                      ) : (
+                        <Input
+                          type="number"
+                          value={newCoupon.discount_value}
+                          onChange={e => setNewCoupon({...newCoupon, discount_value: Number(e.target.value)})}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2">
                   <Label>Compra Mínima (R$)</Label>
-                  <Input 
-                    type="number" 
-                    value={newCoupon.min_purchase} 
-                    onChange={e => setNewCoupon({...newCoupon, min_purchase: Number(e.target.value)})}
+                  <CurrencyTextInput
+                    value={formatBRL(newCoupon.min_purchase || 0)}
+                    onValueChange={(value) => setNewCoupon({...newCoupon, min_purchase: parseBRL(value)})}
                   />
                 </div>
 
@@ -422,12 +496,12 @@ const LoyaltyManager = () => {
                         <Badge variant="secondary" className="text-lg font-bold px-3 py-1 bg-blue-100 text-blue-800">
                           {coupon.code}
                         </Badge>
-                        {coupon.min_purchase > 0 && <span className="text-xs text-gray-500">Min: R$ {coupon.min_purchase}</span>}
+                        {coupon.min_purchase > 0 && <span className="text-xs text-gray-500">Min: {formatBRL(coupon.min_purchase)}</span>}
                       </div>
                       <p className="text-gray-600 mt-1">
                         {coupon.discount_type === 'shipping' ? 'Frete Grátis' : 
                          coupon.discount_type === 'percent' ? `${coupon.discount_value}% de Desconto` : 
-                         `R$ ${coupon.discount_value} de Desconto`}
+                         `${formatBRL(coupon.discount_value)} de Desconto`}
                       </p>
                       {coupon.description && <p className="text-xs text-gray-400">{coupon.description}</p>}
                     </div>

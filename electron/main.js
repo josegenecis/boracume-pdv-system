@@ -570,7 +570,9 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
         {
           silent: !!silent,
           deviceName: deviceName || undefined,
-          printBackground: true
+          printBackground: true,
+          margins: { marginType: 'none' },
+          scaleFactor: 100
         },
         (success, failureReason) => resolve({ success, failureReason })
       );

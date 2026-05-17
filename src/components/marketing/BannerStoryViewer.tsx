@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, ExternalLink, Instagram, Plus, X } from 'lucide-react';
+import AutoplayVideo from '@/components/media/AutoplayVideo';
+import { enforceMutedAutoplay, isVideoAsset } from '@/utils/videoAutoplay';
 
 export interface StoryBanner {
   id: string;
@@ -36,7 +38,6 @@ interface BannerStoryViewerProps {
 
 const IMAGE_STORY_DURATION = 5000;
 
-const isVideoAsset = (value?: string) => /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || '').trim());
 const isInstagramStory = (banner?: StoryBanner | null) => {
   if (!banner) return false;
   return banner.mediaSource === 'instagram' || Boolean(String(banner.externalVideoUrl || '').trim());
@@ -138,12 +139,14 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
   useEffect(() => {
     if (!open || !currentBanner || !isVideo || !videoRef.current) return;
     const video = videoRef.current;
+    const cleanup = enforceMutedAutoplay(video);
     setProgress(0);
     video.currentTime = 0;
     const attempt = video.play();
     if (attempt && typeof attempt.catch === 'function') {
       attempt.catch(() => {});
     }
+    return cleanup;
   }, [open, currentBanner, isVideo, currentIndex]);
 
   if (!currentBanner) return null;
@@ -256,13 +259,11 @@ const BannerStoryViewer: React.FC<BannerStoryViewerProps> = ({
                 </div>
               )
             ) : isVideo ? (
-              <video
+              <AutoplayVideo
                 ref={videoRef}
                 src={currentBanner.imageUrl}
                 className="h-full w-full object-contain"
-                autoPlay
-                playsInline
-                muted
+                loop={false}
                 onTimeUpdate={(event) => {
                   const video = event.currentTarget;
                   const nextProgress = video.duration ? (video.currentTime / video.duration) * 100 : 0;

@@ -2,6 +2,22 @@ const EventEmitter = require('events');
 const fs = require('fs').promises;
 const path = require('path');
 
+const parseWeightToGrams = (data) => {
+  const dataStr = data.toString().trim().toLowerCase();
+  const match = dataStr.match(/([+-]?\d+(?:[.,]\d+)?)/);
+  if (!match) return null;
+
+  const rawNumber = match[1];
+  const value = parseFloat(rawNumber.replace(',', '.'));
+  if (!Number.isFinite(value)) return null;
+
+  const hasDecimal = /[.,]/.test(rawNumber);
+  if (dataStr.includes('kg')) return value * 1000;
+  if (dataStr.includes('g') && hasDecimal && Math.abs(value) < 10) return value * 1000;
+  if (!dataStr.includes('g') && hasDecimal && Math.abs(value) <= 100) return value * 1000;
+  return value;
+};
+
 // Protocolos de comunicação para diferentes marcas de balança
 const SCALE_PROTOCOLS = {
   toledo: {
@@ -16,10 +32,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from([0x5A]) // Z
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      // Formato Toledo: +00000.000kg ou similar
-      const match = dataStr.match(/([+-]?\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   },
   
@@ -35,10 +48,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from([0x02, 0x5A, 0x03]) // STX Z ETX
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      // Formato Filizola: varia por modelo
-      const match = dataStr.match(/(\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   },
   
@@ -54,10 +64,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from('Z\r\n')
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      // Formato Urano: peso em gramas ou kg
-      const match = dataStr.match(/(\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   },
   
@@ -73,10 +80,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from('ZERO\r')
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      // Formato Magna: varia por modelo
-      const match = dataStr.match(/(\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   },
 
@@ -92,9 +96,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from('Z')
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      const match = dataStr.match(/([+-]?\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   },
   
@@ -110,10 +112,7 @@ const SCALE_PROTOCOLS = {
       zero: Buffer.from('Z')
     },
     parseWeight: (data) => {
-      const dataStr = data.toString().trim();
-      // Tentar extrair qualquer número decimal
-      const match = dataStr.match(/([+-]?\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : null;
+      return parseWeightToGrams(data);
     }
   }
 };
@@ -133,7 +132,7 @@ class ScaleService extends EventEmitter {
       stabilityThreshold: 0.01,
       stabilityTime: 2000,
       maxWeight: 30000, // 30kg padrão
-      unit: 'g' // g, kg
+      unit: 'kg' // g, kg
     };
   }
 

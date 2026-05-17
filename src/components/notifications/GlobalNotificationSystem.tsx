@@ -76,14 +76,14 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [soundEnabled, soundType, volume]);
 
   useEffect(() => {
-    const shouldLoopAlert = soundEnabled && visibleOrders.length > 0 && !isOnOrdersPage;
+    const shouldLoopAlert = soundEnabled && pendingOrders.length > 0;
     if (shouldLoopAlert) {
       soundNotifications.startPersistentAlert(soundType, 4000);
       return;
     }
     soundNotifications.stopPersistentAlert();
     soundNotifications.stopAllSounds();
-  }, [visibleOrders.length, soundEnabled, soundType, isOnOrdersPage]);
+  }, [pendingOrders.length, soundEnabled, soundType]);
 
   const playOrderSound = async () => {
     if (!soundEnabledRef.current) return;
@@ -327,7 +327,6 @@ const GlobalNotificationSystem: React.FC = () => {
 
   useEffect(() => {
     if (isOnOrdersPage) {
-      soundNotifications.stopAllSounds();
       setIsVisible(false);
     } else if (visibleOrders.length > 0) {
       setIsVisible(true);
@@ -335,13 +334,6 @@ const GlobalNotificationSystem: React.FC = () => {
   }, [isOnOrdersPage, visibleOrders.length]);
 
   const handleGoToOrders = () => {
-    soundNotifications.stopAllSounds();
-    const currentOrderIds = pendingOrders.map((order) => order.id);
-    setDismissedOrders((prev) => {
-      const nextDismissed = new Set([...prev, ...currentOrderIds]);
-      localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
-      return nextDismissed;
-    });
     setIsAnimatingOut(true);
     window.setTimeout(() => {
       setIsVisible(false);
@@ -350,13 +342,6 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleDismiss = () => {
-    soundNotifications.stopAllSounds();
-    const currentOrderIds = pendingOrders.map((order) => order.id);
-    setDismissedOrders((prev) => {
-      const nextDismissed = new Set([...prev, ...currentOrderIds]);
-      localStorage.setItem('dismissedOrders', JSON.stringify([...nextDismissed]));
-      return nextDismissed;
-    });
     setIsAnimatingOut(true);
     window.setTimeout(() => {
       setIsVisible(false);

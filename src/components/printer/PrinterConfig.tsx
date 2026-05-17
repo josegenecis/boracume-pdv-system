@@ -16,7 +16,7 @@ export const PrinterConfig = () => {
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [settings, setSettings] = useState({
-    paper_width: '80mm',
+    paper_width: '58mm',
     font_size: 'normal',
     print_header: '',
     print_footer: 'Obrigado pela preferência!',

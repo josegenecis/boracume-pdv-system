@@ -62,6 +62,13 @@ const getCycleProgressValue = (program: any, balance: any, issuedCount = 0) => {
   return 0
 }
 
+const getProgramPointValue = (program: any) => {
+  const goal = Math.max(0, Number(program.goal_value || 0))
+  const pointValue = Math.max(0, Number(program.point_value || 0))
+  if (program.type !== 'spending') return goal
+  return pointValue > 0 ? pointValue : goal
+}
+
 const createProgressLine = (program: any, balance: any, options?: { withStars?: boolean; issuedCount?: number }) => {
   const goal = Math.max(0, Number(program.goal_value || 0))
   if (!goal) return ''
@@ -76,8 +83,15 @@ const createProgressLine = (program: any, balance: any, options?: { withStars?: 
 
   if (program.type === 'spending') {
     const progressValue = getCycleProgressValue(program, balance, issuedCount)
-    const prefix = withStars ? '⭐ ' : ''
-    return `${prefix}Fidelidade: ${formatBRL(progressValue)} de ${formatBRL(goal)} acumulados.`
+    const pointValue = getProgramPointValue(program)
+    const stars = pointValue > 0 ? Math.floor(progressValue / pointValue) : 0
+    if (program.type === 'spending' && withStars) {
+      const prefix = `${stars <= 0 ? '☆' : stars <= 10 ? '⭐'.repeat(stars) : `⭐x${stars}`} `
+      return `${prefix}Fidelidade: ${formatBRL(progressValue)} de ${formatBRL(goal)} acumulados. A cada ${formatBRL(pointValue)}, ganha 1 estrelinha.`
+    }
+    if (program.type === 'spending') {
+      return `Fidelidade: ${formatBRL(progressValue)} de ${formatBRL(goal)} acumulados. A cada ${formatBRL(pointValue)}, ganha 1 estrelinha.`
+    }
   }
 
   return ''
@@ -242,7 +256,7 @@ export async function previewLoyaltyForCustomer(
       .maybeSingle(),
     supabase
       .from('loyalty_programs')
-      .select('id,type,goal_value,reward_type,reward_value,active,notify_whatsapp')
+      .select('id,type,goal_value,point_value,reward_type,reward_value,active,notify_whatsapp')
       .eq('user_id', userId)
       .eq('active', true),
     getAvailableLoyaltyReward(supabase, userId, normalizedPhone),
@@ -322,7 +336,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
 
   const { data: programs, error: programsError } = await supabase
     .from('loyalty_programs')
-    .select('id,type,goal_value,reward_type,reward_value,active,notify_whatsapp')
+    .select('id,type,goal_value,point_value,reward_type,reward_value,active,notify_whatsapp')
     .eq('user_id', restaurantId)
     .eq('active', true)
 

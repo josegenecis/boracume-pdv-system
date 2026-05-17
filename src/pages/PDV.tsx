@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Minus, Trash2, Calculator, Search, Store, UtensilsCrossed, RefreshCw, Wallet, ChevronLeft, ChevronRight, Scale } from 'lucide-react';
 import OperatorSwitcher from '@/components/OperatorSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
@@ -144,6 +144,9 @@ const PDV = () => {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [tableLaunchOpen, setTableLaunchOpen] = useState(false);
   const [tableLaunchId, setTableLaunchId] = useState('');
+  const [weightDialogOpen, setWeightDialogOpen] = useState(false);
+  const [pendingWeightProduct, setPendingWeightProduct] = useState<Product | null>(null);
+  const [manualWeight, setManualWeight] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
   const { isMobile } = useSidebar();
@@ -786,7 +789,54 @@ const PDV = () => {
     }
   };
 
+  const normalizeScaleWeightToKg = (weight: number, unit?: string) => {
+    const value = Math.max(0, Number(weight || 0));
+    const normalizedUnit = String(unit || '').toLowerCase();
+    if (normalizedUnit === 'g' || normalizedUnit === 'gram' || normalizedUnit === 'grams') return value / 1000;
+    if (value > 30) return value / 1000;
+    return value;
+  };
+
+  const addWeightedProductToCart = (product: Product, weightKg: number) => {
+    const safeWeight = Math.max(0, Number(weightKg || 0));
+    if (!safeWeight) {
+      toast({ title: 'Peso inválido', description: 'Informe um peso maior que zero.', variant: 'destructive' });
+      return;
+    }
+    addToCart(product, Number(safeWeight.toFixed(3)));
+  };
+
+  const openManualWeightDialog = (product: Product) => {
+    setPendingWeightProduct(product);
+    setManualWeight('');
+    setWeightDialogOpen(true);
+  };
+
+  const handleWeightedProductClick = async (product: Product) => {
+    const api = (window as any)?.electronAPI;
+    const scalePort = localStorage.getItem('hw.scale.port') || '';
+    if (!api?.readWeight || !scalePort) {
+      openManualWeightDialog(product);
+      return;
+    }
+
+    try {
+      const resp = await api.readWeight(scalePort, 1800);
+      if (!resp?.success) throw new Error(resp?.error || resp?.message || 'Balança não identificada');
+      const weightKg = normalizeScaleWeightToKg(Number(resp.weight || 0), resp.unit);
+      if (!weightKg) throw new Error('Peso zerado');
+      addWeightedProductToCart(product, weightKg);
+    } catch {
+      openManualWeightDialog(product);
+    }
+  };
+
   const handleProductClick = async (product: Product) => {
+    if (product.weight_based) {
+      await handleWeightedProductClick(product);
+      return;
+    }
+
     const variations = await prefetchSimpleVariations(product.id);
     
     if (variations.length > 0) {
@@ -1632,8 +1682,14 @@ const PDV = () => {
                                     </div>
                                   )}
                                   <div className="absolute right-1 top-1 rounded-full border border-[#003223]/10 bg-white/95 px-1.5 py-0.5 text-[9px] font-bold text-[#0B5137] shadow-sm backdrop-blur-sm">
-                                    {formatCurrency(product.price)}
+                                    {formatCurrency(product.price)}{product.weight_based ? '/kg' : ''}
                                   </div>
+                                  {product.weight_based && (
+                                    <div className="absolute left-1 top-1 flex items-center gap-1 rounded-full bg-[#003223] px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm">
+                                      <Scale className="h-2.5 w-2.5" />
+                                      Peso
+                                    </div>
+                                  )}
                                   {isLowStock && (
                                     <div className="absolute left-1 top-1 rounded-full bg-red-600 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm">
                                       Estoque baixo
@@ -2295,6 +2351,44 @@ const PDV = () => {
           }}
         />
       )}
+
+      <Dialog open={weightDialogOpen} onOpenChange={setWeightDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Informar peso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+              <div className="font-semibold">{pendingWeightProduct?.name}</div>
+              <div className="text-gray-500">{formatCurrency(pendingWeightProduct?.price || 0)} por kg</div>
+            </div>
+            <div className="space-y-2">
+              <Label>Peso em kg</Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0,100"
+                value={manualWeight}
+                onChange={(event) => setManualWeight(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWeightDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (!pendingWeightProduct) return;
+                const weightKg = Number(manualWeight.replace(',', '.'));
+                addWeightedProductToCart(pendingWeightProduct, weightKg);
+                setWeightDialogOpen(false);
+                setPendingWeightProduct(null);
+                setManualWeight('');
+              }}
+            >
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={tableLaunchOpen} onOpenChange={setTableLaunchOpen}>
         <DialogContent className="max-w-md">

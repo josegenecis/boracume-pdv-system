@@ -90,6 +90,26 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
 
+  const repairMojibake = (value: any): any => {
+    if (typeof value === 'string') {
+      if (!/[ÃÂâ€]/.test(value)) return value;
+      try {
+        const bytes = new Uint8Array(Array.from(value).map((char) => char.charCodeAt(0) & 0xff));
+        const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        const originalBadness = (value.match(/[ÃÂ�]/g) || []).length;
+        const decodedBadness = (decoded.match(/[ÃÂ�]/g) || []).length;
+        return decodedBadness < originalBadness ? decoded : value;
+      } catch {
+        return value;
+      }
+    }
+    if (Array.isArray(value)) return value.map(repairMojibake);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, repairMojibake(entry)]));
+    }
+    return value;
+  };
+
   const mergeImportedMenus = (base: ImportedCategory[], enrich: ImportedCategory[]) => {
     const enrichProducts = new Map<string, ImportedProduct>();
     for (const c of enrich || []) {
@@ -313,13 +333,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
       if (activeTab === 'text') {
         setLoadingMessage('Processando texto...');
+        const normalizedText = String(repairMojibake(textInput) || '');
         const { data, status } = await invokeEdgeFunction('scrape-menu', {
           type: 'text',
-          data: textInput,
+          data: normalizedText,
           action: 'start'
         });
         if (status !== 200 || !data.success) {
-          categoriesToImport = parseMenuText(textInput);
+          categoriesToImport = parseMenuText(normalizedText);
         } else {
           categoriesToImport = data.categories || [];
         }
@@ -327,7 +348,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       else if (activeTab === 'json') {
         setLoadingMessage('Validando JSON...');
         try {
-          const parsed = JSON.parse(textInput);
+          const parsed = repairMojibake(JSON.parse(textInput));
           // Aceitar tanto o formato do Apify antigo quanto o formato direto
           let rawCategories = Array.isArray(parsed) ? parsed : (parsed.categories || []);
           
@@ -383,7 +404,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                }
              }
            });
-           extractedText = String(res?.data?.text || '').trim();
+           extractedText = String(repairMojibake(res?.data?.text || '') || '').trim();
          } catch {}
 
          if (extractedText) {
@@ -433,6 +454,8 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       if (categoriesToImport.length === 0) {
         throw new Error('Nenhum produto encontrado.');
       }
+
+      categoriesToImport = repairMojibake(categoriesToImport);
       
       console.log('[Import] Sucesso! Importando para o banco...');
       setLoadingMessage('Salvando produtos...');

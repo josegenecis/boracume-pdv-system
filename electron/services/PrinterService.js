@@ -151,11 +151,16 @@ class PrinterService extends EventEmitter {
       }
 
       const { printer } = printerInfo;
-      const template = this.templates.get(templateName);
+      const baseTemplate = this.templates.get(templateName);
       
-      if (!template) {
+      if (!baseTemplate) {
         return { success: false, message: 'Template não encontrado' };
       }
+
+      const template = {
+        ...baseTemplate,
+        width: Number(printerInfo?.options?.width || baseTemplate.width || 32)
+      };
 
       // Limpar buffer da impressora
       printer.clear();

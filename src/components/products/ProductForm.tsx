@@ -775,8 +775,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       is_available: formData.available,
       weight_based: formData.weight_based,
       send_to_kds: formData.send_to_kds,
-      show_in_pdv: formData.show_in_pdv,
-      show_in_delivery: formData.show_in_delivery,
+      show_in_pdv: formData.weight_based ? true : formData.show_in_pdv,
+      show_in_delivery: formData.weight_based ? false : formData.show_in_delivery,
       image_url: formData.image_url || null,
     };
 
@@ -2587,8 +2587,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
               id="show_in_delivery"
               checked={formData.show_in_delivery}
               onCheckedChange={(checked) => setFormData(prev => ({ ...prev, show_in_delivery: checked }))}
+              disabled={formData.weight_based}
             />
             <Label htmlFor="show_in_delivery" className="font-medium text-boracume-dark-green">Mostrar no delivery</Label>
+          </div>
+
+          <div className="flex items-center space-x-2 col-span-2 rounded-xl border border-[#003223]/10 bg-white/80 p-3">
+            <Switch
+              id="weight_based"
+              checked={formData.weight_based}
+              onCheckedChange={(checked) => setFormData(prev => ({
+                ...prev,
+                weight_based: checked,
+                show_in_pdv: checked ? true : prev.show_in_pdv,
+                show_in_delivery: checked ? false : prev.show_in_delivery
+              }))}
+            />
+            <div>
+              <Label htmlFor="weight_based" className="font-medium text-boracume-dark-green">Vendido por peso</Label>
+              <p className="text-xs text-[#003223]/60">Produto aparece somente no PDV e puxa o peso da balança ao selecionar.</p>
+            </div>
           </div>
 
           <div className="flex items-center space-x-2 col-span-2">

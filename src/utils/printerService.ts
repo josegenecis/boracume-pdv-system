@@ -96,7 +96,7 @@ function shouldPrintTicketCode(order: any) {
 }
 
 function normalizePrintConfig(settings: any): NormalizedPrintConfig {
-  const paperWidth = String(settings?.paper_width || '80mm').trim() === '58mm' ? '58mm' : '80mm';
+  const paperWidth = String(settings?.paper_width || '58mm').trim() === '80mm' ? '80mm' : '58mm';
   const fontSizeRaw = String(settings?.font_size || 'normal').trim();
   const fontSize: NormalizedPrintConfig['font_size'] =
     fontSizeRaw === 'small' || fontSizeRaw === 'large' ? fontSizeRaw : 'normal';
@@ -449,7 +449,7 @@ function resolveElectronTarget(): ElectronTarget | null {
 
 function buildOrderHtml(order: any, config: any, store?: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-  const bodyWidth = config.paper_width === '58mm' ? '190px' : '260px';
+  const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
   const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
   const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
   const storeDesc = escapeHtml(store?.description || '');
@@ -471,9 +471,9 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           * { box-sizing: border-box; }
           body {
             font-family: 'Courier New', Courier, monospace;
-            width: ${width};
+            width: ${bodyWidth};
             margin: 0;
-            padding: 7px 4px 10px;
+            padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
             line-height: 1.28;
@@ -485,8 +485,8 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           }
           .container {
             width: 100%;
-            max-width: ${bodyWidth};
-            margin: 0 auto;
+            max-width: none;
+            margin: 0;
             overflow: hidden;
           }
           .center { text-align: center; }
@@ -624,7 +624,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
 
 function buildKitchenTicketHtml(order: any, config: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
-  const bodyWidth = config.paper_width === '58mm' ? '190px' : '260px';
+  const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
   const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
   const customerName = escapeHtml(getKitchenCustomerLabel(order));
   const orderTypeLabel = escapeHtml(getOrderTypeLabel(order));
@@ -642,9 +642,9 @@ function buildKitchenTicketHtml(order: any, config: any) {
           * { box-sizing: border-box; }
           body {
             font-family: 'Courier New', Courier, monospace;
-            width: ${width};
+            width: ${bodyWidth};
             margin: 0;
-            padding: 7px 4px 10px;
+            padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
             line-height: 1.28;
@@ -653,8 +653,8 @@ function buildKitchenTicketHtml(order: any, config: any) {
           }
           .container {
             width: 100%;
-            max-width: ${bodyWidth};
-            margin: 0 auto;
+            max-width: none;
+            margin: 0;
             overflow: hidden;
           }
           .center { text-align: center; }
