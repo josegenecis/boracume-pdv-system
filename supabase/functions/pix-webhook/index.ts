@@ -127,8 +127,10 @@ serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, ignored: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
       checkoutPrefetched = checkout
-    } else if (!cidFromQuery && paymentId) {
-      const checkout = await prefetchCheckoutByPaymentId(paymentId)
+    } else if (cidFromQuery || paymentId) {
+      const checkout = cidFromQuery
+        ? await prefetchCheckoutByCorrelation(cidFromQuery)
+        : await prefetchCheckoutByPaymentId(paymentId)
       if (checkout && String(checkout.provider).toLowerCase() === 'mercadopago') {
         checkoutPrefetched = checkout
       }
@@ -156,7 +158,13 @@ serve(async (req) => {
       if (!secretValidated) {
         const expectedSecret = Deno.env.get('PIX_WEBHOOK_SECRET') ?? ''
         if (!expectedSecret || providedSecret !== expectedSecret) {
+          if (checkoutPrefetched && String(checkoutPrefetched.provider).toLowerCase() === 'mercadopago') {
+            secretValidated = true
+          } else if (paymentId) {
+            return new Response(JSON.stringify({ ok: true, unknown: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          } else {
           return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+          }
         }
         secretValidated = true
       }
