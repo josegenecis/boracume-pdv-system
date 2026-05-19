@@ -409,7 +409,7 @@ const NotificationSettings = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="bell">
-                        Bell Boracume {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
+                        Alerta Original {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
                       </SelectItem>
                       <SelectItem value="chime">
                         Bell Instant {customSoundUrls.custom_chime_url ? '(personalizado)' : ''}

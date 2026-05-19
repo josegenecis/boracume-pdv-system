@@ -28,7 +28,7 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
   };
 
   const soundTypes = [
-    { key: 'bell', label: 'Bell Boracume', urlKey: 'custom_bell_url' as const },
+    { key: 'bell', label: 'Alerta Original', urlKey: 'custom_bell_url' as const },
     { key: 'chime', label: 'Bell Instant', urlKey: 'custom_chime_url' as const },
   ];
 
@@ -196,7 +196,7 @@ const SoundUploadManager: React.FC<SoundUploadManagerProps> = ({ customUrls, onS
     if (!soundTypeData) return;
 
     const customUrl = customUrls[soundTypeData.urlKey];
-    const defaultUrl = soundType === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Bell Boracume.mp3';
+    const defaultUrl = soundType === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Alerta Original.mp3';
     const audio = new Audio(customUrl || defaultUrl);
     audio.volume = 0.5;
     audio.play().catch(console.error);

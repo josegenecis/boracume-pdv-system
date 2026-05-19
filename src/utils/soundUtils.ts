@@ -24,7 +24,7 @@ export class SoundNotifications {
 
   private getDefaultSoundPath(soundType: string) {
     const normalized = this.normalizeSoundType(soundType);
-    return normalized === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Bell Boracume.mp3';
+    return normalized === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Alerta Original.mp3';
   }
 
   setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
