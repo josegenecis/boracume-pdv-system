@@ -84,6 +84,84 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
+export async function pauseRestaurantBotForConversation(params: {
+  supabase: any;
+  restaurantId: string;
+  customerPhone: string;
+  customerName?: string;
+  reason?: string;
+}) {
+  const supabase = params.supabase;
+  const restaurantId = String(params.restaurantId || '').trim();
+  const customerPhone = normalizePhone(params.customerPhone);
+  const customerName = String(params.customerName || 'Cliente WhatsApp').trim() || 'Cliente WhatsApp';
+
+  if (!restaurantId || !customerPhone) {
+    return { ok: false, skipped: true, reason: 'missing_input' };
+  }
+
+  const { data: existingConversation, error: findError } = await supabase
+    .from('whatsapp_conversations')
+    .select('id')
+    .eq('user_id', restaurantId)
+    .eq('customer_phone', customerPhone)
+    .maybeSingle();
+
+  if (findError) return { ok: false, error: findError.message };
+
+  let conversationId = String(existingConversation?.id || '');
+  if (!conversationId) {
+    const { data: createdConversation, error: createError } = await supabase
+      .from('whatsapp_conversations')
+      .insert({
+        user_id: restaurantId,
+        customer_phone: customerPhone,
+        customer_name: customerName,
+        status: 'bot_paused'
+      })
+      .select('id')
+      .single();
+
+    if (createError) return { ok: false, error: createError.message };
+    conversationId = String(createdConversation?.id || '');
+  }
+
+  const fullPausePayload = {
+    status: 'bot_paused',
+    bot_paused: true,
+    bot_paused_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  let { error: updateError } = await supabase
+    .from('whatsapp_conversations')
+    .update(fullPausePayload)
+    .eq('id', conversationId)
+    .eq('user_id', restaurantId);
+
+  if (updateError && String(updateError.message || '').includes('bot_paused')) {
+    const fallbackResult = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        status: 'bot_paused',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', conversationId)
+      .eq('user_id', restaurantId);
+    updateError = fallbackResult.error;
+  }
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused_by_outgoing', 'Bot pausado por mensagem enviada pelo restaurante', {
+    customerPhone,
+    conversationId,
+    reason: params.reason || 'outgoing_message'
+  });
+
+  return { ok: true, conversationId };
+}
+
 export async function logWhatsAppBotStep(supabase: any, restaurantId: string, actionType: string, description: string, metadata: Record<string, unknown> = {}) {
   const userId = String(restaurantId || '').trim();
   if (!supabase || !userId) return;
@@ -273,7 +351,10 @@ export async function processRestaurantBotMessage(params: {
     return { ok: true, skipped: true, reason: 'bot_paused', conversationId };
   }
 
-  const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }, { data: productsData }] = await Promise.all([
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const menuLinkNeedle = `/share/menu/${restaurantId}`;
+
+  const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }, { data: lastMenuMessage }, { data: productsData }] = await Promise.all([
     supabase
       .from('whatsapp_messages')
       .select('sender, content, sent_at')
@@ -293,6 +374,16 @@ export async function processRestaurantBotMessage(params: {
       .select('id, content, sent_at')
       .eq('conversation_id', conversationId)
       .eq('sender', 'bot')
+      .order('sent_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('whatsapp_messages')
+      .select('id, sent_at')
+      .eq('conversation_id', conversationId)
+      .eq('sender', 'bot')
+      .ilike('content', `%${menuLinkNeedle}%`)
+      .gte('sent_at', oneDayAgo)
       .order('sent_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -318,11 +409,13 @@ export async function processRestaurantBotMessage(params: {
   const promotionsIntent = wantsPromotions(text);
   const customerHasNoOrder = !lastOrder;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
-  const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20;
+  const menuWasSentToday = Boolean(lastMenuMessage?.id);
+  const canRepeatMenuReply = !menuWasSentToday && (explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20);
 
   let replyText = '';
   let replyStrategy = 'fallback';
   const deterministicReplies: string[] = [];
+  let menuReplySuppressedToday = false;
 
   if (trackIntent && lastOrder?.id) {
     deterministicReplies.push(fillTemplate(
@@ -361,6 +454,11 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
+  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && menuWasSentToday) {
+    menuReplySuppressedToday = true;
+    replyStrategy = replyStrategy === 'fallback' ? 'menu_daily_limit' : `multi_intent_${replyStrategy}_menu_daily_limit`;
+  }
+
   if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
     deterministicReplies.push(
       fillTemplate(context.autoResponses.welcome || '', {
@@ -380,6 +478,8 @@ export async function processRestaurantBotMessage(params: {
 
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
+  } else if (menuReplySuppressedToday) {
+    replyText = 'Ja te enviei o link do cardapio hoje. Se precisar de ajuda com o pedido, pode mandar sua duvida por aqui.';
   } else {
     replyStrategy = 'openai';
     try {

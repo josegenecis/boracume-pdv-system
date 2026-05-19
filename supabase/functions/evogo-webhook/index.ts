@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractPhoneFromRemoteJid } from "../_shared/restaurant-whatsapp.ts";
-import { logWhatsAppBotStep, processRestaurantBotMessage } from "../_shared/whatsapp-bot.ts";
+import { logWhatsAppBotStep, pauseRestaurantBotForConversation, processRestaurantBotMessage } from "../_shared/whatsapp-bot.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -83,6 +83,17 @@ function normalizeLookupKey(value: unknown) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
+}
+
+function isLikelyBotEcho(text: string) {
+  const value = String(text || '').toLowerCase();
+  return value.includes('/share/menu/') ||
+    value.includes('/share/track/') ||
+    value.includes('sou o assistente') ||
+    value.includes('bem-vindo ao') ||
+    value.includes('acompanhe seu pedido') ||
+    value.includes('cardápio completo') ||
+    value.includes('cardapio completo');
 }
 
 serve(async (req) => {
@@ -203,6 +214,69 @@ serve(async (req) => {
       });
 
       const candidates = pickIncomingMessages(body);
+
+      const outgoingMessages = candidates.filter((item: any) => {
+        const key = item?.key || item?.data?.key || {};
+        const remoteJid = String(
+          key?.remoteJid ||
+          item?.remoteJid ||
+          item?.data?.remoteJid ||
+          item?.Info?.Chat ||
+          item?.data?.Info?.Chat ||
+          ''
+        );
+        const fromMe = Boolean(key?.fromMe ?? item?.fromMe ?? item?.data?.fromMe ?? item?.Info?.IsFromMe ?? item?.data?.Info?.IsFromMe);
+        return fromMe && remoteJid && !remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast');
+      });
+
+      if (outgoingMessages.length > 0) {
+        const primaryOutgoing = outgoingMessages[0];
+        const key = primaryOutgoing?.key || primaryOutgoing?.data?.key || {};
+        const remoteJid = String(
+          key?.remoteJid ||
+          primaryOutgoing?.remoteJid ||
+          primaryOutgoing?.data?.remoteJid ||
+          primaryOutgoing?.Info?.Chat ||
+          primaryOutgoing?.data?.Info?.Chat ||
+          ''
+        );
+        const outgoingText = Array.from(new Set(outgoingMessages
+          .map((outgoing: any) => {
+            const message =
+              outgoing?.message ||
+              outgoing?.Message ||
+              outgoing?.data?.message ||
+              outgoing?.data?.Message ||
+              outgoing?.text ||
+              outgoing?.Text ||
+              outgoing?.data?.text ||
+              outgoing?.data?.Text ||
+              outgoing?.data ||
+              {};
+            return toTextFromMessage(message);
+          })
+          .filter(Boolean)))
+          .join('\n');
+        const phone = extractPhoneFromRemoteJid(remoteJid);
+
+        if (phone && outgoingText && !isLikelyBotEcho(outgoingText)) {
+          const pauseResult = await pauseRestaurantBotForConversation({
+            supabase: supabaseClient,
+            restaurantId: instanceRow.restaurant_id,
+            customerPhone: phone,
+            reason: 'from_me_webhook'
+          });
+          lastResult = pauseResult;
+          await logWhatsAppBotStep(supabaseClient, instanceRow.restaurant_id, 'whatsapp_webhook_outgoing', 'Mensagem enviada pelo restaurante detectada no webhook', {
+            provider: 'evogo',
+            event,
+            rawEvent,
+            instanceName: instanceRow.instance_name || instanceName,
+            customerPhone: phone,
+            pauseResult
+          });
+        }
+      }
 
       const incomingMessages = candidates.filter((item: any) => {
         const key = item?.key || item?.data?.key || {};

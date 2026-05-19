@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { logWhatsAppBotStep, processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
+import { logWhatsAppBotStep, pauseRestaurantBotForConversation, processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -74,6 +74,17 @@ function normalizeLookupKey(value: unknown) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function isLikelyBotEcho(text: string) {
+  const value = String(text || '').toLowerCase();
+  return value.includes('/share/menu/') ||
+    value.includes('/share/track/') ||
+    value.includes('sou o assistente') ||
+    value.includes('bem-vindo ao') ||
+    value.includes('acompanhe seu pedido') ||
+    value.includes('cardápio completo') ||
+    value.includes('cardapio completo');
+}
+
 function pickIncomingEnvelope(body: any) {
   const direct = body?.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : body;
   const list = body?.data?.messages || body?.messages || body?.data;
@@ -81,7 +92,7 @@ function pickIncomingEnvelope(body: any) {
     const found = list.find((item: any) => {
       const key = item?.key || item?.data?.key || {};
       const remoteJid = String(key?.remoteJid || item?.remoteJid || '');
-      return remoteJid && !remoteJid.includes('@g.us') && !Boolean(key?.fromMe ?? item?.fromMe);
+      return remoteJid && !remoteJid.includes('@g.us');
     });
     if (found) return found;
   }
@@ -130,7 +141,6 @@ Deno.serve(async (req: Request) => {
   const instance = pickInstanceName(body);
   const data = pickIncomingEnvelope(body);
   const fromMe = Boolean(data?.key?.fromMe ?? data?.fromMe);
-  if (fromMe) return json({ success: true, ignored: true });
 
   const remoteJid = String(data?.key?.remoteJid || data?.remoteJid || '');
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
@@ -177,6 +187,30 @@ Deno.serve(async (req: Request) => {
     }
   }
   if (!userId) return json({ success: false, error: 'User not mapped for instance' }, 400);
+
+  if (fromMe) {
+    if (isLikelyBotEcho(text)) {
+      return json({ success: true, ignored: true, reason: 'bot_echo' });
+    }
+
+    const pauseResult = await pauseRestaurantBotForConversation({
+      supabase,
+      restaurantId: userId,
+      customerPhone,
+      reason: 'from_me_webhook'
+    });
+
+    await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_outgoing', 'Mensagem enviada pelo restaurante detectada no webhook', {
+      provider: 'evolution',
+      event,
+      rawEvent,
+      instanceName: instance,
+      customerPhone,
+      pauseResult
+    });
+
+    return json({ success: true, paused: Boolean(pauseResult?.ok), result: pauseResult });
+  }
 
   await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_received', 'Webhook evolution recebido', {
     provider: 'evolution',
