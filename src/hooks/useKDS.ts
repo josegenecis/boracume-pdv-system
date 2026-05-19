@@ -20,6 +20,11 @@ export interface KitchenOrder {
   table_number?: string;
 }
 
+const isPdvCounterOrder = (order: any) => {
+  const source = String(order?.variations?.source || order?.source || '').toUpperCase();
+  return order?.order_type === 'counter' && source === 'PDV';
+};
+
 export const useKDS = () => {
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +96,7 @@ export const useKDS = () => {
 
       if (error) throw error;
       
-      setOrders((data || []) as any);
+      setOrders(((data || []) as any[]).filter((order) => !isPdvCounterOrder(order)) as any);
       hasLoadedOrdersRef.current = true;
     } catch (error) {
       console.error('Error fetching KDS orders:', error);
@@ -122,6 +127,8 @@ export const useKDS = () => {
           
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as KitchenOrder;
+            if (isPdvCounterOrder(newOrder)) return;
+
             if (['pending', 'accepted', 'preparing', 'ready'].includes(newOrder.status)) {
               setOrders(prev => {
                 // Verificar se já existe para evitar duplicação
@@ -138,6 +145,10 @@ export const useKDS = () => {
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as KitchenOrder;
+            if (isPdvCounterOrder(updatedOrder)) {
+              setOrders(prev => prev.filter(o => o.id !== updatedOrder.id));
+              return;
+            }
             
             // If status changed to something not in KDS (e.g. delivered/cancelled), remove it
             if (!['pending', 'preparing', 'ready'].includes(updatedOrder.status)) {

@@ -14,7 +14,6 @@ import { formatBRL } from '@/lib/currency';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import ProductVariationModal from '@/components/pdv/ProductVariationModal';
-import PixPaymentModal from '@/components/payment/PixPaymentModal';
 import PixCheckoutModal from '@/components/payment/PixCheckoutModal';
 import TableManager from '@/components/tables/TableManager';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -29,7 +28,6 @@ import { PrinterService } from '@/utils/printerService';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 import { ensureDefaultTables } from '@/utils/tableDefaults';
-import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useNavigate } from 'react-router-dom';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -120,8 +118,6 @@ const PDV = () => {
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState('all');
   const [activeTab, setActiveTab] = useState('products');
-  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
-  const [pixOrderId, setPixOrderId] = useState<string | undefined>(undefined);
   const [pixAmount, setPixAmount] = useState(0);
   const [mpPixCheckout, setMpPixCheckout] = useState<null | { correlationID: string; brCode: string; qrCodeImage?: string; paymentLinkUrl?: string; paymentId?: string }>(null);
   const [createdOrderForNfce, setCreatedOrderForNfce] = useState<any>(null);
@@ -1244,6 +1240,7 @@ const PDV = () => {
       const operatorSession = (() => {
         return getOperatorSession();
       })();
+      const isCounterPdvSale = orderType === 'counter';
 
       if (!cashSession?.id) {
         toast({
@@ -1276,8 +1273,8 @@ const PDV = () => {
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseBRL(changeAmount) : null,
-        status: paymentMethod === 'pix' ? 'pending' : 'preparing',
-        acceptance_status: paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'accepted',
+        status: isCounterPdvSale ? 'completed' : (paymentMethod === 'pix' ? 'pending' : 'preparing'),
+        acceptance_status: isCounterPdvSale ? 'accepted' : (paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'accepted'),
         order_number: orderNumber,
         user_id: user?.id,
         estimated_time: '30-45 min',
@@ -1345,6 +1342,9 @@ const PDV = () => {
           toast({ title: 'Aguardando pagamento', description: 'Escaneie o QR Code para concluir a venda.' })
           return
         }
+
+        orderData.status = isCounterPdvSale ? 'completed' : 'preparing';
+        orderData.acceptance_status = 'accepted';
       }
 
       console.log('Criando pedido:', orderData);
@@ -1363,10 +1363,12 @@ const PDV = () => {
 
       const created = Array.isArray(data) ? data[0] : data;
 
-      try {
-        await notifyOrderCreatedById(created?.id);
-      } catch (waErr) {
-        console.warn('Falha ao notificar pedido via WhatsApp:', waErr);
+      if (!isCounterPdvSale) {
+        try {
+          await notifyOrderCreatedById(created?.id);
+        } catch (waErr) {
+          console.warn('Falha ao notificar pedido via WhatsApp:', waErr);
+        }
       }
 
       if (orderType === 'dine_in' && selectedTable) {
@@ -1380,47 +1382,27 @@ const PDV = () => {
         }
       }
 
-      if (paymentMethod === 'pix') {
-        setPixAmount(getFinalTotal());
-        setPixOrderId(created?.id || null);
-        setCreatedOrderForNfce(created || null);
-        setIsPixModalOpen(true);
-        try {
-          await supabase.from('security_logs').insert({
-            user_id: user?.id,
-            event_type: 'order_finalize',
-            description: `Pedido ${orderNumber} criado (PIX) por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
-            severity: 'info',
-            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
-          } as any);
-        } catch {}
-        toast({
-          title: "Pedido criado!",
-          description: "Aguardando pagamento do PIX para enviar ao restaurante.",
-        });
-      } else {
-        setCreatedOrderForNfce(created || null);
-        try {
-          await PrinterService.printOrder(created);
-        } catch (e) {
-          console.warn('Falha ao imprimir automaticamente:', e);
-        }
-        try {
-          await supabase.from('security_logs').insert({
-            user_id: user?.id,
-            event_type: 'order_finalize',
-            description: `Pedido ${orderNumber} finalizado por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
-            severity: 'info',
-            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
-          } as any);
-        } catch {}
-        toast({
-          title: "Venda finalizada!",
-          description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
-        });
-        setMobileCartOpen(false);
-        resetCurrentSale('counter');
+      setCreatedOrderForNfce(created || null);
+      try {
+        await PrinterService.printOrder(created);
+      } catch (e) {
+        console.warn('Falha ao imprimir automaticamente:', e);
       }
+      try {
+        await supabase.from('security_logs').insert({
+          user_id: user?.id,
+          event_type: 'order_finalize',
+          description: `Pedido ${orderNumber} finalizado por ${orderData.variations?.operator?.name || 'Conta do restaurante'}`,
+          severity: 'info',
+          user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
+        } as any);
+      } catch {}
+      toast({
+        title: "Venda finalizada!",
+        description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
+      });
+      setMobileCartOpen(false);
+      resetCurrentSale('counter');
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
       toast({
@@ -2489,31 +2471,6 @@ const PDV = () => {
           }}
         />
       ) : null}
-
-      <PixPaymentModal
-        isOpen={isPixModalOpen}
-        onClose={() => setIsPixModalOpen(false)}
-        amount={pixAmount}
-        orderId={pixOrderId}
-        onPaymentConfirmed={async () => {
-          if (!pixOrderId) return;
-          try {
-            const updated = await updateOrderStatusRemote(pixOrderId, 'preparing');
-            try {
-              await PrinterService.printOrder(updated || { id: pixOrderId, user_id: user?.id, order_number: 'PIX', created_at: new Date().toISOString(), items: cart, total: pixAmount, delivery_fee: getDeliveryFee(), payment_method: 'pix', customer_name: customerName });
-            } catch (e) {
-              console.warn('Falha ao imprimir automaticamente (PIX):', e);
-            }
-            toast({
-              title: "Pagamento confirmado!",
-              description: "Pedido entrou em preparo e foi enviado para impressão.",
-            });
-            resetCurrentSale('counter');
-          } catch (e) {
-            console.error(e);
-          }
-        }}
-      />
 
       <NFCeEmissionModal
         isOpen={nfceModalOpen}

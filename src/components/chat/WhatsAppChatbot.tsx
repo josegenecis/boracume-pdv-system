@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, Filter } from 'lucide-react';
+import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 interface Message {
   id: string;
   content: string;
-  sender: 'bot' | 'customer';
+  sender: 'bot' | 'customer' | 'agent';
   sent_at: string;
 }
 
@@ -24,6 +24,8 @@ interface Conversation {
   customer_name: string;
   status: string;
   created_at: string;
+  bot_paused?: boolean;
+  bot_paused_at?: string | null;
 }
 
 const WhatsAppChatbot = () => {
@@ -71,7 +73,9 @@ const WhatsAppChatbot = () => {
         customer_phone: conv.customer_phone,
         customer_name: conv.customer_name || 'Cliente',
         status: conv.status,
-        created_at: conv.created_at
+        created_at: conv.created_at,
+        bot_paused: Boolean((conv as any).bot_paused) || conv.status === 'bot_paused',
+        bot_paused_at: (conv as any).bot_paused_at || null
       }));
       
       setConversations(typedConversations);
@@ -101,7 +105,7 @@ const WhatsAppChatbot = () => {
       const typedMessages: Message[] = (data || []).map(msg => ({
         id: msg.id,
         content: msg.content,
-        sender: msg.sender as 'bot' | 'customer',
+        sender: msg.sender as 'bot' | 'customer' | 'agent',
         sent_at: msg.sent_at
       }));
       
@@ -118,25 +122,71 @@ const WhatsAppChatbot = () => {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return;
+    const conversation = conversations.find(c => c.id === selectedConversation);
+    if (!conversation) return;
+    const messageToSend = newMessage.trim();
 
     try {
+      const pausePayload = {
+        status: 'bot_paused',
+        bot_paused: true,
+        bot_paused_at: new Date().toISOString(),
+        bot_paused_by: user?.id || null,
+        updated_at: new Date().toISOString()
+      };
+
+      let { error: pauseError } = await supabase
+        .from('whatsapp_conversations')
+        .update(pausePayload as any)
+        .eq('id', selectedConversation)
+        .eq('user_id', user?.id);
+
+      if (pauseError && String(pauseError.message || '').includes('bot_paused')) {
+        const fallbackPausePayload = {
+          status: 'bot_paused',
+          updated_at: new Date().toISOString()
+        };
+        const fallbackResult = await supabase
+          .from('whatsapp_conversations')
+          .update(fallbackPausePayload as any)
+          .eq('id', selectedConversation)
+          .eq('user_id', user?.id);
+        pauseError = fallbackResult.error;
+      }
+
+      if (pauseError) throw pauseError;
+
+      const { data: sendResult, error: sendError } = await supabase.functions.invoke('whatsapp-send', {
+        body: {
+          number: conversation.customer_phone,
+          message: messageToSend
+        }
+      });
+
+      if (sendError) throw sendError;
+      if ((sendResult as any)?.error) {
+        throw new Error((sendResult as any)?.message || 'Falha ao enviar mensagem no WhatsApp.');
+      }
+
       const { error } = await supabase
         .from('whatsapp_messages')
         .insert({
           conversation_id: selectedConversation,
-          content: newMessage,
-          sender: 'bot',
-          message_type: 'text'
+          content: messageToSend,
+          sender: 'agent',
+          message_type: 'text',
+          delivered: true
         });
 
       if (error) throw error;
 
       setNewMessage('');
+      setConversations(prev => prev.map(item => item.id === selectedConversation ? { ...item, ...pausePayload } : item));
       fetchMessages(selectedConversation);
       
       toast({
         title: "Mensagem enviada",
-        description: "Sua mensagem foi enviada com sucesso."
+        description: "O robô foi pausado para esta conversa."
       });
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);
@@ -144,6 +194,59 @@ const WhatsAppChatbot = () => {
         title: "Erro",
         description: "Não foi possível enviar a mensagem.",
         variant: "destructive"
+      });
+    }
+  };
+
+  const toggleBotPause = async (conversationId: string, paused: boolean) => {
+    try {
+      const payload = paused
+        ? {
+            status: 'bot_paused',
+            bot_paused: true,
+            bot_paused_at: new Date().toISOString(),
+            bot_paused_by: user?.id || null,
+            updated_at: new Date().toISOString()
+          }
+        : {
+            status: 'active',
+            bot_paused: false,
+            bot_paused_at: null,
+            bot_paused_by: null,
+            updated_at: new Date().toISOString()
+          };
+
+      let { error } = await supabase
+        .from('whatsapp_conversations')
+        .update(payload as any)
+        .eq('id', conversationId)
+        .eq('user_id', user?.id);
+
+      if (error && String(error.message || '').includes('bot_paused')) {
+        const fallbackPayload = {
+          status: paused ? 'bot_paused' : 'active',
+          updated_at: new Date().toISOString()
+        };
+        const fallbackResult = await supabase
+          .from('whatsapp_conversations')
+          .update(fallbackPayload as any)
+          .eq('id', conversationId)
+          .eq('user_id', user?.id);
+        error = fallbackResult.error;
+      }
+
+      if (error) throw error;
+
+      setConversations(prev => prev.map(item => item.id === conversationId ? { ...item, ...payload } : item));
+      toast({
+        title: paused ? 'Robô pausado' : 'Robô reativado',
+        description: paused ? 'O cliente não receberá respostas automáticas nesta conversa.' : 'O bot voltará a responder novas mensagens.'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error?.message || 'Não foi possível atualizar a pausa do robô.',
+        variant: 'destructive'
       });
     }
   };
@@ -326,9 +429,16 @@ const WhatsAppChatbot = () => {
                         <p className="font-medium">{conversation.customer_name}</p>
                         <p className="text-sm text-gray-500">{conversation.customer_phone}</p>
                       </div>
-                      <Badge variant={conversation.status === 'active' ? 'default' : 'secondary'}>
-                        {conversation.status}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant={conversation.status === 'active' ? 'default' : 'secondary'}>
+                          {conversation.status}
+                        </Badge>
+                        {conversation.bot_paused && (
+                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                            Robô pausado
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
                       {new Date(conversation.created_at).toLocaleDateString()}
@@ -343,9 +453,23 @@ const WhatsAppChatbot = () => {
         {/* Chat */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare size={20} />
-              {selectedConv ? `Chat com ${selectedConv.customer_name}` : 'Selecione uma conversa'}
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+              <span className="flex items-center gap-2">
+                <MessageSquare size={20} />
+                {selectedConv ? `Chat com ${selectedConv.customer_name}` : 'Selecione uma conversa'}
+              </span>
+              {selectedConv && (
+                <Button
+                  type="button"
+                  variant={selectedConv.bot_paused ? 'outline' : 'secondary'}
+                  size="sm"
+                  onClick={() => toggleBotPause(selectedConv.id, !selectedConv.bot_paused)}
+                  className="gap-2"
+                >
+                  {selectedConv.bot_paused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
+                  {selectedConv.bot_paused ? 'Reativar robô' : 'Pausar robô'}
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
@@ -362,12 +486,12 @@ const WhatsAppChatbot = () => {
                     messages.map((message) => (
                       <div
                         key={message.id}
-                        className={`flex ${message.sender === 'bot' ? 'justify-end' : 'justify-start'}`}
+                        className={`flex ${message.sender === 'bot' || message.sender === 'agent' ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
                           className={`max-w-xs px-3 py-2 rounded-lg ${
-                            message.sender === 'bot'
-                              ? 'bg-blue-500 text-white'
+                            message.sender === 'bot' || message.sender === 'agent'
+                              ? message.sender === 'agent' ? 'bg-green-600 text-white' : 'bg-blue-500 text-white'
                               : 'bg-white border shadow-sm'
                           }`}
                         >
@@ -378,12 +502,12 @@ const WhatsAppChatbot = () => {
                               <User size={12} />
                             )}
                             <span className="text-xs opacity-75">
-                              {message.sender === 'bot' ? 'Bot' : 'Cliente'}
+                              {message.sender === 'bot' ? 'Bot' : message.sender === 'agent' ? 'Atendente' : 'Cliente'}
                             </span>
                           </div>
                           <p className="text-sm">{message.content}</p>
                           <p className={`text-xs mt-1 ${
-                            message.sender === 'bot' ? 'text-blue-100' : 'text-gray-400'
+                            message.sender === 'bot' || message.sender === 'agent' ? 'text-white/80' : 'text-gray-400'
                           }`}>
                             {new Date(message.sent_at).toLocaleTimeString()}
                           </p>

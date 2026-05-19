@@ -235,7 +235,7 @@ export async function processRestaurantBotMessage(params: {
 
   const { data: existingConversation } = await supabase
     .from('whatsapp_conversations')
-    .select('id')
+    .select('id, status')
     .eq('user_id', restaurantId)
     .eq('customer_phone', customerPhone)
     .maybeSingle();
@@ -263,6 +263,15 @@ export async function processRestaurantBotMessage(params: {
     message_type: 'text',
     delivered: true
   });
+
+  if (String(existingConversation?.status || '').toLowerCase() === 'bot_paused') {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused', 'Bot pausado por atendimento humano', {
+      instanceName,
+      customerPhone,
+      conversationId
+    });
+    return { ok: true, skipped: true, reason: 'bot_paused', conversationId };
+  }
 
   const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }, { data: productsData }] = await Promise.all([
     supabase

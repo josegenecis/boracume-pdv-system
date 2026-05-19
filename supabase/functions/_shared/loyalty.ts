@@ -26,6 +26,13 @@ const buildRewardLabel = (program: any) => {
   return 'Recompensa disponível'
 }
 
+const buildRewardBenefitLabel = (program: any) => {
+  if (program.reward_type === 'percent') return `${Number(program.reward_value || 0)}% de desconto`
+  if (program.reward_type === 'fixed_amount') return `${formatBRL(Number(program.reward_value || 0))} de desconto`
+  if (program.reward_type === 'free_shipping') return 'frete gratis'
+  return 'uma recompensa'
+}
+
 const calculateRewardDiscount = (reward: any, cartTotal: number, deliveryFee: number) => {
   const safeCartTotal = Math.max(0, Number(cartTotal || 0))
   const safeDeliveryFee = Math.max(0, Number(deliveryFee || 0))
@@ -67,6 +74,38 @@ const getProgramPointValue = (program: any) => {
   const pointValue = Math.max(0, Number(program.point_value || 0))
   if (program.type !== 'spending') return goal
   return pointValue > 0 ? pointValue : goal
+}
+
+const getSpendingStarsRequired = (program: any) => {
+  const goal = Math.max(0, Number(program.goal_value || 0))
+  const pointValue = getProgramPointValue(program)
+  if (!goal || !pointValue) return 0
+  return Math.max(1, Math.ceil(goal / pointValue))
+}
+
+const getSpendingCreditForOrder = (program: any, spentAmount: number) => {
+  const pointValue = getProgramPointValue(program)
+  if (!pointValue) return 0
+  return spentAmount >= pointValue ? pointValue : 0
+}
+
+const createWelcomeLine = (program: any) => {
+  if (program.type === 'spending') {
+    const pointValue = getProgramPointValue(program)
+    const starsRequired = getSpendingStarsRequired(program)
+    const reward = buildRewardBenefitLabel(program)
+    if (!pointValue || !starsRequired) return ''
+    return `Parabens, agora voce faz parte do nosso clube de fidelidade! A cada compra de ${formatBRL(pointValue)} ou mais, voce ganha 1 estrelinha. Ao completar ${starsRequired} estrelinhas, voce ganha ${reward}.`
+  }
+
+  if (program.type === 'visits') {
+    const goal = Math.max(0, Number(program.goal_value || 0))
+    const reward = buildRewardBenefitLabel(program)
+    if (!goal) return ''
+    return `Parabens, agora voce faz parte do nosso clube de fidelidade! A cada pedido finalizado voce avanca no clube. Ao completar ${goal} pedidos, voce ganha ${reward}.`
+  }
+
+  return ''
 }
 
 const createProgressLine = (program: any, balance: any, options?: { withStars?: boolean; issuedCount?: number }) => {
@@ -345,6 +384,9 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
   const activePrograms = Array.isArray(programs) ? programs : []
   console.log('[loyalty] active programs', { orderId, count: activePrograms.length })
   const spentAmount = Math.max(0, Number(order?.total || 0) - Math.max(0, Number(order?.delivery_fee || 0)))
+  const spendingCreditEarned = activePrograms
+    .filter((program: any) => program?.type === 'spending')
+    .reduce((maxCredit: number, program: any) => Math.max(maxCredit, getSpendingCreditForOrder(program, spentAmount)), 0)
 
   const { data: existingBalance, error: balanceError } = await supabase
     .from('customer_loyalty_balances')
@@ -354,11 +396,12 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
     .maybeSingle()
 
   if (balanceError) throw balanceError
+  const isFirstPurchase = !existingBalance
 
   const nextBalance = existingBalance
     ? {
         total_visits: Math.max(0, Number(existingBalance.total_visits || 0)) + 1,
-        total_spent: Math.max(0, Number(existingBalance.total_spent || 0)) + spentAmount,
+        total_spent: Math.max(0, Number(existingBalance.total_spent || 0)) + spendingCreditEarned,
         customer_name: String(order?.customer_name || existingBalance.customer_name || 'Cliente'),
         last_order_at: new Date().toISOString(),
       }
@@ -368,7 +411,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
         customer_name: String(order?.customer_name || 'Cliente'),
         total_points: 0,
         total_visits: 1,
-        total_spent: spentAmount,
+        total_spent: spendingCreditEarned,
         last_order_at: new Date().toISOString(),
       }
 
@@ -394,6 +437,7 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
 
   const progressLines: string[] = []
   const rewardLines: string[] = []
+  const welcomeLines: string[] = []
   const awardedRewards: any[] = []
   let rewardsSchemaAvailable = true
 
@@ -467,22 +511,35 @@ export async function processLoyaltyForOrder(supabase: any, order: any) {
     }
 
     if (program.notify_whatsapp) {
+      if (isFirstPurchase) {
+        const welcomeLine = createWelcomeLine(program)
+        if (welcomeLine) welcomeLines.push(welcomeLine)
+      }
+
       const effectiveIssuedCount = rewardsSchemaAvailable ? issuedCount + rewardsToIssue : issuedCount
-      const progressLine = createProgressLine(program, balanceAfter, { withStars: true, issuedCount: effectiveIssuedCount })
-      if (progressLine) progressLines.push(progressLine)
+      const shouldShowProgress =
+        program.type !== 'spending' ||
+        getSpendingCreditForOrder(program, spentAmount) > 0 ||
+        rewardsToIssue > 0
+      if (shouldShowProgress) {
+        const progressLine = createProgressLine(program, balanceAfter, { withStars: true, issuedCount: effectiveIssuedCount })
+        if (progressLine) progressLines.push(progressLine)
+      }
       if (rewardsToIssue > 0 && rewardsSchemaAvailable) rewardLines.push(createRewardLine(program))
     }
   }
 
-  if (progressLines.length > 0 || rewardLines.length > 0) {
+  if (welcomeLines.length > 0 || progressLines.length > 0 || rewardLines.length > 0) {
+    const uniqueWelcomeLines = Array.from(new Set(welcomeLines))
     const uniqueProgressLines = Array.from(new Set(progressLines))
     const uniqueRewardLines = Array.from(new Set(rewardLines))
     const message = [
       `Olá, ${String(order?.customer_name || balanceAfter?.customer_name || 'Cliente')}!`,
-      'Seu fidelidade foi atualizado:',
+      ...uniqueWelcomeLines,
+      uniqueProgressLines.length > 0 || uniqueRewardLines.length > 0 ? 'Seu fidelidade foi atualizado:' : '',
       ...uniqueProgressLines,
       ...uniqueRewardLines,
-    ].join('\n')
+    ].filter(Boolean).join('\n')
 
     try {
       const waResult = await sendRestaurantWhatsApp(restaurantId, customerPhone, message)

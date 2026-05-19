@@ -1621,6 +1621,9 @@ export type Database = {
       }
       whatsapp_conversations: {
         Row: {
+          bot_paused: boolean
+          bot_paused_at: string | null
+          bot_paused_by: string | null
           created_at: string
           customer_name: string | null
           customer_phone: string
@@ -1630,6 +1633,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          bot_paused?: boolean
+          bot_paused_at?: string | null
+          bot_paused_by?: string | null
           created_at?: string
           customer_name?: string | null
           customer_phone: string
@@ -1639,6 +1645,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          bot_paused?: boolean
+          bot_paused_at?: string | null
+          bot_paused_by?: string | null
           created_at?: string
           customer_name?: string | null
           customer_phone?: string

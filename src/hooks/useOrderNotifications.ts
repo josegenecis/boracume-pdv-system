@@ -4,6 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { soundNotifications } from '@/utils/soundUtils';
 
+const isPdvCounterOrder = (order: any) => {
+  const source = String(order?.variations?.source || order?.source || '').toUpperCase();
+  return order?.order_type === 'counter' && source === 'PDV';
+};
+
 export const useOrderNotifications = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -65,6 +70,7 @@ export const useOrderNotifications = () => {
         },
         async (payload) => {
           console.log('🔔 Novo pedido recebido (Realtime):', payload);
+          if (isPdvCounterOrder((payload as any)?.new)) return;
           
           // Force reload of settings to ensure fresh state if needed, or rely on state
           // We rely on state 'enabled' here. 

@@ -53,6 +53,11 @@ interface Order {
   integration_payload?: any;
 }
 
+const isPdvCounterOrder = (order: any) => {
+  const source = String(order?.variations?.source || order?.source || '').toUpperCase();
+  return order?.order_type === 'counter' && source === 'PDV';
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -157,6 +162,8 @@ const Orders = () => {
           (payload) => {
             console.log('🔔 Novo pedido em tempo real:', payload);
 
+            if (isPdvCounterOrder((payload as any)?.new)) return;
+
             // Add new order to the list
             const newOrder = enrichOrder((payload as any)?.new);
 
@@ -175,6 +182,11 @@ const Orders = () => {
           },
           (payload) => {
             console.log('🔄 Pedido atualizado em tempo real:', payload);
+
+            if (isPdvCounterOrder((payload as any)?.new)) {
+              setOrders(prev => prev.filter(order => order.id !== (payload as any)?.new?.id));
+              return;
+            }
 
             // Update order in the list
             setOrders(prev => prev.map(order =>
@@ -279,7 +291,9 @@ const Orders = () => {
       if (error) throw error;
 
       // Transform the data to ensure items is always an array
-      const transformedData = (data || []).map((order) => enrichOrder(order));
+      const transformedData = (data || [])
+        .filter((order) => !isPdvCounterOrder(order))
+        .map((order) => enrichOrder(order));
 
       setOrders(transformedData);
       hasLoadedOrdersRef.current = true;

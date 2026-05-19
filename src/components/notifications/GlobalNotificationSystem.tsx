@@ -21,6 +21,11 @@ interface PendingOrder {
   acceptance_status?: string;
 }
 
+const isPdvCounterOrder = (order: any) => {
+  const source = String(order?.variations?.source || order?.source || '').toUpperCase();
+  return order?.order_type === 'counter' && source === 'PDV';
+};
+
 const GlobalNotificationSystem: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -204,7 +209,7 @@ const GlobalNotificationSystem: React.FC = () => {
     const loadPendingOrders = async (): Promise<PendingOrder[]> => {
       const { data, error } = await supabase
         .from('orders')
-        .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status')
+        .select('id, order_number, customer_name, order_type, total, created_at, acceptance_status, status, variations')
         .eq('user_id', user.id)
         .or('acceptance_status.in.(pending_acceptance,awaiting_pix_payment),status.eq.pending')
         .order('created_at', { ascending: false });
@@ -214,7 +219,7 @@ const GlobalNotificationSystem: React.FC = () => {
         return [];
       }
 
-      const list = (data || []) as PendingOrder[];
+      const list = ((data || []) as PendingOrder[]).filter((order) => !isPdvCounterOrder(order));
       setPendingOrders(list);
       if (list.length > 0 && !isOnOrdersPageRef.current) {
         setIsAnimatingOut(false);
@@ -238,6 +243,8 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const newOrder = payload.new as PendingOrder;
+          if (isPdvCounterOrder(newOrder)) return;
+
           const showForInsert =
             newOrder.acceptance_status === 'pending_acceptance' ||
             newOrder.acceptance_status === 'awaiting_pix_payment' ||
@@ -258,6 +265,11 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
+          if (isPdvCounterOrder(updatedOrder)) {
+            setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
+            return;
+          }
+
           const isPendingLike =
             updatedOrder.acceptance_status === 'pending_acceptance' ||
             updatedOrder.acceptance_status === 'awaiting_pix_payment' ||
