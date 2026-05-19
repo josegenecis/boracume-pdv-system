@@ -28,6 +28,20 @@ interface Conversation {
   bot_paused_at?: string | null;
 }
 
+const buildTemporaryPauseStatus = (minutes = 60) =>
+  `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
+
+const isBotPaused = (conversation: { status?: string | null; bot_paused?: boolean | null }) => {
+  const status = String(conversation.status || '').trim().toLowerCase();
+  if (status === 'bot_paused') return true;
+  if (status.startsWith('bot_paused_until:')) {
+    const until = new Date(status.slice('bot_paused_until:'.length)).getTime();
+    return Number.isFinite(until) && until > Date.now();
+  }
+
+  return Boolean(conversation.bot_paused);
+};
+
 const WhatsAppChatbot = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -74,7 +88,7 @@ const WhatsAppChatbot = () => {
         customer_name: conv.customer_name || 'Cliente',
         status: conv.status,
         created_at: conv.created_at,
-        bot_paused: Boolean((conv as any).bot_paused) || conv.status === 'bot_paused',
+        bot_paused: isBotPaused(conv as any),
         bot_paused_at: (conv as any).bot_paused_at || null
       }));
       
@@ -128,7 +142,7 @@ const WhatsAppChatbot = () => {
 
     try {
       const pausePayload = {
-        status: 'bot_paused',
+        status: buildTemporaryPauseStatus(60),
         bot_paused: true,
         bot_paused_at: new Date().toISOString(),
         bot_paused_by: user?.id || null,
@@ -143,7 +157,7 @@ const WhatsAppChatbot = () => {
 
       if (pauseError && String(pauseError.message || '').includes('bot_paused')) {
         const fallbackPausePayload = {
-          status: 'bot_paused',
+          status: buildTemporaryPauseStatus(60),
           updated_at: new Date().toISOString()
         };
         const fallbackResult = await supabase
@@ -186,7 +200,7 @@ const WhatsAppChatbot = () => {
       
       toast({
         title: "Mensagem enviada",
-        description: "O robô foi pausado para esta conversa."
+        description: "O robô foi pausado por 1 hora nesta conversa."
       });
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);

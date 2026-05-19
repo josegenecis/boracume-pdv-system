@@ -84,6 +84,27 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
+function buildTemporaryPauseStatus(minutes = 60) {
+  return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
+}
+
+function getPauseState(status: unknown) {
+  const value = String(status || '').trim().toLowerCase();
+  if (value === 'bot_paused') return { paused: true, expired: false, reason: 'manual' };
+  if (!value.startsWith('bot_paused_until:')) return { paused: false, expired: false, reason: '' };
+
+  const rawDate = value.slice('bot_paused_until:'.length);
+  const until = new Date(rawDate).getTime();
+  if (!Number.isFinite(until)) return { paused: false, expired: true, reason: 'invalid_until' };
+
+  return {
+    paused: until > Date.now(),
+    expired: until <= Date.now(),
+    reason: 'temporary',
+    until: new Date(until).toISOString()
+  };
+}
+
 export async function pauseRestaurantBotForConversation(params: {
   supabase: any;
   restaurantId: string;
@@ -117,7 +138,7 @@ export async function pauseRestaurantBotForConversation(params: {
         user_id: restaurantId,
         customer_phone: customerPhone,
         customer_name: customerName,
-        status: 'bot_paused'
+        status: buildTemporaryPauseStatus(60)
       })
       .select('id')
       .single();
@@ -127,7 +148,7 @@ export async function pauseRestaurantBotForConversation(params: {
   }
 
   const fullPausePayload = {
-    status: 'bot_paused',
+    status: buildTemporaryPauseStatus(60),
     bot_paused: true,
     bot_paused_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -143,7 +164,7 @@ export async function pauseRestaurantBotForConversation(params: {
     const fallbackResult = await supabase
       .from('whatsapp_conversations')
       .update({
-        status: 'bot_paused',
+        status: buildTemporaryPauseStatus(60),
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
@@ -342,11 +363,35 @@ export async function processRestaurantBotMessage(params: {
     delivered: true
   });
 
-  if (String(existingConversation?.status || '').toLowerCase() === 'bot_paused') {
+  const pauseState = getPauseState(existingConversation?.status);
+  if (pauseState.expired) {
+    const resumePayload = {
+      status: 'active',
+      bot_paused: false,
+      bot_paused_at: null,
+      bot_paused_by: null,
+      updated_at: new Date().toISOString()
+    };
+
+    const resumeResult = await supabase
+      .from('whatsapp_conversations')
+      .update(resumePayload)
+      .eq('id', conversationId);
+
+    if (resumeResult.error && String(resumeResult.error.message || '').includes('bot_paused')) {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    }
+  }
+
+  if (pauseState.paused) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused', 'Bot pausado por atendimento humano', {
       instanceName,
       customerPhone,
-      conversationId
+      conversationId,
+      pauseState
     });
     return { ok: true, skipped: true, reason: 'bot_paused', conversationId };
   }
@@ -410,12 +455,11 @@ export async function processRestaurantBotMessage(params: {
   const customerHasNoOrder = !lastOrder;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const menuWasSentToday = Boolean(lastMenuMessage?.id);
-  const canRepeatMenuReply = !menuWasSentToday && (explicitMenuIntent ? recentBotReplyMinutes > 2 : recentBotReplyMinutes > 20);
+  const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : (!menuWasSentToday && recentBotReplyMinutes > 20);
 
   let replyText = '';
   let replyStrategy = 'fallback';
   const deterministicReplies: string[] = [];
-  let menuReplySuppressedToday = false;
 
   if (trackIntent && lastOrder?.id) {
     deterministicReplies.push(fillTemplate(
@@ -454,11 +498,6 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && menuWasSentToday) {
-    menuReplySuppressedToday = true;
-    replyStrategy = replyStrategy === 'fallback' ? 'menu_daily_limit' : `multi_intent_${replyStrategy}_menu_daily_limit`;
-  }
-
   if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
     deterministicReplies.push(
       fillTemplate(context.autoResponses.welcome || '', {
@@ -478,8 +517,13 @@ export async function processRestaurantBotMessage(params: {
 
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
-  } else if (menuReplySuppressedToday) {
-    replyText = 'Ja te enviei o link do cardapio hoje. Se precisar de ajuda com o pedido, pode mandar sua duvida por aqui.';
+  } else if (!explicitMenuIntent && greetingIntent && customerHasNoOrder && menuWasSentToday) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_menu_daily_silent', 'Cardapio automatico ja enviado hoje; resposta suprimida', {
+      instanceName,
+      customerPhone,
+      conversationId
+    });
+    return { ok: true, skipped: true, reason: 'menu_sent_today', conversationId };
   } else {
     replyStrategy = 'openai';
     try {

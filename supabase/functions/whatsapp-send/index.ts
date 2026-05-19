@@ -9,6 +9,26 @@ const corsHeaders = {
 const EVOLUTION_URL = "https://api.boracume.com";
 const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
 
+function normalizePhone(value: string | null | undefined) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function buildPhoneCandidates(value: string | null | undefined) {
+  const normalized = normalizePhone(value);
+  const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
+  const candidates = [normalized, withoutCountry, withoutCountry.slice(-11), withoutCountry.slice(-10)]
+    .map((item) => String(item || "").replace(/\D/g, ""))
+    .filter(Boolean);
+
+  return Array.from(new Set(candidates));
+}
+
+function buildTemporaryPauseStatus(minutes = 60) {
+  return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -60,6 +80,31 @@ serve(async (req) => {
     if (!evoRes.ok) {
       console.error("Evolution API Error (Send Message):", evoData);
       return new Response(JSON.stringify({ error: true, message: 'Failed to send message', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const pausePayload = {
+      status: buildTemporaryPauseStatus(60),
+      bot_paused: true,
+      bot_paused_at: new Date().toISOString(),
+      bot_paused_by: user.id,
+      updated_at: new Date().toISOString()
+    };
+
+    let pauseResult = await supabaseClient
+      .from('whatsapp_conversations')
+      .update(pausePayload)
+      .eq('user_id', restaurant_id)
+      .in('customer_phone', buildPhoneCandidates(number));
+
+    if (pauseResult.error && String(pauseResult.error.message || '').includes('bot_paused')) {
+      pauseResult = await supabaseClient
+        .from('whatsapp_conversations')
+        .update({
+          status: buildTemporaryPauseStatus(60),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', restaurant_id)
+        .in('customer_phone', buildPhoneCandidates(number));
     }
 
     return new Response(JSON.stringify({ success: true, data: evoData }), {
