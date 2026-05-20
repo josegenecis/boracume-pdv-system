@@ -669,16 +669,24 @@ class PrinterService extends EventEmitter {
 
   async openCashDrawer(deviceId) {
     try {
-      const device = this.deviceManager.getDevice(deviceId);
-      
-      if (!device) {
-        return { success: false, message: 'Dispositivo não conectado' };
+      let printerInfo = this.connectedPrinters.get(deviceId);
+
+      if (!printerInfo) {
+        const reconnectResult = await this.connectPrinter(deviceId, { protocol: 'epson', width: 48 });
+        if (!reconnectResult?.success) {
+          return { success: false, message: reconnectResult?.message || reconnectResult?.error || 'Dispositivo não conectado' };
+        }
+        printerInfo = this.connectedPrinters.get(deviceId);
       }
 
-      // Comando ESC/POS para abrir gaveta (padrão)
-      const openDrawerCommand = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]);
-      
-      await this.deviceManager.sendData(deviceId, openDrawerCommand);
+      const printer = printerInfo?.printer;
+      if (!printer) {
+        return { success: false, message: 'Impressora térmica indisponível para acionar a gaveta' };
+      }
+
+      printer.clear();
+      printer.openCashDrawer();
+      await printer.execute();
       
       this.emit('cashDrawerOpened', { deviceId });
       return { success: true, message: 'Gaveta aberta' };
