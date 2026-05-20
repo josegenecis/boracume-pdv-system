@@ -29,6 +29,10 @@ function wantsPromotions(text: string) {
   return /(promo[cç][aã]o|promo|desconto|oferta|ofertas|tem combo|tem combos|tem alguma promo|alguma promo[cç][aã]o)/i.test(text);
 }
 
+function isThanks(text: string) {
+  return /(obrigad[oa]?|valeu+|agrade[cç]o|tmj|show|perfeito|maravilha|blz|beleza)\b/i.test(text.trim());
+}
+
 function buildOrderStatusLabel(status: string) {
   const labels: Record<string, string> = {
     pending: 'recebido',
@@ -449,6 +453,7 @@ export async function processRestaurantBotMessage(params: {
 
   const explicitMenuIntent = wantsMenuLink(text);
   const greetingIntent = isGreeting(text);
+  const thanksIntent = isThanks(text);
   const trackIntent = wantsOrderTracking(text);
   const openingHoursIntent = wantsOpeningHours(text);
   const promotionsIntent = wantsPromotions(text);
@@ -464,6 +469,11 @@ export async function processRestaurantBotMessage(params: {
   let replyText = '';
   let replyStrategy = 'fallback';
   const deterministicReplies: string[] = [];
+
+  if (thanksIntent) {
+    deterministicReplies.push(`De nada! Se precisar de mais alguma coisa, estou por aqui. 😊`);
+    replyStrategy = 'thanks_reply';
+  }
 
   if (trackIntent && lastOrder?.id) {
     deterministicReplies.push(fillTemplate(
@@ -490,6 +500,8 @@ export async function processRestaurantBotMessage(params: {
     deterministicReplies.push(buildOpeningHoursReply(context.restaurantName, openingHours, restaurantId));
     if (!trackIntent && replyStrategy === 'fallback') {
       replyStrategy = 'opening_hours';
+    } else if (replyStrategy !== 'fallback' && replyStrategy !== 'opening_hours') {
+      replyStrategy = `multi_intent_${replyStrategy}`;
     }
   }
 

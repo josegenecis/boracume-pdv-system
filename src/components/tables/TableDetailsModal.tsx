@@ -537,6 +537,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             variant: 'destructive'
           });
         }
+
+        const drawerResult = await PrinterService.openCashDrawer();
+        if (!drawerResult?.success) {
+          console.warn('Falha ao abrir gaveta no fechamento da mesa:', drawerResult?.error || drawerResult);
+        }
       }
 
       toast({

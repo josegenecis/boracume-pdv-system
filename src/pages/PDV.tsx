@@ -431,6 +431,14 @@ const PDV = () => {
     return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
   };
 
+  const shouldOpenCashDrawerForOrder = (order: any) => {
+    const orderType = String(order?.order_type || '').trim().toLowerCase();
+    const source = String(order?.variations?.source || '').trim().toUpperCase();
+    if (orderType === 'delivery') return false;
+    if (source === 'PDV') return true;
+    return ['counter', 'pickup', 'dine_in'].includes(orderType);
+  };
+
   const loadCashCloseSummary = async (session: CashSession, informedAmount?: number | null): Promise<CashCloseSummary> => {
     const operatorSession = getOperatorSession();
     const [{ data: orders }, { data: moves }, { data: profile }, { data: fiscal }, { data: paymentMethods }] = await Promise.all([
@@ -630,7 +638,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.74'}`,
+      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.75'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',
@@ -1692,6 +1700,12 @@ const PDV = () => {
       setCreatedOrderForNfce(created || null);
       try {
         await PrinterService.printOrder(created);
+        if (shouldOpenCashDrawerForOrder(created)) {
+          const drawerResult = await PrinterService.openCashDrawer();
+          if (!drawerResult?.success) {
+            console.warn('Falha ao abrir gaveta na finalização do PDV:', drawerResult?.error || drawerResult);
+          }
+        }
       } catch (e) {
         console.warn('Falha ao imprimir automaticamente:', e);
       }
@@ -2762,6 +2776,12 @@ const PDV = () => {
                 setCreatedOrderForNfce(resolvedOrder);
                 try {
                   await PrinterService.printOrder(resolvedOrder);
+                  if (shouldOpenCashDrawerForOrder(resolvedOrder)) {
+                    const drawerResult = await PrinterService.openCashDrawer();
+                    if (!drawerResult?.success) {
+                      console.warn('Falha ao abrir gaveta na confirmação PIX do PDV:', drawerResult?.error || drawerResult);
+                    }
+                  }
                 } catch (e) {
                   console.warn('Falha ao imprimir automaticamente (PIX):', e);
                 }

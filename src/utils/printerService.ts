@@ -21,6 +21,7 @@ let usbDevice: any = null;
 
 type PrintOrderOptions = {
   onlyIfAuto?: boolean;
+  openCashDrawer?: boolean;
 };
 
 type NormalizedPrintConfig = {
@@ -947,6 +948,25 @@ async function printElectron(order: any, config: any) {
   return { success: true };
 }
 
+async function openDrawerElectron() {
+  const api = (window as any)?.electronAPI;
+  if (!api?.openCashDrawer) return { success: false, error: 'API da gaveta indisponível' };
+
+  const target = resolveElectronTarget();
+  if (!target) return { success: false, error: 'Impressora não configurada em Configurações' };
+  if (target.type !== 'device') {
+    return { success: false, error: 'A abertura automática da gaveta requer impressora térmica configurada por dispositivo/porta' };
+  }
+
+  const protocol = target.protocol || 'epson';
+  const conn = await api.connectPrinter(target.deviceId, protocol, { protocol });
+  if (!conn?.success) return { success: false, error: conn?.error || conn?.message || 'Falha ao conectar impressora da gaveta' };
+
+  const resp = await api.openCashDrawer(target.deviceId);
+  if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao abrir gaveta' };
+  return { success: true };
+}
+
 export const PrinterService = {
   // Conectar Impressora USB
   async connectUsb() {
@@ -1097,6 +1117,13 @@ export const PrinterService = {
 
     // 3. Fallback: Janela de Impressão HTML (Navegador)
     this.printHtml(enrichedOrder, config);
+  },
+
+  async openCashDrawer() {
+    const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
+    const isElectron = Boolean(api?.openCashDrawer);
+    if (!isElectron) return { success: false, error: 'Abertura automática da gaveta disponível apenas no app desktop' };
+    return openDrawerElectron();
   },
 
   async printOrderOnAccept(order: any) {
