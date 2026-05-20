@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { getOpenCashRegisterSession } from '@/utils/cashSession';
+import { PrinterService } from '@/utils/printerService';
 
 interface Table {
   id: string;
@@ -46,6 +47,13 @@ interface TableOrder {
   payment_method?: string;
   source?: 'orders' | 'table_accounts';
 }
+
+const generateOrderNumber = () => {
+  const now = new Date();
+  const formattedDate = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const randomNumber = Math.floor(Math.random() * 1000);
+  return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
+};
 
 interface TableDetailsModalProps {
   table: Table | null;
@@ -274,7 +282,37 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         return;
       }
 
+      let printableOrder: any = null;
+
       if (currentOrder.source === 'table_accounts') {
+        const orderPayload = {
+          user_id: user?.id,
+          order_number: generateOrderNumber(),
+          customer_name: currentOrder.customer_name || `Mesa ${table.table_number}`,
+          customer_phone: currentOrder.customer_phone || null,
+          table_id: table.id,
+          items: currentOrder.items,
+          total: Number(currentOrder.total || 0),
+          order_type: 'dine_in',
+          status: 'completed',
+          acceptance_status: 'accepted',
+          payment_method: paymentMethod,
+          cash_register_session_id: openCashSession.id,
+          estimated_time: '15-20 min',
+          variations: {
+            source: 'table_account_closure',
+            original_account_id: currentOrder.id,
+          },
+        };
+
+        const { data: createdOrder, error: orderInsertError } = await supabase
+          .from('orders')
+          .insert([orderPayload])
+          .select()
+          .single();
+
+        if (orderInsertError) throw orderInsertError;
+
         const { error: accountUpdateError } = await supabase
           .from('table_accounts')
           .update({
@@ -284,20 +322,31 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           .eq('id', currentOrder.id);
 
         if (accountUpdateError) throw accountUpdateError;
+
+        printableOrder = createdOrder;
       } else {
-        const { error: orderUpdateError } = await supabase
+        const { data: updatedOrder, error: orderUpdateError } = await supabase
           .from('orders')
           .update({
             payment_method: paymentMethod,
             cash_register_session_id: openCashSession.id,
+            status: 'completed',
             acceptance_status: 'accepted',
             updated_at: new Date().toISOString()
           })
-          .eq('id', currentOrder.id);
+          .eq('id', currentOrder.id)
+          .select()
+          .single();
 
         if (orderUpdateError) throw orderUpdateError;
 
-        await updateOrderStatusRemote(currentOrder.id, 'completed');
+        printableOrder = updatedOrder;
+
+        try {
+          await updateOrderStatusRemote(currentOrder.id, 'completed');
+        } catch (statusError) {
+          console.warn('Falha ao sincronizar status remoto do pedido da mesa:', statusError);
+        }
       }
 
       const { error: tableError } = await supabase
@@ -307,9 +356,22 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
       if (tableError) throw tableError;
 
+      if (printableOrder) {
+        try {
+          await PrinterService.printOrder(printableOrder);
+        } catch (printError) {
+          console.warn('Falha ao imprimir cupom da mesa:', printError);
+          toast({
+            title: 'Conta encerrada',
+            description: `Mesa ${table.table_number} fechada, mas o cupom não foi impresso automaticamente.`,
+            variant: 'destructive'
+          });
+        }
+      }
+
       toast({
         title: "Conta encerrada",
-        description: `Mesa ${table.table_number} fechada com pagamento em ${paymentMethod === 'cartao' ? 'cartÃ£o' : paymentMethod}.`,
+        description: `Mesa ${table.table_number} fechada com pagamento em ${paymentMethod === 'cartao' ? 'cartão' : paymentMethod}.`,
       });
 
       onRefresh();

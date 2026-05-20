@@ -13,6 +13,8 @@ const BOLD_OFF = ESC + 'E' + '\x00';
 const ALIGN_CENTER = ESC + 'a' + '\x01';
 const ALIGN_LEFT = ESC + 'a' + '\x00';
 const ALIGN_RIGHT = ESC + 'a' + '\x02';
+const BRAND_NAME = 'PopSystem';
+const BRAND_POS_NAME = 'POPSYSTEM PDV';
 
 // Variável global para manter a conexão ativa (singleton pattern simples)
 let usbDevice: any = null;
@@ -104,7 +106,7 @@ function normalizePrintConfig(settings: any): NormalizedPrintConfig {
   return {
     paper_width: paperWidth,
     font_size: fontSize,
-    print_header: String(settings?.print_header || 'BoraCumê PDV').trim() || 'BoraCumê PDV',
+    print_header: String(settings?.print_header || BRAND_POS_NAME).trim() || BRAND_POS_NAME,
     print_footer: String(settings?.print_footer || 'Obrigado!').trim() || 'Obrigado!',
     copies: Math.max(1, Number(settings?.copies || 1) || 1),
     receipt_logo_url: String(settings?.receipt_logo_url || '').trim(),
@@ -615,7 +617,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           
           <div class="divider"></div>
           <div class="center" style="margin-top: 10px;">${config.print_footer}</div>
-          <div class="center" style="font-size: 0.8em; margin-top: 5px;">Sistema BoraCumê</div>
+          <div class="center" style="font-size: 0.8em; margin-top: 5px;">Sistema ${BRAND_NAME}</div>
         </div>
       </body>
       </html>
@@ -815,10 +817,10 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
   return commands;
 }
 
-function buildReportHtml(title: string, lines: string[], store?: any) {
+function buildReportHtml(title: string, lines: string[], store?: any, options?: { hideStoreHeader?: boolean; footerText?: string }) {
   const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
-  const storeHeader = store ? `
+  const storeHeader = store && !options?.hideStoreHeader ? `
     ${storeLogoHtml}
     <div class="center bold" style="font-size: 14px; margin-bottom: 4px;">${escapeHtml(store.restaurant_name || store.name || 'RESTAURANTE')}</div>
     ${store.address ? `<div class="center" style="font-size: 11px;">${escapeHtml(store.address)}</div>` : ''}
@@ -826,6 +828,8 @@ function buildReportHtml(title: string, lines: string[], store?: any) {
     ${store.cnpj ? `<div class="center" style="font-size: 11px;">CNPJ: ${escapeHtml(store.cnpj)}</div>` : ''}
     <div class="divider"></div>
   ` : '';
+  const safeTitle = String(title || '').trim();
+  const titleBlock = safeTitle ? `<div class="center bold" style="font-size: 13px; margin: 6px 0;">${escapeHtml(safeTitle)}</div><div class="divider"></div>` : '';
 
   return `
       <!DOCTYPE html>
@@ -851,11 +855,10 @@ function buildReportHtml(title: string, lines: string[], store?: any) {
       </head>
       <body>
         ${storeHeader}
-        <div class="center bold" style="font-size: 13px; margin: 6px 0;">${title}</div>
-        <div class="divider"></div>
+        ${titleBlock}
         ${lines.map((l) => `<div class="line">${String(l).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')}
         <div class="divider"></div>
-        <div class="center" style="font-size: 0.8em; margin-top: 10px;">Sistema BoraCumê</div>
+        <div class="center" style="font-size: 0.8em; margin-top: 10px;">${escapeHtml(options?.footerText || BRAND_POS_NAME)}</div>
       </body>
       </html>
     `;
@@ -1102,7 +1105,7 @@ export const PrinterService = {
     return this.printOrder(order, { onlyIfAuto: !isElectron });
   },
 
-  async printCashReport(report: { title: string; lines: string[]; userId?: string }) {
+  async printCashReport(report: { title: string; lines: string[]; userId?: string; hideStoreHeader?: boolean; footerText?: string }) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem);
     let store: any = null;
@@ -1150,7 +1153,10 @@ export const PrinterService = {
       } catch {}
     }
 
-    const htmlContent = buildReportHtml(report.title, report.lines, store).replace(
+    const htmlContent = buildReportHtml(report.title, report.lines, store, {
+      hideStoreHeader: report.hideStoreHeader,
+      footerText: report.footerText,
+    }).replace(
       '</body>',
       `<script>window.onload=function(){window.print();}</script></body>`
     );
@@ -1307,7 +1313,7 @@ export const PrinterService = {
     line();
     center();
     commands += text(config.print_footer);
-    commands += text('Sistema BoraCumê');
+    commands += text(`Sistema ${BRAND_NAME}`);
     
     // Feed e Corte
     commands += '\n\n\n\n'; // Feed

@@ -1,8 +1,8 @@
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.72",
-  "author": "BoraCumê Team",
-  "description": "Desktop application for Bora Cume Hub",
+  "version": "1.0.73",
+  "author": "PopSystem Team",
+  "description": "Desktop application for PopSystem",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -34,7 +34,7 @@
     ],
     "compression": "maximum",
     "appId": "com.boracume.desktop",
-    "productName": "BoraCume",
+    "productName": "POPSYSTEM",
     "directories": {
       "output": "dist-electron"
     },
@@ -61,7 +61,7 @@
           ]
         }
       ],
-      "executableName": "BoraCume",
+      "executableName": "POPSYSTEM",
       "icon": "../public/icon-512x512.png",
       "requestedExecutionLevel": "asInvoker",
       "verifyUpdateCodeSignature": false

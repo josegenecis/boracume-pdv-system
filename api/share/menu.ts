@@ -60,7 +60,7 @@ export default async function handler(req: any, res: any) {
     const description = String(profile?.description || 'Confira nosso cardápio digital.');
     const logoUrl =
       normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || '')) ||
-      'https://boracume.com/LOGOMARCA/logo-sistema.png';
+      'https://boracume.com/LOGOMARCA/LOGO%20POPSYSTEM.png';
     const pageUrl = `https://boracume.com/menu/${encodeURIComponent(id)}`;
 
     const html = `<!doctype html>

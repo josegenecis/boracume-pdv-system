@@ -95,6 +95,41 @@ interface CashSession {
   status: string;
 }
 
+interface CashCloseSummary {
+  expectedCash: number;
+  pix: number;
+  card: number;
+  cash: number;
+  total: number;
+  inAmount: number;
+  outAmount: number;
+  initial: number;
+  grossRevenue: number;
+  discounts: number;
+  deliveryFee: number;
+  systemFees: number;
+  netRevenue: number;
+  credit: number;
+  debit: number;
+  voucher: number;
+  genericCard: number;
+  totalReceived: number;
+  ordersCount: number;
+  cancelledCount: number;
+  customersServed: number;
+  deliveryOrders: number;
+  counterOrders: number;
+  dineInOrders: number;
+  avgProductionMinutes: number;
+  avgDeliveryMinutes: number;
+  openedAt: string;
+  closedAt: string;
+  operatorName: string;
+  companyName: string;
+  companyCnpj: string;
+  boxLabel: string;
+}
+
 const PDV = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -127,7 +162,7 @@ const PDV = () => {
   const [cashDialogMode, setCashDialogMode] = useState<'open' | 'close'>('open');
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [cashCloseLoading, setCashCloseLoading] = useState(false);
-  const [cashCloseSummary, setCashCloseSummary] = useState<{ expectedCash: number; pix: number; card: number; cash: number; total: number; inAmount: number; outAmount: number; initial: number } | null>(null);
+  const [cashCloseSummary, setCashCloseSummary] = useState<CashCloseSummary | null>(null);
   const [mustCreateOperator, setMustCreateOperator] = useState(false);
   const [cashMoveOpen, setCashMoveOpen] = useState(false);
   const [cashMoveType, setCashMoveType] = useState<'in' | 'out'>('out');
@@ -318,6 +353,301 @@ const PDV = () => {
     }
   };
 
+  const normalizeCustomerKey = (order: any) => {
+    const phone = String(order?.customer_phone || '').replace(/\D/g, '');
+    if (phone) return `phone:${phone}`;
+
+    const name = String(order?.customer_name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+    if (name) return `name:${name}`;
+
+    return `order:${String(order?.id || order?.order_number || '')}`;
+  };
+
+  const normalizePaymentBucket = (order: any) => {
+    const raw = String(order?.payment_method || '').trim().toLowerCase();
+    if (!raw) return 'other';
+    if (raw.includes('pix')) return 'pix';
+    if (raw.includes('dinheiro')) return 'cash';
+    if (raw.includes('voucher') || raw.includes('refeicao') || raw.includes('refeição') || raw.includes('aliment')) return 'voucher';
+    if (raw.includes('debito') || raw.includes('débito') || raw.includes('debit')) return 'debit';
+    if (raw.includes('credito') || raw.includes('crédito') || raw.includes('credit')) return 'credit';
+    if (raw === 'cartao' || raw === 'cartão' || raw.includes('cartao') || raw.includes('cartão') || raw.includes('card')) {
+      const installments = Number(order?.variations?.tef?.installments || 0);
+      return installments > 1 ? 'credit' : 'card';
+    }
+    return 'other';
+  };
+
+  const normalizePaymentMethodName = (value: any) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const resolveExtraFeePercent = (order: any, methods: any[]) => {
+    const normalizedPayment = normalizePaymentMethodName(order?.payment_method);
+    const bucket = normalizePaymentBucket(order);
+    const list = Array.isArray(methods) ? methods : [];
+
+    const exact = list.find((method: any) => {
+      const methodName = normalizePaymentMethodName(method?.name);
+      return methodName === normalizedPayment;
+    });
+    if (exact) return Number(exact?.extra_fee_percent || 0);
+
+    if (bucket === 'credit') {
+      const match = list.find((method: any) => normalizePaymentMethodName(method?.name).includes('credito'));
+      if (match) return Number(match?.extra_fee_percent || 0);
+    }
+
+    if (bucket === 'debit') {
+      const match = list.find((method: any) => normalizePaymentMethodName(method?.name).includes('debito'));
+      if (match) return Number(match?.extra_fee_percent || 0);
+    }
+
+    if (bucket === 'card') {
+      const genericCard = list.find((method: any) => Boolean(method?.is_card));
+      if (genericCard) return Number(genericCard?.extra_fee_percent || 0);
+    }
+
+    return 0;
+  };
+
+  const averageMinutesFromOrders = (orders: any[]) => {
+    const validDurations = (Array.isArray(orders) ? orders : [])
+      .map((order) => {
+        const createdAt = new Date(order?.created_at || '').getTime();
+        const updatedAt = new Date(order?.updated_at || '').getTime();
+        if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt) || updatedAt < createdAt) return null;
+        return Math.round((updatedAt - createdAt) / 60000);
+      })
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+
+    if (validDurations.length === 0) return 0;
+    return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
+  };
+
+  const loadCashCloseSummary = async (session: CashSession, informedAmount?: number | null): Promise<CashCloseSummary> => {
+    const operatorSession = getOperatorSession();
+    const [{ data: orders }, { data: moves }, { data: profile }, { data: fiscal }, { data: paymentMethods }] = await Promise.all([
+      (supabase as any)
+        .from('orders')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('cash_register_session_id', session.id),
+      (supabase as any)
+        .from('cash_movements')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('session_id', session.id),
+      supabase
+        .from('profiles')
+        .select('restaurant_name')
+        .eq('id', user?.id)
+        .maybeSingle(),
+      supabase
+        .from('fiscal_settings')
+        .select('cnpj')
+        .eq('user_id', user?.id)
+        .maybeSingle(),
+      (supabase as any)
+        .from('payment_methods')
+        .select('name,extra_fee_percent,is_card')
+        .eq('user_id', user?.id),
+    ]);
+
+    const orderList = Array.isArray(orders) ? orders : [];
+    const movementList = Array.isArray(moves) ? moves : [];
+    const sales = orderList.filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
+    const cancelledCount = orderList.length - sales.length;
+    const grossRevenue = sales.reduce((sum, order) => sum + Number(order?.total || 0), 0);
+    const discounts = sales.reduce((sum, order) => sum + Number(order?.discount || 0), 0);
+    const deliveryFee = sales.reduce((sum, order) => sum + Number(order?.delivery_fee || 0), 0);
+    const systemFees = sales.reduce((sum, order) => {
+      const feePercent = resolveExtraFeePercent(order, paymentMethods);
+      return sum + (Number(order?.total || 0) * feePercent / 100);
+    }, 0);
+
+    let pix = 0;
+    let cash = 0;
+    let credit = 0;
+    let debit = 0;
+    let voucher = 0;
+    let genericCard = 0;
+
+    for (const order of sales) {
+      const total = Number(order?.total || 0);
+      const bucket = normalizePaymentBucket(order);
+      if (bucket === 'pix') pix += total;
+      else if (bucket === 'cash') cash += total;
+      else if (bucket === 'credit') credit += total;
+      else if (bucket === 'debit') debit += total;
+      else if (bucket === 'voucher') voucher += total;
+      else if (bucket === 'card') genericCard += total;
+    }
+
+    const totalReceived = pix + cash + credit + debit + voucher + genericCard;
+    const inAmount = movementList
+      .filter((movement) => movement?.type === 'in')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const outAmount = movementList
+      .filter((movement) => movement?.type === 'out')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const initial = Number(session.initial_amount || 0);
+    const expectedCash = initial + cash + inAmount - outAmount;
+    const netRevenue = grossRevenue - discounts + deliveryFee - systemFees;
+    const customerKeys = new Set(sales.map((order) => normalizeCustomerKey(order)).filter(Boolean));
+    const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
+    const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
+
+    return {
+      expectedCash,
+      pix,
+      card: credit + debit + genericCard,
+      cash,
+      total: grossRevenue,
+      inAmount,
+      outAmount,
+      initial,
+      grossRevenue,
+      discounts,
+      deliveryFee,
+      systemFees,
+      netRevenue,
+      credit,
+      debit,
+      voucher,
+      genericCard,
+      totalReceived,
+      ordersCount: sales.length,
+      cancelledCount,
+      customersServed: customerKeys.size,
+      deliveryOrders: deliveryOrders.length,
+      counterOrders: sales.filter((order) => order?.order_type === 'counter' || order?.order_type === 'pickup').length,
+      dineInOrders: sales.filter((order) => order?.order_type === 'dine_in').length,
+      avgProductionMinutes: averageMinutesFromOrders(productionOrders),
+      avgDeliveryMinutes: averageMinutesFromOrders(deliveryOrders),
+      openedAt: session.opened_at,
+      closedAt: new Date().toISOString(),
+      operatorName: operatorSession?.name || 'Operador',
+      companyName: String((profile as any)?.restaurant_name || 'PopSystem').trim() || 'PopSystem',
+      companyCnpj: String((fiscal as any)?.cnpj || '').trim() || '--',
+      boxLabel: 'CAIXA 01',
+    };
+  };
+
+  const buildCashCloseReportLines = (summary: CashCloseSummary, informedAmount: number) => {
+    const lineWidth = 48;
+    const divider = '='.repeat(lineWidth);
+    const centerText = (value: string) => {
+      const text = String(value || '').trim();
+      const leftPadding = Math.max(0, Math.floor((lineWidth - text.length) / 2));
+      return `${' '.repeat(leftPadding)}${text}`;
+    };
+    const row = (label: string, value: string) => {
+      const safeLabel = String(label || '').trim();
+      const safeValue = String(value || '').trim();
+      const spacing = Math.max(1, lineWidth - safeLabel.length - safeValue.length);
+      return `${safeLabel}${' '.repeat(spacing)}${safeValue}`;
+    };
+    const formatMinutes = (value: number) => `${Math.max(0, Math.round(value || 0))} min`;
+    const difference = informedAmount - summary.expectedCash;
+
+    const lines = [
+      divider,
+      centerText('POPSYSTEM PDV'),
+      centerText('RELATORIO DE FECHAMENTO'),
+      divider,
+      '',
+      `Empresa: ${summary.companyName}`,
+      `CNPJ: ${summary.companyCnpj}`,
+      `Operador: ${summary.operatorName}`,
+      `Caixa: ${summary.boxLabel}`,
+      '',
+      `Data: ${new Date(summary.closedAt).toLocaleDateString('pt-BR')}`,
+      `Hora Abertura: ${new Date(summary.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      `Hora Fechamento: ${new Date(summary.closedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      '',
+      divider,
+      centerText('RESUMO GERAL'),
+      divider,
+      '',
+      row('Pedidos Realizados', String(summary.ordersCount)),
+      row('Pedidos Cancelados', String(summary.cancelledCount)),
+      row('Clientes Atendidos', String(summary.customersServed)),
+      '',
+      row('Faturamento Bruto', formatBRL(summary.grossRevenue)),
+      row('Descontos', formatBRL(summary.discounts)),
+      row('Taxa Entrega', formatBRL(summary.deliveryFee)),
+      row('Taxas Sistema', formatBRL(summary.systemFees)),
+      '',
+      row('FATURAMENTO LIQUIDO', formatBRL(summary.netRevenue)),
+      '',
+      divider,
+      centerText('FORMAS DE PAGAMENTO'),
+      divider,
+      '',
+      row('PIX', formatBRL(summary.pix)),
+      row('Dinheiro', formatBRL(summary.cash)),
+      row('Credito', formatBRL(summary.credit)),
+      row('Debito', formatBRL(summary.debit)),
+      row('Voucher/Refeicao', formatBRL(summary.voucher)),
+      ...(summary.genericCard > 0 ? [row('Cartao', formatBRL(summary.genericCard))] : []),
+      '',
+      row('TOTAL RECEBIDO', formatBRL(summary.totalReceived)),
+      '',
+      divider,
+      centerText('MOVIMENTO CAIXA'),
+      divider,
+      '',
+      row('Valor Inicial', formatBRL(summary.initial)),
+      '',
+      row('Entradas Extras', formatBRL(summary.inAmount)),
+      row('Sangrias/Saidas', formatBRL(summary.outAmount)),
+      '',
+      row('Valor Esperado', formatBRL(summary.expectedCash)),
+      row('Valor Informado', formatBRL(informedAmount)),
+      '',
+      row('DIFERENCA', `${difference < 0 ? '-' : ''}${formatBRL(Math.abs(difference))}`),
+      '',
+      divider,
+      centerText('DELIVERY / LOJA'),
+      divider,
+      '',
+      row('Pedidos Delivery', String(summary.deliveryOrders)),
+      row('Pedidos Balcao', String(summary.counterOrders)),
+      row('Pedidos Mesas', String(summary.dineInOrders)),
+      '',
+      row('Tempo Medio Producao', formatMinutes(summary.avgProductionMinutes)),
+      row('Tempo Medio Entrega', formatMinutes(summary.avgDeliveryMinutes)),
+      '',
+      divider,
+      centerText('OBSERVACOES'),
+      divider,
+      '',
+      'Sistema: PopSystem PDV',
+      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.73'}`,
+      '',
+      'Fechamento realizado com sucesso.',
+      '',
+      divider,
+      '',
+      'Assinatura Operador:',
+      '',
+      '____________________________________________',
+      '',
+      divider,
+      centerText('POPSYSTEM PDV'),
+      divider,
+    ];
+
+    return lines;
+  };
+
   const openCashDialog = async (mode: 'open' | 'close') => {
     setCashDialogMode(mode);
     setCashCloseSummary(null);
@@ -325,29 +655,9 @@ const PDV = () => {
     if (mode === 'close' && user?.id && cashSession?.id) {
       try {
         setCashCloseLoading(true);
-        const [{ data: orders }, { data: moves }] = await Promise.all([
-          (supabase as any)
-            .from('orders')
-            .select('total, payment_method, status')
-            .eq('user_id', user.id)
-            .eq('cash_register_session_id', cashSession.id),
-          (supabase as any)
-            .from('cash_movements')
-            .select('type, amount')
-            .eq('user_id', user.id)
-            .eq('session_id', cashSession.id),
-        ]);
-        const sales = Array.isArray(orders) ? orders.filter((o) => o?.status !== 'cancelled') : [];
-        const pix = sales.filter((o) => o.payment_method === 'pix').reduce((sum, o) => sum + Number(o.total || 0), 0);
-        const card = sales.filter((o) => o.payment_method === 'cartao').reduce((sum, o) => sum + Number(o.total || 0), 0);
-        const cash = sales.filter((o) => o.payment_method === 'dinheiro').reduce((sum, o) => sum + Number(o.total || 0), 0);
-        const total = sales.reduce((sum, o) => sum + Number(o.total || 0), 0);
-        const inAmount = (Array.isArray(moves) ? moves : []).filter((m) => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
-        const outAmount = (Array.isArray(moves) ? moves : []).filter((m) => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
-        const initial = Number(cashSession.initial_amount || 0);
-        const expectedCash = initial + cash + inAmount - outAmount;
-        setCashCloseSummary({ expectedCash, pix, card, cash, total, inAmount, outAmount, initial });
-        setCashAmountInput(formatBRL(expectedCash));
+        const summary = await loadCashCloseSummary(cashSession);
+        setCashCloseSummary(summary);
+        setCashAmountInput(formatBRL(summary.expectedCash));
       } catch {}
       setCashCloseLoading(false);
     }
@@ -408,12 +718,14 @@ const PDV = () => {
           toast({ title: 'Caixa não encontrado', variant: 'destructive' });
           return;
         }
+        const latestSummary = cashCloseSummary || await loadCashCloseSummary(cashSession, amount);
+        setCashCloseSummary(latestSummary);
         let error: any = null;
         const updatePayload: any = {
           status: 'closed',
           closed_at: new Date().toISOString(),
           final_amount: amount,
-          expected_amount: cashCloseSummary?.expectedCash ?? null,
+          expected_amount: latestSummary?.expectedCash ?? null,
         };
         if (waiterId) updatePayload.closed_by_waiter_id = waiterId;
         const res1 = await supabase
@@ -440,19 +752,14 @@ const PDV = () => {
         if (error) throw error;
         toast({ title: 'Caixa fechado' });
         await PrinterService.printCashReport({
-          title: 'Fechamento de Caixa',
+          title: '',
           userId: user.id,
-          lines: [
-            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
-            `Valor informado: R$ ${amount.toFixed(2)}`,
-            cashCloseSummary?.expectedCash != null ? `Valor esperado: R$ ${Number(cashCloseSummary.expectedCash).toFixed(2)}` : '',
-            cashCloseSummary?.pix != null ? `PIX: R$ ${Number(cashCloseSummary.pix).toFixed(2)}` : '',
-            cashCloseSummary?.card != null ? `Cartão: R$ ${Number(cashCloseSummary.card).toFixed(2)}` : '',
-            cashCloseSummary?.cash != null ? `Dinheiro (vendas): R$ ${Number(cashCloseSummary.cash).toFixed(2)}` : '',
-            cashCloseSummary?.inAmount != null ? `Suprimentos: R$ ${Number(cashCloseSummary.inAmount).toFixed(2)}` : '',
-            cashCloseSummary?.outAmount != null ? `Sangrias: R$ ${Number(cashCloseSummary.outAmount).toFixed(2)}` : '',
-            operatorSession?.name ? `Operador: ${operatorSession.name}` : ''
-          ].filter(Boolean) as string[]
+          hideStoreHeader: true,
+          footerText: 'POPSYSTEM PDV',
+          lines: buildCashCloseReportLines({
+            ...latestSummary,
+            closedAt: updatePayload.closed_at,
+          }, amount)
         });
       }
       setCashDialogOpen(false);

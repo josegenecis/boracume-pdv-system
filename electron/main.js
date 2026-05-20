@@ -110,7 +110,7 @@ function createUpdateWindow() {
       contextIsolation: true
     },
     icon: path.join(__dirname, '../public/icon-512x512.png'),
-    title: 'BoraCume'
+    title: 'PopSystem'
   });
 
   const html = `
@@ -119,7 +119,7 @@ function createUpdateWindow() {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>BoraCume</title>
+        <title>PopSystem</title>
         <style>
           body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:18px;background:#fff;color:#111}
           .title{font-weight:700;font-size:16px;margin-bottom:10px}
@@ -131,7 +131,7 @@ function createUpdateWindow() {
         </style>
       </head>
       <body>
-        <div class="title">Atualizando BoraCume</div>
+        <div class="title">Atualizando PopSystem</div>
         <div class="desc">Verificando atualizações...</div>
         <div class="bar"><div id="fill" class="fill"></div></div>
         <div class="meta">
@@ -260,7 +260,7 @@ function createTray() {
     tray = new Tray(iconPath);
     
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'BoraCumê Print Agent', enabled: false },
+      { label: 'PopSystem Print Agent', enabled: false },
       { type: 'separator' },
       { label: 'Status: Rodando', enabled: false },
       { label: 'Porta: 17171', enabled: false },
@@ -284,7 +284,7 @@ function createTray() {
       { label: 'Sair', click: () => app.quit() }
     ]);
 
-    tray.setToolTip('BoraCumê Print Agent');
+    tray.setToolTip('PopSystem Print Agent');
     tray.setContextMenu(contextMenu);
     
     // Duplo clique abre

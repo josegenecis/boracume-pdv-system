@@ -69,7 +69,7 @@ const createWindow = () => {
 const createTray = () => {
   const iconPath = path.join(__dirname, '..', 'public', 'icon-512x512.png')
   tray = new Tray(iconPath)
-  tray.setToolTip('BoraCumê Bridge')
+  tray.setToolTip('PopSystem Bridge')
   tray.on('double-click', () => {
     if (win) win.show()
   })

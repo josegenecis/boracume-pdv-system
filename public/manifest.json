@@ -1,6 +1,6 @@
 {
-  "name": "BoraCumê - Sistema de Delivery e PDV",
-  "short_name": "BoraCumê",
+  "name": "PopSystem - Sistema de Delivery e PDV",
+  "short_name": "PopSystem",
   "description": "Plataforma completa de delivery e PDV para restaurantes com gestão de pedidos, cozinha, entregas e financeiro",
   "start_url": "/",
   "display": "standalone",
