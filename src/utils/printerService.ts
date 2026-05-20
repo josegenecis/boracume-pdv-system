@@ -952,17 +952,16 @@ async function openDrawerElectron() {
   const api = (window as any)?.electronAPI;
   if (!api?.openCashDrawer) return { success: false, error: 'API da gaveta indisponível' };
 
-  const target = resolveElectronTarget();
-  if (!target) return { success: false, error: 'Impressora não configurada em Configurações' };
-  if (target.type !== 'device') {
-    return { success: false, error: 'A abertura automática da gaveta requer impressora térmica configurada por dispositivo/porta' };
+  const serialDeviceId = String(localStorage.getItem('hw.receipt.port') || '').trim();
+  const serialProtocol = String(localStorage.getItem('hw.receipt.protocol') || 'epson').trim() || 'epson';
+  if (!serialDeviceId) {
+    return { success: false, error: 'Configure a porta da impressora térmica em Hardware para acionar a gaveta' };
   }
 
-  const protocol = target.protocol || 'epson';
-  const conn = await api.connectPrinter(target.deviceId, protocol, { protocol });
+  const conn = await api.connectPrinter(serialDeviceId, serialProtocol, { protocol: serialProtocol });
   if (!conn?.success) return { success: false, error: conn?.error || conn?.message || 'Falha ao conectar impressora da gaveta' };
 
-  const resp = await api.openCashDrawer(target.deviceId);
+  const resp = await api.openCashDrawer(serialDeviceId);
   if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao abrir gaveta' };
   return { success: true };
 }

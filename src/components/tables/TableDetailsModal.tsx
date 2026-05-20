@@ -72,6 +72,9 @@ const mapPaymentMethodToWaiterPayment = (value: 'pix' | 'cartao' | 'dinheiro') =
   return 'pix';
 };
 
+const isMissingColumnError = (error: any) =>
+  String(error?.message || '').toLowerCase().includes('column');
+
 interface TableDetailsModalProps {
   table: Table | null;
   isOpen: boolean;
@@ -286,6 +289,46 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     });
   };
 
+  const finalizeAccountRecord = async (accountRowId: string, nextAccountStatus: 'paid' | 'closed', paymentTimestamp: string) => {
+    const fullPayload: Record<string, any> = {
+      status: nextAccountStatus,
+      table_id: null,
+      updated_at: paymentTimestamp,
+    };
+
+    if (nextAccountStatus === 'paid') {
+      fullPayload.paid_at = paymentTimestamp;
+      fullPayload.closed_at = paymentTimestamp;
+    } else {
+      fullPayload.closed_at = paymentTimestamp;
+    }
+
+    let { error } = await supabase
+      .from('table_accounts')
+      .update(fullPayload as any)
+      .eq('id', accountRowId);
+
+    if (!error) return;
+
+    if (isMissingColumnError(error)) {
+      const fallbackPayload: Record<string, any> = {
+        status: nextAccountStatus,
+        table_id: null,
+        updated_at: paymentTimestamp,
+      };
+
+      const fallbackResult = await supabase
+        .from('table_accounts')
+        .update(fallbackPayload as any)
+        .eq('id', accountRowId);
+
+      error = fallbackResult.error;
+      if (!error) return;
+    }
+
+    throw error;
+  };
+
   const handleFinishOrder = async () => {
     if (!table || !currentOrder) return;
 
@@ -397,17 +440,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         }
 
         const nextAccountStatus = currentOrder.session_id ? 'paid' : 'closed';
-        const { error: accountUpdateError } = await supabase
-          .from('table_accounts')
-          .update({
-            status: nextAccountStatus,
-            paid_at: currentOrder.session_id ? paymentTimestamp : null,
-            closed_at: paymentTimestamp,
-            updated_at: paymentTimestamp
-          } as any)
-          .eq('id', currentOrder.id);
-
-        if (accountUpdateError) throw accountUpdateError;
+        await finalizeAccountRecord(currentOrder.id, nextAccountStatus, paymentTimestamp);
 
         printableOrder = {
           ...(finalizedOrders[finalizedOrders.length - 1] || {}),
@@ -468,18 +501,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             if (paymentInsertError) throw paymentInsertError;
           }
 
-          const { error: accountUpdateError } = await supabase
-            .from('table_accounts')
-            .update({
-              status: 'paid',
-              paid_at: paymentTimestamp,
-              closed_at: paymentTimestamp,
-              updated_at: paymentTimestamp
-            } as any)
-            .eq('id', (updatedOrder as any).account_id)
-            .eq('user_id', user?.id);
-
-          if (accountUpdateError) throw accountUpdateError;
+          await finalizeAccountRecord((updatedOrder as any).account_id, 'paid', paymentTimestamp);
         }
 
         printableOrder = updatedOrder;
