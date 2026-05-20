@@ -630,7 +630,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.73'}`,
+      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.74'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',

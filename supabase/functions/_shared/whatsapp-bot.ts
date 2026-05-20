@@ -84,7 +84,7 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
-function buildTemporaryPauseStatus(minutes = 60) {
+function buildTemporaryPauseStatus(minutes = 5) {
   return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
 }
 
@@ -138,7 +138,7 @@ export async function pauseRestaurantBotForConversation(params: {
         user_id: restaurantId,
         customer_phone: customerPhone,
         customer_name: customerName,
-        status: buildTemporaryPauseStatus(60)
+        status: buildTemporaryPauseStatus(5)
       })
       .select('id')
       .single();
@@ -148,7 +148,7 @@ export async function pauseRestaurantBotForConversation(params: {
   }
 
   const fullPausePayload = {
-    status: buildTemporaryPauseStatus(60),
+    status: buildTemporaryPauseStatus(5),
     bot_paused: true,
     bot_paused_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -164,7 +164,7 @@ export async function pauseRestaurantBotForConversation(params: {
     const fallbackResult = await supabase
       .from('whatsapp_conversations')
       .update({
-        status: buildTemporaryPauseStatus(60),
+        status: buildTemporaryPauseStatus(5),
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
@@ -453,9 +453,13 @@ export async function processRestaurantBotMessage(params: {
   const openingHoursIntent = wantsOpeningHours(text);
   const promotionsIntent = wantsPromotions(text);
   const customerHasNoOrder = !lastOrder;
+  const customerMessageCount = (history || []).filter((item: any) => item?.sender === 'customer').length;
+  const isFirstConversationTouch = customerMessageCount <= 1 && !lastBotMessage?.id;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const menuWasSentToday = Boolean(lastMenuMessage?.id);
-  const canRepeatMenuReply = explicitMenuIntent ? recentBotReplyMinutes > 2 : (!menuWasSentToday && recentBotReplyMinutes > 20);
+  const canRepeatMenuReply = explicitMenuIntent
+    ? recentBotReplyMinutes > 2
+    : (isFirstConversationTouch || (!menuWasSentToday && recentBotReplyMinutes > 20));
 
   let replyText = '';
   let replyStrategy = 'fallback';
@@ -498,7 +502,7 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder)) && canRepeatMenuReply) {
+  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder) || (isFirstConversationTouch && customerHasNoOrder)) && canRepeatMenuReply) {
     deterministicReplies.push(
       fillTemplate(context.autoResponses.welcome || '', {
         restaurant_name: context.restaurantName,
@@ -561,6 +565,7 @@ export async function processRestaurantBotMessage(params: {
     replyStrategy,
     replyPreview: replyText.slice(0, 160),
     hasOrder: Boolean(lastOrder?.id),
+    isFirstConversationTouch,
     greetingIntent,
     explicitMenuIntent,
     trackIntent

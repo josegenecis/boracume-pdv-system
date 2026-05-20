@@ -28,7 +28,7 @@ interface Conversation {
   bot_paused_at?: string | null;
 }
 
-const buildTemporaryPauseStatus = (minutes = 60) =>
+const buildTemporaryPauseStatus = (minutes = 5) =>
   `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
 
 const isBotPaused = (conversation: { status?: string | null; bot_paused?: boolean | null }) => {
@@ -142,7 +142,7 @@ const WhatsAppChatbot = () => {
 
     try {
       const pausePayload = {
-        status: buildTemporaryPauseStatus(60),
+        status: buildTemporaryPauseStatus(5),
         bot_paused: true,
         bot_paused_at: new Date().toISOString(),
         bot_paused_by: user?.id || null,
@@ -157,7 +157,7 @@ const WhatsAppChatbot = () => {
 
       if (pauseError && String(pauseError.message || '').includes('bot_paused')) {
         const fallbackPausePayload = {
-          status: buildTemporaryPauseStatus(60),
+          status: buildTemporaryPauseStatus(5),
           updated_at: new Date().toISOString()
         };
         const fallbackResult = await supabase
@@ -200,7 +200,7 @@ const WhatsAppChatbot = () => {
       
       toast({
         title: "Mensagem enviada",
-        description: "O robô foi pausado por 1 hora nesta conversa."
+        description: "O robô foi pausado por 5 minutos nesta conversa."
       });
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);

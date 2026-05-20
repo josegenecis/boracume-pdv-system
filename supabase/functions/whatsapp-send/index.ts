@@ -25,7 +25,7 @@ function buildPhoneCandidates(value: string | null | undefined) {
   return Array.from(new Set(candidates));
 }
 
-function buildTemporaryPauseStatus(minutes = 60) {
+function buildTemporaryPauseStatus(minutes = 5) {
   return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
 }
 
@@ -83,7 +83,7 @@ serve(async (req) => {
     }
 
     const pausePayload = {
-      status: buildTemporaryPauseStatus(60),
+      status: buildTemporaryPauseStatus(5),
       bot_paused: true,
       bot_paused_at: new Date().toISOString(),
       bot_paused_by: user.id,
@@ -100,7 +100,7 @@ serve(async (req) => {
       pauseResult = await supabaseClient
         .from('whatsapp_conversations')
         .update({
-          status: buildTemporaryPauseStatus(60),
+          status: buildTemporaryPauseStatus(5),
           updated_at: new Date().toISOString()
         })
         .eq('user_id', restaurant_id)

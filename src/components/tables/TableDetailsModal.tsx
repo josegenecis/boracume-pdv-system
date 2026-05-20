@@ -45,6 +45,9 @@ interface TableOrder {
   status: string;
   created_at: string;
   payment_method?: string;
+  session_id?: string | null;
+  account_id?: string | null;
+  name?: string | null;
   source?: 'orders' | 'table_accounts';
 }
 
@@ -53,6 +56,20 @@ const generateOrderNumber = () => {
   const formattedDate = now.toISOString().slice(0, 10).replace(/-/g, '');
   const randomNumber = Math.floor(Math.random() * 1000);
   return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
+};
+
+const normalizeCheckoutPaymentMethod = (value?: string | null): 'pix' | 'cartao' | 'dinheiro' => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'pix') return 'pix';
+  if (['cartao', 'cartao_credito', 'cartao_debito', 'card', 'credito', 'debito'].includes(normalized)) return 'cartao';
+  if (['dinheiro', 'cash'].includes(normalized)) return 'dinheiro';
+  return 'pix';
+};
+
+const mapPaymentMethodToWaiterPayment = (value: 'pix' | 'cartao' | 'dinheiro') => {
+  if (value === 'cartao') return 'card';
+  if (value === 'dinheiro') return 'cash';
+  return 'pix';
 };
 
 interface TableDetailsModalProps {
@@ -88,8 +105,51 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
     try {
       setLoading(true);
-      
-      // Buscar pedido ativo da mesa
+
+      const { data: accountData, error: accountError } = await supabase
+        .from('table_accounts')
+        .select('*')
+        .eq('table_id', table.id)
+        .eq('user_id', user.id)
+        .in('status', ['open', 'payment_pending'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (accountError && accountError.code !== 'PGRST116') throw accountError;
+
+      if (accountData) {
+        let parsedItems: OrderItem[] = [];
+        try {
+          if (typeof accountData.items === 'string') {
+            parsedItems = JSON.parse(accountData.items);
+          } else if (Array.isArray(accountData.items)) {
+            parsedItems = accountData.items as unknown as OrderItem[];
+          }
+        } catch (e) {
+          console.error('Error parsing table account items:', e);
+          parsedItems = [];
+        }
+
+        setCurrentOrder({
+          id: accountData.id,
+          account_id: accountData.id,
+          session_id: (accountData as any).session_id || null,
+          order_number: `MESA-${table.table_number}`,
+          customer_name: String((accountData as any).name || '').trim() || `Mesa ${table.table_number}`,
+          customer_phone: '',
+          items: parsedItems,
+          total: Number(accountData.total || 0),
+          status: accountData.status || 'open',
+          created_at: accountData.created_at,
+          payment_method: 'pix',
+          name: (accountData as any).name || null,
+          source: 'table_accounts'
+        });
+        setPaymentMethod('pix');
+        return;
+      }
+
       const { data: orderData, error } = await supabase
         .from('orders')
         .select('*')
@@ -103,8 +163,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
       if (orderData && orderData.length > 0) {
         const order = orderData[0];
-        
-        // Parse items properly
+
         let parsedItems: OrderItem[] = [];
         try {
           if (typeof order.items === 'string') {
@@ -122,48 +181,9 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           items: parsedItems,
           source: 'orders'
         });
-        setPaymentMethod((order.payment_method as 'pix' | 'cartao' | 'dinheiro') || 'pix');
+        setPaymentMethod(normalizeCheckoutPaymentMethod(order.payment_method));
       } else {
-        const { data: accountData, error: accountError } = await supabase
-          .from('table_accounts')
-          .select('*')
-          .eq('table_id', table.id)
-          .eq('user_id', user.id)
-          .eq('status', 'open')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (accountError && accountError.code !== 'PGRST116') throw accountError;
-
-        if (accountData) {
-          let parsedItems: OrderItem[] = [];
-          try {
-            if (typeof accountData.items === 'string') {
-              parsedItems = JSON.parse(accountData.items);
-            } else if (Array.isArray(accountData.items)) {
-              parsedItems = accountData.items as unknown as OrderItem[];
-            }
-          } catch (e) {
-            console.error('Error parsing table account items:', e);
-            parsedItems = [];
-          }
-
-          setCurrentOrder({
-            id: accountData.id,
-            order_number: `MESA-${table.table_number}`,
-            customer_name: `Mesa ${table.table_number}`,
-            customer_phone: '',
-            items: parsedItems,
-            total: Number(accountData.total || 0),
-            status: accountData.status || 'open',
-            created_at: accountData.created_at,
-            payment_method: 'pendente',
-            source: 'table_accounts'
-          });
-        } else {
-          setCurrentOrder(null);
-        }
+        setCurrentOrder(null);
         setPaymentMethod('pix');
       }
     } catch (error) {
@@ -283,11 +303,116 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       }
 
       let printableOrder: any = null;
+      const paymentTimestamp = new Date().toISOString();
+      const waiterPaymentMethod = mapPaymentMethodToWaiterPayment(paymentMethod);
 
       if (currentOrder.source === 'table_accounts') {
-        const orderPayload = {
-          user_id: user?.id,
-          order_number: generateOrderNumber(),
+        const accountId = currentOrder.account_id || currentOrder.id;
+        let finalizedOrders: any[] = [];
+
+        if (accountId) {
+          const { data: relatedOrders, error: relatedOrdersError } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('account_id', accountId)
+            .eq('user_id', user?.id)
+            .in('status', ['pending', 'preparing', 'ready']);
+
+          if (relatedOrdersError) throw relatedOrdersError;
+          finalizedOrders = Array.isArray(relatedOrders) ? relatedOrders : [];
+        }
+
+        if (finalizedOrders.length > 0) {
+          const relatedOrderIds = finalizedOrders.map((order) => order.id).filter(Boolean);
+          const { error: batchUpdateError } = await supabase
+            .from('orders')
+            .update({
+              payment_method: paymentMethod,
+              cash_register_session_id: openCashSession.id,
+              status: 'completed',
+              acceptance_status: 'accepted',
+              updated_at: paymentTimestamp
+            })
+            .in('id', relatedOrderIds);
+
+          if (batchUpdateError) throw batchUpdateError;
+        } else {
+          const orderPayload = {
+            user_id: user?.id,
+            order_number: generateOrderNumber(),
+            customer_name: currentOrder.customer_name || `Mesa ${table.table_number}`,
+            customer_phone: currentOrder.customer_phone || null,
+            table_id: table.id,
+            items: currentOrder.items,
+            total: Number(currentOrder.total || 0),
+            order_type: 'dine_in',
+            status: 'completed',
+            acceptance_status: 'accepted',
+            payment_method: paymentMethod,
+            cash_register_session_id: openCashSession.id,
+            estimated_time: '15-20 min',
+            session_id: currentOrder.session_id || null,
+            account_id: accountId || null,
+            variations: {
+              source: 'table_account_closure',
+              original_account_id: currentOrder.id,
+            },
+          };
+
+          const { data: createdOrder, error: orderInsertError } = await supabase
+            .from('orders')
+            .insert([orderPayload])
+            .select()
+            .single();
+
+          if (orderInsertError) throw orderInsertError;
+          finalizedOrders = createdOrder ? [createdOrder] : [];
+        }
+
+        if (currentOrder.session_id && accountId) {
+          const { data: paymentRows, error: paymentRowsError } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('session_id', currentOrder.session_id)
+            .eq('account_id', accountId);
+
+          if (paymentRowsError) throw paymentRowsError;
+
+          const paidAmount = (paymentRows || []).reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0);
+          const remainingAmount = Math.max(Number(currentOrder.total || 0) - paidAmount, 0);
+
+          if (remainingAmount > 0.009) {
+            const { error: paymentInsertError } = await supabase
+              .from('payments')
+              .insert({
+                user_id: user?.id,
+                session_id: currentOrder.session_id,
+                account_id: accountId,
+                method: waiterPaymentMethod,
+                amount: remainingAmount,
+              });
+
+            if (paymentInsertError) throw paymentInsertError;
+          }
+        }
+
+        const nextAccountStatus = currentOrder.session_id ? 'paid' : 'closed';
+        const { error: accountUpdateError } = await supabase
+          .from('table_accounts')
+          .update({
+            status: nextAccountStatus,
+            paid_at: currentOrder.session_id ? paymentTimestamp : null,
+            closed_at: paymentTimestamp,
+            updated_at: paymentTimestamp
+          } as any)
+          .eq('id', currentOrder.id);
+
+        if (accountUpdateError) throw accountUpdateError;
+
+        printableOrder = {
+          ...(finalizedOrders[finalizedOrders.length - 1] || {}),
+          id: finalizedOrders[finalizedOrders.length - 1]?.id || accountId,
+          order_number: finalizedOrders[finalizedOrders.length - 1]?.order_number || currentOrder.order_number,
           customer_name: currentOrder.customer_name || `Mesa ${table.table_number}`,
           customer_phone: currentOrder.customer_phone || null,
           table_id: table.id,
@@ -297,33 +422,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           status: 'completed',
           acceptance_status: 'accepted',
           payment_method: paymentMethod,
-          cash_register_session_id: openCashSession.id,
-          estimated_time: '15-20 min',
-          variations: {
-            source: 'table_account_closure',
-            original_account_id: currentOrder.id,
-          },
+          created_at: currentOrder.created_at,
         };
-
-        const { data: createdOrder, error: orderInsertError } = await supabase
-          .from('orders')
-          .insert([orderPayload])
-          .select()
-          .single();
-
-        if (orderInsertError) throw orderInsertError;
-
-        const { error: accountUpdateError } = await supabase
-          .from('table_accounts')
-          .update({
-            status: 'closed',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', currentOrder.id);
-
-        if (accountUpdateError) throw accountUpdateError;
-
-        printableOrder = createdOrder;
       } else {
         const { data: updatedOrder, error: orderUpdateError } = await supabase
           .from('orders')
@@ -332,13 +432,55 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             cash_register_session_id: openCashSession.id,
             status: 'completed',
             acceptance_status: 'accepted',
-            updated_at: new Date().toISOString()
+            updated_at: paymentTimestamp
           })
           .eq('id', currentOrder.id)
+          .eq('user_id', user?.id)
           .select()
-          .single();
+          .maybeSingle();
 
         if (orderUpdateError) throw orderUpdateError;
+        if (!updatedOrder) throw new Error('Pedido da mesa não encontrado para finalização.');
+
+        if ((updatedOrder as any).session_id && (updatedOrder as any).account_id) {
+          const { data: paymentRows, error: paymentRowsError } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('session_id', (updatedOrder as any).session_id)
+            .eq('account_id', (updatedOrder as any).account_id);
+
+          if (paymentRowsError) throw paymentRowsError;
+
+          const paidAmount = (paymentRows || []).reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0);
+          const remainingAmount = Math.max(Number(currentOrder.total || 0) - paidAmount, 0);
+
+          if (remainingAmount > 0.009) {
+            const { error: paymentInsertError } = await supabase
+              .from('payments')
+              .insert({
+                user_id: user?.id,
+                session_id: (updatedOrder as any).session_id,
+                account_id: (updatedOrder as any).account_id,
+                method: waiterPaymentMethod,
+                amount: remainingAmount,
+              });
+
+            if (paymentInsertError) throw paymentInsertError;
+          }
+
+          const { error: accountUpdateError } = await supabase
+            .from('table_accounts')
+            .update({
+              status: 'paid',
+              paid_at: paymentTimestamp,
+              closed_at: paymentTimestamp,
+              updated_at: paymentTimestamp
+            } as any)
+            .eq('id', (updatedOrder as any).account_id)
+            .eq('user_id', user?.id);
+
+          if (accountUpdateError) throw accountUpdateError;
+        }
 
         printableOrder = updatedOrder;
 
@@ -349,9 +491,37 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
         }
       }
 
+      let shouldFreeTable = true;
+      const currentSessionId = currentOrder.session_id || printableOrder?.session_id || null;
+
+      if (currentSessionId) {
+        const { data: remainingAccounts, error: remainingAccountsError } = await supabase
+          .from('table_accounts')
+          .select('id, status')
+          .eq('session_id', currentSessionId)
+          .neq('id', currentOrder.account_id || currentOrder.id)
+          .in('status', ['open', 'payment_pending']);
+
+        if (remainingAccountsError) throw remainingAccountsError;
+        shouldFreeTable = (remainingAccounts || []).length === 0;
+
+        if (shouldFreeTable) {
+          const { error: sessionCloseError } = await supabase
+            .from('table_sessions')
+            .update({
+              status: 'closed',
+              closed_at: paymentTimestamp
+            } as any)
+            .eq('id', currentSessionId)
+            .eq('user_id', user?.id);
+
+          if (sessionCloseError) throw sessionCloseError;
+        }
+      }
+
       const { error: tableError } = await supabase
         .from('tables')
-        .update({ status: 'available' })
+        .update({ status: shouldFreeTable ? 'available' : 'occupied' })
         .eq('id', table.id);
 
       if (tableError) throw tableError;
@@ -380,7 +550,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       console.error('Erro ao finalizar pedido:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível finalizar o pedido.",
+        description: error instanceof Error ? error.message : "Não foi possível finalizar o pedido.",
         variant: "destructive"
       });
     } finally {
@@ -427,7 +597,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users size={20} />
@@ -528,9 +698,9 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             </Card>
 
             {/* Ações */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(340px,1.2fr)]">
               {/* Transferir Mesa */}
-              <Card>
+              <Card className="min-w-0">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
                     <ArrowRightLeft size={16} />
@@ -567,7 +737,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
               </Card>
 
               {/* Imprimir Parcial */}
-              <Card>
+              <Card className="min-w-0">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Printer size={16} />
@@ -587,7 +757,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
               </Card>
 
               {/* Fechamento */}
-              <Card>
+              <Card className="min-w-0">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
                     <WalletCards size={16} />
@@ -595,12 +765,12 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="rounded-lg border bg-slate-50 p-3">
+                  <div className="rounded-lg border bg-slate-50 p-4">
                     <div className="flex items-center justify-between text-sm text-slate-500">
                       <span>Total para receber</span>
                       <ReceiptText size={14} />
                     </div>
-                    <div className="mt-2 text-2xl font-bold text-slate-900">{formatCurrency(currentOrder.total)}</div>
+                    <div className="mt-2 break-words text-2xl font-bold text-slate-900">{formatCurrency(currentOrder.total)}</div>
                   </div>
 
                   <div className="space-y-2">
@@ -616,7 +786,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                       </label>
                       <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
                         <RadioGroupItem value="cartao" />
-                        <span className="text-sm font-medium">CartÃ£o</span>
+                        <span className="text-sm font-medium">Cartão</span>
                       </label>
                       <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
                         <RadioGroupItem value="dinheiro" />
@@ -628,8 +798,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                   <Button
                     onClick={handleFinishOrder}
                     disabled={loading}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
-                    size="sm"
+                    className="w-full whitespace-normal break-words px-4 py-3 text-center leading-tight bg-emerald-600 hover:bg-emerald-700"
+                    size="default"
                   >
                     Receber e Fechar Mesa
                   </Button>
