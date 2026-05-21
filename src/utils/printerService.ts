@@ -954,8 +954,16 @@ async function openDrawerElectron() {
 
   const serialDeviceId = String(localStorage.getItem('hw.receipt.port') || '').trim();
   const serialProtocol = String(localStorage.getItem('hw.receipt.protocol') || 'epson').trim() || 'epson';
-  if (!serialDeviceId) {
-    return { success: false, error: 'Configure a porta da impressora térmica em Hardware para acionar a gaveta' };
+  const systemPrinterName = String(localStorage.getItem('hw.report.printer') || '').trim();
+
+  if (!serialDeviceId && !systemPrinterName) {
+    return { success: false, error: 'Configure a impressora térmica ou a impressora do sistema em Hardware para acionar a gaveta' };
+  }
+
+  if (!serialDeviceId && systemPrinterName) {
+    const resp = await api.openCashDrawer(`system:${systemPrinterName}`);
+    if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao abrir gaveta na impressora do sistema' };
+    return { success: true };
   }
 
   const conn = await api.connectPrinter(serialDeviceId, serialProtocol, { protocol: serialProtocol });

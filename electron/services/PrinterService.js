@@ -1,6 +1,7 @@
 const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
 const EventEmitter = require('events');
+const { execFile } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const { exec } = require('child_process');
@@ -669,6 +670,14 @@ class PrinterService extends EventEmitter {
 
   async openCashDrawer(deviceId) {
     try {
+      if (String(deviceId || '').startsWith('system:')) {
+        const printerName = String(deviceId || '').slice('system:'.length).trim();
+        if (!printerName) {
+          return { success: false, message: 'Impressora do sistema não informada para acionar a gaveta' };
+        }
+        return await this.openCashDrawerSystem(printerName);
+      }
+
       let printerInfo = this.connectedPrinters.get(deviceId);
 
       if (!printerInfo) {
@@ -695,6 +704,101 @@ class PrinterService extends EventEmitter {
       console.error('Erro ao abrir gaveta:', error);
       return { success: false, message: error.message };
     }
+  }
+
+  async openCashDrawerSystem(printerName) {
+    if (process.platform !== 'win32') {
+      return { success: false, message: 'Abertura da gaveta via impressora do sistema está disponível apenas no Windows' };
+    }
+
+    const script = `
+$printerName = $env:DRAWER_PRINTER_NAME
+$bytes = [byte[]](27,112,0,25,250,27,112,1,25,250)
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDocName;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, DOCINFOA di);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, byte[] pBytes, Int32 dwCount, out Int32 dwWritten);
+
+  public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
+    IntPtr pPrinter = IntPtr.Zero;
+    DOCINFOA di = new DOCINFOA();
+    di.pDocName = "POPSYSTEM Drawer Pulse";
+    di.pDataType = "RAW";
+    int written = 0;
+
+    if (!OpenPrinter(printerName, out pPrinter, IntPtr.Zero)) return false;
+    try {
+      if (!StartDocPrinter(pPrinter, 1, di)) return false;
+      try {
+        if (!StartPagePrinter(pPrinter)) return false;
+        try {
+          return WritePrinter(pPrinter, bytes, bytes.Length, out written);
+        } finally {
+          EndPagePrinter(pPrinter);
+        }
+      } finally {
+        EndDocPrinter(pPrinter);
+      }
+    } finally {
+      ClosePrinter(pPrinter);
+    }
+  }
+}
+"@
+Add-Type -TypeDefinition $signature -Language CSharp
+if ([RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)) {
+  exit 0
+}
+exit 1
+`;
+
+    return await new Promise((resolve) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+        {
+          windowsHide: true,
+          env: {
+            ...process.env,
+            DRAWER_PRINTER_NAME: printerName,
+          },
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error('Erro ao abrir gaveta via impressora do sistema:', stderr || error.message);
+            resolve({ success: false, message: stderr || error.message || 'Falha ao acionar gaveta na impressora do sistema' });
+            return;
+          }
+
+          this.emit('cashDrawerOpened', { deviceId: `system:${printerName}` });
+          resolve({ success: true, message: 'Gaveta aberta' });
+        }
+      );
+    });
   }
 
   getConnectedPrinters() {
