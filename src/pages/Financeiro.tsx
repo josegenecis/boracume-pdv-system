@@ -91,6 +91,7 @@ interface CashSession {
   initial_amount: number;
   final_amount: number | null;
   status: 'open' | 'closed';
+  notes?: string | null;
 }
 
 const Financeiro = () => {
@@ -108,6 +109,7 @@ const Financeiro = () => {
   const [sessionOrders, setSessionOrders] = useState<any[]>([]);
   const [sessionMovements, setSessionMovements] = useState<any[]>([]);
   const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
+  const [reprintingCashReport, setReprintingCashReport] = useState(false);
   
   // States for new expense
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
@@ -228,7 +230,7 @@ const Financeiro = () => {
     try {
       const { data, error } = await (supabase as any)
         .from('cash_register_sessions')
-        .select('id, opened_at, closed_at, initial_amount, final_amount, status')
+        .select('id, opened_at, closed_at, initial_amount, final_amount, status, notes')
         .eq('user_id', user.id)
         .order('opened_at', { ascending: false })
         .limit(50);
@@ -313,7 +315,12 @@ const Financeiro = () => {
     return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
   };
 
-  const buildCashCloseReportLines = async (session: CashSession, informedAmount: number, closedAt: string) => {
+  const buildCashCloseReportLines = async (
+    session: CashSession,
+    informedAmount: number,
+    closedAt: string,
+    notesOverride?: string | null
+  ) => {
     if (!user?.id) return [];
 
     const db = supabase as unknown as SupabaseUntyped;
@@ -391,6 +398,7 @@ const Financeiro = () => {
     const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
     const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
     const formatMinutes = (value: number) => `${Math.max(0, Math.round(value || 0))} min`;
+    const reportNotes = notesOverride ?? cashDescription;
 
     return [
       divider,
@@ -464,9 +472,9 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.81'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.82'}`,
       '',
-      cashDescription ? `Obs: ${cashDescription}` : '',
+      reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
       '',
       divider,
@@ -504,6 +512,48 @@ const Financeiro = () => {
       fetchData();
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const handleReprintCashCloseReport = async () => {
+    if (!user?.id || !selectedSession) return;
+    if (selectedSession.status !== 'closed') {
+      toast({
+        title: 'Caixa ainda aberto',
+        description: 'Só é possível reimprimir fechamentos de sessões encerradas.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setReprintingCashReport(true);
+      const closedAt = selectedSession.closed_at || new Date().toISOString();
+      const informedAmount = Number(selectedSession.final_amount ?? selectedSession.initial_amount ?? 0);
+      const reportLines = await buildCashCloseReportLines(
+        selectedSession,
+        informedAmount,
+        closedAt,
+        selectedSession.notes || ''
+      );
+
+      await PrinterService.printCashReport({
+        title: '',
+        userId: user.id,
+        hideStoreHeader: true,
+        footerText: '',
+        lines: reportLines
+      });
+
+      toast({ title: 'Fechamento reimpresso' });
+    } catch (e: any) {
+      toast({
+        title: 'Erro ao reimprimir',
+        description: e?.message || 'Não foi possível reimprimir o fechamento.',
+        variant: 'destructive'
+      });
+    } finally {
+      setReprintingCashReport(false);
     }
   };
 
@@ -1337,6 +1387,16 @@ const Financeiro = () => {
                 {selectedSession?.status === 'open' ? 'ABERTO' : 'FECHADO'}
               </Badge>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-full rounded-[14px] border-[#003223]/10 bg-white text-xs text-[#003223] hover:bg-[#F5EBE1]"
+              onClick={() => { void handleReprintCashCloseReport(); }}
+              disabled={!selectedSession || selectedSession.status !== 'closed' || reprintingCashReport}
+            >
+              <ReceiptText className="mr-1.5 h-3.5 w-3.5" />
+              {reprintingCashReport ? 'Reimprimindo...' : 'Reimprimir fechamento'}
+            </Button>
           </div>
         </section>
 
@@ -1751,9 +1811,17 @@ const Financeiro = () => {
                     </Badge>
                   </div>
                 </div>
-                <div className="flex items-end justify-end">
+                <div className="flex flex-col items-stretch justify-end gap-2 sm:flex-row sm:items-end">
                   <Button variant="outline" onClick={() => selectedSessionId && fetchSessionDetails(selectedSessionId)} disabled={!selectedSessionId || loadingSessionDetails}>
                     {loadingSessionDetails ? 'Atualizando...' : 'Atualizar sessão'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { void handleReprintCashCloseReport(); }}
+                    disabled={!selectedSession || selectedSession.status !== 'closed' || reprintingCashReport}
+                  >
+                    <ReceiptText className="mr-2 h-4 w-4" />
+                    {reprintingCashReport ? 'Reimprimindo...' : 'Reimprimir fechamento'}
                   </Button>
                 </div>
               </div>
