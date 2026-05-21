@@ -26,6 +26,12 @@ const isPdvCounterOrder = (order: any) => {
   return order?.order_type === 'counter' && source === 'PDV';
 };
 
+const isTableServiceOrder = (order: any) => {
+  const orderType = String(order?.order_type || '').toLowerCase();
+  const source = String(order?.variations?.source || order?.source || '').toLowerCase();
+  return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
+};
+
 const GlobalNotificationSystem: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -219,7 +225,7 @@ const GlobalNotificationSystem: React.FC = () => {
         return [];
       }
 
-      const list = ((data || []) as PendingOrder[]).filter((order) => !isPdvCounterOrder(order));
+      const list = ((data || []) as PendingOrder[]).filter((order) => !isPdvCounterOrder(order) && !isTableServiceOrder(order));
       setPendingOrders(list);
       if (list.length > 0 && !isOnOrdersPageRef.current) {
         setIsAnimatingOut(false);
@@ -244,6 +250,7 @@ const GlobalNotificationSystem: React.FC = () => {
         async (payload) => {
           const newOrder = payload.new as PendingOrder;
           if (isPdvCounterOrder(newOrder)) return;
+          if (isTableServiceOrder(newOrder)) return;
 
           const showForInsert =
             newOrder.acceptance_status === 'pending_acceptance' ||
@@ -265,7 +272,7 @@ const GlobalNotificationSystem: React.FC = () => {
         },
         async (payload) => {
           const updatedOrder = payload.new as PendingOrder;
-          if (isPdvCounterOrder(updatedOrder)) {
+          if (isPdvCounterOrder(updatedOrder) || isTableServiceOrder(updatedOrder)) {
             setPendingOrders((prev) => prev.filter((order) => order.id !== updatedOrder.id));
             return;
           }

@@ -58,6 +58,12 @@ const isPdvCounterOrder = (order: any) => {
   return order?.order_type === 'counter' && source === 'PDV';
 };
 
+const isTableServiceOrder = (order: any) => {
+  const orderType = String(order?.order_type || '').toLowerCase();
+  const source = String(order?.variations?.source || order?.source || '').toLowerCase();
+  return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -162,7 +168,7 @@ const Orders = () => {
           (payload) => {
             console.log('🔔 Novo pedido em tempo real:', payload);
 
-            if (isPdvCounterOrder((payload as any)?.new)) return;
+            if (isPdvCounterOrder((payload as any)?.new) || isTableServiceOrder((payload as any)?.new)) return;
 
             // Add new order to the list
             const newOrder = enrichOrder((payload as any)?.new);
@@ -183,7 +189,7 @@ const Orders = () => {
           (payload) => {
             console.log('🔄 Pedido atualizado em tempo real:', payload);
 
-            if (isPdvCounterOrder((payload as any)?.new)) {
+            if (isPdvCounterOrder((payload as any)?.new) || isTableServiceOrder((payload as any)?.new)) {
               setOrders(prev => prev.filter(order => order.id !== (payload as any)?.new?.id));
               return;
             }
@@ -292,7 +298,7 @@ const Orders = () => {
 
       // Transform the data to ensure items is always an array
       const transformedData = (data || [])
-        .filter((order) => !isPdvCounterOrder(order))
+        .filter((order) => !isPdvCounterOrder(order) && !isTableServiceOrder(order))
         .map((order) => enrichOrder(order));
 
       setOrders(transformedData);

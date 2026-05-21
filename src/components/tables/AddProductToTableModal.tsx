@@ -10,7 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenIntegration } from '@/hooks/useKitchenIntegration';
 import ProductSelectionModal from '@/components/pdv/ProductSelectionModal';
-import { notifyOrderCreatedById } from '@/utils/orderNotifications';
 
 interface Product {
   id: string;
@@ -145,13 +144,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
-  const generateOrderNumber = () => {
-    const now = new Date();
-    const formattedDate = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const randomNumber = Math.floor(Math.random() * 1000);
-    return `${formattedDate}-${randomNumber.toString().padStart(3, '0')}`;
-  };
-
   const handleAddToTable = async () => {
     if (!table || !user || cartItems.length === 0) {
       toast({
@@ -186,13 +178,15 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     try {
       setLoading(true);
 
-      const { data: existingOrders, error: checkError } = await supabase
-        .from('orders')
+      const { data: existingAccount, error: checkError } = await supabase
+        .from('table_accounts')
         .select('*')
         .eq('table_id', table.id)
         .eq('user_id', user.id)
-        .in('status', ['pending', 'preparing', 'ready'])
-        .limit(1);
+        .in('status', ['open', 'payment_pending'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (checkError) throw checkError;
 
@@ -207,15 +201,18 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         notes: item.notes || ''
       }));
 
-      if (existingOrders && existingOrders.length > 0) {
-        const existingOrder = existingOrders[0];
-        
+      const itemsForKitchen = orderItems.filter(item => {
+        const product = products.find(p => p.id === item.product_id);
+        return product?.send_to_kds === true;
+      });
+
+      if (existingAccount) {
         let currentItems = [];
         try {
-          if (typeof existingOrder.items === 'string') {
-            currentItems = JSON.parse(existingOrder.items);
-          } else if (Array.isArray(existingOrder.items)) {
-            currentItems = existingOrder.items;
+          if (typeof existingAccount.items === 'string') {
+            currentItems = JSON.parse(existingAccount.items);
+          } else if (Array.isArray(existingAccount.items)) {
+            currentItems = existingAccount.items;
           }
         } catch (e) {
           console.error('Error parsing existing items:', e);
@@ -223,35 +220,30 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         }
         
         const updatedItems = [...currentItems, ...orderItems];
-        const newTotal = existingOrder.total + getTotalValue();
+        const newTotal = Number(existingAccount.total || 0) + getTotalValue();
 
         const { error: updateError } = await supabase
-          .from('orders')
+          .from('table_accounts')
           .update({
             items: updatedItems,
             total: newTotal,
             updated_at: new Date().toISOString()
           })
-          .eq('id', existingOrder.id);
+          .eq('id', existingAccount.id);
 
         if (updateError) throw updateError;
-
-        const itemsForKitchen = orderItems.filter(item => {
-          const product = products.find(p => p.id === item.product_id);
-          return product?.send_to_kds === true;
-        });
 
         if (itemsForKitchen.length > 0) {
           await sendToKitchen({
             user_id: user.id,
-            order_number: existingOrder.order_number,
+            order_number: `MESA-${table.table_number}-${Date.now().toString().slice(-5)}`,
 
-            customer_name: existingOrder.customer_name || 'Cliente não informado',
+            customer_name: customerName.trim() || `Mesa ${table.table_number}`,
 
-            customer_phone: existingOrder.customer_phone || '',
+            customer_phone: customerPhone.trim() || '',
             items: itemsForKitchen,
             total: getTotalValue(),
-            payment_method: existingOrder.payment_method || 'pendente',
+            payment_method: 'pendente',
             order_type: 'dine_in'
           });
         }
@@ -261,47 +253,29 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
           description: `Produtos adicionados ao pedido da Mesa ${table.table_number}.`,
         });
       } else {
-        const orderNumber = generateOrderNumber();
-        
-        const orderData = {
+        const accountData = {
           user_id: user.id,
-          order_number: orderNumber,
-          customer_name: customerName.trim() || `Mesa ${table.table_number}`,
-          customer_phone: customerPhone.trim() || null,
           table_id: table.id,
           items: orderItems,
           total: getTotalValue(),
-          order_type: 'dine_in',
-          status: 'pending',
-          payment_method: 'pendente',
-          estimated_time: '15-20 min'
+          status: 'open'
         };
 
-        const { data: createdOrder, error: createError } = await supabase
-          .from('orders')
-          .insert([orderData])
+        const { error: createError } = await supabase
+          .from('table_accounts')
+          .insert([accountData])
           .select('id')
           .single();
 
         if (createError) throw createError;
-
-        try {
-          await notifyOrderCreatedById(createdOrder?.id);
-        } catch (waErr) {
-          console.warn('Falha ao notificar pedido da mesa via WhatsApp:', waErr);
-        }
 
         await supabase
           .from('tables')
           .update({ status: 'occupied' })
           .eq('id', table.id);
 
-        const itemsForKitchen = orderItems.filter(item => {
-          const product = products.find(p => p.id === item.product_id);
-          return product?.send_to_kds === true;
-        });
-
         if (itemsForKitchen.length > 0) {
+          const orderNumber = `MESA-${table.table_number}-${Date.now().toString().slice(-5)}`;
           await sendToKitchen({
             user_id: user.id,
             order_number: orderNumber,
@@ -317,8 +291,8 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         }
 
         toast({
-          title: "Pedido criado!",
-          description: `Pedido #${orderNumber} criado para a Mesa ${table.table_number}.`,
+          title: "Mesa lançada!",
+          description: `Produtos adicionados à Mesa ${table.table_number}.`,
         });
       }
 

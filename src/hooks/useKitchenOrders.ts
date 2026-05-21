@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 
 export interface OrderItem {
   id: string;
@@ -50,9 +49,10 @@ export const useKitchenOrders = () => {
       console.log('🔄 Fetching kitchen orders...');
       
       const { data, error } = await supabase
-        .from('orders') // Changed from kitchen_orders
+        .from('kitchen_orders')
         .select('*')
-        .in('status', ['pending', 'preparing', 'ready', 'completed']) // Filter pertinent statuses
+        .eq('user_id', user?.id)
+        .in('status', ['pending', 'preparing', 'ready', 'completed'])
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -172,7 +172,13 @@ export const useKitchenOrders = () => {
     try {
       console.log(`🔄 Updating order ${orderId} status to ${newStatus}`);
       
-      await updateOrderStatusRemote(orderId, newStatus);
+      const { error } = await supabase
+        .from('kitchen_orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', orderId)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
 
       // Update local state
       setOrders(prev => prev.map(order => 
@@ -194,7 +200,13 @@ export const useKitchenOrders = () => {
     try {
       console.log(`🔄 Updating ${orderIds.length} orders to status ${newStatus}`);
 
-      await Promise.all(orderIds.map((orderId) => updateOrderStatusRemote(orderId, newStatus)));
+      const { error } = await supabase
+        .from('kitchen_orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .in('id', orderIds)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
 
       // Update local state
       setOrders(prev => prev.map(order => 
@@ -224,7 +236,7 @@ export const useKitchenOrders = () => {
         {
           event: '*', // Listen to all events for debugging
           schema: 'public',
-          table: 'orders',
+          table: 'kitchen_orders',
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
