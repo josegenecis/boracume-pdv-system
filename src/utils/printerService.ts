@@ -1005,6 +1005,7 @@ export const PrinterService = {
   async printOrder(order: any, options: PrintOrderOptions = {}) {
     const api = typeof window !== 'undefined' ? (window as any)?.electronAPI : null;
     const isElectron = Boolean(api?.printSystem && api?.printReceipt);
+    let drawerOpenedBeforePrint = false;
 
     // 1. Buscar configurações
     const { data: settings } = await (supabase as any)
@@ -1018,6 +1019,14 @@ export const PrinterService = {
         if (settings?.auto_print === false) return;
       } else {
         if (settings?.auto_print !== true) return;
+      }
+    }
+
+    if (options.openCashDrawer && isElectron) {
+      const drawerResult = await openDrawerElectron();
+      drawerOpenedBeforePrint = Boolean(drawerResult?.success);
+      if (!drawerOpenedBeforePrint) {
+        console.warn('Falha ao abrir gaveta antes da impressão:', drawerResult?.error || drawerResult);
       }
     }
 
@@ -1107,6 +1116,12 @@ export const PrinterService = {
       const resp = await printElectron(enrichedOrder, config);
       if (!resp.success) {
         toast.error(resp.error || 'Falha ao imprimir');
+        if (options.openCashDrawer && !drawerOpenedBeforePrint) {
+          const drawerResult = await openDrawerElectron();
+          if (!drawerResult?.success) {
+            console.warn('Falha ao abrir gaveta após erro de impressão:', drawerResult?.error || drawerResult);
+          }
+        }
       }
       return;
     }

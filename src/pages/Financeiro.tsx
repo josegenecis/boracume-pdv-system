@@ -45,6 +45,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
+import { getLocalOperatorSession } from '@/services/operatorAuth';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { useLocation } from 'react-router-dom';
 import {
@@ -62,6 +63,16 @@ import { parseBRL } from '@/lib/currency';
 type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
 type TxTypeFilter = '' | 'all' | 'entrada' | 'saida';
+type SupabaseQuery = {
+  select: (columns: string) => SupabaseQuery;
+  eq: (column: string, value: unknown) => SupabaseQuery;
+  order: (column: string, options?: { ascending?: boolean }) => SupabaseQuery;
+  limit: (count: number) => SupabaseQuery;
+  maybeSingle: () => Promise<{ data: unknown; error?: unknown }>;
+};
+type SupabaseUntyped = {
+  from: (table: string) => SupabaseQuery;
+};
 
 interface Transaction {
   id: string;
@@ -277,6 +288,241 @@ const Financeiro = () => {
     }
   };
 
+  const getPaymentBucket = (paymentMethod: unknown) => {
+    const value = String(paymentMethod || '').trim().toLowerCase();
+    if (value.includes('pix')) return 'pix';
+    if (value.includes('dinheiro') || value.includes('cash') || value.includes('especie')) return 'dinheiro';
+    if (value.includes('credito') || value.includes('credit')) return 'credito';
+    if (value.includes('debito') || value.includes('debit')) return 'debito';
+    if (value.includes('voucher') || value.includes('refeicao') || value.includes('vale')) return 'voucher';
+    if (value.includes('cart') || value.includes('card')) return 'cartao';
+    return 'outros';
+  };
+
+  const normalizePaymentMethodName = (value: unknown) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const resolveExtraFeePercent = (order: Record<string, unknown>, methods: Array<Record<string, unknown>>) => {
+    const normalizedPayment = normalizePaymentMethodName(order?.payment_method);
+    const bucket = getPaymentBucket(order?.payment_method);
+    const exact = methods.find((method) => normalizePaymentMethodName(method?.name) === normalizedPayment);
+    if (exact) return Number(exact?.extra_fee_percent || 0);
+
+    if (bucket === 'credito') {
+      const match = methods.find((method) => normalizePaymentMethodName(method?.name).includes('credito'));
+      if (match) return Number(match?.extra_fee_percent || 0);
+    }
+
+    if (bucket === 'debito') {
+      const match = methods.find((method) => normalizePaymentMethodName(method?.name).includes('debito'));
+      if (match) return Number(match?.extra_fee_percent || 0);
+    }
+
+    if (bucket === 'cartao') {
+      const match = methods.find((method) => Boolean(method?.is_card));
+      if (match) return Number(match?.extra_fee_percent || 0);
+    }
+
+    return 0;
+  };
+
+  const averageMinutesFromOrders = (orders: Array<Record<string, unknown>>) => {
+    const validDurations = (Array.isArray(orders) ? orders : [])
+      .map((order) => {
+        const createdAt = new Date(String(order?.created_at || '')).getTime();
+        const updatedAt = new Date(String(order?.updated_at || '')).getTime();
+        if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt) || updatedAt < createdAt) return null;
+        return Math.round((updatedAt - createdAt) / 60000);
+      })
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+
+    if (validDurations.length === 0) return 0;
+    return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
+  };
+
+  const buildCashCloseReportLines = async (session: CashSession, informedAmount: number, closedAt: string) => {
+    if (!user?.id) return [];
+
+    const db = supabase as unknown as SupabaseUntyped;
+    const [{ data: orders }, { data: movements }, { data: profile }, { data: fiscal }, { data: paymentMethods }] = await Promise.all([
+      db
+        .from('orders')
+        .select('id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone')
+        .eq('user_id', user.id)
+        .eq('cash_register_session_id', session.id),
+      db
+        .from('cash_movements')
+        .select('id, created_at, type, amount, description')
+        .eq('user_id', user.id)
+        .eq('session_id', session.id),
+      supabase
+        .from('profiles')
+        .select('restaurant_name')
+        .eq('id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('fiscal_settings')
+        .select('cnpj')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      db
+        .from('payment_methods')
+        .select('name,extra_fee_percent,is_card')
+        .eq('user_id', user.id),
+    ]);
+
+    const orderList = Array.isArray(orders) ? orders as Array<Record<string, unknown>> : [];
+    const movementList = Array.isArray(movements) ? movements as Array<Record<string, unknown>> : [];
+    const paymentMethodList = Array.isArray(paymentMethods) ? paymentMethods as Array<Record<string, unknown>> : [];
+    const profileRow = (profile && typeof profile === 'object' ? profile : {}) as Record<string, unknown>;
+    const fiscalRow = (fiscal && typeof fiscal === 'object' ? fiscal : {}) as Record<string, unknown>;
+    const sales = orderList.filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
+    const cancelledCount = orderList.length - sales.length;
+    const grossRevenue = sales.reduce((sum, order) => sum + Number(order?.total || 0), 0);
+    const discounts = sales.reduce((sum, order) => sum + Number(order?.discount || 0), 0);
+    const deliveryFee = sales.reduce((sum, order) => sum + Number(order?.delivery_fee || 0), 0);
+    const systemFees = sales.reduce((sum, order) => {
+      const feePercent = resolveExtraFeePercent(order, paymentMethodList);
+      return sum + (Number(order?.total || 0) * feePercent / 100);
+    }, 0);
+    const netRevenue = grossRevenue - discounts + deliveryFee - systemFees;
+
+    const paymentTotals = sales.reduce<Record<string, number>>((acc, order) => {
+      const bucket = getPaymentBucket(order?.payment_method);
+      acc[bucket] = (acc[bucket] || 0) + Number(order?.total || 0);
+      return acc;
+    }, {});
+
+    const inAmount = movementList
+      .filter((movement) => movement?.type === 'in')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const outAmount = movementList
+      .filter((movement) => movement?.type === 'out')
+      .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
+    const initial = Number(session.initial_amount || 0);
+    const expectedCash = initial + Number(paymentTotals.dinheiro || 0) + inAmount - outAmount;
+    const difference = informedAmount - expectedCash;
+    const operatorSession = getLocalOperatorSession();
+    const customerKeys = new Set(
+      sales
+        .map((order) => String(order?.customer_phone || order?.customer_name || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const lineWidth = 48;
+    const divider = '='.repeat(lineWidth);
+    const centerText = (value: string) => {
+      const text = String(value || '').trim();
+      const leftPadding = Math.max(0, Math.floor((lineWidth - text.length) / 2));
+      return `${' '.repeat(leftPadding)}${text}`;
+    };
+    const row = (label: string, value: string) => {
+      const safeLabel = String(label || '').trim();
+      const safeValue = String(value || '').trim();
+      const spacing = Math.max(1, lineWidth - safeLabel.length - safeValue.length);
+      return `${safeLabel}${' '.repeat(spacing)}${safeValue}`;
+    };
+    const date = new Date(closedAt);
+    const openedAt = new Date(session.opened_at);
+    const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
+    const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
+    const formatMinutes = (value: number) => `${Math.max(0, Math.round(value || 0))} min`;
+
+    return [
+      divider,
+      centerText('POPSYSTEM PDV'),
+      centerText('RELATÓRIO DE FECHAMENTO'),
+      divider,
+      '',
+      `Empresa: ${String(profileRow.restaurant_name || 'PopSystem').trim() || 'PopSystem'}`,
+      `CNPJ: ${String(fiscalRow.cnpj || '--').trim() || '--'}`,
+      `Operador: ${operatorSession?.name || 'Operador'}`,
+      'Caixa: CAIXA 01',
+      '',
+      `Data: ${date.toLocaleDateString('pt-BR')}`,
+      `Hora Abertura: ${openedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      `Hora Fechamento: ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      '',
+      divider,
+      centerText('RESUMO GERAL'),
+      divider,
+      '',
+      row('Pedidos Realizados:', String(sales.length)),
+      row('Pedidos Cancelados:', String(cancelledCount)),
+      row('Clientes Atendidos:', String(customerKeys.size)),
+      '',
+      row('Faturamento Bruto:', formatCurrency(grossRevenue)),
+      row('Descontos:', formatCurrency(discounts)),
+      row('Taxa Entrega:', formatCurrency(deliveryFee)),
+      row('Taxas Sistema:', formatCurrency(systemFees)),
+      '',
+      row('FATURAMENTO LÍQUIDO:', formatCurrency(netRevenue)),
+      '',
+      divider,
+      centerText('FORMAS DE PAGAMENTO'),
+      divider,
+      '',
+      row('PIX:', formatCurrency(paymentTotals.pix || 0)),
+      row('Dinheiro:', formatCurrency(paymentTotals.dinheiro || 0)),
+      row('Crédito:', formatCurrency(paymentTotals.credito || 0)),
+      row('Débito:', formatCurrency(paymentTotals.debito || 0)),
+      row('Voucher/Refeição:', formatCurrency(paymentTotals.voucher || 0)),
+      ...(Number(paymentTotals.cartao || 0) > 0 ? [row('Cartão:', formatCurrency(paymentTotals.cartao || 0))] : []),
+      ...(Number(paymentTotals.outros || 0) > 0 ? [row('Outros:', formatCurrency(paymentTotals.outros || 0))] : []),
+      '',
+      row('TOTAL RECEBIDO:', formatCurrency(grossRevenue)),
+      '',
+      divider,
+      centerText('MOVIMENTO CAIXA'),
+      divider,
+      '',
+      row('Valor Inicial:', formatCurrency(initial)),
+      '',
+      row('Entradas Extras:', formatCurrency(inAmount)),
+      row('Sangrias/Saídas:', formatCurrency(outAmount)),
+      '',
+      row('Valor Esperado:', formatCurrency(expectedCash)),
+      row('Valor Informado:', formatCurrency(informedAmount)),
+      '',
+      row('DIFERENÇA:', `${difference < 0 ? '-' : ''}${formatCurrency(Math.abs(difference))}`),
+      '',
+      divider,
+      centerText('DELIVERY / LOJA'),
+      divider,
+      '',
+      row('Pedidos Delivery:', String(deliveryOrders.length)),
+      row('Pedidos Balcão:', String(sales.filter((order) => order?.order_type === 'counter' || order?.order_type === 'pickup').length)),
+      row('Pedidos Mesas:', String(sales.filter((order) => order?.order_type === 'dine_in').length)),
+      '',
+      row('Tempo Médio Produção:', formatMinutes(averageMinutesFromOrders(productionOrders))),
+      row('Tempo Médio Entrega:', formatMinutes(averageMinutesFromOrders(deliveryOrders))),
+      '',
+      divider,
+      centerText('OBSERVACOES'),
+      divider,
+      '',
+      'Sistema: PopSystem PDV',
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.81'}`,
+      '',
+      cashDescription ? `Obs: ${cashDescription}` : '',
+      'Fechamento realizado com sucesso.',
+      '',
+      divider,
+      '',
+      'Assinatura Operador:',
+      '',
+      '____________________________________________',
+      '',
+      divider,
+      centerText('POPSYSTEM PDV'),
+      divider,
+    ];
+  };
+
   const handleAddExpense = async () => {
     if (!newExpense.description || !newExpense.amount) return;
     try {
@@ -335,19 +581,24 @@ const Financeiro = () => {
         });
       } else if (cashOperation === 'close') {
         if (!currentSession) return;
+        const closedAt = new Date().toISOString();
+        const reportLines = await buildCashCloseReportLines(currentSession, amount, closedAt);
         const { error } = await (supabase as any).from('cash_register_sessions').update({
           status: 'closed',
-          closed_at: new Date().toISOString(),
+          closed_at: closedAt,
           final_amount: amount,
           notes: cashDescription
         }).eq('id', currentSession.id);
         if (error) throw error;
         toast({ title: 'Caixa fechado com sucesso' });
         await PrinterService.printCashReport({
-          title: 'Fechamento de Caixa',
-          lines: [
-            `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
-            `Valor final: R$ ${Number(amount).toFixed(2)}`,
+          title: '',
+          userId: user.id,
+          hideStoreHeader: true,
+          footerText: 'POPSYSTEM PDV',
+          lines: reportLines.length > 0 ? reportLines : [
+            `Data/Hora: ${new Date(closedAt).toLocaleString('pt-BR')}`,
+            `Valor final: ${formatCurrency(amount)}`,
             cashDescription ? `Obs: ${cashDescription}` : ''
           ].filter(Boolean) as string[]
         });

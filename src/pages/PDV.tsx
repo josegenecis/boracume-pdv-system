@@ -568,7 +568,7 @@ const PDV = () => {
     const lines = [
       divider,
       centerText('POPSYSTEM PDV'),
-      centerText('RELATORIO DE FECHAMENTO'),
+      centerText('RELATÓRIO DE FECHAMENTO'),
       divider,
       '',
       `Empresa: ${summary.companyName}`,
@@ -584,61 +584,61 @@ const PDV = () => {
       centerText('RESUMO GERAL'),
       divider,
       '',
-      row('Pedidos Realizados', String(summary.ordersCount)),
-      row('Pedidos Cancelados', String(summary.cancelledCount)),
-      row('Clientes Atendidos', String(summary.customersServed)),
+      row('Pedidos Realizados:', String(summary.ordersCount)),
+      row('Pedidos Cancelados:', String(summary.cancelledCount)),
+      row('Clientes Atendidos:', String(summary.customersServed)),
       '',
-      row('Faturamento Bruto', formatBRL(summary.grossRevenue)),
-      row('Descontos', formatBRL(summary.discounts)),
-      row('Taxa Entrega', formatBRL(summary.deliveryFee)),
-      row('Taxas Sistema', formatBRL(summary.systemFees)),
+      row('Faturamento Bruto:', formatBRL(summary.grossRevenue)),
+      row('Descontos:', formatBRL(summary.discounts)),
+      row('Taxa Entrega:', formatBRL(summary.deliveryFee)),
+      row('Taxas Sistema:', formatBRL(summary.systemFees)),
       '',
-      row('FATURAMENTO LIQUIDO', formatBRL(summary.netRevenue)),
+      row('FATURAMENTO LÍQUIDO:', formatBRL(summary.netRevenue)),
       '',
       divider,
       centerText('FORMAS DE PAGAMENTO'),
       divider,
       '',
-      row('PIX', formatBRL(summary.pix)),
-      row('Dinheiro', formatBRL(summary.cash)),
-      row('Credito', formatBRL(summary.credit)),
-      row('Debito', formatBRL(summary.debit)),
-      row('Voucher/Refeicao', formatBRL(summary.voucher)),
-      ...(summary.genericCard > 0 ? [row('Cartao', formatBRL(summary.genericCard))] : []),
+      row('PIX:', formatBRL(summary.pix)),
+      row('Dinheiro:', formatBRL(summary.cash)),
+      row('Crédito:', formatBRL(summary.credit)),
+      row('Débito:', formatBRL(summary.debit)),
+      row('Voucher/Refeição:', formatBRL(summary.voucher)),
+      ...(summary.genericCard > 0 ? [row('Cartão:', formatBRL(summary.genericCard))] : []),
       '',
-      row('TOTAL RECEBIDO', formatBRL(summary.totalReceived)),
+      row('TOTAL RECEBIDO:', formatBRL(summary.totalReceived)),
       '',
       divider,
       centerText('MOVIMENTO CAIXA'),
       divider,
       '',
-      row('Valor Inicial', formatBRL(summary.initial)),
+      row('Valor Inicial:', formatBRL(summary.initial)),
       '',
-      row('Entradas Extras', formatBRL(summary.inAmount)),
-      row('Sangrias/Saidas', formatBRL(summary.outAmount)),
+      row('Entradas Extras:', formatBRL(summary.inAmount)),
+      row('Sangrias/Saídas:', formatBRL(summary.outAmount)),
       '',
-      row('Valor Esperado', formatBRL(summary.expectedCash)),
-      row('Valor Informado', formatBRL(informedAmount)),
+      row('Valor Esperado:', formatBRL(summary.expectedCash)),
+      row('Valor Informado:', formatBRL(informedAmount)),
       '',
-      row('DIFERENCA', `${difference < 0 ? '-' : ''}${formatBRL(Math.abs(difference))}`),
+      row('DIFERENÇA:', `${difference < 0 ? '-' : ''}${formatBRL(Math.abs(difference))}`),
       '',
       divider,
       centerText('DELIVERY / LOJA'),
       divider,
       '',
-      row('Pedidos Delivery', String(summary.deliveryOrders)),
-      row('Pedidos Balcao', String(summary.counterOrders)),
-      row('Pedidos Mesas', String(summary.dineInOrders)),
+      row('Pedidos Delivery:', String(summary.deliveryOrders)),
+      row('Pedidos Balcão:', String(summary.counterOrders)),
+      row('Pedidos Mesas:', String(summary.dineInOrders)),
       '',
-      row('Tempo Medio Producao', formatMinutes(summary.avgProductionMinutes)),
-      row('Tempo Medio Entrega', formatMinutes(summary.avgDeliveryMinutes)),
+      row('Tempo Médio Produção:', formatMinutes(summary.avgProductionMinutes)),
+      row('Tempo Médio Entrega:', formatMinutes(summary.avgDeliveryMinutes)),
       '',
       divider,
       centerText('OBSERVACOES'),
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versao: ${import.meta.env.VITE_APP_VERSION || '1.0.80'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.81'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',
@@ -1699,13 +1699,9 @@ const PDV = () => {
 
       setCreatedOrderForNfce(created || null);
       try {
-        await PrinterService.printOrder(created);
-        if (shouldOpenCashDrawerForOrder(created)) {
-          const drawerResult = await PrinterService.openCashDrawer();
-          if (!drawerResult?.success) {
-            console.warn('Falha ao abrir gaveta na finalização do PDV:', drawerResult?.error || drawerResult);
-          }
-        }
+        await PrinterService.printOrder(created, {
+          openCashDrawer: shouldOpenCashDrawerForOrder(created),
+        });
       } catch (e) {
         console.warn('Falha ao imprimir automaticamente:', e);
       }
@@ -2775,13 +2771,9 @@ const PDV = () => {
 
                 setCreatedOrderForNfce(resolvedOrder);
                 try {
-                  await PrinterService.printOrder(resolvedOrder);
-                  if (shouldOpenCashDrawerForOrder(resolvedOrder)) {
-                    const drawerResult = await PrinterService.openCashDrawer();
-                    if (!drawerResult?.success) {
-                      console.warn('Falha ao abrir gaveta na confirmação PIX do PDV:', drawerResult?.error || drawerResult);
-                    }
-                  }
+                  await PrinterService.printOrder(resolvedOrder, {
+                    openCashDrawer: shouldOpenCashDrawerForOrder(resolvedOrder),
+                  });
                 } catch (e) {
                   console.warn('Falha ao imprimir automaticamente (PIX):', e);
                 }
