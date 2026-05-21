@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit, Trash2, Users, MousePointer, ShoppingCart } from 'lucide-react';
+import { Plus, Edit, Trash2, Users, MousePointer, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -321,7 +321,7 @@ const TableManager: React.FC = () => {
             </div>
             <p className="text-sm text-gray-600">
               <strong>Clique na mesa</strong> para acompanhar a conta, imprimir parcial, transferir ou fechar com pagamento.
-              <strong className="ml-1">Botao carrinho</strong> para adicionar produtos a mesa.
+              <strong className="ml-1">ADD PRODUTO</strong> para lançar itens na mesa.
             </p>
           </div>
         </>
@@ -360,10 +360,11 @@ const TableManager: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={(e) => handleAddProductsClick(table, e)}
-                  className={`${isMobile ? 'h-7 flex-1 rounded-xl px-1.5' : 'h-8 flex-1 px-2'} hover:border-boracume-green/50 hover:bg-boracume-green/10 hover:text-boracume-green`}
+                  className={`${isMobile ? 'h-7 flex-1 rounded-xl px-1 text-[8px]' : 'h-8 flex-1 px-2 text-xs'} hover:border-boracume-green/50 hover:bg-boracume-green/10 hover:text-boracume-green`}
                   title="Adicionar produtos"
                 >
-                  <ShoppingCart size={isMobile ? 12 : 14} />
+                  <PackagePlus size={isMobile ? 11 : 14} />
+                  <span>ADD PRODUTO</span>
                 </Button>
                 <Button
                   variant="outline"

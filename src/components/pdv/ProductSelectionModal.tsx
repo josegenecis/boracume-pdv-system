@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Search, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,12 +46,15 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productVariations, setProductVariations] = useState<Variation[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [showVariations, setShowVariations] = useState(false);
 
   useEffect(() => {
     if (isOpen && user) {
       fetchProducts();
       fetchCategories();
+      setSearchTerm('');
+      setSelectedCategoryId('all');
     }
   }, [isOpen, user]);
 
@@ -178,10 +182,17 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     onClose();
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const categoriesWithProducts = categories.filter((category) =>
+    products.some((product) => product.category_id === category.id)
   );
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategoryId === 'all' || product.category_id === selectedCategoryId;
+    return matchesSearch && matchesCategory;
+  });
 
   if (showVariations && selectedProduct) {
     return (
@@ -222,6 +233,32 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
               className="pl-10"
             />
           </div>
+
+          {categoriesWithProducts.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <Button
+                type="button"
+                variant={selectedCategoryId === 'all' ? 'default' : 'outline'}
+                size="sm"
+                className="shrink-0"
+                onClick={() => setSelectedCategoryId('all')}
+              >
+                Todos
+              </Button>
+              {categoriesWithProducts.map((category) => (
+                <Button
+                  key={category.id}
+                  type="button"
+                  variant={selectedCategoryId === category.id ? 'default' : 'outline'}
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setSelectedCategoryId(category.id)}
+                >
+                  {category.name}
+                </Button>
+              ))}
+            </div>
+          )}
 
           {filteredProducts.length === 0 ? (
             <div className="text-center py-8">

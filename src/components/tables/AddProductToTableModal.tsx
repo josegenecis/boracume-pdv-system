@@ -4,9 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Plus, Minus, Search } from 'lucide-react';
+import { Plus, Minus, PackagePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,14 +39,6 @@ interface Table {
   location?: string;
 }
 
-interface ProductVariation {
-  id: string;
-  name: string;
-  required: boolean;
-  max_selections: number;
-  options: Array<{name: string; price: number}>;
-}
-
 interface AddProductToTableModalProps {
   table: Table | null;
   isOpen: boolean;
@@ -64,7 +54,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,7 +68,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       setCartItems([]);
       setCustomerName('');
       setCustomerPhone('');
-      setSearchTerm('');
     }
   }, [isOpen]);
 
@@ -102,68 +90,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         description: "Erro ao carregar produtos.",
         variant: "destructive"
       });
-    }
-  };
-
-  const fetchProductVariations = async (productId: string) => {
-    try {
-      let data: any[] | null = null;
-      let error: any = null;
-      const res1 = await supabase
-        .from('product_variations')
-        .select('*')
-        .eq('product_id', productId)
-        .order('display_order', { ascending: true });
-      data = res1.data as any;
-      error = res1.error as any;
-      if (error && String(error.message || '').includes('display_order')) {
-        const res2 = await supabase
-          .from('product_variations')
-          .select('*')
-          .eq('product_id', productId)
-          .order('name', { ascending: true });
-        data = res2.data as any;
-        error = res2.error as any;
-      }
-
-      if (error) throw error;
-      
-      const transformedData = (data || []).map(item => {
-        let parsedOptions = [];
-        try {
-          if (typeof item.options === 'string') {
-            parsedOptions = JSON.parse(item.options);
-          } else if (Array.isArray(item.options)) {
-            parsedOptions = item.options;
-          }
-        } catch (e) {
-          console.error('Error parsing options:', e);
-          parsedOptions = [];
-        }
-
-        return {
-          id: item.id,
-          name: item.name,
-          required: item.required,
-          max_selections: item.max_selections,
-          options: Array.isArray(parsedOptions) ? parsedOptions : []
-        };
-      });
-      
-      return transformedData;
-    } catch (error) {
-      console.error('Erro ao carregar variações:', error);
-      return [];
-    }
-  };
-
-  const handleProductClick = async (product: Product) => {
-    const variations = await fetchProductVariations(product.id);
-    
-    if (variations.length > 0) {
-      setShowProductModal(true);
-    } else {
-      addToCart(product, 1, [], '');
     }
   };
 
@@ -231,15 +157,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
       toast({
         title: "Erro",
         description: "Selecione produtos antes de adicionar à mesa.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!customerName.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Informe o nome do cliente.",
         variant: "destructive"
       });
       return;
@@ -349,7 +266,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
         const orderData = {
           user_id: user.id,
           order_number: orderNumber,
-          customer_name: customerName.trim(),
+          customer_name: customerName.trim() || `Mesa ${table.table_number}`,
           customer_phone: customerPhone.trim() || null,
           table_id: table.id,
           items: orderItems,
@@ -389,7 +306,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
             user_id: user.id,
             order_number: orderNumber,
 
-            customer_name: customerName.trim() || 'Cliente não informado',
+            customer_name: customerName.trim() || `Mesa ${table.table_number}`,
 
             customer_phone: customerPhone || '',
             items: itemsForKitchen,
@@ -426,11 +343,6 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
     }).format(value);
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    product.available !== false
-  );
-
   if (!table) return null;
 
   return (
@@ -444,56 +356,48 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1.2fr] gap-6">
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="search">Buscar Produto</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="search"
-                    placeholder="Digite o nome do produto..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
               <Button 
                 onClick={() => setShowProductModal(true)}
-                className="w-full"
+                className="h-14 w-full text-base"
               >
-                <Plus size={16} className="mr-2" />
-                Adicionar Produto
+                <PackagePlus size={18} className="mr-2" />
+                ADD PRODUTO
               </Button>
+
+              <Card>
+                <CardContent className="p-4">
+                  <details className="group">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-slate-700">
+                      Cliente opcional
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <Label htmlFor="customerName">Nome</Label>
+                        <Input
+                          id="customerName"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          placeholder={`Mesa ${table.table_number}`}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="customerPhone">Telefone</Label>
+                        <Input
+                          id="customerPhone"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
+                    </div>
+                  </details>
+                </CardContent>
+              </Card>
             </div>
 
             <div className="space-y-4">
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <div>
-                    <Label htmlFor="customerName">Nome do Cliente *</Label>
-                    <Input
-                      id="customerName"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Nome do cliente"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="customerPhone">Telefone</Label>
-                    <Input
-                      id="customerPhone"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardContent className="p-4">
                   <h3 className="font-medium mb-3">Itens Selecionados</h3>
@@ -562,7 +466,7 @@ const AddProductToTableModal: React.FC<AddProductToTableModalProps> = ({
               <div className="flex gap-2">
                 <Button
                   onClick={handleAddToTable}
-                  disabled={loading || cartItems.length === 0 || !customerName.trim()}
+                  disabled={loading || cartItems.length === 0}
                   className="flex-1"
                 >
                   {loading ? 'Adicionando...' : 'Adicionar à Mesa'}

@@ -175,6 +175,63 @@ function AppContent() {
 
 // Removido helper de permissão de som; habilitar automaticamente
 
+function HardwareAutoConnect() {
+  useEffect(() => {
+    const api = (window as any)?.electronAPI;
+    if (!api?.isElectron || !api?.connectPrinter || !api?.connectScale) return;
+
+    let cancelled = false;
+    const connectSavedDevices = async () => {
+      try {
+        const portsResp = await api.listSerialPorts?.();
+        if (cancelled) return;
+
+        const ports = Array.isArray(portsResp?.ports) ? portsResp.ports : [];
+        const savedReceiptMode = String(localStorage.getItem('hw.receipt.mode') || 'serial');
+        const savedReceiptPort = String(localStorage.getItem('hw.receipt.port') || '').trim();
+        const savedReceiptProtocol = String(localStorage.getItem('hw.receipt.protocol') || 'epson').trim() || 'epson';
+        const savedScalePort = String(localStorage.getItem('hw.scale.port') || '').trim();
+        const savedScaleProtocol = String(localStorage.getItem('hw.scale.protocol') || 'generic').trim() || 'generic';
+        const savedScaleBaudRate = Number(localStorage.getItem('hw.scale.baudRate') || '9600') || 9600;
+
+        const recognizedPrinter = ports.find((port: any) => port?.recognizedType === 'printer');
+        const recognizedScale = ports.find((port: any) => port?.recognizedType === 'scale');
+
+        const receiptPort = savedReceiptPort || String(recognizedPrinter?.id || recognizedPrinter?.port || '').trim();
+        const receiptProtocol = savedReceiptPort ? savedReceiptProtocol : String(recognizedPrinter?.recognizedProtocol || 'epson');
+        if (savedReceiptMode === 'serial' && receiptPort) {
+          const resp = await api.connectPrinter(receiptPort, receiptProtocol, { protocol: receiptProtocol, width: 48, autoConnect: true });
+          if (!cancelled && resp?.success && !savedReceiptPort) {
+            localStorage.setItem('hw.receipt.port', receiptPort);
+            localStorage.setItem('hw.receipt.protocol', receiptProtocol);
+          }
+        }
+
+        const scalePort = savedScalePort || String(recognizedScale?.id || recognizedScale?.port || '').trim();
+        const scaleProtocol = savedScalePort ? savedScaleProtocol : String(recognizedScale?.recognizedProtocol || 'generic');
+        if (scalePort) {
+          const resp = await api.connectScale(scalePort, scaleProtocol, { baudRate: savedScaleBaudRate, autoConnect: true });
+          if (!cancelled && resp?.success && !savedScalePort) {
+            localStorage.setItem('hw.scale.port', scalePort);
+            localStorage.setItem('hw.scale.protocol', scaleProtocol);
+            localStorage.setItem('hw.scale.baudRate', String(savedScaleBaudRate));
+          }
+        }
+      } catch (error) {
+        console.warn('Auto conexão de hardware falhou:', error);
+      }
+    };
+
+    const timer = window.setTimeout(connectSavedDevices, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  return null;
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -186,6 +243,7 @@ function App() {
                 <Router>
                   <ErrorBoundary>
                     <FeatureGateProvider>
+                      <HardwareAutoConnect />
                       <AppContent />
                       <GlobalNotificationSystem />
                       <SonnerToaster />

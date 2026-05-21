@@ -56,6 +56,12 @@ const HardwareSettings = () => {
       setPrinterProtocols(printerProtoResp?.success ? (printerProtoResp.protocols || []) : []);
       setScaleProtocols(scaleProtoResp?.success ? (scaleProtoResp.protocols || []) : []);
 
+      const connectedResp = await window.electronAPI.getConnectedDevices?.();
+      const connectedPrinters = Array.isArray(connectedResp?.printers) ? connectedResp.printers : [];
+      const connectedScales = Array.isArray(connectedResp?.scales) ? connectedResp.scales : [];
+      setReceiptConnected(receiptMode === 'system' ? Boolean(reportPrinterName) : connectedPrinters.some((device: any) => String(device?.deviceId || device?.id || device?.port || '') === receiptPort));
+      setScaleConnected(connectedScales.some((device: any) => String(device?.deviceId || device?.id || device?.port || '') === scalePort));
+
       if (!reportPrinterName) {
         const first = (printersResp?.printers || [])?.[0];
         if (first?.name) setReportPrinterName(String(first.name));
