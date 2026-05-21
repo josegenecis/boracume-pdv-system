@@ -62,6 +62,13 @@ function parseRestaurantIdFromToken(value: unknown) {
   return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
 }
 
+function parseRestaurantIdFromInstanceName(value: unknown) {
+  const instance = String(value || '').trim();
+  const raw = instance.startsWith('rest_') ? instance.slice(5) : '';
+  if (!/^[a-f0-9]{32}$/i.test(raw)) return '';
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+}
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
@@ -160,6 +167,17 @@ Deno.serve(async (req: Request) => {
   }
   if (!userId) {
     userId = parseRestaurantIdFromToken(body?.token || body?.data?.token || body?.apikey || body?.data?.apikey);
+  }
+  if (!userId && instance) {
+    userId = parseRestaurantIdFromInstanceName(instance);
+    if (userId) {
+      await supabase
+        .from('whatsapp_instances')
+        .upsert(
+          { restaurant_id: userId, instance_name: instance, status: 'connected' },
+          { onConflict: 'instance_name' }
+        );
+    }
   }
   if (!userId && isUuid(instance)) {
     const { data: profile } = await supabase
