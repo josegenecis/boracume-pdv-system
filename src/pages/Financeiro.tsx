@@ -299,37 +299,6 @@ const Financeiro = () => {
     return 'outros';
   };
 
-  const normalizePaymentMethodName = (value: unknown) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-  const resolveExtraFeePercent = (order: Record<string, unknown>, methods: Array<Record<string, unknown>>) => {
-    const normalizedPayment = normalizePaymentMethodName(order?.payment_method);
-    const bucket = getPaymentBucket(order?.payment_method);
-    const exact = methods.find((method) => normalizePaymentMethodName(method?.name) === normalizedPayment);
-    if (exact) return Number(exact?.extra_fee_percent || 0);
-
-    if (bucket === 'credito') {
-      const match = methods.find((method) => normalizePaymentMethodName(method?.name).includes('credito'));
-      if (match) return Number(match?.extra_fee_percent || 0);
-    }
-
-    if (bucket === 'debito') {
-      const match = methods.find((method) => normalizePaymentMethodName(method?.name).includes('debito'));
-      if (match) return Number(match?.extra_fee_percent || 0);
-    }
-
-    if (bucket === 'cartao') {
-      const match = methods.find((method) => Boolean(method?.is_card));
-      if (match) return Number(match?.extra_fee_percent || 0);
-    }
-
-    return 0;
-  };
-
   const averageMinutesFromOrders = (orders: Array<Record<string, unknown>>) => {
     const validDurations = (Array.isArray(orders) ? orders : [])
       .map((order) => {
@@ -348,7 +317,7 @@ const Financeiro = () => {
     if (!user?.id) return [];
 
     const db = supabase as unknown as SupabaseUntyped;
-    const [{ data: orders }, { data: movements }, { data: profile }, { data: fiscal }, { data: paymentMethods }] = await Promise.all([
+    const [{ data: orders }, { data: movements }, { data: profile }, { data: fiscal }] = await Promise.all([
       db
         .from('orders')
         .select('id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone')
@@ -369,15 +338,10 @@ const Financeiro = () => {
         .select('cnpj')
         .eq('user_id', user.id)
         .maybeSingle(),
-      db
-        .from('payment_methods')
-        .select('name,extra_fee_percent,is_card')
-        .eq('user_id', user.id),
     ]);
 
     const orderList = Array.isArray(orders) ? orders as Array<Record<string, unknown>> : [];
     const movementList = Array.isArray(movements) ? movements as Array<Record<string, unknown>> : [];
-    const paymentMethodList = Array.isArray(paymentMethods) ? paymentMethods as Array<Record<string, unknown>> : [];
     const profileRow = (profile && typeof profile === 'object' ? profile : {}) as Record<string, unknown>;
     const fiscalRow = (fiscal && typeof fiscal === 'object' ? fiscal : {}) as Record<string, unknown>;
     const sales = orderList.filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
@@ -385,11 +349,7 @@ const Financeiro = () => {
     const grossRevenue = sales.reduce((sum, order) => sum + Number(order?.total || 0), 0);
     const discounts = sales.reduce((sum, order) => sum + Number(order?.discount || 0), 0);
     const deliveryFee = sales.reduce((sum, order) => sum + Number(order?.delivery_fee || 0), 0);
-    const systemFees = sales.reduce((sum, order) => {
-      const feePercent = resolveExtraFeePercent(order, paymentMethodList);
-      return sum + (Number(order?.total || 0) * feePercent / 100);
-    }, 0);
-    const netRevenue = grossRevenue - discounts + deliveryFee - systemFees;
+    const netRevenue = grossRevenue - discounts + deliveryFee;
 
     const paymentTotals = sales.reduce<Record<string, number>>((acc, order) => {
       const bucket = getPaymentBucket(order?.payment_method);
@@ -458,8 +418,6 @@ const Financeiro = () => {
       row('Faturamento Bruto:', formatCurrency(grossRevenue)),
       row('Descontos:', formatCurrency(discounts)),
       row('Taxa Entrega:', formatCurrency(deliveryFee)),
-      row('Taxas Sistema:', formatCurrency(systemFees)),
-      '',
       row('FATURAMENTO LÍQUIDO:', formatCurrency(netRevenue)),
       '',
       divider,
@@ -595,7 +553,7 @@ const Financeiro = () => {
           title: '',
           userId: user.id,
           hideStoreHeader: true,
-          footerText: 'POPSYSTEM PDV',
+          footerText: '',
           lines: reportLines.length > 0 ? reportLines : [
             `Data/Hora: ${new Date(closedAt).toLocaleString('pt-BR')}`,
             `Valor final: ${formatCurrency(amount)}`,

@@ -831,6 +831,11 @@ function buildReportHtml(title: string, lines: string[], store?: any, options?: 
   ` : '';
   const safeTitle = String(title || '').trim();
   const titleBlock = safeTitle ? `<div class="center bold" style="font-size: 13px; margin: 6px 0;">${escapeHtml(safeTitle)}</div><div class="divider"></div>` : '';
+  const hasFooterOverride = Boolean(options && Object.prototype.hasOwnProperty.call(options, 'footerText'));
+  const footerText = hasFooterOverride ? String(options?.footerText ?? '').trim() : BRAND_POS_NAME;
+  const footerBlock = footerText
+    ? `<div class="divider"></div><div class="center" style="font-size: 0.8em; margin-top: 10px;">${escapeHtml(footerText)}</div>`
+    : '';
 
   return `
       <!DOCTYPE html>
@@ -858,8 +863,7 @@ function buildReportHtml(title: string, lines: string[], store?: any, options?: 
         ${storeHeader}
         ${titleBlock}
         ${lines.map((l) => `<div class="line">${String(l).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')}
-        <div class="divider"></div>
-        <div class="center" style="font-size: 0.8em; margin-top: 10px;">${escapeHtml(options?.footerText || BRAND_POS_NAME)}</div>
+        ${footerBlock}
       </body>
       </html>
     `;

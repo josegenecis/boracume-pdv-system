@@ -107,7 +107,6 @@ interface CashCloseSummary {
   grossRevenue: number;
   discounts: number;
   deliveryFee: number;
-  systemFees: number;
   netRevenue: number;
   credit: number;
   debit: number;
@@ -381,42 +380,6 @@ const PDV = () => {
     return 'other';
   };
 
-  const normalizePaymentMethodName = (value: any) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-  const resolveExtraFeePercent = (order: any, methods: any[]) => {
-    const normalizedPayment = normalizePaymentMethodName(order?.payment_method);
-    const bucket = normalizePaymentBucket(order);
-    const list = Array.isArray(methods) ? methods : [];
-
-    const exact = list.find((method: any) => {
-      const methodName = normalizePaymentMethodName(method?.name);
-      return methodName === normalizedPayment;
-    });
-    if (exact) return Number(exact?.extra_fee_percent || 0);
-
-    if (bucket === 'credit') {
-      const match = list.find((method: any) => normalizePaymentMethodName(method?.name).includes('credito'));
-      if (match) return Number(match?.extra_fee_percent || 0);
-    }
-
-    if (bucket === 'debit') {
-      const match = list.find((method: any) => normalizePaymentMethodName(method?.name).includes('debito'));
-      if (match) return Number(match?.extra_fee_percent || 0);
-    }
-
-    if (bucket === 'card') {
-      const genericCard = list.find((method: any) => Boolean(method?.is_card));
-      if (genericCard) return Number(genericCard?.extra_fee_percent || 0);
-    }
-
-    return 0;
-  };
-
   const averageMinutesFromOrders = (orders: any[]) => {
     const validDurations = (Array.isArray(orders) ? orders : [])
       .map((order) => {
@@ -441,7 +404,7 @@ const PDV = () => {
 
   const loadCashCloseSummary = async (session: CashSession, informedAmount?: number | null): Promise<CashCloseSummary> => {
     const operatorSession = getOperatorSession();
-    const [{ data: orders }, { data: moves }, { data: profile }, { data: fiscal }, { data: paymentMethods }] = await Promise.all([
+    const [{ data: orders }, { data: moves }, { data: profile }, { data: fiscal }] = await Promise.all([
       (supabase as any)
         .from('orders')
         .select('*')
@@ -462,10 +425,6 @@ const PDV = () => {
         .select('cnpj')
         .eq('user_id', user?.id)
         .maybeSingle(),
-      (supabase as any)
-        .from('payment_methods')
-        .select('name,extra_fee_percent,is_card')
-        .eq('user_id', user?.id),
     ]);
 
     const orderList = Array.isArray(orders) ? orders : [];
@@ -475,10 +434,6 @@ const PDV = () => {
     const grossRevenue = sales.reduce((sum, order) => sum + Number(order?.total || 0), 0);
     const discounts = sales.reduce((sum, order) => sum + Number(order?.discount || 0), 0);
     const deliveryFee = sales.reduce((sum, order) => sum + Number(order?.delivery_fee || 0), 0);
-    const systemFees = sales.reduce((sum, order) => {
-      const feePercent = resolveExtraFeePercent(order, paymentMethods);
-      return sum + (Number(order?.total || 0) * feePercent / 100);
-    }, 0);
 
     let pix = 0;
     let cash = 0;
@@ -507,7 +462,7 @@ const PDV = () => {
       .reduce((sum, movement) => sum + Number(movement?.amount || 0), 0);
     const initial = Number(session.initial_amount || 0);
     const expectedCash = initial + cash + inAmount - outAmount;
-    const netRevenue = grossRevenue - discounts + deliveryFee - systemFees;
+    const netRevenue = grossRevenue - discounts + deliveryFee;
     const customerKeys = new Set(sales.map((order) => normalizeCustomerKey(order)).filter(Boolean));
     const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
     const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
@@ -524,7 +479,6 @@ const PDV = () => {
       grossRevenue,
       discounts,
       deliveryFee,
-      systemFees,
       netRevenue,
       credit,
       debit,
@@ -591,7 +545,6 @@ const PDV = () => {
       row('Faturamento Bruto:', formatBRL(summary.grossRevenue)),
       row('Descontos:', formatBRL(summary.discounts)),
       row('Taxa Entrega:', formatBRL(summary.deliveryFee)),
-      row('Taxas Sistema:', formatBRL(summary.systemFees)),
       '',
       row('FATURAMENTO LÍQUIDO:', formatBRL(summary.netRevenue)),
       '',
@@ -763,7 +716,7 @@ const PDV = () => {
           title: '',
           userId: user.id,
           hideStoreHeader: true,
-          footerText: 'POPSYSTEM PDV',
+          footerText: '',
           lines: buildCashCloseReportLines({
             ...latestSummary,
             closedAt: updatePayload.closed_at,
