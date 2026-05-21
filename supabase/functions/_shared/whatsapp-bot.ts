@@ -33,6 +33,15 @@ function isThanks(text: string) {
   return /(obrigad[oa]?|valeu+|agrade[cç]o|tmj|show|perfeito|maravilha|blz|beleza)\b/i.test(text.trim());
 }
 
+function ensureMenuLink(text: string, menuLink: string) {
+  const message = String(text || '').trim();
+  const normalizedLink = String(menuLink || '').trim();
+  if (!normalizedLink) return message;
+  if (!message) return `📋 Confira nosso cardápio: ${normalizedLink}`;
+  if (message.includes(normalizedLink)) return message;
+  return `${message}\n\n📋 Cardápio: ${normalizedLink}`;
+}
+
 function buildOrderStatusLabel(status: string) {
   const labels: Record<string, string> = {
     pending: 'recebido',
@@ -465,6 +474,7 @@ export async function processRestaurantBotMessage(params: {
   const canRepeatMenuReply = explicitMenuIntent
     ? recentBotReplyMinutes > 2
     : (isFirstConversationTouch || (!menuWasSentToday && recentBotReplyMinutes > 20));
+  const menuLink = buildMenuShareUrl(restaurantId);
 
   let replyText = '';
   let replyStrategy = 'fallback';
@@ -515,14 +525,22 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder) || (isFirstConversationTouch && customerHasNoOrder)) && canRepeatMenuReply) {
+    const menuTemplate = explicitMenuIntent ? (context.autoResponses.menu_link || '') : (context.autoResponses.welcome || '');
+    const renderedMenuReply = fillTemplate(menuTemplate, {
+      restaurant_name: context.restaurantName,
+      menu_link: menuLink,
+      customer_name: customerName,
+      order_number: '',
+      track_link: ''
+    });
+
     deterministicReplies.push(
-      fillTemplate(context.autoResponses.welcome || '', {
-        restaurant_name: context.restaurantName,
-        menu_link: buildMenuShareUrl(restaurantId),
-        customer_name: customerName,
-        order_number: '',
-        track_link: ''
-      }) || `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${buildMenuShareUrl(restaurantId)}`
+      ensureMenuLink(
+        renderedMenuReply || (explicitMenuIntent
+          ? `📋 Confira nosso cardápio: ${menuLink}`
+          : `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${menuLink}`),
+        menuLink
+      )
     );
     if (replyStrategy === 'fallback') {
       replyStrategy = 'menu_auto_reply';
@@ -568,7 +586,7 @@ export async function processRestaurantBotMessage(params: {
 
   if (!replyText) {
     replyStrategy = 'generic_fallback';
-    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, promoções, horário de funcionamento e status do pedido. Se quiser, já te envio o cardápio: ${buildMenuShareUrl(restaurantId)}`;
+    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, promoções, horário de funcionamento e status do pedido. Se quiser, já te envio o cardápio: ${menuLink}`;
   }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {
