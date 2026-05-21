@@ -10,7 +10,7 @@ function toTextFromHistoryItem(item: any) {
 }
 
 function isGreeting(text: string) {
-  return /^(oi+|ol[áa]+|opa+|bom dia|boa tarde|boa noite|e ai|e aí|menu|card[aá]pio|link)\b/i.test(text.trim());
+  return /^(oi+|ol[áa]+|opa+|bom dia|boa tarde|boa noite|e ai|e aí)\b/i.test(text.trim());
 }
 
 function wantsMenuLink(text: string) {
@@ -31,6 +31,49 @@ function wantsPromotions(text: string) {
 
 function isThanks(text: string) {
   return /(obrigad[oa]?|valeu+|agrade[cç]o|tmj|show|perfeito|maravilha|blz|beleza)\b/i.test(text.trim());
+}
+
+function normalizeIntentText(text: string) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function isLowSignalMessage(text: string) {
+  const value = normalizeIntentText(text).replace(/[!?.\s]+$/g, '');
+  if (!value) return true;
+  return /^(ok|okay|certo|ta|t[aá]|ta bom|t[aá] bom|beleza|blz|show|sim|nao|não|obg|obrigado|obrigada|valeu|vlw|👍|👌)$/.test(value);
+}
+
+function wantsHumanAttendance(text: string) {
+  const value = normalizeIntentText(text);
+  return /(atendente|humano|pessoa|falar com alguem|falar com alguém|responsavel|responsável|gerente|dono|suporte|me liga|ligar|telefone)/i.test(value);
+}
+
+function isComplaintOrProblem(text: string) {
+  const value = normalizeIntentText(text);
+  return /(reclama|problema|errado|atras|atrasado|demora|demorando|frio|faltou|faltando|cance|cancelar|ruim|horrivel|péssimo|pessimo|devolu|estorno|reembolso)/i.test(value);
+}
+
+function getLocalDayKey(value?: string | null) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Fortaleza',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function isSameLocalDay(value?: string | null) {
+  const key = getLocalDayKey(value);
+  return Boolean(key && key === getLocalDayKey());
 }
 
 function ensureMenuLink(text: string, menuLink: string) {
@@ -88,6 +131,47 @@ function buildPromotionsReply(restaurantName: string, restaurantId: string, prod
   });
 
   return `✨ Hoje no ${restaurantName} encontrei estas opções em destaque:\n${lines.join('\n')}\n\n📋 Cardápio completo: ${buildMenuShareUrl(restaurantId)}`;
+}
+
+function formatBRL(value: unknown) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+}
+
+function findMentionedProducts(text: string, products: any[]) {
+  const normalizedText = normalizeIntentText(text);
+  if (!normalizedText || !Array.isArray(products)) return [];
+
+  const tokens = normalizedText
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-z0-9]/g, ''))
+    .filter((token) => token.length >= 3);
+
+  return products
+    .map((product: any) => {
+      const name = String(product?.name || '').trim();
+      const normalizedName = normalizeIntentText(name);
+      if (!name || !normalizedName) return null;
+      const direct = normalizedText.includes(normalizedName);
+      const nameTokens = normalizedName.split(/\s+/).filter((token) => token.length >= 3);
+      const score = direct
+        ? 100
+        : nameTokens.filter((token) => tokens.includes(token)).length;
+      return score > 0 ? { product, score } : null;
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => b.score - a.score)
+    .slice(0, 3)
+    .map((item: any) => item.product);
+}
+
+function wantsProductInfo(text: string) {
+  const value = normalizeIntentText(text);
+  return /(tem|voces tem|vocês tem|quanto|preco|preço|valor|vende|disponivel|disponível|serve|cardapio|cardápio)/i.test(value);
+}
+
+function buildProductInfoReply(restaurantId: string, products: any[]) {
+  const lines = products.map((product: any) => `- ${String(product?.name || 'Produto').trim()}: ${formatBRL(product?.price)}`);
+  return `${products.length === 1 ? 'Temos sim:' : 'Encontrei essas opções:'}\n${lines.join('\n')}\n\nPara pedir, acesse o cardápio: ${buildMenuShareUrl(restaurantId)}`;
 }
 
 function minutesSince(dateString?: string | null) {
@@ -245,7 +329,9 @@ async function callOpenAiBot(payload: {
     hasMessage: Boolean(String(data?.message || '').trim()),
     error: String(data?.error || data?.details || '')
   });
-  return String(data?.message || '').trim();
+  const message = String(data?.message || '').trim();
+  if (/^teste ok\b/i.test(message)) return '';
+  return message;
 }
 
 export async function sendEvolutionText(restaurantId: string, instanceName: string, phone: string, text: string) {
@@ -409,7 +495,6 @@ export async function processRestaurantBotMessage(params: {
     return { ok: true, skipped: true, reason: 'bot_paused', conversationId };
   }
 
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const menuLinkNeedle = `/share/menu/${restaurantId}`;
 
   const [{ data: history }, { data: lastOrder }, { data: lastBotMessage }, { data: lastMenuMessage }, { data: productsData }] = await Promise.all([
@@ -441,7 +526,6 @@ export async function processRestaurantBotMessage(params: {
       .eq('conversation_id', conversationId)
       .eq('sender', 'bot')
       .ilike('content', `%${menuLinkNeedle}%`)
-      .gte('sent_at', oneDayAgo)
       .order('sent_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -451,7 +535,7 @@ export async function processRestaurantBotMessage(params: {
       .eq('user_id', restaurantId)
       .eq('available', true)
       .order('updated_at', { ascending: false })
-      .limit(12)
+      .limit(80)
   ]);
 
   const { data: profileRow } = await supabase
@@ -466,24 +550,81 @@ export async function processRestaurantBotMessage(params: {
   const trackIntent = wantsOrderTracking(text);
   const openingHoursIntent = wantsOpeningHours(text);
   const promotionsIntent = wantsPromotions(text);
-  const customerHasNoOrder = !lastOrder;
+  const productMatches = findMentionedProducts(text, Array.isArray(productsData) ? productsData : []);
+  const productInfoIntent = wantsProductInfo(text) && productMatches.length > 0;
+  const lowSignalIntent = isLowSignalMessage(text) || thanksIntent;
+  const humanIntent = wantsHumanAttendance(text);
+  const problemIntent = isComplaintOrProblem(text);
   const customerMessageCount = (history || []).filter((item: any) => item?.sender === 'customer').length;
   const isFirstConversationTouch = customerMessageCount <= 1 && !lastBotMessage?.id;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
-  const menuWasSentToday = Boolean(lastMenuMessage?.id);
+  const menuWasSentToday = Boolean(lastMenuMessage?.id && isSameLocalDay(lastMenuMessage?.sent_at));
   const canRepeatMenuReply = explicitMenuIntent
     ? recentBotReplyMinutes > 2
-    : (isFirstConversationTouch || (!menuWasSentToday && recentBotReplyMinutes > 20));
+    : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
+
+  if (lowSignalIntent && !explicitMenuIntent && !trackIntent && !openingHoursIntent && !promotionsIntent && !humanIntent && !problemIntent) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_low_signal_silent', 'Mensagem curta/agradecimento; resposta suprimida', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      textPreview: text.slice(0, 120)
+    });
+    return { ok: true, skipped: true, reason: 'low_signal', conversationId };
+  }
+
+  if (humanIntent || problemIntent) {
+    const pauseUntil = new Date(Date.now() + 60 * 60000).toISOString();
+    const pausePayload = {
+      status: `bot_paused_until:${pauseUntil}`,
+      bot_paused: true,
+      bot_paused_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    const pauseUpdate = await supabase
+      .from('whatsapp_conversations')
+      .update(pausePayload)
+      .eq('id', conversationId);
+
+    if (pauseUpdate.error && String(pauseUpdate.error.message || '').includes('bot_paused')) {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ status: `bot_paused_until:${pauseUntil}`, updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+    }
+
+    const handoffText = problemIntent
+      ? `Entendi. Vou deixar um atendente do ${context.restaurantName} assumir por aqui para te ajudar melhor.`
+      : `Claro. Vou chamar um atendente do ${context.restaurantName} para continuar por aqui.`;
+
+    const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, handoffText);
+    if (sendResult?.ok) {
+      await supabase.from('whatsapp_messages').insert({
+        conversation_id: conversationId,
+        content: handoffText,
+        sender: 'bot',
+        message_type: 'text',
+        delivered: true
+      });
+    }
+
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_handoff_paused', 'Bot pausado por pedido de atendente ou problema', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      humanIntent,
+      problemIntent,
+      pauseUntil,
+      sendOk: Boolean(sendResult?.ok)
+    });
+
+    return { ok: true, skipped: false, reason: 'handoff_paused', replyText: handoffText, conversationId };
+  }
 
   let replyText = '';
   let replyStrategy = 'fallback';
   const deterministicReplies: string[] = [];
-
-  if (thanksIntent) {
-    deterministicReplies.push(`De nada! Se precisar de mais alguma coisa, estou por aqui. 😊`);
-    replyStrategy = 'thanks_reply';
-  }
 
   if (trackIntent && lastOrder?.id) {
     deterministicReplies.push(fillTemplate(
@@ -524,7 +665,16 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if ((explicitMenuIntent || (greetingIntent && customerHasNoOrder) || (isFirstConversationTouch && customerHasNoOrder)) && canRepeatMenuReply) {
+  if (productInfoIntent) {
+    deterministicReplies.push(buildProductInfoReply(restaurantId, productMatches));
+    if (replyStrategy === 'fallback') {
+      replyStrategy = 'product_info';
+    } else {
+      replyStrategy = `multi_intent_${replyStrategy}`;
+    }
+  }
+
+  if ((explicitMenuIntent || greetingIntent || isFirstConversationTouch) && canRepeatMenuReply) {
     const menuTemplate = explicitMenuIntent ? (context.autoResponses.menu_link || '') : (context.autoResponses.welcome || '');
     const renderedMenuReply = fillTemplate(menuTemplate, {
       restaurant_name: context.restaurantName,
@@ -547,11 +697,19 @@ export async function processRestaurantBotMessage(params: {
     } else {
       replyStrategy = `multi_intent_${replyStrategy}`;
     }
+  } else if (explicitMenuIntent && !canRepeatMenuReply && deterministicReplies.length === 0) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_menu_repeat_silent', 'Pedido de cardapio repetido em curto intervalo; resposta suprimida', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      recentBotReplyMinutes
+    });
+    return { ok: true, skipped: true, reason: 'menu_recently_sent', conversationId };
   }
 
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
-  } else if (!explicitMenuIntent && greetingIntent && customerHasNoOrder && menuWasSentToday) {
+  } else if (!explicitMenuIntent && greetingIntent && menuWasSentToday) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_menu_daily_silent', 'Cardapio automatico ja enviado hoje; resposta suprimida', {
       instanceName,
       customerPhone,
@@ -585,8 +743,17 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (!replyText) {
-    replyStrategy = 'generic_fallback';
-    replyText = `Olá! 👋 Sou o assistente do ${context.restaurantName}. Posso te ajudar com cardápio, promoções, horário de funcionamento e status do pedido. Se quiser, já te envio o cardápio: ${menuLink}`;
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_no_reply_silent', 'Nenhuma intenção acionável; resposta suprimida', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      greetingIntent,
+      explicitMenuIntent,
+      trackIntent,
+      openingHoursIntent,
+      promotionsIntent
+    });
+    return { ok: true, skipped: true, reason: 'no_actionable_intent', conversationId };
   }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {

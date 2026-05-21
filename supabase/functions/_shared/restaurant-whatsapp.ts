@@ -14,7 +14,7 @@ type AutoResponses = {
 type RestaurantContext = {
   enabled: boolean;
   restaurantName: string;
-  autoResponses: AutoResponses;
+  autoResponses: Required<AutoResponses>;
 };
 
 const defaultResponses: Required<AutoResponses> = {
