@@ -454,6 +454,29 @@ export async function processRestaurantBotMessage(params: {
     conversationId = String(createdConversation?.id || '');
   }
 
+  const recentDuplicateCutoff = new Date(Date.now() - 30 * 1000).toISOString();
+  const { data: recentDuplicateMessage } = await supabase
+    .from('whatsapp_messages')
+    .select('id, sent_at')
+    .eq('conversation_id', conversationId)
+    .eq('sender', 'customer')
+    .eq('content', text)
+    .gte('sent_at', recentDuplicateCutoff)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (recentDuplicateMessage?.id) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_duplicate_silent', 'Mensagem duplicada recebida por outro webhook; resposta suprimida', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      duplicateMessageId: recentDuplicateMessage.id,
+      textPreview: text.slice(0, 120)
+    });
+    return { ok: true, skipped: true, reason: 'duplicate_recent_message', conversationId };
+  }
+
   await supabase.from('whatsapp_messages').insert({
     conversation_id: conversationId,
     content: text,
