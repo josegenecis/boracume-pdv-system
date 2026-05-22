@@ -612,7 +612,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.89'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.90'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',
@@ -1260,6 +1260,10 @@ const PDV = () => {
     setOrderType(nextOrderType);
   };
 
+  const getNextSaleOrderType = () => {
+    return orderType === 'dine_in' ? 'counter' : orderType;
+  };
+
   const fetchCategories = async () => {
     try {
       let data: any[] | null = null;
@@ -1693,7 +1697,7 @@ const PDV = () => {
         description: `Pedido #${orderNumber} finalizado com sucesso. Total: ${formatCurrency(getFinalTotal())}.`,
       });
       setMobileCartOpen(false);
-      resetCurrentSale('counter');
+      resetCurrentSale(getNextSaleOrderType());
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
       toast({
@@ -2755,7 +2759,7 @@ const PDV = () => {
                   title: "Pagamento confirmado!",
                   description: "Pedido entrou em preparo e foi enviado para impressão.",
                 });
-                resetCurrentSale('counter');
+                resetCurrentSale(getNextSaleOrderType());
               } catch (e: any) {
                 console.error(e);
                 toast({ title: 'Erro', description: e?.message || 'Não foi possível concluir a venda.', variant: 'destructive' });
