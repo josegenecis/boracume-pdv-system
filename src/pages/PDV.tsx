@@ -91,6 +91,7 @@ interface Table {
 interface CashSession {
   id: string;
   opened_at: string;
+  closed_at?: string | null;
   initial_amount: number;
   status: string;
 }
@@ -423,12 +424,20 @@ const PDV = () => {
 
   const loadCashCloseSummary = async (session: CashSession, informedAmount?: number | null): Promise<CashCloseSummary> => {
     const operatorSession = getOperatorSession();
-    const [{ data: orders }, { data: moves }, { data: profile }, { data: fiscal }] = await Promise.all([
+    const reportClosedAt = session.closed_at || new Date().toISOString();
+    const [{ data: orders }, { data: unlinkedOrders }, { data: moves }, { data: profile }, { data: fiscal }] = await Promise.all([
       (supabase as any)
         .from('orders')
         .select('*')
         .eq('user_id', user?.id)
         .eq('cash_register_session_id', session.id),
+      (supabase as any)
+        .from('orders')
+        .select('*')
+        .eq('user_id', user?.id)
+        .is('cash_register_session_id', null)
+        .gte('created_at', session.opened_at)
+        .lte('created_at', reportClosedAt),
       (supabase as any)
         .from('cash_movements')
         .select('*')
@@ -446,7 +455,15 @@ const PDV = () => {
         .maybeSingle(),
     ]);
 
-    const orderList = Array.isArray(orders) ? orders : [];
+    const orderMap = new Map<string, any>();
+    for (const order of [
+      ...(Array.isArray(orders) ? orders : []),
+      ...(Array.isArray(unlinkedOrders) ? unlinkedOrders : []),
+    ]) {
+      const id = String(order?.id || '').trim();
+      if (id) orderMap.set(id, order);
+    }
+    const orderList = Array.from(orderMap.values());
     const movementList = Array.isArray(moves) ? moves : [];
     const sales = orderList.filter((order) => String(order?.status || '').toLowerCase() !== 'cancelled');
     const cancelledCount = orderList.length - sales.length;
@@ -612,7 +629,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.90'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.91'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',

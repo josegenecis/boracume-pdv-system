@@ -343,12 +343,20 @@ const Financeiro = () => {
     if (!user?.id) return [];
 
     const db = supabase as unknown as SupabaseUntyped;
-    const [{ data: orders }, { data: movements }, { data: profile }, { data: fiscal }] = await Promise.all([
+    const orderSelect = 'id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id, table_id';
+    const [{ data: orders }, { data: unlinkedOrders }, { data: movements }, { data: profile }, { data: fiscal }] = await Promise.all([
       db
         .from('orders')
-        .select('id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id, table_id')
+        .select(orderSelect)
         .eq('user_id', user.id)
         .eq('cash_register_session_id', session.id),
+      db
+        .from('orders')
+        .select(orderSelect)
+        .eq('user_id', user.id)
+        .is('cash_register_session_id', null)
+        .gte('created_at', session.opened_at)
+        .lte('created_at', closedAt),
       db
         .from('cash_movements')
         .select('id, created_at, type, amount, description')
@@ -366,7 +374,15 @@ const Financeiro = () => {
         .maybeSingle(),
     ]);
 
-    const orderList = Array.isArray(orders) ? orders as Array<Record<string, unknown>> : [];
+    const orderMap = new Map<string, Record<string, unknown>>();
+    for (const order of [
+      ...(Array.isArray(orders) ? orders as Array<Record<string, unknown>> : []),
+      ...(Array.isArray(unlinkedOrders) ? unlinkedOrders as Array<Record<string, unknown>> : []),
+    ]) {
+      const id = String(order?.id || '').trim();
+      if (id) orderMap.set(id, order);
+    }
+    const orderList = Array.from(orderMap.values());
     const movementList = Array.isArray(movements) ? movements as Array<Record<string, unknown>> : [];
     const profileRow = (profile && typeof profile === 'object' ? profile : {}) as Record<string, unknown>;
     const fiscalRow = (fiscal && typeof fiscal === 'object' ? fiscal : {}) as Record<string, unknown>;
@@ -493,7 +509,7 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.90'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.91'}`,
       '',
       reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
