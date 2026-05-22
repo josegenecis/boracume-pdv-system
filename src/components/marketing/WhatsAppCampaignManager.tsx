@@ -46,7 +46,12 @@ type AudiencePreview = {
   count: number;
   activeWindowDays: number;
   cooldownDays: number;
-  sample?: Array<{ name: string; phone: string; lastActivity: string }>;
+  manual?: {
+    requested: number;
+    matched: number;
+    blocked: number;
+  } | null;
+  sample?: Array<{ name: string; phone: string; lastActivity: string; daysSinceLastOrder?: number | null }>;
 };
 
 const statusLabels: Record<string, string> = {
@@ -104,6 +109,10 @@ export default function WhatsAppCampaignManager() {
   const [selectedProductId, setSelectedProductId] = useState('none');
   const [promoImageUrl, setPromoImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [audienceType, setAudienceType] = useState<'active' | 'manual' | 'inactive_range'>('manual');
+  const [manualPhones, setManualPhones] = useState('');
+  const [inactiveMinDays, setInactiveMinDays] = useState(15);
+  const [inactiveMaxDays, setInactiveMaxDays] = useState(0);
 
   const minDelaySeconds = useMemo(() => Math.max(1, minDelayMinutes) * 60, [minDelayMinutes]);
   const maxDelaySeconds = useMemo(() => Math.max(minDelayMinutes, maxDelayMinutes) * 60, [maxDelayMinutes, minDelayMinutes]);
@@ -169,7 +178,7 @@ export default function WhatsAppCampaignManager() {
   const previewAudience = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
-        body: { action: 'preview-audience' },
+        body: buildAudiencePayload('preview-audience'),
       });
 
       if (error) throw error;
@@ -179,6 +188,14 @@ export default function WhatsAppCampaignManager() {
       console.error('Erro ao pré-visualizar público:', error);
     }
   };
+
+  const buildAudiencePayload = (action: string) => ({
+    action,
+    audienceType,
+    manualPhones,
+    inactiveMinDays: audienceType === 'inactive_range' ? inactiveMinDays : null,
+    inactiveMaxDays: audienceType === 'inactive_range' && inactiveMaxDays > 0 ? inactiveMaxDays : null,
+  });
 
   const createCampaign = async () => {
     if (!riskAccepted) {
@@ -195,7 +212,7 @@ export default function WhatsAppCampaignManager() {
       const selectedProduct = products.find((item) => item.id === selectedProductId) || null;
       const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
         body: {
-          action: 'create',
+          ...buildAudiencePayload('create'),
           title,
           message,
           riskAcknowledged: riskAccepted,
@@ -378,6 +395,73 @@ export default function WhatsAppCampaignManager() {
               </div>
             </div>
 
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="mb-3 flex items-center gap-2 font-semibold">
+                <Users className="h-4 w-4 text-emerald-700" />
+                Funil de destinatários
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <div className="space-y-2">
+                  <Label>Quem deve receber</Label>
+                  <Select value={audienceType} onValueChange={(value) => setAudienceType(value as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Lista manual para teste</SelectItem>
+                      <SelectItem value="inactive_range">Sem pedido por dias</SelectItem>
+                      <SelectItem value="active">Todas conversas elegíveis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {audienceType === 'manual' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="wa-manual-phones">WhatsApps permitidos</Label>
+                    <Textarea
+                      id="wa-manual-phones"
+                      value={manualPhones}
+                      onChange={(event) => setManualPhones(event.target.value)}
+                      rows={3}
+                      placeholder="Um por linha, ou separado por vírgula. Ex.: 85999990000"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      O sistema só mantém números que já têm conversa ativa com o restaurante.
+                    </div>
+                  </div>
+                ) : audienceType === 'inactive_range' ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="wa-inactive-min">Sem pedir há pelo menos</Label>
+                      <Input
+                        id="wa-inactive-min"
+                        type="number"
+                        min={0}
+                        value={inactiveMinDays}
+                        onChange={(event) => setInactiveMinDays(Number(event.target.value || 0))}
+                      />
+                      <div className="text-xs text-muted-foreground">dias</div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="wa-inactive-max">E no máximo</Label>
+                      <Input
+                        id="wa-inactive-max"
+                        type="number"
+                        min={0}
+                        value={inactiveMaxDays}
+                        onChange={(event) => setInactiveMaxDays(Number(event.target.value || 0))}
+                      />
+                      <div className="text-xs text-muted-foreground">0 deixa sem limite máximo</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
+                    Usa todas as conversas elegíveis: conversa ativa, cliente respondeu antes, sem opt-out e sem oferta nos últimos 7 dias.
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
               <div className="space-y-2">
                 <Label>Produto em oferta</Label>
@@ -550,7 +634,31 @@ export default function WhatsAppCampaignManager() {
               <div className="mt-2 text-xs text-emerald-800">
                 Com mensagem recebida do cliente, atividade nos últimos {audience?.activeWindowDays || 30} dias, sem opt-out e sem oferta nos últimos {audience?.cooldownDays || 7} dias.
               </div>
+              {audience?.manual && (
+                <div className="mt-3 rounded-md bg-white/70 p-2 text-xs text-emerald-900">
+                  Lista manual: {audience.manual.matched} liberado(s) de {audience.manual.requested}. {audience.manual.blocked} fora por não ter conversa ativa/elegível.
+                </div>
+              )}
             </div>
+
+            {audience?.sample && audience.sample.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">Prévia do funil</div>
+                <div className="space-y-2">
+                  {audience.sample.map((item) => (
+                    <div key={item.phone} className="rounded-md border bg-white p-2 text-xs">
+                      <div className="font-semibold">{item.name}</div>
+                      <div className="text-muted-foreground">
+                        {item.phone}
+                        {item.daysSinceLastOrder !== null && item.daysSinceLastOrder !== undefined
+                          ? ` · ${item.daysSinceLastOrder} dia(s) sem pedir`
+                          : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">

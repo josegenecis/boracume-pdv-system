@@ -13,6 +13,13 @@ const MARKETING_COOLDOWN_DAYS = 7;
 const MAX_CREATE_TARGETS = 200;
 const MAX_PROCESS_BATCH = 5;
 
+type AudienceFilters = {
+  audienceType: string;
+  manualPhones: string[];
+  inactiveMinDays: number | null;
+  inactiveMaxDays: number | null;
+};
+
 function json(data: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -24,6 +31,39 @@ function normalizePhone(value: string | null | undefined) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
   return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function buildPhoneCandidates(value: string | null | undefined) {
+  const normalized = normalizePhone(value);
+  const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
+  return Array.from(new Set([
+    normalized,
+    withoutCountry,
+    withoutCountry.slice(-11),
+    withoutCountry.slice(-10),
+  ].map((item) => String(item || "").replace(/\D/g, "")).filter(Boolean)));
+}
+
+function parseManualPhones(value: unknown) {
+  if (Array.isArray(value)) return Array.from(new Set(value.map((item) => normalizePhone(String(item))).filter(Boolean)));
+  return Array.from(new Set(String(value || "")
+    .split(/[\n,; ]+/)
+    .map((item) => normalizePhone(item))
+    .filter(Boolean)));
+}
+
+function parseAudienceFilters(body: any = {}): AudienceFilters {
+  const audienceType = String(body.audienceType || body.audience_type || "active").trim();
+  const minRaw = body.inactiveMinDays ?? body.inactive_min_days;
+  const maxRaw = body.inactiveMaxDays ?? body.inactive_max_days;
+  const min = minRaw === "" || minRaw === null || minRaw === undefined ? null : Math.max(0, Number(minRaw));
+  const max = maxRaw === "" || maxRaw === null || maxRaw === undefined ? null : Math.max(0, Number(maxRaw));
+  return {
+    audienceType: ["active", "manual", "inactive_range"].includes(audienceType) ? audienceType : "active",
+    manualPhones: parseManualPhones(body.manualPhones ?? body.manual_phones),
+    inactiveMinDays: Number.isFinite(min as number) ? min : null,
+    inactiveMaxDays: Number.isFinite(max as number) ? max : null,
+  };
 }
 
 function withoutAccents(value: string) {
@@ -121,7 +161,39 @@ async function getUser(req: Request) {
   return { user, userClient, serviceClient };
 }
 
-async function loadEligibleAudience(serviceClient: any, userId: string) {
+async function attachLastOrder(serviceClient: any, userId: string, audience: any[]) {
+  const phoneCandidates = Array.from(new Set(audience.flatMap((item: any) => buildPhoneCandidates(item.customer_phone))));
+  if (phoneCandidates.length === 0) return audience;
+
+  const { data: orders } = await serviceClient
+    .from("orders")
+    .select("customer_phone, created_at, status")
+    .eq("user_id", userId)
+    .in("customer_phone", phoneCandidates)
+    .not("status", "eq", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(2000);
+
+  const latestByPhone = new Map<string, string>();
+  for (const order of orders || []) {
+    const createdAt = String(order?.created_at || "");
+    for (const candidate of buildPhoneCandidates(order?.customer_phone)) {
+      if (!latestByPhone.has(candidate)) latestByPhone.set(candidate, createdAt);
+    }
+  }
+
+  return audience.map((item: any) => {
+    const lastOrderAt = buildPhoneCandidates(item.customer_phone)
+      .map((candidate) => latestByPhone.get(candidate))
+      .find(Boolean) || null;
+    const daysSinceLastOrder = lastOrderAt
+      ? Math.floor((Date.now() - new Date(lastOrderAt).getTime()) / 86400000)
+      : null;
+    return { ...item, lastOrderAt, daysSinceLastOrder };
+  });
+}
+
+async function loadEligibleAudience(serviceClient: any, userId: string, filters: AudienceFilters = parseAudienceFilters()) {
   const cutoff = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 86400000).toISOString();
   const { data: conversations, error } = await serviceClient
     .from("whatsapp_conversations")
@@ -159,24 +231,54 @@ async function loadEligibleAudience(serviceClient: any, userId: string) {
   const optoutSet = new Set((optouts || []).map((item: any) => normalizePhone(item.customer_phone)));
   const recentSet = new Set((recentSent || []).map((item: any) => normalizePhone(item.customer_phone)));
 
-  return active
+  let eligible = active
     .map((item: any) => ({ ...item, customer_phone: normalizePhone(item.customer_phone) }))
     .filter((item: any) => item.customer_phone && inboundSet.has(item.id))
     .filter((item: any) => !optoutSet.has(item.customer_phone))
-    .filter((item: any) => !recentSet.has(item.customer_phone))
-    .slice(0, MAX_CREATE_TARGETS);
+    .filter((item: any) => !recentSet.has(item.customer_phone));
+
+  if (filters.audienceType === "manual") {
+    const manualSet = new Set(filters.manualPhones);
+    eligible = eligible.filter((item: any) => manualSet.has(item.customer_phone));
+  }
+
+  if (filters.audienceType === "inactive_range") {
+    eligible = await attachLastOrder(serviceClient, userId, eligible);
+    eligible = eligible.filter((item: any) => {
+      if (item.daysSinceLastOrder === null || item.daysSinceLastOrder === undefined) return false;
+      if (filters.inactiveMinDays !== null && item.daysSinceLastOrder < filters.inactiveMinDays) return false;
+      if (filters.inactiveMaxDays !== null && item.daysSinceLastOrder > filters.inactiveMaxDays) return false;
+      return true;
+    });
+  }
+
+  return eligible.slice(0, MAX_CREATE_TARGETS);
 }
 
-async function previewAudience(serviceClient: any, userId: string) {
-  const audience = await loadEligibleAudience(serviceClient, userId);
+async function previewAudience(serviceClient: any, userId: string, filters: AudienceFilters) {
+  const audience = await loadEligibleAudience(serviceClient, userId, filters);
+  const manualSet = new Set(filters.manualPhones);
+  const matchedManual = filters.audienceType === "manual"
+    ? audience.filter((item: any) => manualSet.has(item.customer_phone)).length
+    : null;
   return {
     count: audience.length,
     activeWindowDays: ACTIVE_WINDOW_DAYS,
     cooldownDays: MARKETING_COOLDOWN_DAYS,
+    filters,
+    manual: filters.audienceType === "manual"
+      ? {
+          requested: filters.manualPhones.length,
+          matched: matchedManual,
+          blocked: Math.max(0, filters.manualPhones.length - Number(matchedManual || 0)),
+        }
+      : null,
     sample: audience.slice(0, 5).map((item: any) => ({
       name: item.customer_name || "Cliente",
       phone: item.customer_phone,
       lastActivity: item.updated_at,
+      lastOrderAt: item.lastOrderAt || null,
+      daysSinceLastOrder: item.daysSinceLastOrder ?? null,
     })),
   };
 }
@@ -200,14 +302,21 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     ? Number(body.productPrice)
     : null;
   const promoImageUrl = String(body.promoImageUrl || "").trim() || null;
+  const audienceFilters = parseAudienceFilters(body);
 
   if (!title || title.length < 3) return { error: "Informe um nome para a campanha." };
   if (!message || message.length < 10) return { error: "Escreva uma mensagem de oferta com pelo menos 10 caracteres." };
   if (!riskAcknowledged) return { error: "Confirme o aviso de risco antes de criar a campanha." };
   if (!activeConversationsOnly) return { error: "Por segurança, esta campanha só pode usar conversas ativas existentes." };
   if (isOptOutText(message)) return { error: "A mensagem não pode ser apenas um comando de opt-out." };
+  if (audienceFilters.audienceType === "manual" && audienceFilters.manualPhones.length === 0) {
+    return { error: "Informe pelo menos um WhatsApp na lista manual." };
+  }
+  if (audienceFilters.audienceType === "inactive_range" && audienceFilters.inactiveMinDays === null && audienceFilters.inactiveMaxDays === null) {
+    return { error: "Informe o intervalo de dias sem pedido." };
+  }
 
-  const audience = await loadEligibleAudience(serviceClient, userId);
+  const audience = await loadEligibleAudience(serviceClient, userId, audienceFilters);
   if (audience.length === 0) return { error: "Nenhuma conversa ativa elegível encontrada." };
 
   const { data: campaign, error: campaignError } = await serviceClient
@@ -220,6 +329,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
       risk_acknowledged: true,
       active_conversations_only: true,
       opt_out_text: optOutText,
+      audience_type: audienceFilters.audienceType,
       daily_limit: dailyLimit,
       min_delay_seconds: minDelaySeconds,
       max_delay_seconds: maxDelaySeconds,
@@ -238,6 +348,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
           cooldownDays: MARKETING_COOLDOWN_DAYS,
           maxCreateTargets: MAX_CREATE_TARGETS,
         },
+        audienceFilters,
       },
     })
     .select("*")
@@ -283,7 +394,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     event_type: "campaign_created",
     severity: "warning",
     description: "Campanha criada apenas com conversas ativas, cooldown e opt-out obrigatório.",
-    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit },
+    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters },
   });
 
   return { campaign, targetCount: audience.length };
@@ -515,7 +626,7 @@ serve(async (req) => {
     const action = String(body.action || new URL(req.url).searchParams.get("action") || "preview-audience");
 
     if (action === "preview-audience") {
-      return json({ ok: true, audience: await previewAudience(serviceClient, user.id) });
+      return json({ ok: true, audience: await previewAudience(serviceClient, user.id, parseAudienceFilters(body)) });
     }
 
     if (action === "create") {
