@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, Save, Copy, Clock3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -89,6 +90,8 @@ const ProfileSettings = () => {
   
   const [profileImage, setProfileImage] = useState('');
   const [bannerImage, setBannerImage] = useState('');
+  const [bannerFit, setBannerFit] = useState<'cover' | 'contain'>('cover');
+  const [profileThemeConfig, setProfileThemeConfig] = useState<Record<string, any>>({});
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -132,6 +135,9 @@ const ProfileSettings = () => {
         setWeeklySchedule(parseWeeklySchedule(data.opening_hours));
         setProfileImage(data.logo_url || '');
         setBannerImage(data.banner_url || '');
+        const themeConfig = (data as any).theme_config && typeof (data as any).theme_config === 'object' ? (data as any).theme_config : {};
+        setProfileThemeConfig(themeConfig);
+        setBannerFit(themeConfig.bannerFit === 'contain' ? 'contain' : 'cover');
       }
     } catch (error) {
       console.error('Erro ao carregar perfil:', error);
@@ -300,6 +306,10 @@ const ProfileSettings = () => {
         minimum_order: parseBRL(formData.minimumOrder),
         logo_url: profileImage,
         banner_url: bannerImage,
+        theme_config: {
+          ...profileThemeConfig,
+          bannerFit,
+        },
         updated_at: new Date().toISOString()
       };
 
@@ -323,14 +333,27 @@ const ProfileSettings = () => {
         } catch {}
       }
 
-      const msg = String((error as any)?.message || '');
+      let msg = String((error as any)?.message || '');
       if (error && (msg.includes('banner_url') || String((error as any)?.details || '').includes('banner_url'))) {
         const { banner_url, ...withoutBanner } = profileData as any;
         error = await trySave(withoutBanner);
+        msg = String((error as any)?.message || '');
         if (!error && bannerImage) {
           toast({
             title: "Perfil salvo",
             description: "Salvei o perfil. Para salvar o banner, aplique a atualização do banco (banner_url).",
+          });
+          return;
+        }
+      }
+
+      if (error && (msg.includes('theme_config') || String((error as any)?.details || '').includes('theme_config'))) {
+        const { theme_config, ...withoutThemeConfig } = profileData as any;
+        error = await trySave(withoutThemeConfig);
+        if (!error) {
+          toast({
+            title: "Perfil salvo",
+            description: "Salvei o perfil. Para salvar o ajuste da capa, aplique a atualização do banco (theme_config).",
           });
           return;
         }
@@ -400,12 +423,12 @@ const ProfileSettings = () => {
             <Label>Banner do Restaurante</Label>
             <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2] md:h-32">
               {bannerImage ? (
-                <img src={bannerImage} alt="Banner" className="w-full h-full object-cover" />
+                <img src={bannerImage} alt="Banner" className={`w-full h-full ${bannerFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
               ) : (
                 <div className="text-xs text-muted-foreground">Nenhum banner cadastrado</div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-end gap-3">
               <Label htmlFor="banner-upload" className="cursor-pointer">
                 <Button variant="outline" className="cursor-pointer border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" disabled={uploadingBanner} asChild>
                   <span>
@@ -421,6 +444,18 @@ const ProfileSettings = () => {
                 className="hidden"
                 onChange={handleBannerUpload}
               />
+              <div className="w-full space-y-1 sm:w-[220px]">
+                <Label className="text-xs font-semibold text-[#003223]/70">Ajuste da imagem</Label>
+                <Select value={bannerFit} onValueChange={(value) => setBannerFit(value === 'contain' ? 'contain' : 'cover')}>
+                  <SelectTrigger className="h-10 rounded-xl border-[#FF6400]/15 bg-white/85">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cover">Preencher capa</SelectItem>
+                    <SelectItem value="contain">Mostrar inteira</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">

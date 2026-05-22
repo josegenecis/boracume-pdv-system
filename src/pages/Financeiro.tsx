@@ -472,7 +472,7 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.86'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.87'}`,
       '',
       reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
@@ -1096,12 +1096,12 @@ const Financeiro = () => {
         </CardContent>
       </Card>
       
-      <div className="hidden gap-5 md:grid xl:grid-cols-[minmax(0,1.35fr)_360px]">
+      <div className="hidden gap-5 md:grid">
         <div className="space-y-5">
           <div className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_28px_70px_-36px_rgba(0,50,35,0.32)] dark:border-white/10 dark:bg-[#101a16]/96 dark:shadow-[0_26px_60px_-36px_rgba(0,0,0,0.82)]">
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
                     <DollarSign className="h-3.5 w-3.5" />
                     Financial cockpit
@@ -1111,22 +1111,22 @@ const Financeiro = () => {
                     Um layout mais analítico para acompanhar caixa, margem, mix de pagamentos e pressão das despesas no período.
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 xl:w-[340px]">
-                  <div className="rounded-[22px] border border-[#8CC850]/18 bg-gradient-to-br from-white to-[#F5FBED] p-4 dark:border-[#8CC850]/15 dark:from-[#0c1512] dark:to-[#112017]">
+                <div className="grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[420px] 2xl:w-[480px]">
+                  <div className="min-w-0 rounded-[22px] border border-[#8CC850]/18 bg-gradient-to-br from-white to-[#F5FBED] p-4 dark:border-[#8CC850]/15 dark:from-[#0c1512] dark:to-[#112017]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receitas</div>
-                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalIncome)}</div>
+                    <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{formatCurrency(totalIncome)}</div>
                   </div>
-                  <div className="rounded-[22px] border border-[#FF6400]/18 bg-gradient-to-br from-white to-[#FFF3EA] p-4 dark:border-[#FF6400]/15 dark:from-[#0c1512] dark:to-[#1e1510]">
+                  <div className="min-w-0 rounded-[22px] border border-[#FF6400]/18 bg-gradient-to-br from-white to-[#FFF3EA] p-4 dark:border-[#FF6400]/15 dark:from-[#0c1512] dark:to-[#1e1510]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Despesas</div>
-                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalExpenses)}</div>
+                    <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{formatCurrency(totalExpenses)}</div>
                   </div>
-                  <div className="rounded-[22px] border border-[#003223]/10 bg-gradient-to-br from-white to-[#F5F8F7] p-4 dark:border-white/10 dark:from-[#0c1512] dark:to-[#141b18]">
+                  <div className="min-w-0 rounded-[22px] border border-[#003223]/10 bg-gradient-to-br from-white to-[#F5F8F7] p-4 dark:border-white/10 dark:from-[#0c1512] dark:to-[#141b18]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Saldo</div>
-                    <div className={`mt-2 text-2xl font-bold ${balance >= 0 ? 'text-boracume-green' : 'text-boracume-orange'}`}>{formatCurrency(balance)}</div>
+                    <div className={`mt-2 truncate text-[1.35rem] font-bold 2xl:text-2xl ${balance >= 0 ? 'text-boracume-green' : 'text-boracume-orange'}`}>{formatCurrency(balance)}</div>
                   </div>
-                  <div className="rounded-[22px] border border-violet-200 bg-gradient-to-br from-white to-violet-50 p-4 dark:border-violet-500/20 dark:from-[#0c1512] dark:to-[#171325]">
+                  <div className="min-w-0 rounded-[22px] border border-violet-200 bg-gradient-to-br from-white to-violet-50 p-4 dark:border-violet-500/20 dark:from-[#0c1512] dark:to-[#171325]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Margem</div>
-                    <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%</div>
+                    <div className="mt-2 truncate text-[1.35rem] font-bold text-slate-900 dark:text-white 2xl:text-2xl">{Number(margemOperacional.toFixed(1)).toString().replace('.', ',')}%</div>
                   </div>
                 </div>
               </div>
@@ -1274,28 +1274,6 @@ const Financeiro = () => {
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_60px_-36px_rgba(0,50,35,0.28)] dark:border-white/10 dark:bg-[#101a16]/95">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Indicadores rápidos</div>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Receita líquida</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(dre.receitaLiquida)}</div>
-              </div>
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Lucro operacional</div>
-                <div className={`mt-2 text-2xl font-bold ${dre.lucroOperacional >= 0 ? 'text-[#0B5137] dark:text-[#8CC850]' : 'text-[#FF6400]'}`}>
-                  {formatCurrency(dre.lucroOperacional)}
-                </div>
-              </div>
-              <div className="rounded-[22px] bg-[#F8FAF8] p-4 dark:bg-[#0c1512]">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Caixa atual</div>
-                <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{currentSession ? 'Aberto' : 'Fechado'}</div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{currentSession ? 'Sessão ativa para conferência' : 'Abra um caixa para acompanhar ao vivo'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="space-y-3 md:hidden">

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react';
+import { Package, Search, Edit, Trash2, Import, GripVertical, ChevronDown, ChevronRight, Folder, Eye, EyeOff, Plus, SlidersHorizontal, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -449,6 +449,118 @@ const Products = () => {
     }
   };
 
+  const handleDuplicateProduct = async (product: ProductItem) => {
+    if (!activeUserIdSync) {
+      toast({
+        title: 'Sessão expirada',
+        description: 'Faça login novamente para duplicar o produto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const existingNames = new Set(products.map((item) => String(item.name || '').trim().toLowerCase()));
+    const baseName = String(product.name || 'Produto').trim() || 'Produto';
+    let copyName = `${baseName} (cópia)`;
+    let counter = 2;
+    while (existingNames.has(copyName.trim().toLowerCase())) {
+      copyName = `${baseName} (cópia ${counter})`;
+      counter += 1;
+    }
+
+    const completePayload: Record<string, any> = {
+      user_id: activeUserIdSync,
+      name: copyName,
+      description: product.description || null,
+      price: Number(product.price || 0),
+      category: product.category || null,
+      category_id: product.category_id || null,
+      image_url: product.image_url || null,
+      available: product.available !== false,
+      is_available: product.is_available ?? product.available !== false,
+      weight_based: Boolean(product.weight_based),
+      send_to_kds: Boolean(product.send_to_kds),
+      show_in_pdv: product.show_in_pdv !== false,
+      show_in_delivery: product.show_in_delivery !== false,
+      display_order: products.length + 1,
+      track_stock: Boolean(product.track_stock),
+      stock_quantity: Number(product.stock_quantity || 0),
+      low_stock_threshold: Number(product.low_stock_threshold || 0),
+    };
+
+    const fallbackPayload = {
+      user_id: activeUserIdSync,
+      name: copyName,
+      description: product.description || null,
+      price: Number(product.price || 0),
+      category: product.category || null,
+      category_id: product.category_id || null,
+      image_url: product.image_url || null,
+      available: product.available !== false,
+      weight_based: Boolean(product.weight_based),
+      send_to_kds: Boolean(product.send_to_kds),
+      show_in_pdv: product.show_in_pdv !== false,
+      show_in_delivery: product.show_in_delivery !== false,
+    };
+
+    try {
+      setIsLoading(true);
+      let insertResult = await (supabase as any)
+        .from('products')
+        .insert(completePayload)
+        .select('id')
+        .single();
+
+      if (insertResult.error && String(insertResult.error?.code || '') === 'PGRST204') {
+        insertResult = await (supabase as any)
+          .from('products')
+          .insert(fallbackPayload)
+          .select('id')
+          .single();
+      }
+
+      if (insertResult.error) throw insertResult.error;
+
+      const duplicatedId = insertResult.data?.id;
+      if (duplicatedId) {
+        const { data: linkedVariations } = await (supabase as any)
+          .from('product_global_variation_links')
+          .select('global_variation_id')
+          .eq('product_id', product.id);
+
+        if (Array.isArray(linkedVariations) && linkedVariations.length > 0) {
+          const links = linkedVariations
+            .filter((link: any) => link?.global_variation_id)
+            .map((link: any) => ({
+              product_id: duplicatedId,
+              global_variation_id: link.global_variation_id,
+            }));
+
+          if (links.length > 0) {
+            await (supabase as any)
+              .from('product_global_variation_links')
+              .insert(links);
+          }
+        }
+      }
+
+      toast({
+        title: 'Produto duplicado',
+        description: `${product.name} foi copiado para ${copyName}.`,
+      });
+
+      await fetchProducts();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao duplicar produto',
+        description: error?.message || 'Não foi possível duplicar este produto.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const toggleProductAvailability = async (product: ProductItem) => {
     try {
       setIsLoading(true);
@@ -739,8 +851,9 @@ const Products = () => {
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[auto,1fr,220px]">
-          <div className="flex items-center">
+        <div className="mt-4 grid gap-3 lg:grid-cols-[128px,1fr,220px]">
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#003223]/60">Imagem</div>
             <ProductImageUpload
               currentImageUrl={inlineProductDraft.image_url}
               onImageUploaded={(imageUrl) => setInlineProductDraft(prev => ({ ...prev, image_url: imageUrl }))}
@@ -956,12 +1069,15 @@ const Products = () => {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-4 gap-2">
+        <div className="mt-3 grid grid-cols-5 gap-2">
           <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => toggleProductAvailability(product)}>
             {product.available ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </Button>
           <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleEditProduct(product)}>
             <Edit className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" className="h-9 rounded-[14px] border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]" onClick={() => handleDuplicateProduct(product)}>
+            <Copy className="h-4 w-4" />
           </Button>
           <div className="flex items-center justify-center rounded-[14px] border border-[#003223]/10 bg-white text-[#003223] hover:bg-[#F5EBE1]">
             <ProductVariationsButton productId={product.id} compact />
@@ -1279,6 +1395,9 @@ const Products = () => {
                                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}>
                                                     <Edit className="h-4 w-4" />
                                                   </Button>
+                                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-[#0B5137]" onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}>
+                                                    <Copy className="h-4 w-4" />
+                                                  </Button>
                                                   <div onClick={(e) => e.stopPropagation()}>
                                                     <ProductVariationsButton productId={product.id} compact />
                                                   </div>
@@ -1449,6 +1568,9 @@ const Products = () => {
                                                   </Button>
                                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); handleEditProduct(product); }}>
                                                     <Edit className="h-4 w-4" />
+                                                  </Button>
+                                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-[#0B5137]" onClick={(e) => { e.stopPropagation(); handleDuplicateProduct(product); }}>
+                                                    <Copy className="h-4 w-4" />
                                                   </Button>
                                                   <div onClick={(e) => e.stopPropagation()}>
                                                     <ProductVariationsButton productId={product.id} compact />

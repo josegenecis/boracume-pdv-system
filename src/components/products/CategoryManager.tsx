@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, FolderPlus, GripVertical, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderPlus, GripVertical, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/contexts/ConfirmDialogContext';
@@ -301,11 +301,7 @@ const CategoryManager = () => {
       <CardHeader className="border-b border-orange-100/80 bg-white/65 backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-semibold text-boracume-orange">
-              <Sparkles className="h-3.5 w-3.5" />
-              Categorias com toque de vidro
-            </div>
-            <CardTitle className="mt-2 flex items-center gap-2 text-slate-900">
+            <CardTitle className="flex items-center gap-2 text-slate-900">
             <FolderPlus className="h-5 w-5" />
             Categorias de Produtos
             </CardTitle>

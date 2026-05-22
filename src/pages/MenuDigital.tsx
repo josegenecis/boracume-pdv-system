@@ -153,6 +153,8 @@ const MenuDigital = () => {
     }
   }, [profile]);
 
+  const bannerFit = ((profile as any)?.theme_config?.bannerFit === 'contain') ? 'contain' : 'cover';
+
   useEffect(() => {
     if (!googleKey) return;
     const mode = deliverySettings?.pricing?.mode;
@@ -791,7 +793,7 @@ const MenuDigital = () => {
             <img
               src={String((profile as any).banner_url)}
               alt={profile.restaurant_name || 'Banner'}
-              className="absolute inset-0 w-full h-full object-cover"
+              className={`absolute inset-0 w-full h-full ${bannerFit === 'contain' ? 'object-contain' : 'object-cover'}`}
               loading="eager"
               fetchPriority="high"
               decoding="async"
