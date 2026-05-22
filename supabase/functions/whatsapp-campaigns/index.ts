@@ -42,11 +42,13 @@ function isConversationActive(row: any) {
   return Number.isFinite(updatedAt) && updatedAt >= Date.now() - ACTIVE_WINDOW_DAYS * 86400000;
 }
 
-function fillTemplate(template: string, payload: { customerName?: string; menuLink?: string }) {
+function fillTemplate(template: string, payload: { customerName?: string; menuLink?: string; productName?: string; productPrice?: string }) {
   return String(template || "")
     .replace(/\{nome\}/gi, String(payload.customerName || ""))
     .replace(/\{cliente\}/gi, String(payload.customerName || ""))
     .replace(/\{cardapio\}/gi, String(payload.menuLink || ""))
+    .replace(/\{produto\}/gi, String(payload.productName || ""))
+    .replace(/\{preco\}/gi, String(payload.productPrice || ""))
     .trim();
 }
 
@@ -192,6 +194,12 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   const quietHoursEnd = String(body.quietHoursEnd || "09:00");
   const optOutText = String(body.optOutText || "Responder SAIR para não receber novas ofertas.").trim();
   const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : new Date();
+  const productId = String(body.productId || "").trim() || null;
+  const productName = String(body.productName || "").trim() || null;
+  const productPrice = body.productPrice !== undefined && body.productPrice !== null && body.productPrice !== ""
+    ? Number(body.productPrice)
+    : null;
+  const promoImageUrl = String(body.promoImageUrl || "").trim() || null;
 
   if (!title || title.length < 3) return { error: "Informe um nome para a campanha." };
   if (!message || message.length < 10) return { error: "Escreva uma mensagem de oferta com pelo menos 10 caracteres." };
@@ -220,6 +228,10 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
       timezone,
       scheduled_at: Number.isNaN(scheduledAt.getTime()) ? new Date().toISOString() : scheduledAt.toISOString(),
       target_count: audience.length,
+      product_id: productId,
+      product_name: productName,
+      product_price: Number.isFinite(productPrice as number) ? productPrice : null,
+      promo_image_url: promoImageUrl,
       metadata: {
         safety: {
           activeWindowDays: ACTIVE_WINDOW_DAYS,
@@ -240,7 +252,11 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     const personalized = appendOptOut(fillTemplate(message, {
       customerName: item.customer_name || "",
       menuLink: buildMenuLink(userId),
-    }), optOutText);
+      productName: productName || "",
+      productPrice: Number.isFinite(productPrice as number)
+        ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(productPrice))
+        : "",
+    } as any), optOutText);
 
     return {
       campaign_id: campaign.id,
@@ -249,6 +265,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
       customer_phone: item.customer_phone,
       customer_name: item.customer_name || "Cliente WhatsApp",
       message_text: personalized,
+      promo_image_url: promoImageUrl,
       status: "queued",
       scheduled_at: cursor.toISOString(),
     };
@@ -288,6 +305,41 @@ async function sendText(userId: string, number: string, text: string) {
   }
 
   return { ok: response.ok, status: response.status, data };
+}
+
+async function sendMedia(userId: string, number: string, text: string, mediaUrl: string) {
+  const instanceToken = `token_${userId.replace(/-/g, "")}`;
+  const payloads = [
+    {
+      url: `${EVOLUTION_URL}/send/media`,
+      body: { number, mediatype: "image", media: mediaUrl, caption: text },
+    },
+    {
+      url: `${EVOLUTION_URL}/send/image`,
+      body: { number, image: mediaUrl, caption: text },
+    },
+  ];
+
+  for (const payload of payloads) {
+    const response = await fetch(payload.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: instanceToken },
+      body: JSON.stringify(payload.body),
+    });
+
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch (_) {
+      data = null;
+    }
+
+    if (response.ok) return { ok: true, status: response.status, data, transport: payload.url };
+  }
+
+  const fallbackText = `${text}\n\nImagem da oferta: ${mediaUrl}`;
+  const fallback = await sendText(userId, number, fallbackText);
+  return { ...fallback, fallbackText, mediaFallback: true };
 }
 
 async function processQueue(serviceClient: any, userId: string, body: any) {
@@ -350,7 +402,10 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
       .update({ status: "sending", attempt_count: Number(recipient.attempt_count || 0) + 1 })
       .eq("id", recipient.id);
 
-    const sendResult = await sendText(userId, phone, recipient.message_text);
+    const mediaUrl = String(recipient.promo_image_url || "").trim();
+    const sendResult = mediaUrl
+      ? await sendMedia(userId, phone, recipient.message_text, mediaUrl)
+      : await sendText(userId, phone, recipient.message_text);
     if (!sendResult.ok) {
       await serviceClient
         .from("whatsapp_marketing_recipients")
@@ -366,9 +421,9 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
 
     await serviceClient.from("whatsapp_messages").insert({
       conversation_id: recipient.conversation_id,
-      content: recipient.message_text,
+      content: (sendResult as any)?.fallbackText || recipient.message_text,
       sender: "agent",
-      message_type: "marketing_offer",
+      message_type: mediaUrl ? "marketing_offer_image" : "marketing_offer",
       delivered: true,
     });
 

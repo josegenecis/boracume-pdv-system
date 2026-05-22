@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Clock, MessageCircle, Pause, Play, RefreshCw, Send, ShieldCheck, Square, Users } from 'lucide-react';
+import { AlertTriangle, Clock, ImageIcon, MessageCircle, Package, Pause, Play, RefreshCw, Send, ShieldCheck, Square, Upload, Users } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +29,17 @@ type Campaign = {
   max_delay_seconds: number;
   scheduled_at: string;
   created_at: string;
+  product_name?: string | null;
+  promo_image_url?: string | null;
+};
+
+type ProductOption = {
+  id: string;
+  name: string;
+  price: number;
+  original_price?: number | null;
+  discount_percentage?: number | null;
+  image_url?: string | null;
 };
 
 type AudiencePreview = {
@@ -54,7 +66,7 @@ const statusClass: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border-red-200',
 };
 
-const defaultMessage = 'Oi {nome}! Hoje temos uma oferta especial para você. Confira no cardápio: {cardapio}';
+const defaultMessage = 'Oi {nome}! Hoje temos uma oferta especial: {produto} por {preco}. Confira e peça pelo cardápio: {cardapio}';
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -88,6 +100,10 @@ export default function WhatsAppCampaignManager() {
   const [processing, setProcessing] = useState(false);
   const [audience, setAudience] = useState<AudiencePreview | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState('none');
+  const [promoImageUrl, setPromoImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const minDelaySeconds = useMemo(() => Math.max(1, minDelayMinutes) * 60, [minDelayMinutes]);
   const maxDelaySeconds = useMemo(() => Math.max(minDelayMinutes, maxDelayMinutes) * 60, [maxDelayMinutes, minDelayMinutes]);
@@ -95,6 +111,7 @@ export default function WhatsAppCampaignManager() {
   useEffect(() => {
     if (!user?.id) return;
     fetchCampaigns();
+    fetchProducts();
     previewAudience();
   }, [user?.id]);
 
@@ -124,6 +141,31 @@ export default function WhatsAppCampaignManager() {
     setCampaigns(data || []);
   };
 
+  const fetchProducts = async () => {
+    if (!user?.id) return;
+    const { data, error } = await (supabase as any)
+      .from('products')
+      .select('id,name,price,original_price,discount_percentage,image_url,available')
+      .eq('user_id', user.id)
+      .eq('available', true)
+      .order('name', { ascending: true })
+      .limit(250);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setProducts((data || []).map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      price: Number(item.price || 0),
+      original_price: item.original_price,
+      discount_percentage: item.discount_percentage,
+      image_url: item.image_url,
+    })));
+  };
+
   const previewAudience = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
@@ -150,6 +192,7 @@ export default function WhatsAppCampaignManager() {
 
     setLoading(true);
     try {
+      const selectedProduct = products.find((item) => item.id === selectedProductId) || null;
       const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
         body: {
           action: 'create',
@@ -165,6 +208,10 @@ export default function WhatsAppCampaignManager() {
           quietHoursEnd: '09:00',
           timezone: 'America/Fortaleza',
           optOutText: 'Responder SAIR para não receber novas ofertas.',
+          productId: selectedProduct?.id || null,
+          productName: selectedProduct?.name || null,
+          productPrice: selectedProduct?.price ?? null,
+          promoImageUrl: promoImageUrl || selectedProduct?.image_url || null,
         },
       });
 
@@ -177,6 +224,8 @@ export default function WhatsAppCampaignManager() {
       });
       setTitle('');
       setRiskAccepted(false);
+      setSelectedProductId('none');
+      setPromoImageUrl('');
       await Promise.all([fetchCampaigns(), previewAudience()]);
     } catch (error: any) {
       toast({
@@ -186,6 +235,57 @@ export default function WhatsAppCampaignManager() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const selectedProduct = useMemo(
+    () => products.find((item) => item.id === selectedProductId) || null,
+    [products, selectedProductId]
+  );
+
+  const displayPrice = (value?: number | null) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+
+  const chooseProduct = (productId: string) => {
+    setSelectedProductId(productId);
+    if (productId === 'none') return;
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    if (!title.trim()) setTitle(`Oferta: ${product.name}`);
+    setMessage(`Oi {nome}! Oferta especial de hoje: ${product.name} por ${displayPrice(product.price)}.\n\nPeça aqui: {cardapio}`);
+    if (product.image_url && !promoImageUrl) setPromoImageUrl(product.image_url);
+  };
+
+  const uploadPromotionImage = async (file?: File | null) => {
+    if (!file || !user?.id) return;
+    setUploadingImage(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const safeName = file.name.replace(/[^a-z0-9_.-]/gi, '-').toLowerCase();
+      const path = `marketing-offers/${user.id}/${Date.now()}-${safeName || `offer.${ext}`}`;
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type || `image/${ext}`,
+        });
+
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      setPromoImageUrl(data.publicUrl);
+      toast({
+        title: 'Imagem adicionada',
+        description: 'A imagem será enviada junto com a oferta quando o WhatsApp aceitar mídia.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao subir imagem',
+        description: String(error?.message || error),
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -278,6 +378,83 @@ export default function WhatsAppCampaignManager() {
               </div>
             </div>
 
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="space-y-2">
+                <Label>Produto em oferta</Label>
+                <Select value={selectedProductId} onValueChange={chooseProduct}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar produto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem produto vinculado</SelectItem>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} - {displayPrice(product.price)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground">
+                  Quando vinculado, a campanha guarda o produto e pode usar {'{produto}'} e {'{preco}'} na mensagem.
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="wa-promo-image">Imagem da promoção</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="wa-promo-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => uploadPromotionImage(event.target.files?.[0])}
+                    disabled={uploadingImage}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={uploadingImage}
+                    title="Subir imagem"
+                  >
+                    {uploadingImage ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {(selectedProduct || promoImageUrl) && (
+              <div className="grid gap-3 rounded-lg border bg-white p-3 md:grid-cols-[140px_minmax(0,1fr)]">
+                <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
+                  {promoImageUrl || selectedProduct?.image_url ? (
+                    <img
+                      src={promoImageUrl || selectedProduct?.image_url || ''}
+                      alt={selectedProduct?.name || 'Imagem da promoção'}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Package className="h-4 w-4 text-emerald-700" />
+                    {selectedProduct?.name || 'Imagem avulsa da promoção'}
+                  </div>
+                  {selectedProduct && (
+                    <div className="text-2xl font-bold text-emerald-900">{displayPrice(selectedProduct.price)}</div>
+                  )}
+                  <Input
+                    value={promoImageUrl}
+                    onChange={(event) => setPromoImageUrl(event.target.value)}
+                    placeholder="URL da imagem da promoção"
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Se a API de mídia do WhatsApp não aceitar imagem, o sistema envia a oferta com o link da imagem no texto.
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="wa-message">Mensagem</Label>
               <Textarea
@@ -288,7 +465,7 @@ export default function WhatsAppCampaignManager() {
                 className="resize-none"
               />
               <div className="text-xs text-muted-foreground">
-                Variáveis disponíveis: {'{nome}'} e {'{cardapio}'}. O texto “Responder SAIR...” entra automaticamente no final.
+                Variáveis disponíveis: {'{nome}'}, {'{cardapio}'}, {'{produto}'} e {'{preco}'}. O texto “Responder SAIR...” entra automaticamente no final.
               </div>
             </div>
 
@@ -414,8 +591,22 @@ export default function WhatsAppCampaignManager() {
               ) : campaigns.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell>
-                    <div className="font-semibold">{campaign.title}</div>
-                    <div className="line-clamp-1 text-xs text-muted-foreground">{campaign.message}</div>
+                    <div className="flex items-center gap-3">
+                      {campaign.promo_image_url ? (
+                        <img src={campaign.promo_image_url} alt="" className="h-12 w-12 rounded-md object-cover" />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted">
+                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-semibold">{campaign.title}</div>
+                        {campaign.product_name && (
+                          <div className="text-xs font-medium text-emerald-700">{campaign.product_name}</div>
+                        )}
+                        <div className="line-clamp-1 text-xs text-muted-foreground">{campaign.message}</div>
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusClass[campaign.status] || ''}>
