@@ -472,7 +472,7 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.85'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.86'}`,
       '',
       reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
@@ -585,6 +585,7 @@ const Financeiro = () => {
         toast({ title: 'Caixa aberto com sucesso' });
         await PrinterService.printCashReport({
           title: 'Abertura de Caixa',
+          userId: user.id,
           lines: [`Data/Hora: ${new Date().toLocaleString('pt-BR')}`, `Valor inicial: R$ ${Number(amount).toFixed(2)}`]
         });
       } else if (cashOperation === 'close') {
@@ -627,6 +628,7 @@ const Financeiro = () => {
         toast({ title: cashOperation === 'in' ? 'Suprimento registrado' : 'Sangria registrada' });
         await PrinterService.printCashReport({
           title: cashOperation === 'in' ? 'Suprimento' : 'Sangria',
+          userId: user.id,
           lines: [
             `Data/Hora: ${new Date().toLocaleString('pt-BR')}`,
             `Valor: R$ ${Number(amount).toFixed(2)}`,

@@ -404,6 +404,63 @@ function formatColumns(left: string, right: string, width: number) {
   return lines;
 }
 
+function getThermalLineWidth(config: Pick<NormalizedPrintConfig, 'paper_width'>) {
+  return config.paper_width === '58mm' ? 32 : 48;
+}
+
+function centerReceiptLine(value: string, width: number) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.length >= width) return text.slice(0, width);
+  const leftPadding = Math.max(0, Math.floor((width - text.length) / 2));
+  return `${' '.repeat(leftPadding)}${text}`;
+}
+
+function normalizeReportLines(lines: string[], width: number) {
+  const out: string[] = [];
+
+  for (const raw of lines || []) {
+    const line = String(raw ?? '').replace(/\t/g, '  ').replace(/\r/g, '');
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      out.push('');
+      continue;
+    }
+
+    if (/^[=\-]+$/.test(trimmed)) {
+      out.push(trimmed[0].repeat(width));
+      continue;
+    }
+
+    if (/^_+$/.test(trimmed)) {
+      out.push('_'.repeat(Math.min(width, 32)));
+      continue;
+    }
+
+    const looksCentered = line.startsWith(' ') && !trimmed.includes(':');
+    if (looksCentered) {
+      out.push(centerReceiptLine(trimmed, width));
+      continue;
+    }
+
+    if (line.length <= width) {
+      out.push(line);
+      continue;
+    }
+
+    const columnMatch = trimmed.match(/^(.{2,}?:)\s+(.+)$/);
+    if (columnMatch) {
+      formatColumns(columnMatch[1], columnMatch[2], width).forEach((value) => out.push(value));
+      continue;
+    }
+
+    wrapTextLine(trimmed, width).forEach((value) => out.push(value));
+  }
+
+  return out;
+}
+
 function resolveElectronTarget(): ElectronTarget | null {
   try {
     const mode = (localStorage.getItem('hw.receipt.mode') || '').trim();
@@ -818,8 +875,16 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
   return commands;
 }
 
-function buildReportHtml(title: string, lines: string[], store?: any, options?: { hideStoreHeader?: boolean; footerText?: string }) {
+function buildReportHtml(
+  title: string,
+  lines: string[],
+  store?: any,
+  options?: { hideStoreHeader?: boolean; footerText?: string; paperWidth?: '58mm' | '80mm'; fontSize?: NormalizedPrintConfig['font_size'] }
+) {
   const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const paperWidth = options?.paperWidth === '80mm' ? '80mm' : '58mm';
+  const bodyWidth = paperWidth === '58mm' ? '46mm' : '68mm';
+  const fontSize = options?.fontSize === 'small' ? '10px' : options?.fontSize === 'large' ? '13px' : paperWidth === '58mm' ? '11px' : '12px';
   const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
   const storeHeader = store && !options?.hideStoreHeader ? `
     ${storeLogoHtml}
@@ -844,19 +909,23 @@ function buildReportHtml(title: string, lines: string[], store?: any, options?: 
         <meta charset="utf-8" />
         <title>${title}</title>
         <style>
-          @page { margin: 0; size: auto; }
+          @page { margin: 0; size: ${paperWidth} auto; }
+          * { box-sizing: border-box; }
+          html, body { width: ${paperWidth}; max-width: ${paperWidth}; overflow: hidden; }
           body {
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            padding: 10px;
-            font-size: 12px;
+            padding: 3mm 2mm;
+            width: ${bodyWidth};
+            max-width: ${bodyWidth};
+            font-size: ${fontSize};
             color: #000;
             line-height: 1.25;
           }
           .center { text-align: center; }
           .bold { font-weight: bold; }
           .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .line { white-space: pre-wrap; word-break: break-word; }
+          .line { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
         </style>
       </head>
       <body>
@@ -1163,9 +1232,10 @@ export const PrinterService = {
     const isElectron = Boolean(api?.printSystem);
     let store: any = null;
     const userId = String(report.userId || '').trim();
+    let config = normalizePrintConfig(null);
     if (userId) {
       try {
-        const [{ data: profile }, { data: fiscal }] = await Promise.all([
+        const [{ data: profile }, { data: fiscal }, { data: settings }] = await Promise.all([
           supabase
             .from('profiles')
             .select('restaurant_name,description,logo_url,phone,address,website')
@@ -1175,8 +1245,14 @@ export const PrinterService = {
             .from('fiscal_settings')
             .select('cnpj,nome_fantasia,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_municipio,endereco_uf,endereco_cep')
             .eq('user_id', userId)
+            .maybeSingle(),
+          (supabase as any)
+            .from('printer_settings')
+            .select('*')
+            .eq('user_id', userId)
             .maybeSingle()
         ]);
+        config = normalizePrintConfig(settings);
 
         const fiscalAddressParts = [
           (fiscal as any)?.endereco_logradouro,
@@ -1206,9 +1282,12 @@ export const PrinterService = {
       } catch {}
     }
 
-    const htmlContent = buildReportHtml(report.title, report.lines, store, {
+    const safeLines = normalizeReportLines(report.lines || [], getThermalLineWidth(config));
+    const htmlContent = buildReportHtml(report.title, safeLines, store, {
       hideStoreHeader: report.hideStoreHeader,
       footerText: report.footerText,
+      paperWidth: config.paper_width,
+      fontSize: config.font_size,
     }).replace(
       '</body>',
       `<script>window.onload=function(){window.print();}</script></body>`

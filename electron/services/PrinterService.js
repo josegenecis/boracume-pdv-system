@@ -60,6 +60,16 @@ class PrinterService extends EventEmitter {
     try {
       // Verificar se já está conectado
       if (this.connectedPrinters.has(deviceId)) {
+        const printerInfo = this.connectedPrinters.get(deviceId);
+        const mergedOptions = { ...(printerInfo.options || {}), ...(options || {}) };
+        printerInfo.options = mergedOptions;
+        if (printerInfo.config?.options) {
+          printerInfo.config.options = {
+            ...printerInfo.config.options,
+            timeout: mergedOptions.timeout || printerInfo.config.options.timeout || 5000,
+            width: mergedOptions.width || printerInfo.config.options.width || 48
+          };
+        }
         return { success: true, message: 'Impressora já conectada' };
       }
 
