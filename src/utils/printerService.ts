@@ -408,6 +408,10 @@ function getThermalLineWidth(config: Pick<NormalizedPrintConfig, 'paper_width'>)
   return config.paper_width === '58mm' ? 32 : 48;
 }
 
+function getCashReportLineWidth(config: Pick<NormalizedPrintConfig, 'paper_width'>) {
+  return config.paper_width === '58mm' ? 30 : 46;
+}
+
 function centerReceiptLine(value: string, width: number) {
   const text = String(value || '').trim();
   if (!text) return '';
@@ -459,6 +463,11 @@ function normalizeReportLines(lines: string[], width: number) {
   }
 
   return out;
+}
+
+function buildRawCashReportText(lines: string[]) {
+  const normalized = (lines || []).map((line) => String(line ?? '').replace(/\r/g, '').trimEnd());
+  return `${normalized.join('\n')}\n`;
 }
 
 function resolveElectronTarget(): ElectronTarget | null {
@@ -883,8 +892,8 @@ function buildReportHtml(
 ) {
   const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const paperWidth = options?.paperWidth === '80mm' ? '80mm' : '58mm';
-  const bodyWidth = paperWidth === '58mm' ? '46mm' : '68mm';
-  const fontSize = options?.fontSize === 'small' ? '10px' : options?.fontSize === 'large' ? '13px' : paperWidth === '58mm' ? '11px' : '12px';
+  const bodyWidth = paperWidth === '58mm' ? '54mm' : '76mm';
+  const fontSize = options?.fontSize === 'small' ? '9px' : options?.fontSize === 'large' ? '12px' : paperWidth === '58mm' ? '10px' : '11px';
   const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
   const storeHeader = store && !options?.hideStoreHeader ? `
     ${storeLogoHtml}
@@ -911,21 +920,23 @@ function buildReportHtml(
         <style>
           @page { margin: 0; size: ${paperWidth} auto; }
           * { box-sizing: border-box; }
-          html, body { width: ${paperWidth}; max-width: ${paperWidth}; overflow: hidden; }
+          html, body { width: ${paperWidth}; max-width: ${paperWidth}; overflow: visible; }
           body {
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            padding: 3mm 2mm;
+            padding: 2mm 1mm 3mm 1mm;
             width: ${bodyWidth};
             max-width: ${bodyWidth};
             font-size: ${fontSize};
             color: #000;
-            line-height: 1.25;
+            line-height: 1.18;
+            page-break-inside: avoid;
+            break-inside: avoid;
           }
           .center { text-align: center; }
           .bold { font-weight: bold; }
           .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .line { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+          .line { white-space: pre; overflow: visible; max-width: none; page-break-inside: avoid; break-inside: avoid; }
         </style>
       </head>
       <body>
@@ -946,6 +957,17 @@ async function printReportElectron(html: string) {
   if (target.type !== 'system') return { success: false, error: 'Selecione uma impressora do sistema para imprimir relatórios' };
   const resp = await api.printSystem(target.printerName, html, true);
   if (!resp?.success) return { success: false, error: resp?.error || 'Falha ao imprimir' };
+  return { success: true };
+}
+
+async function printRawReportElectron(text: string) {
+  const api = (window as any)?.electronAPI;
+  if (!api?.printRawSystem) return { success: false, error: 'API RAW do Desktop indisponível' };
+  const target = resolveElectronTarget();
+  if (!target) return { success: false, error: 'Impressora não configurada em Configurações' };
+  if (target.type !== 'system') return { success: false, error: 'Selecione uma impressora do sistema para imprimir relatórios' };
+  const resp = await api.printRawSystem(target.printerName, text);
+  if (!resp?.success) return { success: false, error: resp?.error || resp?.message || 'Falha ao imprimir relatório' };
   return { success: true };
 }
 
@@ -1282,7 +1304,8 @@ export const PrinterService = {
       } catch {}
     }
 
-    const safeLines = normalizeReportLines(report.lines || [], getThermalLineWidth(config));
+    const reportLineWidth = getCashReportLineWidth(config);
+    const safeLines = normalizeReportLines(report.lines || [], reportLineWidth);
     const htmlContent = buildReportHtml(report.title, safeLines, store, {
       hideStoreHeader: report.hideStoreHeader,
       footerText: report.footerText,
@@ -1294,7 +1317,10 @@ export const PrinterService = {
     );
 
     if (isElectron) {
-      const resp = await printReportElectron(htmlContent);
+      let resp = await printRawReportElectron(buildRawCashReportText(safeLines));
+      if (!resp.success) {
+        resp = await printReportElectron(htmlContent);
+      }
       if (!resp.success) {
         toast.error(resp.error || 'Falha ao imprimir');
       }

@@ -811,6 +811,115 @@ exit 1
     });
   }
 
+  async printRawTextSystem(printerName, text) {
+    if (process.platform !== 'win32') {
+      return { success: false, message: 'Impressão RAW via impressora do sistema está disponível apenas no Windows' };
+    }
+
+    const safeText = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (!safeText.trim()) {
+      return { success: false, message: 'Texto de impressão vazio' };
+    }
+
+    const script = `
+$printerName = $env:RAW_PRINTER_NAME
+$rawText = $env:RAW_PRINTER_TEXT
+$encoding = [System.Text.Encoding]::GetEncoding(850)
+$payload = $encoding.GetBytes($rawText)
+$prefix = [byte[]](27,64,27,116,2)
+$suffix = [byte[]](10,10,10,29,86,65,0)
+$bytes = New-Object byte[] ($prefix.Length + $payload.Length + $suffix.Length)
+[Array]::Copy($prefix, 0, $bytes, 0, $prefix.Length)
+[Array]::Copy($payload, 0, $bytes, $prefix.Length, $payload.Length)
+[Array]::Copy($suffix, 0, $bytes, $prefix.Length + $payload.Length, $suffix.Length)
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDocName;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, DOCINFOA di);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.Drv", SetLastError=true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, byte[] pBytes, Int32 dwCount, out Int32 dwWritten);
+
+  public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
+    IntPtr pPrinter = IntPtr.Zero;
+    DOCINFOA di = new DOCINFOA();
+    di.pDocName = "POPSYSTEM Cash Report";
+    di.pDataType = "RAW";
+    int written = 0;
+
+    if (!OpenPrinter(printerName, out pPrinter, IntPtr.Zero)) return false;
+    try {
+      if (!StartDocPrinter(pPrinter, 1, di)) return false;
+      try {
+        if (!StartPagePrinter(pPrinter)) return false;
+        try {
+          return WritePrinter(pPrinter, bytes, bytes.Length, out written);
+        } finally {
+          EndPagePrinter(pPrinter);
+        }
+      } finally {
+        EndDocPrinter(pPrinter);
+      }
+    } finally {
+      ClosePrinter(pPrinter);
+    }
+  }
+}
+"@
+Add-Type -TypeDefinition $signature -Language CSharp
+if ([RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)) {
+  exit 0
+}
+exit 1
+`;
+
+    return await new Promise((resolve) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+        {
+          windowsHide: true,
+          maxBuffer: 1024 * 1024,
+          env: {
+            ...process.env,
+            RAW_PRINTER_NAME: printerName,
+            RAW_PRINTER_TEXT: safeText,
+          },
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error('Erro ao imprimir RAW via impressora do sistema:', stderr || error.message);
+            resolve({ success: false, message: stderr || error.message || 'Falha ao imprimir relatório em RAW' });
+            return;
+          }
+
+          resolve({ success: true, message: 'Relatório enviado para a impressora' });
+        }
+      );
+    });
+  }
+
   getConnectedPrinters() {
     const printers = [];
     

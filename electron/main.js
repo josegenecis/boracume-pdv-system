@@ -593,6 +593,22 @@ ipcMain.handle('print-system', async (event, { deviceName, html, silent = true }
   }
 });
 
+ipcMain.handle('print-raw-system', async (event, { deviceName, text } = {}) => {
+  try {
+    if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };
+    if (!deviceName || !text) return { success: false, error: 'Impressora ou texto inválido' };
+    const result = await printerService.printRawTextSystem(deviceName, text);
+    return {
+      success: !!result?.success,
+      error: result?.error || result?.message,
+      message: result?.message,
+    };
+  } catch (error) {
+    console.error('Erro ao imprimir RAW via sistema:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('open-cash-drawer', async (event, deviceId) => {
   try {
     if (!printerService) return { success: false, error: 'Serviço de impressora não inicializado' };

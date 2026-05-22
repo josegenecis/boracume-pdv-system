@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openCashDrawer: (deviceId) => ipcRenderer.invoke('open-cash-drawer', deviceId),
   printProductLabel: (deviceId, productData) => ipcRenderer.invoke('print-product-label', deviceId, productData),
   printSystem: (deviceName, html, silent) => ipcRenderer.invoke('print-system', { deviceName, html, silent }),
+  printRawSystem: (deviceName, text) => ipcRenderer.invoke('print-raw-system', { deviceName, text }),
   
   // Scale operations
   connectScale: (deviceId, protocol, options) => ipcRenderer.invoke('connect-scale', deviceId, protocol, options),

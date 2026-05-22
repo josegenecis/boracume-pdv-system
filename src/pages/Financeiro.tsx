@@ -472,7 +472,7 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.87'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.88'}`,
       '',
       reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
