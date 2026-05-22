@@ -394,6 +394,25 @@ const PDV = () => {
     return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
   };
 
+  const classifyOrderChannel = (order: any) => {
+    const orderType = String(order?.order_type || '').trim().toLowerCase();
+    const status = String(order?.status || '').trim().toLowerCase();
+    const hasTable = Boolean(order?.table_id) || orderType === 'dine_in';
+    if (hasTable) return 'dine_in';
+
+    const hasDeliveryInfo =
+      orderType === 'delivery' ||
+      status === 'in_delivery' ||
+      status === 'delivered' ||
+      Boolean(order?.delivery_zone_id) ||
+      String(order?.customer_address || '').trim().length > 0 ||
+      String(order?.customer_neighborhood || '').trim().length > 0 ||
+      Number(order?.delivery_fee || 0) > 0;
+
+    if (hasDeliveryInfo) return 'delivery';
+    return 'counter';
+  };
+
   const shouldOpenCashDrawerForOrder = (order: any) => {
     const orderType = String(order?.order_type || '').trim().toLowerCase();
     const source = String(order?.variations?.source || '').trim().toUpperCase();
@@ -464,8 +483,10 @@ const PDV = () => {
     const expectedCash = initial + cash + inAmount - outAmount;
     const netRevenue = grossRevenue - discounts + deliveryFee;
     const customerKeys = new Set(sales.map((order) => normalizeCustomerKey(order)).filter(Boolean));
-    const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
-    const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
+    const deliveryOrders = sales.filter((order) => classifyOrderChannel(order) === 'delivery');
+    const counterOrders = sales.filter((order) => classifyOrderChannel(order) === 'counter');
+    const dineInOrders = sales.filter((order) => classifyOrderChannel(order) === 'dine_in');
+    const productionOrders = sales.filter((order) => classifyOrderChannel(order) !== 'delivery');
 
     return {
       expectedCash,
@@ -489,8 +510,8 @@ const PDV = () => {
       cancelledCount,
       customersServed: customerKeys.size,
       deliveryOrders: deliveryOrders.length,
-      counterOrders: sales.filter((order) => order?.order_type === 'counter' || order?.order_type === 'pickup').length,
-      dineInOrders: sales.filter((order) => order?.order_type === 'dine_in').length,
+      counterOrders: counterOrders.length,
+      dineInOrders: dineInOrders.length,
       avgProductionMinutes: averageMinutesFromOrders(productionOrders),
       avgDeliveryMinutes: averageMinutesFromOrders(deliveryOrders),
       openedAt: session.opened_at,
@@ -591,7 +612,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.88'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.89'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',

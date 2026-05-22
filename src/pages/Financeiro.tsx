@@ -315,6 +315,25 @@ const Financeiro = () => {
     return Math.round(validDurations.reduce((sum, value) => sum + value, 0) / validDurations.length);
   };
 
+  const classifyOrderChannel = (order: Record<string, unknown>) => {
+    const orderType = String(order?.order_type || '').trim().toLowerCase();
+    const status = String(order?.status || '').trim().toLowerCase();
+    const hasTable = Boolean(order?.table_id) || orderType === 'dine_in';
+    if (hasTable) return 'dine_in';
+
+    const hasDeliveryInfo =
+      orderType === 'delivery' ||
+      status === 'in_delivery' ||
+      status === 'delivered' ||
+      Boolean(order?.delivery_zone_id) ||
+      String(order?.customer_address || '').trim().length > 0 ||
+      String(order?.customer_neighborhood || '').trim().length > 0 ||
+      Number(order?.delivery_fee || 0) > 0;
+
+    if (hasDeliveryInfo) return 'delivery';
+    return 'counter';
+  };
+
   const buildCashCloseReportLines = async (
     session: CashSession,
     informedAmount: number,
@@ -327,7 +346,7 @@ const Financeiro = () => {
     const [{ data: orders }, { data: movements }, { data: profile }, { data: fiscal }] = await Promise.all([
       db
         .from('orders')
-        .select('id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone')
+        .select('id, created_at, updated_at, total, discount, delivery_fee, payment_method, status, order_type, customer_name, customer_phone, customer_address, customer_neighborhood, delivery_zone_id, table_id')
         .eq('user_id', user.id)
         .eq('cash_register_session_id', session.id),
       db
@@ -395,8 +414,10 @@ const Financeiro = () => {
     };
     const date = new Date(closedAt);
     const openedAt = new Date(session.opened_at);
-    const deliveryOrders = sales.filter((order) => order?.order_type === 'delivery');
-    const productionOrders = sales.filter((order) => order?.order_type !== 'delivery');
+    const deliveryOrders = sales.filter((order) => classifyOrderChannel(order) === 'delivery');
+    const counterOrders = sales.filter((order) => classifyOrderChannel(order) === 'counter');
+    const dineInOrders = sales.filter((order) => classifyOrderChannel(order) === 'dine_in');
+    const productionOrders = sales.filter((order) => classifyOrderChannel(order) !== 'delivery');
     const formatMinutes = (value: number) => `${Math.max(0, Math.round(value || 0))} min`;
     const reportNotes = notesOverride ?? cashDescription;
 
@@ -461,8 +482,8 @@ const Financeiro = () => {
       divider,
       '',
       row('Pedidos Delivery:', String(deliveryOrders.length)),
-      row('Pedidos Balcão:', String(sales.filter((order) => order?.order_type === 'counter' || order?.order_type === 'pickup').length)),
-      row('Pedidos Mesas:', String(sales.filter((order) => order?.order_type === 'dine_in').length)),
+      row('Pedidos Balcão:', String(counterOrders.length)),
+      row('Pedidos Mesas:', String(dineInOrders.length)),
       '',
       row('Tempo Médio Produção:', formatMinutes(averageMinutesFromOrders(productionOrders))),
       row('Tempo Médio Entrega:', formatMinutes(averageMinutesFromOrders(deliveryOrders))),
@@ -472,7 +493,7 @@ const Financeiro = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.88'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.89'}`,
       '',
       reportNotes ? `Obs: ${reportNotes}` : '',
       'Fechamento realizado com sucesso.',
