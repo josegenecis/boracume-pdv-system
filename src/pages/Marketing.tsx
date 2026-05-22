@@ -7,12 +7,14 @@ import MarketingBanners from '@/components/marketing/MarketingBanners';
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager';
 import HighlightsManager from '@/components/marketing/HighlightsManager';
 import UpsellManager from '@/components/marketing/UpsellManager';
+import WhatsAppCampaignManager from '@/components/marketing/WhatsAppCampaignManager';
 
 const TABS = [
   { value: 'banners', label: 'Banners' },
   { value: 'coupons', label: 'Cupons' },
   { value: 'highlights', label: 'Destaques' },
   { value: 'upsells', label: 'Upsells' },
+  { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'loyalty', label: 'Fidelidade' },
   { value: 'pixels', label: 'Pixels' }
 ];
@@ -39,7 +41,7 @@ export default function Marketing() {
         <div>
           <div className="text-2xl font-bold tracking-tight">Marketing</div>
           <div className="text-sm text-muted-foreground mt-1">
-            Banners, cupons, destaques, upsells, fidelidade e pixels (Meta/Google).
+            Banners, cupons, destaques, upsells, WhatsApp, fidelidade e pixels (Meta/Google).
           </div>
         </div>
       </div>
@@ -67,6 +69,9 @@ export default function Marketing() {
         </TabsContent>
         <TabsContent value="upsells">
           <UpsellManager />
+        </TabsContent>
+        <TabsContent value="whatsapp">
+          <WhatsAppCampaignManager />
         </TabsContent>
         <TabsContent value="loyalty">
           <LoyaltyManager />

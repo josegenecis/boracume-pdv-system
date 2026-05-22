@@ -58,6 +58,11 @@ function isComplaintOrProblem(text: string) {
   return /(reclama|problema|errado|atras|atrasado|demora|demorando|frio|faltou|faltando|cance|cancelar|ruim|horrivel|péssimo|pessimo|devolu|estorno|reembolso)/i.test(value);
 }
 
+function isMarketingOptOut(text: string) {
+  const value = normalizeIntentText(text);
+  return /^(sair|parar|cancelar ofertas|remover|nao quero|nao receber|sem ofertas)\b/.test(value);
+}
+
 function getLocalDayKey(value?: string | null) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return '';
@@ -484,6 +489,47 @@ export async function processRestaurantBotMessage(params: {
     message_type: 'text',
     delivered: true
   });
+
+  if (isMarketingOptOut(text)) {
+    await supabase
+      .from('whatsapp_marketing_optouts')
+      .upsert({
+        user_id: restaurantId,
+        customer_phone: customerPhone,
+        reason: 'customer_message'
+      }, { onConflict: 'user_id,customer_phone' });
+
+    await supabase
+      .from('whatsapp_marketing_recipients')
+      .update({
+        status: 'opted_out',
+        last_error: 'Cliente solicitou sair das ofertas.'
+      })
+      .eq('user_id', restaurantId)
+      .eq('customer_phone', customerPhone)
+      .eq('status', 'queued');
+
+    const optOutReply = `Pronto. Não vou enviar novas ofertas por aqui. Se precisar falar com o ${context.restaurantName}, é só mandar mensagem.`;
+    const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, optOutReply);
+    if (sendResult?.ok) {
+      await supabase.from('whatsapp_messages').insert({
+        conversation_id: conversationId,
+        content: optOutReply,
+        sender: 'bot',
+        message_type: 'text',
+        delivered: true
+      });
+    }
+
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_marketing_optout', 'Cliente saiu das ofertas automáticas', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      sendOk: Boolean(sendResult?.ok)
+    });
+
+    return { ok: true, skipped: true, reason: 'marketing_optout', conversationId };
+  }
 
   const pauseState = getPauseState(existingConversation?.status);
   if (pauseState.expired) {
