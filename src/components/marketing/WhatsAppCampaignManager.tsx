@@ -29,6 +29,7 @@ type Campaign = {
   max_delay_seconds: number;
   scheduled_at: string;
   created_at: string;
+  audience_type?: string | null;
   product_name?: string | null;
   promo_image_url?: string | null;
 };
@@ -113,6 +114,7 @@ export default function WhatsAppCampaignManager() {
   const [manualPhones, setManualPhones] = useState('');
   const [inactiveMinDays, setInactiveMinDays] = useState(15);
   const [inactiveMaxDays, setInactiveMaxDays] = useState(0);
+  const [immediateManualTest, setImmediateManualTest] = useState(true);
 
   const minDelaySeconds = useMemo(() => Math.max(1, minDelayMinutes) * 60, [minDelayMinutes]);
   const maxDelaySeconds = useMemo(() => Math.max(minDelayMinutes, maxDelayMinutes) * 60, [maxDelayMinutes, minDelayMinutes]);
@@ -204,6 +206,7 @@ export default function WhatsAppCampaignManager() {
     manualPhones,
     inactiveMinDays: audienceType === 'inactive_range' ? inactiveMinDays : null,
     inactiveMaxDays: audienceType === 'inactive_range' && inactiveMaxDays > 0 ? inactiveMaxDays : null,
+    immediateManualTest: audienceType === 'manual' ? immediateManualTest : false,
   });
 
   const createCampaign = async () => {
@@ -262,6 +265,9 @@ export default function WhatsAppCampaignManager() {
       setSelectedProductId('none');
       setPromoImageUrl('');
       await Promise.all([fetchCampaigns(), previewAudience()]);
+      if (audienceType === 'manual' && immediateManualTest) {
+        await processQueue(false);
+      }
     } catch (error: any) {
       toast({
         title: 'Não foi possível criar a campanha',
@@ -355,6 +361,32 @@ export default function WhatsAppCampaignManager() {
     }
   };
 
+  const sendCampaignNow = async (campaignId: string) => {
+    setProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
+        body: { action: 'send-now', campaignId },
+      });
+
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const processed = (data as any)?.processed || [];
+      toast({
+        title: 'Envio de teste processado',
+        description: processed.length ? `${processed.length} mensagem(ns) processadas agora.` : 'Nenhuma mensagem pendente para esta campanha.',
+      });
+      await fetchCampaigns();
+    } catch (error: any) {
+      toast({
+        title: 'Não foi possível enviar agora',
+        description: String(error?.message || error),
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const changeStatus = async (campaignId: string, action: 'pause' | 'resume' | 'cancel') => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-campaigns', {
@@ -379,7 +411,7 @@ export default function WhatsAppCampaignManager() {
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Envio com risco controlado, não disparo em massa</AlertTitle>
         <AlertDescription>
-          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para conversas ativas já existentes, inclui saída por SAIR, respeita pausa noturna, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
+          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para conversas ativas já existentes, inclui saída por SAIR, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
         </AlertDescription>
       </Alert>
 
@@ -445,6 +477,19 @@ export default function WhatsAppCampaignManager() {
                     />
                     <div className="text-xs text-muted-foreground">
                       O sistema só mantém números que já têm conversa ativa com o restaurante. A busca aceita com/sem 55 e com/sem nono dígito.
+                    </div>
+                    <div className="rounded-md border bg-white p-3">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id="wa-immediate-test"
+                          checked={immediateManualTest}
+                          onCheckedChange={(checked) => setImmediateManualTest(Boolean(checked))}
+                          className="mt-0.5"
+                        />
+                        <Label htmlFor="wa-immediate-test" className="cursor-pointer text-sm leading-relaxed">
+                      Enviar teste agora para esta lista manual, sem esperar intervalo. Limitado a 5 WhatsApps.
+                        </Label>
+                      </div>
                     </div>
                   </div>
                 ) : audienceType === 'inactive_range' ? (
@@ -681,7 +726,7 @@ export default function WhatsAppCampaignManager() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                Pausa automática das 21:00 às 09:00.
+                Envio permitido em qualquer horário, mantendo intervalo aleatório.
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
@@ -763,6 +808,11 @@ export default function WhatsAppCampaignManager() {
                           <Pause className="h-4 w-4" />
                         </Button>
                       ) : null}
+                      {campaign.status === 'scheduled' && campaign.audience_type === 'manual' && Number(campaign.sent_count || 0) < Number(campaign.target_count || 0) && (
+                        <Button size="icon" variant="outline" onClick={() => sendCampaignNow(campaign.id)} title="Enviar teste agora">
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      )}
                       {['scheduled', 'paused'].includes(campaign.status) && (
                         <Button size="icon" variant="outline" onClick={() => changeStatus(campaign.id, 'cancel')} title="Cancelar">
                           <Square className="h-4 w-4" />

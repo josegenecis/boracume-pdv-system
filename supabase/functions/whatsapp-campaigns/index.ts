@@ -314,6 +314,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     : null;
   const promoImageUrl = String(body.promoImageUrl || "").trim() || null;
   const audienceFilters = parseAudienceFilters(body);
+  const immediateManualTest = Boolean(body.immediateManualTest) && audienceFilters.audienceType === "manual";
 
   if (!title || title.length < 3) return { error: "Informe um nome para a campanha." };
   if (!message || message.length < 10) return { error: "Escreva uma mensagem de oferta com pelo menos 10 caracteres." };
@@ -329,6 +330,9 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
 
   const audience = await loadEligibleAudience(serviceClient, userId, audienceFilters);
   if (audience.length === 0) return { error: "Nenhuma conversa ativa elegível encontrada." };
+  if (immediateManualTest && audience.length > 5) {
+    return { error: "O teste imediato é permitido somente para até 5 WhatsApps na lista manual." };
+  }
 
   const { data: campaign, error: campaignError } = await serviceClient
     .from("whatsapp_marketing_campaigns")
@@ -360,6 +364,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
           maxCreateTargets: MAX_CREATE_TARGETS,
         },
         audienceFilters,
+        immediateManualTest,
       },
     })
     .select("*")
@@ -368,9 +373,12 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   if (campaignError) throw new Error(campaignError.message);
 
   let cursor = new Date(campaign.scheduled_at);
-  const recipients = audience.map((item: any) => {
-    cursor = new Date(cursor.getTime() + randomInt(minDelaySeconds, maxDelaySeconds) * 1000);
-    cursor = respectQuietHours(cursor, quietHoursStart, quietHoursEnd, timezone);
+  const recipients = audience.map((item: any, index: number) => {
+    if (immediateManualTest) {
+      cursor = new Date(Date.now() - 5000 + index * randomInt(8, 20) * 1000);
+    } else {
+      cursor = new Date(cursor.getTime() + randomInt(minDelaySeconds, maxDelaySeconds) * 1000);
+    }
     const personalized = appendOptOut(fillTemplate(message, {
       customerName: item.customer_name || "",
       menuLink: buildMenuLink(userId),
@@ -405,7 +413,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     event_type: "campaign_created",
     severity: "warning",
     description: "Campanha criada apenas com conversas ativas, cooldown e opt-out obrigatório.",
-    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters },
+    metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters, immediateManualTest },
   });
 
   return { campaign, targetCount: audience.length };
@@ -626,6 +634,40 @@ async function changeCampaignStatus(serviceClient: any, userId: string, body: an
   return { ok: true, status };
 }
 
+async function sendManualCampaignNow(serviceClient: any, userId: string, body: any) {
+  const campaignId = String(body.campaignId || "").trim();
+  if (!campaignId) return { error: "Campanha não informada." };
+
+  const { data: campaign, error } = await serviceClient
+    .from("whatsapp_marketing_campaigns")
+    .select("id, audience_type, target_count, status")
+    .eq("id", campaignId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!campaign?.id) return { error: "Campanha não encontrada." };
+  if (campaign.audience_type !== "manual") return { error: "Enviar agora é permitido somente para lista manual de teste." };
+  if (Number(campaign.target_count || 0) > 5) return { error: "Enviar agora é permitido somente para até 5 destinatários." };
+
+  await serviceClient
+    .from("whatsapp_marketing_campaigns")
+    .update({ status: "scheduled" })
+    .eq("id", campaignId)
+    .eq("user_id", userId);
+
+  const { error: updateError } = await serviceClient
+    .from("whatsapp_marketing_recipients")
+    .update({ scheduled_at: new Date(Date.now() - 5000).toISOString() })
+    .eq("campaign_id", campaignId)
+    .eq("user_id", userId)
+    .eq("status", "queued");
+
+  if (updateError) throw new Error(updateError.message);
+
+  return await processQueue(serviceClient, userId, { batchSize: 5 });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -648,6 +690,12 @@ serve(async (req) => {
 
     if (action === "process") {
       return json({ ok: true, ...(await processQueue(serviceClient, user.id, body)) });
+    }
+
+    if (action === "send-now") {
+      const result = await sendManualCampaignNow(serviceClient, user.id, body);
+      if ((result as any).error) return json({ ok: false, error: (result as any).error });
+      return json({ ok: true, ...result });
     }
 
     if (action === "pause") return json({ ok: true, ...(await changeCampaignStatus(serviceClient, user.id, body, "paused")) });
