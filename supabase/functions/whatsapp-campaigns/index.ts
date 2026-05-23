@@ -402,7 +402,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   let cursor = new Date(campaign.scheduled_at);
   const recipients = audience.map((item: any, index: number) => {
     if (immediateManualTest) {
-      cursor = new Date(Date.now() - 5000 + index * randomInt(8, 20) * 1000);
+      cursor = new Date(Date.now() - 5000 - index * 1000);
     } else {
       cursor = new Date(cursor.getTime() + randomInt(minDelaySeconds, maxDelaySeconds) * 1000);
     }
@@ -444,7 +444,11 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     metadata: { targetCount: audience.length, minDelaySeconds, maxDelaySeconds, dailyLimit, audienceFilters, immediateManualTest },
   });
 
-  return { campaign, targetCount: audience.length };
+  const processed = immediateManualTest
+    ? await processQueue(serviceClient, userId, { batchSize: Math.min(5, audience.length) })
+    : null;
+
+  return { campaign, targetCount: audience.length, processed };
 }
 
 async function sendText(userId: string, number: string, text: string) {
@@ -477,39 +481,83 @@ async function loadInstanceName(serviceClient: any, userId: string) {
   return String(data?.instance_name || `rest_${userId.replace(/-/g, "")}`).trim();
 }
 
+function mediaMimeType(mediaUrl: string) {
+  const clean = String(mediaUrl || "").split("?")[0].toLowerCase();
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function mediaAsDataUri(mediaUrl: string) {
+  try {
+    const response = await fetch(mediaUrl);
+    if (!response.ok) return "";
+    const contentType = response.headers.get("content-type") || mediaMimeType(mediaUrl);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return `data:${contentType};base64,${btoa(binary)}`;
+  } catch (_) {
+    return "";
+  }
+}
+
+function buildMediaPayloads(number: string, text: string, media: string, mimeType: string) {
+  return [
+    {
+      number,
+      mediatype: "image",
+      mimetype: mimeType,
+      media,
+      caption: text,
+      fileName: "oferta.jpg",
+      delay: 400,
+    },
+    {
+      number,
+      mediaMessage: {
+        mediaType: "image",
+        mimetype: mimeType,
+        media,
+        caption: text,
+        fileName: "oferta.jpg",
+      },
+      options: {
+        delay: 400,
+        presence: "composing",
+      },
+    },
+  ];
+}
+
 async function sendMedia(userId: string, instanceName: string, number: string, text: string, mediaUrl: string) {
   const instanceToken = `token_${userId.replace(/-/g, "")}`;
   const standardBaseUrl = String(Deno.env.get("EVOLUTION_BASE_URL") || "").replace(/\/$/, "");
   const standardApiKey = String(Deno.env.get("EVOLUTION_API_KEY") || "").trim();
   const instance = String(instanceName || Deno.env.get("EVOLUTION_DEFAULT_INSTANCE") || `rest_${userId.replace(/-/g, "")}`).trim();
-  const payloads = [
-    ...(standardBaseUrl && standardApiKey ? [
-      {
+  const mimeType = mediaMimeType(mediaUrl);
+  const transportsFor = (media: string) => [
+    ...(standardBaseUrl && standardApiKey
+      ? buildMediaPayloads(number, text, media, mimeType).map((body) => ({
         url: `${standardBaseUrl}/message/sendMedia/${encodeURIComponent(instance)}`,
         headers: { "Content-Type": "application/json", apikey: standardApiKey },
-        body: {
-          number,
-          mediatype: "image",
-          media: mediaUrl,
-          caption: text,
-          fileName: "oferta.webp",
-          delay: 400,
-        },
-      },
-    ] : []),
-    {
+        body,
+      }))
+      : []),
+    ...buildMediaPayloads(number, text, media, mimeType).map((body) => ({
       url: `${EVOLUTION_URL}/send/media`,
       headers: { "Content-Type": "application/json", apikey: instanceToken },
-      body: { number, mediatype: "image", media: mediaUrl, caption: text },
-    },
+      body,
+    })),
     {
       url: `${EVOLUTION_URL}/send/image`,
       headers: { "Content-Type": "application/json", apikey: instanceToken },
-      body: { number, image: mediaUrl, caption: text },
+      body: { number, image: media, caption: text, mimetype: mimeType },
     },
   ];
 
-  for (const payload of payloads) {
+  for (const payload of transportsFor(mediaUrl)) {
     const response = await fetch(payload.url, {
       method: "POST",
       headers: payload.headers,
@@ -524,6 +572,26 @@ async function sendMedia(userId: string, instanceName: string, number: string, t
     }
 
     if (response.ok) return { ok: true, status: response.status, data, transport: payload.url };
+  }
+
+  const dataUri = await mediaAsDataUri(mediaUrl);
+  if (dataUri) {
+    for (const payload of transportsFor(dataUri)) {
+      const response = await fetch(payload.url, {
+        method: "POST",
+        headers: payload.headers,
+        body: JSON.stringify(payload.body),
+      });
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = null;
+      }
+
+      if (response.ok) return { ok: true, status: response.status, data, transport: `${payload.url}:data-uri` };
+    }
   }
 
   return { ok: false, status: 0, data: { error: "image_send_failed" }, mediaFallback: false };
