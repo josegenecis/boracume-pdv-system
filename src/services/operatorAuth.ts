@@ -3,6 +3,7 @@ export type OperatorSession = {
   name: string
   role?: 'admin' | 'cashier' | string
   permissions?: Record<string, any>
+  user_id?: string
 }
 
 export const getLocalOperatorSession = (): OperatorSession | null => {
@@ -15,6 +16,13 @@ export const getLocalOperatorSession = (): OperatorSession | null => {
   } catch {
     return null
   }
+}
+
+export const clearLocalOperatorSession = () => {
+  try {
+    localStorage.removeItem('operator_session')
+    localStorage.removeItem('waiter_session')
+  } catch {}
 }
 
 export const isAdminOperator = (session: OperatorSession | null): boolean => {
@@ -90,7 +98,7 @@ export type OperatorArea =
 
 export const canAccessOperatorArea = (session: OperatorSession | null, area?: OperatorArea): boolean => {
   if (!area) return true
-  if (!session) return true
+  if (!session) return false
   if (isAdminOperator(session)) return true
   const permissions = session.permissions || {}
 
@@ -116,4 +124,25 @@ export const canAccessOperatorArea = (session: OperatorSession | null, area?: Op
   }
 
   return (areaPermissions[area] || []).some((permission) => permissions[permission] === true)
+}
+
+const defaultOperatorRoutes: Array<{ area: OperatorArea; path: string }> = [
+  { area: 'dashboard', path: '/dashboard' },
+  { area: 'pdv', path: '/pdv' },
+  { area: 'tables', path: '/mesas' },
+  { area: 'orders', path: '/pedidos' },
+  { area: 'kds', path: '/cozinha' },
+  { area: 'products', path: '/produtos' },
+  { area: 'stock', path: '/estoque' },
+  { area: 'finance', path: '/financeiro' },
+  { area: 'reports', path: '/relatorios' },
+  { area: 'marketing', path: '/marketing' },
+  { area: 'settings', path: '/configuracoes' },
+  { area: 'team', path: '/garcons' },
+]
+
+export const getDefaultOperatorPath = (session: OperatorSession | null): string => {
+  if (!session) return '/operator-login'
+  if (isAdminOperator(session)) return '/dashboard'
+  return defaultOperatorRoutes.find((route) => canAccessOperatorArea(session, route.area))?.path || '/dashboard'
 }

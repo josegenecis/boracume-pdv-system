@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { enrichCategoryWithMetadata } from '../../src/lib/category-metadata';
+import { enrichCategoryWithMetadata } from '../../src/lib/category-metadata.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://gcfyrcpugmducptktjic.supabase.co';
 const SUPABASE_ANON_KEY =

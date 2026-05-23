@@ -17,6 +17,7 @@ import { ConfirmDialogProvider } from '@/contexts/ConfirmDialogContext';
 import { FeatureGateProvider } from '@/components/subscription/FeatureGateProvider';
 import { FeatureRoute } from '@/components/subscription/FeatureRoute';
 import { OperatorRoute } from '@/components/auth/OperatorRoute';
+import { OperatorGate } from '@/components/auth/OperatorGate';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -59,6 +60,7 @@ import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
 import MpCallback from '@/pages/MpCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
+import OperatorLogin from '@/pages/OperatorLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
 import WaiterSession from '@/pages/WaiterSession';
 import KDSView from '@/pages/KDSView';
@@ -108,12 +110,12 @@ function AppContent() {
       {/* KDS e TV Standalone (Sem Menu Lateral) */}
       <Route path="/kds-view" element={
         <RouteGuard>
-          <FeatureRoute feature="kds"><KDSView /></FeatureRoute>
+          <OperatorGate><FeatureRoute feature="kds"><KDSView /></FeatureRoute></OperatorGate>
         </RouteGuard>
       } />
       <Route path="/tv-view" element={
         <RouteGuard>
-          <FeatureRoute feature="kds"><CustomerView /></FeatureRoute>
+          <OperatorGate><FeatureRoute feature="kds"><CustomerView /></FeatureRoute></OperatorGate>
         </RouteGuard>
       } />
       
@@ -122,14 +124,15 @@ function AppContent() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/operator-login" element={<RouteGuard><OperatorLogin /></RouteGuard>} />
       
       {/* Rota específica para o aplicativo desktop - sem layout padrão */}
-      <Route element={<RouteGuard><Outlet /></RouteGuard>}>
+      <Route element={<RouteGuard><OperatorGate><Outlet /></OperatorGate></RouteGuard>}>
         <Route path="/desktop" element={<FeatureRoute feature="desktop"><DesktopApp /></FeatureRoute>} />
       </Route>
 
 
-      <Route element={<RouteGuard><Outlet /></RouteGuard>}>
+      <Route element={<RouteGuard><OperatorGate><Outlet /></OperatorGate></RouteGuard>}>
         <Route element={<DashboardLayout><Outlet /></DashboardLayout>}>
           <Route path="/dashboard" element={<OperatorRoute area="dashboard"><FeatureRoute feature="dashboard"><Dashboard /></FeatureRoute></OperatorRoute>} />
           <Route path="/produtos" element={<OperatorRoute area="products"><FeatureRoute feature="products"><Products /></FeatureRoute></OperatorRoute>} />

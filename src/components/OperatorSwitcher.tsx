@@ -1,164 +1,46 @@
 import React, { useEffect, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { Badge } from '@/components/ui/badge';
+import { LogIn, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
-import { Plus } from 'lucide-react';
-
-interface Waiter {
-  id: string;
-  name: string;
-  active: boolean;
-  role?: string;
-  permissions?: any;
-}
+import { Badge } from '@/components/ui/badge';
+import { clearLocalOperatorSession, getLocalOperatorSession, OperatorSession } from '@/services/operatorAuth';
 
 export default function OperatorSwitcher() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [waiters, setWaiters] = useState<Waiter[]>([]);
-  const [operatorId, setOperatorId] = useState<string>('');
-  const [operatorName, setOperatorName] = useState<string>('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: '', pin: '', role: 'cashier' });
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const [operator, setOperator] = useState<OperatorSession | null>(() => getLocalOperatorSession());
 
   useEffect(() => {
-    const session = localStorage.getItem('operator_session');
-    if (session) {
-      try {
-        const parsed = JSON.parse(session);
-        setOperatorId(parsed.id || '');
-        setOperatorName(parsed.name || '');
-      } catch {}
-    }
+    const sync = () => setOperator(getLocalOperatorSession());
+    window.addEventListener('storage', sync);
+    window.addEventListener('operator-session-changed', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('operator-session-changed', sync);
+    };
   }, []);
 
-  useEffect(() => {
-    const loadWaiters = async () => {
-      try {
-        const { data } = await supabase
-          .from('waiters' as any)
-          .select('id, name, active, role, permissions')
-          .eq('user_id', user?.id)
-          .order('name');
-        setWaiters(((data as any) || []).filter((w: any) => w.active));
-      } catch {}
-    };
-    if (user?.id) loadWaiters();
-  }, [user?.id]);
-
-  const handleChange = (id: string) => {
-    setOperatorId(id);
-    const found = waiters.find(w => w.id === id);
-    const name = found?.name || '';
-    setOperatorName(name);
-    localStorage.setItem('operator_session', JSON.stringify({
-      id,
-      name,
-      role: (found as any)?.role || 'cashier',
-      permissions: (found as any)?.permissions || {},
-      user_id: user?.id,
-      set_at: new Date().toISOString()
-    }));
-  };
-  
-  const addOperator = async () => {
-    if (!form.name.trim() || !form.pin.trim()) {
-      toast({ title: 'Campos obrigatórios', description: 'Informe nome e PIN', variant: 'destructive' });
-      return;
-    }
-    if (form.pin.length < 4) {
-      toast({ title: 'PIN inválido', description: 'O PIN deve ter pelo menos 4 dígitos', variant: 'destructive' });
-      return;
-    }
-    try {
-      setLoading(true);
-      const payload: any = { user_id: user?.id, name: form.name.trim(), pin: form.pin.trim(), active: true, role: form.role }
-      let data: any = null
-      let error: any = null
-      const res1 = await supabase.from('waiters' as any).insert(payload).select('id, name, role, permissions').single()
-      data = (res1 as any).data
-      error = (res1 as any).error
-      if (error && String(error.message || '').includes('role')) {
-        const { role, ...fallback } = payload
-        const res2 = await supabase.from('waiters' as any).insert(fallback).select('id, name').single()
-        data = (res2 as any).data
-        error = (res2 as any).error
-      }
-      if (error) throw error;
-      const created: any = data;
-      toast({ title: 'Operador criado!', description: `${created.name} adicionado` });
-      setWaiters(prev => [...prev, { id: created.id, name: created.name, active: true, role: created.role, permissions: created.permissions }]);
-      // Seleciona automaticamente
-      handleChange(created.id);
-      setForm({ name: '', pin: '', role: 'cashier' });
-      setShowCreate(false);
-    } catch (e: any) {
-      toast({ title: 'Erro ao criar operador', description: e?.message || 'Verifique tabelas/RLS no Supabase', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
+  const switchOperator = () => {
+    clearLocalOperatorSession();
+    window.dispatchEvent(new Event('operator-session-changed'));
+    navigate('/operator-login', { replace: true });
   };
 
   return (
     <div className="flex items-center gap-2">
-      <Badge variant="outline" className="h-9 rounded-xl border-[#DCE6DF] bg-white px-3 text-xs font-semibold text-[#003223] shadow-sm">Operador</Badge>
-      <Select value={operatorId} onValueChange={handleChange}>
-        <SelectTrigger className="h-9 w-[180px] rounded-xl border-[#DCE6DF] bg-white text-xs font-medium text-[#003223] shadow-sm">
-          <SelectValue placeholder={operatorName || 'Selecionar operador'} />
-        </SelectTrigger>
-        <SelectContent>
-          {waiters.map(w => (
-            <SelectItem key={w.id} value={w.id}>
-              {w.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-[#DCE6DF] bg-white text-[#003223] shadow-sm hover:bg-[#F5F8F6]" title="Criar operador">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Novo Operador</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: João Silva" />
-            </div>
-            <div className="space-y-2">
-              <Label>PIN (4-6 dígitos)</Label>
-              <Input value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} maxLength={6} placeholder="Ex: 1234" />
-            </div>
-            <div className="space-y-2">
-              <Label>Perfil</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="cashier">Operador</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-              <Button onClick={addOperator} disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <Badge variant="outline" className="h-9 rounded-xl border-[#DCE6DF] bg-white px-3 text-xs font-semibold text-[#003223] shadow-sm">
+        <UserRound className="mr-1.5 h-3.5 w-3.5" />
+        {operator?.name || 'Sem operador'}
+      </Badge>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={switchOperator}
+        className="h-9 rounded-xl border-[#DCE6DF] bg-white px-3 text-xs font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
+      >
+        <LogIn className="mr-1.5 h-3.5 w-3.5" />
+        Trocar
+      </Button>
     </div>
   );
 }

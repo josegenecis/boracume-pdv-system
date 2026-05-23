@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { FeatureKey } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
+import { clearLocalOperatorSession } from '@/services/operatorAuth';
 
 const FixedHeader = () => {
   const { signOut, user } = useAuth();
@@ -97,6 +98,7 @@ const FixedHeader = () => {
   }, []);
 
   const handleSignOut = async () => {
+    clearLocalOperatorSession();
     await signOut();
     navigate('/login');
   };

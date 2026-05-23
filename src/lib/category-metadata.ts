@@ -1,4 +1,4 @@
-import type { PizzaHalfPriceMode } from './pizza-pricing';
+import type { PizzaHalfPriceMode } from './pizza-pricing.js';
 
 const CATEGORY_META_PREFIX = '[BORACUME_CATEGORY_META]';
 const CATEGORY_META_SUFFIX = '[/BORACUME_CATEGORY_META]';

@@ -434,6 +434,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      localStorage.removeItem('operator_session');
+      localStorage.removeItem('waiter_session');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -527,6 +529,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setLoading(true);
+      localStorage.removeItem('operator_session');
+      localStorage.removeItem('waiter_session');
       await supabase.auth.signOut();
       
       // Limpar cache
