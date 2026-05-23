@@ -444,7 +444,7 @@ export default function WhatsAppCampaignManager() {
                       placeholder="Um por linha, ou separado por vírgula. Ex.: 85999990000"
                     />
                     <div className="text-xs text-muted-foreground">
-                      O sistema só mantém números que já têm conversa ativa com o restaurante.
+                      O sistema só mantém números que já têm conversa ativa com o restaurante. A busca aceita com/sem 55 e com/sem nono dígito.
                     </div>
                   </div>
                 ) : audienceType === 'inactive_range' ? (

@@ -36,9 +36,20 @@ function normalizePhone(value: string | null | undefined) {
 function buildPhoneCandidates(value: string | null | undefined) {
   const normalized = normalizePhone(value);
   const withoutCountry = normalized.startsWith("55") ? normalized.slice(2) : normalized;
+  const brMobileWithoutNine = withoutCountry.length === 11 && withoutCountry[2] === "9"
+    ? `${withoutCountry.slice(0, 2)}${withoutCountry.slice(3)}`
+    : "";
+  const brMobileWithNine = withoutCountry.length === 10
+    ? `${withoutCountry.slice(0, 2)}9${withoutCountry.slice(2)}`
+    : "";
+  const localVariants = [withoutCountry, brMobileWithoutNine, brMobileWithNine].filter(Boolean);
+  const countryVariants = localVariants.map((item) => `55${item}`);
+
   return Array.from(new Set([
     normalized,
     withoutCountry,
+    ...localVariants,
+    ...countryVariants,
     withoutCountry.slice(-11),
     withoutCountry.slice(-10),
   ].map((item) => String(item || "").replace(/\D/g, "")).filter(Boolean)));
@@ -238,8 +249,8 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
     .filter((item: any) => !recentSet.has(item.customer_phone));
 
   if (filters.audienceType === "manual") {
-    const manualSet = new Set(filters.manualPhones);
-    eligible = eligible.filter((item: any) => manualSet.has(item.customer_phone));
+    const manualSet = new Set(filters.manualPhones.flatMap((phone) => buildPhoneCandidates(phone)));
+    eligible = eligible.filter((item: any) => buildPhoneCandidates(item.customer_phone).some((candidate) => manualSet.has(candidate)));
   }
 
   if (filters.audienceType === "inactive_range") {
@@ -257,9 +268,9 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
 
 async function previewAudience(serviceClient: any, userId: string, filters: AudienceFilters) {
   const audience = await loadEligibleAudience(serviceClient, userId, filters);
-  const manualSet = new Set(filters.manualPhones);
+  const manualSet = new Set(filters.manualPhones.flatMap((phone) => buildPhoneCandidates(phone)));
   const matchedManual = filters.audienceType === "manual"
-    ? audience.filter((item: any) => manualSet.has(item.customer_phone)).length
+    ? audience.filter((item: any) => buildPhoneCandidates(item.customer_phone).some((candidate) => manualSet.has(candidate))).length
     : null;
   return {
     count: audience.length,
