@@ -109,7 +109,7 @@ export default function WhatsAppCampaignManager() {
   const [selectedProductId, setSelectedProductId] = useState('none');
   const [promoImageUrl, setPromoImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [audienceType, setAudienceType] = useState<'active' | 'manual' | 'inactive_range'>('manual');
+  const [audienceType, setAudienceType] = useState<'active' | 'manual' | 'inactive_range'>('active');
   const [manualPhones, setManualPhones] = useState('');
   const [inactiveMinDays, setInactiveMinDays] = useState(15);
   const [inactiveMaxDays, setInactiveMaxDays] = useState(0);
@@ -123,6 +123,15 @@ export default function WhatsAppCampaignManager() {
     fetchProducts();
     previewAudience();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const timer = window.setTimeout(() => {
+      previewAudience();
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [user?.id, audienceType, manualPhones, inactiveMinDays, inactiveMaxDays]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -207,6 +216,15 @@ export default function WhatsAppCampaignManager() {
       return;
     }
 
+    if (audienceType === 'manual' && !manualPhones.replace(/\D/g, '').trim()) {
+      toast({
+        title: 'Informe os WhatsApps do teste',
+        description: 'Cole pelo menos um número na lista manual ou troque o funil para outro público.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const selectedProduct = products.find((item) => item.id === selectedProductId) || null;
@@ -232,7 +250,7 @@ export default function WhatsAppCampaignManager() {
         },
       });
 
-      if (error) throw error;
+      if (error) throw new Error((error as any)?.message || 'Falha ao chamar a função de campanhas.');
       if ((data as any)?.error) throw new Error((data as any).error);
 
       toast({

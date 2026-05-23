@@ -631,7 +631,7 @@ serve(async (req) => {
 
     if (action === "create") {
       const result = await createCampaign(serviceClient, user.id, body);
-      if (result.error) return json({ ok: false, error: result.error }, 400);
+      if (result.error) return json({ ok: false, error: result.error });
       return json({ ok: true, ...result });
     }
 
