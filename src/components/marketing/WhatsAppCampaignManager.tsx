@@ -246,7 +246,7 @@ export default function WhatsAppCampaignManager() {
           quietHoursStart: '21:00',
           quietHoursEnd: '09:00',
           timezone: 'America/Fortaleza',
-          optOutText: 'Responder SAIR para não receber novas ofertas.',
+          optOutText: '',
           productId: selectedProduct?.id || null,
           productName: selectedProduct?.name || null,
           productPrice: selectedProduct?.price ?? null,
@@ -407,17 +407,45 @@ export default function WhatsAppCampaignManager() {
   };
 
   return (
-    <div className="space-y-5">
-      <Alert className="border-amber-200 bg-amber-50 text-amber-950">
+    <div className="space-y-6 rounded-[28px] bg-[radial-gradient(circle_at_top_left,rgba(255,111,0,0.14),transparent_32%),linear-gradient(135deg,#fff7ed_0%,#f0fdf4_42%,#ffffff_100%)] p-4 sm:p-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-orange-200/70 bg-white/80 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-orange-700">
+            <MessageCircle className="h-3.5 w-3.5" />
+            Marketing inteligente
+          </div>
+          <h2 className="mt-3 text-2xl font-black text-emerald-950 sm:text-3xl">Ofertas com imagem, funil e controle</h2>
+          <p className="mt-1 max-w-3xl text-sm text-emerald-900/75">
+            Crie campanhas para clientes com conversa ativa, teste em números específicos e acompanhe o envio sem disparos frios.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-emerald-900 px-4 py-3 text-white shadow-sm">
+            <div className="text-2xl font-black">{audience?.count ?? '-'}</div>
+            <div className="text-[11px] font-semibold uppercase text-emerald-100">Elegíveis</div>
+          </div>
+          <div className="rounded-xl bg-orange-500 px-4 py-3 text-white shadow-sm">
+            <div className="text-2xl font-black">{campaigns.filter((item) => item.status === 'scheduled').length}</div>
+            <div className="text-[11px] font-semibold uppercase text-orange-50">Na fila</div>
+          </div>
+          <div className="rounded-xl bg-lime-500 px-4 py-3 text-emerald-950 shadow-sm">
+            <div className="text-2xl font-black">{campaigns.reduce((sum, item) => sum + Number(item.sent_count || 0), 0)}</div>
+            <div className="text-[11px] font-semibold uppercase text-emerald-950/70">Enviadas</div>
+          </div>
+        </div>
+      </div>
+
+      <Alert className="border-amber-200 bg-white/90 text-amber-950 shadow-sm">
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle>Envio com risco controlado, não disparo em massa</AlertTitle>
         <AlertDescription>
-          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para conversas ativas já existentes, inclui saída por SAIR, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
+          O WhatsApp pode bloquear ou limitar o número se perceber comportamento de spam. Esta ferramenta só envia para conversas ativas já existentes, aplica intervalo aleatório e evita reenviar oferta para o mesmo telefone por 7 dias.
         </AlertDescription>
       </Alert>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <Card>
+        <Card className="overflow-hidden border-orange-200/80 bg-white/95 shadow-lg shadow-orange-100/50">
+          <div className="h-1.5 bg-gradient-to-r from-orange-500 via-lime-400 to-emerald-700" />
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <MessageCircle className="h-5 w-5 text-emerald-700" />
@@ -446,7 +474,7 @@ export default function WhatsAppCampaignManager() {
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/20 p-4">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
               <div className="mb-3 flex items-center gap-2 font-semibold">
                 <Users className="h-4 w-4 text-emerald-700" />
                 Funil de destinatários
@@ -479,7 +507,7 @@ export default function WhatsAppCampaignManager() {
                     <div className="text-xs text-muted-foreground">
                       O sistema só mantém números que já têm conversa ativa com o restaurante. A busca aceita com/sem 55 e com/sem nono dígito.
                     </div>
-                    <div className="rounded-md border bg-white p-3">
+                    <div className="rounded-md border border-lime-200 bg-white p-3 shadow-sm">
                       <div className="flex items-start gap-3">
                         <Checkbox
                           id="wa-immediate-test"
@@ -519,7 +547,7 @@ export default function WhatsAppCampaignManager() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
+                  <div className="rounded-md border border-emerald-100 bg-white p-3 text-sm text-muted-foreground shadow-sm">
                     Usa todas as conversas elegíveis: conversa ativa, cliente respondeu antes, sem opt-out e sem oferta nos últimos 7 dias.
                   </div>
                 )}
@@ -527,7 +555,7 @@ export default function WhatsAppCampaignManager() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="space-y-2">
+              <div className="space-y-2 rounded-2xl border border-orange-100 bg-orange-50/50 p-3">
                 <Label>Produto em oferta</Label>
                 <Select value={selectedProductId} onValueChange={chooseProduct}>
                   <SelectTrigger>
@@ -547,7 +575,7 @@ export default function WhatsAppCampaignManager() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
                 <Label htmlFor="wa-promo-image">Imagem da promoção</Label>
                 <div className="flex gap-2">
                   <Input
@@ -571,7 +599,7 @@ export default function WhatsAppCampaignManager() {
             </div>
 
             {(selectedProduct || promoImageUrl) && (
-              <div className="grid gap-3 rounded-lg border bg-white p-3 md:grid-cols-[140px_minmax(0,1fr)]">
+              <div className="grid gap-3 rounded-2xl border border-orange-200 bg-white p-3 shadow-sm md:grid-cols-[140px_minmax(0,1fr)]">
                 <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-muted">
                   {promoImageUrl || selectedProduct?.image_url ? (
                     <img
@@ -597,7 +625,7 @@ export default function WhatsAppCampaignManager() {
                     placeholder="URL da imagem da promoção"
                   />
                   <div className="text-xs text-muted-foreground">
-                    Se a API de mídia do WhatsApp não aceitar imagem, o sistema envia a oferta com o link da imagem no texto.
+                    A imagem será enviada anexada ao WhatsApp com a mensagem como legenda.
                   </div>
                 </div>
               </div>
@@ -613,7 +641,7 @@ export default function WhatsAppCampaignManager() {
                 className="resize-none"
               />
               <div className="text-xs text-muted-foreground">
-                Variáveis disponíveis: {'{nome}'}, {'{cardapio}'}, {'{produto}'} e {'{preco}'}. O texto “Responder SAIR...” entra automaticamente no final.
+                Variáveis disponíveis: {'{nome}'}, {'{cardapio}'}, {'{produto}'} e {'{preco}'}.
               </div>
             </div>
 
@@ -653,7 +681,7 @@ export default function WhatsAppCampaignManager() {
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/30 p-4">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
               <div className="flex items-start gap-3">
                 <Checkbox
                   id="wa-risk"
@@ -684,7 +712,8 @@ export default function WhatsAppCampaignManager() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden border-emerald-200/80 bg-white/95 shadow-lg shadow-emerald-100/50">
+          <div className="h-1.5 bg-gradient-to-r from-emerald-700 via-lime-400 to-orange-500" />
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <ShieldCheck className="h-5 w-5 text-emerald-700" />
@@ -738,7 +767,7 @@ export default function WhatsAppCampaignManager() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-orange-100 bg-white/95 shadow-lg shadow-orange-100/40">
         <CardHeader>
           <CardTitle>Campanhas recentes</CardTitle>
         </CardHeader>

@@ -117,6 +117,8 @@ function cleanCustomerName(value: unknown) {
 function normalizeOfferGreeting(message: string) {
   return String(message || "")
     .replace(/\bCliente WhatsApp\b/gi, "")
+    .replace(/\n*\s*Responder SAIR para n[aã]o receber novas ofertas\.?/gi, "")
+    .replace(/\n*\s*Imagem da oferta:\s*https?:\/\/\S+/gi, "")
     .replace(/^\s*oi\s*!/i, "Olá!")
     .replace(/^\s*ola\s*!/i, "Olá!")
     .replace(/^\s*olá\s*!/i, "Olá!")
@@ -227,6 +229,52 @@ async function attachLastOrder(serviceClient: any, userId: string, audience: any
   });
 }
 
+async function attachCustomerNames(serviceClient: any, userId: string, audience: any[]) {
+  const phoneCandidates = Array.from(new Set(audience.flatMap((item: any) => buildPhoneCandidates(item.customer_phone))));
+  if (phoneCandidates.length === 0) return audience;
+
+  const [{ data: customers }, { data: orders }] = await Promise.all([
+    serviceClient
+      .from("customers")
+      .select("name, phone, updated_at, created_at")
+      .eq("user_id", userId)
+      .in("phone", phoneCandidates)
+      .order("updated_at", { ascending: false })
+      .limit(1000),
+    serviceClient
+      .from("orders")
+      .select("customer_name, customer_phone, updated_at, created_at")
+      .eq("user_id", userId)
+      .in("customer_phone", phoneCandidates)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+  ]);
+
+  const namesByPhone = new Map<string, string>();
+  for (const customer of customers || []) {
+    const name = cleanCustomerName(customer?.name);
+    if (!name) continue;
+    for (const candidate of buildPhoneCandidates(customer?.phone)) {
+      if (!namesByPhone.has(candidate)) namesByPhone.set(candidate, name);
+    }
+  }
+  for (const order of orders || []) {
+    const name = cleanCustomerName(order?.customer_name);
+    if (!name || /^mesa\s+\d+/i.test(name) || /^venda balc/i.test(name)) continue;
+    for (const candidate of buildPhoneCandidates(order?.customer_phone)) {
+      if (!namesByPhone.has(candidate)) namesByPhone.set(candidate, name);
+    }
+  }
+
+  return audience.map((item: any) => {
+    const currentName = cleanCustomerName(item.customer_name);
+    const matchedName = buildPhoneCandidates(item.customer_phone)
+      .map((candidate) => namesByPhone.get(candidate))
+      .find(Boolean);
+    return { ...item, customer_name: currentName || matchedName || "" };
+  });
+}
+
 async function loadEligibleAudience(serviceClient: any, userId: string, filters: AudienceFilters = parseAudienceFilters()) {
   const cutoff = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 86400000).toISOString();
   const { data: conversations, error } = await serviceClient
@@ -290,6 +338,8 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
     });
   }
 
+  eligible = await attachCustomerNames(serviceClient, userId, eligible);
+
   return eligible.slice(0, MAX_CREATE_TARGETS);
 }
 
@@ -332,7 +382,7 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
   const timezone = String(body.timezone || "America/Fortaleza");
   const quietHoursStart = String(body.quietHoursStart || "21:00");
   const quietHoursEnd = String(body.quietHoursEnd || "09:00");
-  const optOutText = String(body.optOutText || "Responder SAIR para não receber novas ofertas.").trim();
+  const optOutText = String(body.optOutText || "").trim();
   const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : new Date();
   const productId = String(body.productId || "").trim() || null;
   const productName = String(body.productName || "").trim() || null;
