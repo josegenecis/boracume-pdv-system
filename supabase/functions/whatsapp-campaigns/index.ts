@@ -103,6 +103,27 @@ function fillTemplate(template: string, payload: { customerName?: string; menuLi
     .trim();
 }
 
+function cleanCustomerName(value: unknown) {
+  const name = String(value || "").trim();
+  if (!name) return "";
+  const normalized = withoutAccents(name).toLowerCase();
+  if (["cliente whatsapp", "whatsapp", "cliente"].includes(normalized)) return "";
+  if (/^cliente\s+\d+$/i.test(normalized)) return "";
+  return name;
+}
+
+function normalizeOfferGreeting(message: string) {
+  return String(message || "")
+    .replace(/\bCliente WhatsApp\b/gi, "")
+    .replace(/^\s*oi\s*!/i, "Olá!")
+    .replace(/^\s*ola\s*!/i, "Olá!")
+    .replace(/^\s*olá\s*!/i, "Olá!")
+    .replace(/^\s*oi\s+/i, "Olá ")
+    .replace(/\s+!/g, "!")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function buildMenuLink(restaurantId: string) {
   return `https://boracume.com/share/menu/${restaurantId}`;
 }
@@ -379,21 +400,22 @@ async function createCampaign(serviceClient: any, userId: string, body: any) {
     } else {
       cursor = new Date(cursor.getTime() + randomInt(minDelaySeconds, maxDelaySeconds) * 1000);
     }
-    const personalized = appendOptOut(fillTemplate(message, {
-      customerName: item.customer_name || "",
+    const customerName = cleanCustomerName(item.customer_name);
+    const personalized = appendOptOut(normalizeOfferGreeting(fillTemplate(message, {
+      customerName,
       menuLink: buildMenuLink(userId),
       productName: productName || "",
       productPrice: Number.isFinite(productPrice as number)
         ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(productPrice))
         : "",
-    } as any), optOutText);
+    } as any)), optOutText);
 
     return {
       campaign_id: campaign.id,
       user_id: userId,
       conversation_id: item.id,
       customer_phone: item.customer_phone,
-      customer_name: item.customer_name || "Cliente WhatsApp",
+      customer_name: customerName || null,
       message_text: personalized,
       promo_image_url: promoImageUrl,
       status: "queued",
@@ -437,15 +459,46 @@ async function sendText(userId: string, number: string, text: string) {
   return { ok: response.ok, status: response.status, data };
 }
 
-async function sendMedia(userId: string, number: string, text: string, mediaUrl: string) {
+async function loadInstanceName(serviceClient: any, userId: string) {
+  const { data } = await serviceClient
+    .from("whatsapp_instances")
+    .select("instance_name")
+    .eq("restaurant_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return String(data?.instance_name || `rest_${userId.replace(/-/g, "")}`).trim();
+}
+
+async function sendMedia(userId: string, instanceName: string, number: string, text: string, mediaUrl: string) {
   const instanceToken = `token_${userId.replace(/-/g, "")}`;
+  const standardBaseUrl = String(Deno.env.get("EVOLUTION_BASE_URL") || "").replace(/\/$/, "");
+  const standardApiKey = String(Deno.env.get("EVOLUTION_API_KEY") || "").trim();
+  const instance = String(instanceName || Deno.env.get("EVOLUTION_DEFAULT_INSTANCE") || `rest_${userId.replace(/-/g, "")}`).trim();
   const payloads = [
+    ...(standardBaseUrl && standardApiKey ? [
+      {
+        url: `${standardBaseUrl}/message/sendMedia/${encodeURIComponent(instance)}`,
+        headers: { "Content-Type": "application/json", apikey: standardApiKey },
+        body: {
+          number,
+          mediatype: "image",
+          media: mediaUrl,
+          caption: text,
+          fileName: "oferta.webp",
+          delay: 400,
+        },
+      },
+    ] : []),
     {
       url: `${EVOLUTION_URL}/send/media`,
+      headers: { "Content-Type": "application/json", apikey: instanceToken },
       body: { number, mediatype: "image", media: mediaUrl, caption: text },
     },
     {
       url: `${EVOLUTION_URL}/send/image`,
+      headers: { "Content-Type": "application/json", apikey: instanceToken },
       body: { number, image: mediaUrl, caption: text },
     },
   ];
@@ -453,7 +506,7 @@ async function sendMedia(userId: string, number: string, text: string, mediaUrl:
   for (const payload of payloads) {
     const response = await fetch(payload.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: instanceToken },
+      headers: payload.headers,
       body: JSON.stringify(payload.body),
     });
 
@@ -467,9 +520,7 @@ async function sendMedia(userId: string, number: string, text: string, mediaUrl:
     if (response.ok) return { ok: true, status: response.status, data, transport: payload.url };
   }
 
-  const fallbackText = `${text}\n\nImagem da oferta: ${mediaUrl}`;
-  const fallback = await sendText(userId, number, fallbackText);
-  return { ...fallback, fallbackText, mediaFallback: true };
+  return { ok: false, status: 0, data: { error: "image_send_failed" }, mediaFallback: false };
 }
 
 async function processQueue(serviceClient: any, userId: string, body: any) {
@@ -489,6 +540,7 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
 
   const processed: any[] = [];
   const dailyCounters = new Map<string, number>();
+  const instanceName = await loadInstanceName(serviceClient, userId);
   for (const recipient of recipients || []) {
     const campaignLimit = Number(recipient.whatsapp_marketing_campaigns?.daily_limit || 40);
     const campaignId = String(recipient.campaign_id || "");
@@ -533,9 +585,10 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
       .eq("id", recipient.id);
 
     const mediaUrl = String(recipient.promo_image_url || "").trim();
+    const outboundText = normalizeOfferGreeting(recipient.message_text);
     const sendResult = mediaUrl
-      ? await sendMedia(userId, phone, recipient.message_text, mediaUrl)
-      : await sendText(userId, phone, recipient.message_text);
+      ? await sendMedia(userId, instanceName, phone, outboundText, mediaUrl)
+      : await sendText(userId, phone, outboundText);
     if (!sendResult.ok) {
       await serviceClient
         .from("whatsapp_marketing_recipients")
@@ -551,7 +604,7 @@ async function processQueue(serviceClient: any, userId: string, body: any) {
 
     await serviceClient.from("whatsapp_messages").insert({
       conversation_id: recipient.conversation_id,
-      content: (sendResult as any)?.fallbackText || recipient.message_text,
+      content: outboundText,
       sender: "agent",
       message_type: mediaUrl ? "marketing_offer_image" : "marketing_offer",
       delivered: true,

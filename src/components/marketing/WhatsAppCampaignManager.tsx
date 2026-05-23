@@ -72,7 +72,7 @@ const statusClass: Record<string, string> = {
   cancelled: 'bg-red-50 text-red-700 border-red-200',
 };
 
-const defaultMessage = 'Oi {nome}! Hoje temos uma oferta especial: {produto} por {preco}. Confira e peça pelo cardápio: {cardapio}';
+const defaultMessage = 'Olá {nome}! Oferta especial de hoje: {produto} por {preco}.\n\nPeça aqui: {cardapio}';
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
