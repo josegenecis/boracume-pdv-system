@@ -87,6 +87,15 @@ const createPaymentLine = (accountId: string, amount: number, method: PaymentMet
   amount: amount > 0 ? amount.toFixed(2) : '',
 });
 
+const parsePaymentAmount = (value: string) => {
+  const normalized = String(value || '')
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const buildOptionLabel = (groupName: string, optionName: string) => `${groupName}: ${optionName}`;
 
 const WaiterSessionPage = () => {
@@ -192,7 +201,7 @@ const WaiterSessionPage = () => {
   }, [session]);
 
   const paymentBaseTotal = useMemo(() => {
-    return paymentLines.reduce((total, line) => total + Math.max(0, Number(String(line.amount || '').replace(',', '.')) || 0), 0);
+    return paymentLines.reduce((total, line) => total + Math.max(0, parsePaymentAmount(line.amount)), 0);
   }, [paymentLines]);
 
   const serviceChargeSettings = session?.serviceChargeSettings;
@@ -535,9 +544,15 @@ const WaiterSessionPage = () => {
     try {
       const response = await sendWaiterAccountItems(session.id, account.id);
       applySession(response.session);
+      const totalSent = Number(response.itemCount || account.draftCount || 0);
+      const kitchenSent = Number(response.kitchenItemCount || 0);
+      const accountOnly = Math.max(totalSent - kitchenSent, 0);
       toast({
-        title: 'Pedido enviado',
-        description: `${account.name} foi encaminhada para a cozinha.`,
+        title: kitchenSent > 0 ? 'Pedido enviado' : 'Itens lançados',
+        description:
+          kitchenSent > 0
+            ? `${account.name}: ${kitchenSent} item(ns) para cozinha${accountOnly > 0 ? ` e ${accountOnly} item(ns) apenas na conta` : ''}.`
+            : `${account.name}: itens ficaram apenas na conta da mesa.`,
       });
     } catch (error: any) {
       toast({
@@ -558,12 +573,15 @@ const WaiterSessionPage = () => {
       const response = await sendAllWaiterSessionItems(session.id);
       applySession(response.session);
       const sentAccounts = Number(response.sentAccounts || 0);
+      const totalSent = Number(response.itemCount || 0);
+      const kitchenSent = Number(response.kitchenItemCount || 0);
+      const accountOnly = Math.max(totalSent - kitchenSent, 0);
       toast({
-        title: 'Pedidos enviados',
+        title: kitchenSent > 0 ? 'Pedidos enviados' : 'Itens lançados',
         description:
-          sentAccounts > 1
-            ? `${sentAccounts} comandas foram encaminhadas para a cozinha.`
-            : 'A comanda pendente foi encaminhada para a cozinha.',
+          kitchenSent > 0
+            ? `${kitchenSent} item(ns) para cozinha${accountOnly > 0 ? ` e ${accountOnly} item(ns) apenas na conta` : ''} em ${sentAccounts || 1} comanda(s).`
+            : 'As comandas pendentes ficaram apenas na conta da mesa.',
       });
     } catch (error: any) {
       toast({
@@ -604,7 +622,7 @@ const WaiterSessionPage = () => {
       .map((line) => ({
         accountId: line.accountId,
         method: line.method,
-        amount: Number(line.amount.replace(',', '.')),
+        amount: parsePaymentAmount(line.amount),
       }))
       .filter((line) => line.accountId && line.amount > 0);
 

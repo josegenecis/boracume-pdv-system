@@ -819,7 +819,7 @@ export async function cancelWaiterDraftItem(itemId: string, accountId: string, s
 
 export async function sendWaiterAccountItems(sessionId: string, accountId: string) {
   const session = requireSession();
-  const response = await invokeFunction<{ session: TableSession }>(
+  const response = await invokeFunction<{ session: TableSession; itemCount?: number; kitchenItemCount?: number }>(
     'waiter-web',
     {
       action: 'send_account',
@@ -835,7 +835,12 @@ export async function sendWaiterAccountItems(sessionId: string, accountId: strin
 
 export async function sendAllWaiterSessionItems(sessionId: string) {
   const session = requireSession();
-  const response = await invokeFunction<{ session: TableSession; sentAccounts?: number }>(
+  const response = await invokeFunction<{
+    session: TableSession;
+    sentAccounts?: number;
+    itemCount?: number;
+    kitchenItemCount?: number;
+  }>(
     'waiter-web',
     {
       action: 'send_all_accounts',

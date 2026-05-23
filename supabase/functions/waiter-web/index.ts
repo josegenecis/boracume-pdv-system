@@ -391,7 +391,7 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
     const options = optionsMap.get(row.id) ?? []
     const order = row.order_id ? ordersById.get(row.order_id) : null
     const status = mapOrderItemStatus(row.status, order?.status)
-    const kitchenStatus = status === 'draft' || status === 'cancelled' ? 'idle' : mapOrderToKitchenStatus(order?.status)
+    const kitchenStatus = status === 'draft' || status === 'cancelled' || !order ? 'idle' : mapOrderToKitchenStatus(order?.status)
 
     const item = {
       id: row.id,
@@ -593,8 +593,24 @@ async function sendAccountDraftItemsToKitchen(
 
   if (optionRows.error) throw optionRows.error
 
+  const productIds = Array.from(new Set(draftRows.data.map((row: any) => String(row.product_id || '')).filter(Boolean)))
+  const { data: productRows, error: productRowsError } = productIds.length
+    ? await supabase
+        .from('products')
+        .select('id, send_to_kds')
+        .in('id', productIds)
+        .eq('user_id', waiterSession.profile.restaurantId)
+    : { data: [], error: null }
+
+  if (productRowsError) throw productRowsError
+
+  const kdsProductIds = new Set(
+    (productRows ?? []).filter((row: any) => row.send_to_kds === true).map((row: any) => String(row.id)),
+  )
+  const kitchenRows = draftRows.data.filter((row: any) => kdsProductIds.has(String(row.product_id)))
+
   const optionsMap = buildOptionsMap(optionRows.data ?? [])
-  const orderItems = draftRows.data.map((row: any) => {
+  const orderItems = kitchenRows.map((row: any) => {
     const options = optionsMap.get(row.id) ?? []
     return {
       product_id: row.product_id,
@@ -610,44 +626,58 @@ async function sendAccountDraftItemsToKitchen(
   })
 
   const total = orderItems.reduce((sum: number, item: any) => sum + normalizeAmount(item.subtotal), 0)
-  const orderNumber = `M${tableRow.table_number}-${Date.now().toString().slice(-5)}-${String(accountId).slice(0, 4)}`
+  let orderRow: any = null
 
-  const { data: orderRow, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      user_id: waiterSession.profile.restaurantId,
-      order_number: orderNumber,
-      customer_name: `Mesa ${tableRow.table_number} - ${accountRow.name}`,
-      table_id: sessionRow.table_id,
-      items: orderItems,
-      total,
-      order_type: 'dine_in',
-      payment_method: 'pendente',
-      status: 'pending',
-      session_id: sessionId,
-      account_id: accountId,
-      waiter_id: waiterSession.profile.id,
-    })
-    .select('id')
-    .single()
+  if (orderItems.length > 0) {
+    const orderNumber = `M${tableRow.table_number}-${Date.now().toString().slice(-5)}-${String(accountId).slice(0, 4)}`
 
-  if (orderError) throw orderError
+    const { data: createdOrder, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        user_id: waiterSession.profile.restaurantId,
+        order_number: orderNumber,
+        customer_name: `Mesa ${tableRow.table_number} - ${accountRow.name}`,
+        table_id: sessionRow.table_id,
+        items: orderItems,
+        total,
+        order_type: 'dine_in',
+        payment_method: 'pendente',
+        status: 'pending',
+        session_id: sessionId,
+        account_id: accountId,
+        waiter_id: waiterSession.profile.id,
+      })
+      .select('id')
+      .single()
+
+    if (orderError) throw orderError
+    orderRow = createdOrder
+  }
 
   const { error: updateError } = await supabase
     .from('order_items')
     .update({
       status: 'sent',
-      order_id: orderRow.id,
       sent_at: new Date().toISOString(),
     })
     .in('id', itemIds)
 
   if (updateError) throw updateError
 
+  if (orderRow?.id && kitchenRows.length > 0) {
+    const { error: kitchenUpdateError } = await supabase
+      .from('order_items')
+      .update({ order_id: orderRow.id })
+      .in('id', kitchenRows.map((row: any) => row.id))
+
+    if (kitchenUpdateError) throw kitchenUpdateError
+  }
+
   return {
     sent: true,
     accountName: String(accountRow.name || ''),
     itemCount: draftRows.data.length,
+    kitchenItemCount: kitchenRows.length,
   }
 }
 
@@ -922,7 +952,10 @@ async function listRestaurantTables(supabase: any, restaurantId: string) {
     const total = sessionAccounts.reduce((sum: number, account: any) => sum + normalizeAmount(account.total), 0)
     const paidTotal = Array.from(rawPaidByAccount.values()).reduce((sum, amount) => sum + amount, 0)
     const dueAmount = Math.max(total - paidTotal, 0)
-    const kitchenStatuses = sessionItems.map((item: any) => mapOrderToKitchenStatus(ordersById.get(item.order_id)?.status))
+    const kitchenStatuses = sessionItems.map((item: any) => {
+      const order = item.order_id ? ordersById.get(item.order_id) : null
+      return order ? mapOrderToKitchenStatus(order.status) : 'idle'
+    })
     const kitchenStatus = pickKitchenStatus(kitchenStatuses.filter(Boolean))
     const itemCount = sessionItems.length
     const sentItemsCount = sessionItems.filter((item: any) => mapOrderItemStatus(item.status, ordersById.get(item.order_id)?.status) !== 'draft').length
@@ -1782,7 +1815,7 @@ Deno.serve(async (req: Request) => {
 
       await refreshSessionStatus(supabase, sessionId)
       const session = await buildSessionResponse(supabase, waiterSession.profile.restaurantId, sessionId)
-      return ok({ session })
+      return ok({ session, kitchenItemCount: sentAccount.kitchenItemCount || 0, itemCount: sentAccount.itemCount || 0 })
     }
 
     if (action === 'send_all_accounts') {
@@ -1803,13 +1836,17 @@ Deno.serve(async (req: Request) => {
 
       if (!accountIds.length) return fail('Nenhuma comanda com itens pendentes para enviar.', 400)
 
+      let kitchenItemCount = 0
+      let itemCount = 0
       for (const accountId of accountIds) {
-        await sendAccountDraftItemsToKitchen(supabase, waiterSession, sessionId, accountId)
+        const result = await sendAccountDraftItemsToKitchen(supabase, waiterSession, sessionId, accountId)
+        kitchenItemCount += Number(result.kitchenItemCount || 0)
+        itemCount += Number(result.itemCount || 0)
       }
 
       await refreshSessionStatus(supabase, sessionId)
       const session = await buildSessionResponse(supabase, waiterSession.profile.restaurantId, sessionId)
-      return ok({ session, sentAccounts: accountIds.length })
+      return ok({ session, sentAccounts: accountIds.length, kitchenItemCount, itemCount })
     }
 
     if (action === 'record_payments') {
