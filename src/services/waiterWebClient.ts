@@ -61,6 +61,12 @@ export type PaymentEntry = {
   createdAt: string;
 };
 
+export type WaiterServiceChargeSettings = {
+  enabled: boolean;
+  percentage: number;
+  taxWithholdPercent: number;
+};
+
 export type AccountTicket = {
   id: string;
   orderNumber?: string | null;
@@ -181,12 +187,18 @@ export type TableSession = {
   accounts: TableAccount[];
   history: SessionHistoryEntry[];
   tableChoices: WaiterTableChoice[];
+  serviceChargeSettings?: WaiterServiceChargeSettings;
 };
 
 export type WaiterPaymentInput = {
   accountId: string;
   method: PaymentMethod;
   amount: number;
+};
+
+export type WaiterServiceChargeInput = {
+  enabled: boolean;
+  percentage?: number;
 };
 
 export type WaiterPixCheckout = {
@@ -836,7 +848,7 @@ export async function sendAllWaiterSessionItems(sessionId: string) {
   return response;
 }
 
-export async function recordWaiterPayments(sessionId: string, payments: WaiterPaymentInput[]) {
+export async function recordWaiterPayments(sessionId: string, payments: WaiterPaymentInput[], serviceCharge?: WaiterServiceChargeInput) {
   const session = requireSession();
   const response = await invokeFunction<{ session: TableSession }>(
     'waiter-web',
@@ -844,6 +856,7 @@ export async function recordWaiterPayments(sessionId: string, payments: WaiterPa
       action: 'record_payments',
       sessionId,
       payments,
+      serviceCharge,
     },
     session.token,
   );

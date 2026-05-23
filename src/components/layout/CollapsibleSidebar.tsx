@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { IfoodLogo } from '@/components/icons/IfoodLogo';
 import { FeatureKey, getFeatureDefinition } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
+import { canAccessOperatorArea, getLocalOperatorSession, OperatorArea } from '@/services/operatorAuth';
 
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -99,10 +100,11 @@ const CollapsibleSidebar = () => {
     detail?: string;
     accent?: boolean;
     feature?: FeatureKey;
+    area?: OperatorArea;
   };
 
   const mainLinks: SidebarLink[] = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial', feature: 'dashboard' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Painel Inicial', feature: 'dashboard', area: 'dashboard' },
   ];
 
   const groups = [
@@ -111,9 +113,9 @@ const CollapsibleSidebar = () => {
       icon: CreditCard,
       label: 'Caixa & PDV',
       items: [
-        { to: '/caixa', label: 'Caixa Geral', feature: 'finance' },
-        { to: '/pdv', label: 'PDV / Frente de Caixa', feature: 'pdv' },
-        { to: '/mesas', label: 'Gestão de Mesas', feature: 'tables' },
+        { to: '/caixa', label: 'Caixa Geral', feature: 'finance', area: 'finance' },
+        { to: '/pdv', label: 'PDV / Frente de Caixa', feature: 'pdv', area: 'pdv' },
+        { to: '/mesas', label: 'Gestão de Mesas', feature: 'tables', area: 'tables' },
       ]
     },
     {
@@ -121,8 +123,8 @@ const CollapsibleSidebar = () => {
       icon: DollarSign,
       label: 'Financeiro',
       items: [
-        { to: '/financeiro', label: 'Resumo', feature: 'finance' },
-        { to: '/despesas', label: 'Despesas', feature: 'finance' },
+        { to: '/financeiro', label: 'Resumo', feature: 'finance', area: 'finance' },
+        { to: '/despesas', label: 'Despesas', feature: 'finance', area: 'finance' },
       ]
     },
     {
@@ -130,7 +132,7 @@ const CollapsibleSidebar = () => {
       icon: Package,
       label: 'Estoque & Insumos',
       items: [
-        { to: '/estoque', label: 'Gestão de Insumos', feature: 'stock' },
+        { to: '/estoque', label: 'Gestão de Insumos', feature: 'stock', area: 'stock' },
       ]
     },
     {
@@ -138,7 +140,7 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Inteligência',
       items: [
-        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC', feature: 'cmv' },
+        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC', feature: 'cmv', area: 'stock' },
       ]
     },
     {
@@ -146,8 +148,8 @@ const CollapsibleSidebar = () => {
       icon: FileText,
       label: 'Pedidos',
       items: [
-        { to: '/pedidos', label: 'Gestor de pedidos', feature: 'orders' },
-        { to: '/cozinha', label: 'Cozinha (KDS)', feature: 'kds' },
+        { to: '/pedidos', label: 'Gestor de pedidos', feature: 'orders', area: 'orders' },
+        { to: '/cozinha', label: 'Cozinha (KDS)', feature: 'kds', area: 'kds' },
       ]
     },
     {
@@ -155,10 +157,10 @@ const CollapsibleSidebar = () => {
       icon: ShoppingBag,
       label: 'Cardápio',
       items: [
-        { to: '/produtos', label: 'Produtos', feature: 'products' },
-        { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products' },
-        { to: '/produtos?tab=global-variations', label: 'Variações', feature: 'products' },
-        { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu' },
+        { to: '/produtos', label: 'Produtos', feature: 'products', area: 'products' },
+        { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products', area: 'products' },
+        { to: '/produtos?tab=global-variations', label: 'Variações', feature: 'products', area: 'products' },
+        { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu', area: 'products' },
       ]
     },
     {
@@ -166,7 +168,7 @@ const CollapsibleSidebar = () => {
       icon: BarChart3,
       label: 'Relatórios',
       items: [
-        { to: '/relatorios', label: 'Relatórios', feature: 'reports' },
+        { to: '/relatorios', label: 'Relatórios', feature: 'reports', area: 'reports' },
       ]
     },
     {
@@ -174,13 +176,13 @@ const CollapsibleSidebar = () => {
       icon: Megaphone,
       label: 'Marketing',
       items: [
-        { to: '/marketing?tab=banners', label: 'Banners', feature: 'marketing' },
-        { to: '/marketing?tab=coupons', label: 'Cupons', feature: 'marketing' },
-        { to: '/marketing?tab=highlights', label: 'Destaques', feature: 'marketing' },
-        { to: '/marketing?tab=upsells', label: 'Upsells', feature: 'marketing' },
-        { to: '/marketing?tab=loyalty', label: 'Fidelidade', feature: 'marketing' },
-        { to: '/marketing?tab=pixels', label: 'Pixels', feature: 'marketing' },
-        { to: '/whatsapp-bot', label: 'WhatsApp Bot', feature: 'whatsapp' },
+        { to: '/marketing?tab=banners', label: 'Banners', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=coupons', label: 'Cupons', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=highlights', label: 'Destaques', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=upsells', label: 'Upsells', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=loyalty', label: 'Fidelidade', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=pixels', label: 'Pixels', feature: 'marketing', area: 'marketing' },
+        { to: '/whatsapp-bot', label: 'WhatsApp Bot', feature: 'whatsapp', area: 'marketing' },
       ]
     },
     {
@@ -188,21 +190,21 @@ const CollapsibleSidebar = () => {
       icon: Settings,
       label: 'Configurações',
       items: [
-        { to: '/configuracoes?tab=general', label: 'Geral', feature: 'settings' },
-        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças', feature: 'hardware' },
-        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu' },
-        { to: '/configuracoes?tab=devices', label: 'Sessões ativas', feature: 'settings' },
-        { to: '/configuracoes?tab=profile', label: 'Perfil', feature: 'settings' },
-        { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings' },
-        { to: '/configuracoes?tab=appearance', label: 'Aparência', feature: 'settings' },
-        { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery' },
-        { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam' },
-        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp' },
-        { to: '/configuracoes?tab=fiscal', label: 'Fiscal / NFC-e', feature: 'fiscal' },
-        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix' },
-        { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood' },
-        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team' },
-        { to: '/configuracoes?tab=support', label: 'Suporte', feature: 'settings' },
+        { to: '/configuracoes?tab=general', label: 'Geral', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças', feature: 'hardware', area: 'settings' },
+        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu', area: 'products' },
+        { to: '/configuracoes?tab=devices', label: 'Sessões ativas', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=profile', label: 'Perfil', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=appearance', label: 'Aparência', feature: 'settings', area: 'settings' },
+        { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery', area: 'delivery' },
+        { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam', area: 'delivery' },
+        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp', area: 'marketing' },
+        { to: '/configuracoes?tab=fiscal', label: 'Fiscal / NFC-e', feature: 'fiscal', area: 'nfce' },
+        { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix', area: 'pix' },
+        { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood', area: 'settings' },
+        { to: '/configuracoes?tab=users', label: 'Usuários e Equipe', feature: 'team', area: 'team' },
+        { to: '/configuracoes?tab=support', label: 'Suporte', feature: 'settings', area: 'settings' },
       ]
     },
   ];
@@ -225,10 +227,18 @@ const CollapsibleSidebar = () => {
   }, [subscription]);
 
   const standaloneLinks: SidebarLink[] = [
-    { to: '/agente', icon: Bot, label: 'Assistente', feature: 'agent' },
-    { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop' },
+    { to: '/agente', icon: Bot, label: 'Assistente', feature: 'agent', area: 'agent' },
+    { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop', area: 'desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },
   ];
+
+  const operatorSession = getLocalOperatorSession();
+  const canSeeLink = (link: SidebarLink) => canAccessOperatorArea(operatorSession, link.area);
+  const visibleMainLinks = mainLinks.filter(canSeeLink);
+  const visibleStandaloneLinks = standaloneLinks.filter(canSeeLink);
+  const visibleGroups = groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => canSeeLink(item as SidebarLink)) }))
+    .filter((group) => group.items.length > 0);
 
 
   const handleLinkClick = () => {
@@ -289,11 +299,11 @@ const CollapsibleSidebar = () => {
   };
 
   const groupForCurrentPath = useMemo(() => {
-    for (const group of groups) {
+    for (const group of visibleGroups) {
       if (group.items.some(i => i.to.split('?')[0] === location.pathname)) return group.id;
     }
     return '';
-  }, [groups, location.pathname]);
+  }, [visibleGroups, location.pathname]);
 
   const [openGroup, setOpenGroup] = useState<string>(groupForCurrentPath);
 
@@ -337,7 +347,7 @@ const CollapsibleSidebar = () => {
         <div className="flex-1">
         {!isOpen && !isMobile ? (
           <ul className="space-y-1">
-            {[...mainLinks, ...groups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...standaloneLinks].map((link) => {
+            {[...visibleMainLinks, ...visibleGroups.flatMap(g => g.items.slice(0, 1).map(i => ({ ...i, icon: g.icon, label: g.label }))), ...visibleStandaloneLinks].map((link) => {
               const Icon = (link as any).icon;
               const isActive = isActivePath(link.to);
               return (
@@ -361,7 +371,7 @@ const CollapsibleSidebar = () => {
         ) : (
           <div className="space-y-2">
             <ul className="space-y-1 pb-2">
-              {mainLinks.map((link) => {
+              {visibleMainLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = isActivePath(link.to);
                 return (
@@ -384,7 +394,7 @@ const CollapsibleSidebar = () => {
             </ul>
 
             <Accordion type="single" collapsible value={openGroup} onValueChange={(v) => setOpenGroup(v)} className="w-full space-y-1">
-              {groups.map((group) => {
+              {visibleGroups.map((group) => {
                 const Icon = group.icon;
                 return (
                   <AccordionItem key={group.id} value={group.id} className="border-none">
@@ -423,7 +433,7 @@ const CollapsibleSidebar = () => {
             </Accordion>
 
             <ul className="space-y-1 pt-2">
-              {standaloneLinks.map((link) => {
+              {visibleStandaloneLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = isActivePath(link.to);
                 return (

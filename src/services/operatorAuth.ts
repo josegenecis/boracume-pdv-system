@@ -67,3 +67,53 @@ export const canManageUsers = (session: OperatorSession | null): boolean => {
   if (isAdminOperator(session)) return true
   return session.permissions?.users_manage === true
 }
+
+export type OperatorArea =
+  | 'dashboard'
+  | 'pdv'
+  | 'tables'
+  | 'orders'
+  | 'kds'
+  | 'products'
+  | 'stock'
+  | 'finance'
+  | 'reports'
+  | 'marketing'
+  | 'settings'
+  | 'team'
+  | 'delivery'
+  | 'desktop'
+  | 'agent'
+  | 'security'
+  | 'nfce'
+  | 'pix'
+
+export const canAccessOperatorArea = (session: OperatorSession | null, area?: OperatorArea): boolean => {
+  if (!area) return true
+  if (!session) return true
+  if (isAdminOperator(session)) return true
+  const permissions = session.permissions || {}
+
+  const areaPermissions: Record<OperatorArea, string[]> = {
+    dashboard: ['dashboard_view'],
+    pdv: ['pos_access'],
+    tables: ['tables_access', 'pos_access', 'waiter_app'],
+    orders: ['orders_manage'],
+    kds: ['kds_access', 'orders_manage'],
+    products: ['menu_manage'],
+    stock: ['stock_manage'],
+    finance: ['financial_view'],
+    reports: ['reports_view', 'financial_view'],
+    marketing: ['marketing_manage'],
+    settings: ['settings_manage'],
+    team: ['users_manage'],
+    delivery: ['delivery_manage', 'settings_manage'],
+    desktop: ['settings_manage'],
+    agent: ['settings_manage'],
+    security: ['settings_manage'],
+    nfce: ['fiscal_manage', 'settings_manage'],
+    pix: ['financial_view', 'settings_manage'],
+  }
+
+  return (areaPermissions[area] || []).some((permission) => permissions[permission] === true)
+}

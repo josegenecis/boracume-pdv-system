@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import Logo from '@/components/Logo';
@@ -113,6 +114,7 @@ const WaiterSessionPage = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
+  const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
   const [pixCheckout, setPixCheckout] = useState<WaiterPixCheckoutState | null>(null);
   const [moveItemId, setMoveItemId] = useState('');
   const [moveTargetAccountId, setMoveTargetAccountId] = useState('');
@@ -188,6 +190,22 @@ const WaiterSessionPage = () => {
   const accountTransferChoices = useMemo(() => {
     return (session?.tableChoices || []).filter((table) => table.canReceiveAccountTransfer && table.id !== session?.tableId);
   }, [session]);
+
+  const paymentBaseTotal = useMemo(() => {
+    return paymentLines.reduce((total, line) => total + Math.max(0, Number(String(line.amount || '').replace(',', '.')) || 0), 0);
+  }, [paymentLines]);
+
+  const serviceChargeSettings = session?.serviceChargeSettings;
+  const canUseServiceCharge = Boolean(serviceChargeSettings?.enabled && (serviceChargeSettings.percentage || 0) > 0);
+  const serviceChargePercent = Number(serviceChargeSettings?.percentage || 10);
+  const serviceChargeAmount = serviceChargeAccepted && canUseServiceCharge
+    ? Number(((paymentBaseTotal * serviceChargePercent) / 100).toFixed(2))
+    : 0;
+  const serviceChargeTax = serviceChargeAccepted && canUseServiceCharge
+    ? Number(((serviceChargeAmount * Number(serviceChargeSettings?.taxWithholdPercent || 0)) / 100).toFixed(2))
+    : 0;
+  const serviceChargeNet = Math.max(0, serviceChargeAmount - serviceChargeTax);
+  const paymentFinalTotal = paymentBaseTotal + serviceChargeAmount;
 
   const loadSession = async (silent = false) => {
     if (!sessionId) return;
@@ -569,6 +587,7 @@ const WaiterSessionPage = () => {
           .map((current) => createPaymentLine(current.id, current.dueAmount));
 
     setPaymentLines(lines.length ? lines : [createPaymentLine(baseSession.accounts[0]?.id || '', 0)]);
+    setServiceChargeAccepted(false);
     setPaymentDialogOpen(true);
   };
 
@@ -598,8 +617,21 @@ const WaiterSessionPage = () => {
       return;
     }
 
+    const serviceSettings = session.serviceChargeSettings;
+    const serviceEnabled = Boolean(serviceSettings?.enabled && serviceChargeAccepted);
+    const servicePercent = Math.max(0, Number(serviceSettings?.percentage || 10));
+
     const pixPayments = payload.filter((line) => line.method === 'pix');
     if (pixPayments.length > 0) {
+      if (serviceEnabled) {
+        toast({
+          title: 'Taxa com PIX indisponivel',
+          description: 'Para adicionar a taxa do garçom, use Dinheiro ou Cartao neste recebimento.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       if (payload.length !== 1 || pixPayments.length !== 1) {
         toast({
           title: 'PIX por comanda',
@@ -654,7 +686,10 @@ const WaiterSessionPage = () => {
 
     setSubmitting(true);
     try {
-      const response = await recordWaiterPayments(session.id, payload);
+      const response = await recordWaiterPayments(session.id, payload, {
+        enabled: serviceEnabled,
+        percentage: servicePercent,
+      });
       applySession(response.session);
       setPaymentDialogOpen(false);
       toast({
@@ -1691,6 +1726,49 @@ const WaiterSessionPage = () => {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {canUseServiceCharge ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-[#082F23]">
+                      Cliente autorizou adicionar {serviceChargePercent}% do garçom?
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-amber-800">
+                      O valor entra junto no recebimento da mesa. Retenção configurada: {Number(serviceChargeSettings?.taxWithholdPercent || 0)}%.
+                    </div>
+                  </div>
+                  <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+                </div>
+                {serviceChargeAccepted ? (
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                    <div className="rounded-xl bg-white/80 p-3">
+                      <div className="text-xs text-slate-500">Taxa</div>
+                      <div className="font-semibold text-[#082F23]">{formatMoney(serviceChargeAmount)}</div>
+                    </div>
+                    <div className="rounded-xl bg-white/80 p-3">
+                      <div className="text-xs text-slate-500">Retenção</div>
+                      <div className="font-semibold text-red-700">{formatMoney(serviceChargeTax)}</div>
+                    </div>
+                    <div className="rounded-xl bg-white/80 p-3">
+                      <div className="text-xs text-slate-500">Líquido garçom</div>
+                      <div className="font-semibold text-emerald-700">{formatMoney(serviceChargeNet)}</div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between rounded-2xl bg-[#082F23] px-4 py-3 text-white">
+              <div>
+                <div className="text-xs uppercase tracking-[0.16em] text-white/65">Total a receber</div>
+                <div className="text-sm text-white/80">
+                  Pagamento {formatMoney(paymentBaseTotal)}
+                  {serviceChargeAmount > 0 ? ` + taxa ${formatMoney(serviceChargeAmount)}` : ''}
+                </div>
+              </div>
+              <div className="text-xl font-semibold">{formatMoney(paymentFinalTotal)}</div>
             </div>
 
             <div className="flex justify-start">

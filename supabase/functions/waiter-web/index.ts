@@ -255,6 +255,24 @@ async function listTransferTables(supabase: any, restaurantId: string, currentSe
   })
 }
 
+async function getServiceChargeSettings(supabase: any, restaurantId: string) {
+  const { data, error } = await supabase
+    .from('waiter_service_charge_settings')
+    .select('enabled, percentage, tax_withhold_percent')
+    .eq('user_id', restaurantId)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('waiter_service_charge_settings unavailable:', error?.message || error)
+  }
+
+  return {
+    enabled: data?.enabled !== false,
+    percentage: Math.max(0, Number(data?.percentage ?? 10)),
+    taxWithholdPercent: Math.max(0, Number(data?.tax_withhold_percent ?? 0)),
+  }
+}
+
 async function getNextAccountNumber(supabase: any, sessionId: string) {
   const { data, error } = await supabase
     .from('table_accounts')
@@ -736,6 +754,7 @@ async function buildSessionResponse(supabase: any, restaurantId: string, session
   const snapshot = await getSessionSnapshot(supabase, sessionId)
   const metrics = buildSessionMetrics(snapshot)
   const tableChoices = await listTransferTables(supabase, restaurantId, sessionId)
+  const serviceChargeSettings = await getServiceChargeSettings(supabase, restaurantId)
 
   return {
     id: snapshot.sessionRow.id,
@@ -757,6 +776,7 @@ async function buildSessionResponse(supabase: any, restaurantId: string, session
     accounts: metrics.accounts,
     history: metrics.history,
     tableChoices,
+    serviceChargeSettings,
   }
 }
 
@@ -1812,7 +1832,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: accountRows, error: accountError } = await supabase
         .from('table_accounts')
-        .select('id, session_id')
+        .select('id, session_id, total')
         .in('id', sanitizedPayments.map((payment: any) => payment.accountId))
 
       if (accountError) throw accountError
@@ -1821,18 +1841,71 @@ Deno.serve(async (req: Request) => {
         return fail('Existe uma comanda invalida no pagamento informado.', 400)
       }
 
-      const { error: insertError } = await supabase
-        .from('payments')
-        .insert(
-          sanitizedPayments.map((payment: any) => ({
+      const serviceSettings = await getServiceChargeSettings(supabase, waiterSession.profile.restaurantId)
+      const serviceChargeRequest = body?.serviceCharge || {}
+      const serviceEnabled = Boolean(serviceChargeRequest?.enabled && serviceSettings.enabled)
+      const servicePercent = serviceEnabled
+        ? Math.max(0, Number(serviceChargeRequest?.percentage ?? serviceSettings.percentage ?? 10))
+        : 0
+      const taxPercent = serviceEnabled ? Math.max(0, Number(serviceSettings.taxWithholdPercent || 0)) : 0
+      const accountById = new Map((accountRows ?? []).map((row: any) => [row.id, row]))
+      const roundMoney = (value: number) => Math.round(value * 100) / 100
+      const serviceRows: any[] = []
+      const extraTotalByAccount = new Map<string, number>()
+      const paymentRows = sanitizedPayments.map((payment: any) => {
+        const serviceAmount = roundMoney((payment.amount * servicePercent) / 100)
+        const taxAmount = roundMoney((serviceAmount * taxPercent) / 100)
+        const totalAmount = roundMoney(payment.amount + serviceAmount)
+
+        if (serviceAmount > 0) {
+          extraTotalByAccount.set(payment.accountId, roundMoney((extraTotalByAccount.get(payment.accountId) ?? 0) + serviceAmount))
+          serviceRows.push({
+            user_id: waiterSession.profile.restaurantId,
             session_id: sessionId,
             account_id: payment.accountId,
-            user_id: waiterSession.profile.restaurantId,
             waiter_id: waiterSession.profile.id,
-            method: payment.method,
-            amount: payment.amount,
-          })),
-        )
+            base_amount: payment.amount,
+            percentage: servicePercent,
+            gross_amount: serviceAmount,
+            tax_withhold_percent: taxPercent,
+            tax_amount: taxAmount,
+            net_waiter_amount: roundMoney(serviceAmount - taxAmount),
+          })
+        }
+
+        return {
+          session_id: sessionId,
+          account_id: payment.accountId,
+          user_id: waiterSession.profile.restaurantId,
+          waiter_id: waiterSession.profile.id,
+          method: payment.method,
+          amount: totalAmount,
+        }
+      })
+
+      if (extraTotalByAccount.size > 0) {
+        for (const [accountId, serviceAmount] of extraTotalByAccount.entries()) {
+          const account = accountById.get(accountId)
+          const nextTotal = roundMoney(normalizeAmount(account?.total) + serviceAmount)
+          const { error: updateAccountError } = await supabase
+            .from('table_accounts')
+            .update({ total: nextTotal })
+            .eq('id', accountId)
+            .eq('session_id', sessionId)
+
+          if (updateAccountError) throw updateAccountError
+        }
+
+        const { error: serviceInsertError } = await supabase
+          .from('waiter_service_charges')
+          .insert(serviceRows)
+
+        if (serviceInsertError) throw serviceInsertError
+      }
+
+      const { error: insertError } = await supabase
+        .from('payments')
+        .insert(paymentRows)
 
       if (insertError) throw insertError
 

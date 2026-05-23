@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import FirstOperatorDialog from '@/components/pdv/FirstOperatorDialog';
 import NFCeEmissionModal from '@/components/nfce/NFCeEmissionModal';
 import AdminPinDialog from '@/components/security/AdminPinDialog';
-import { getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
+import { canGiveDiscount, getLocalOperatorSession, isAdminOperator } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
 import { useTefSettings } from '@/hooks/useTefSettings';
 import { PrinterService } from '@/utils/printerService';
@@ -143,6 +143,8 @@ const PDV = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeAmount, setChangeAmount] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('');
+  const [surchargeAmount, setSurchargeAmount] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -629,7 +631,7 @@ const PDV = () => {
       divider,
       '',
       'Sistema: PopSystem PDV',
-      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.102'}`,
+      `Versão: ${import.meta.env.VITE_APP_VERSION || '1.0.103'}`,
       '',
       'Fechamento realizado com sucesso.',
       '',
@@ -1244,6 +1246,9 @@ const PDV = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  const getDiscountValue = () => parseBRL(discountAmount);
+  const getSurchargeValue = () => parseBRL(surchargeAmount);
+
   const getDeliveryFee = () => {
     if (orderType !== 'delivery' || !selectedDeliveryZone) return 0;
     const zone = deliveryZones.find(z => z.id === selectedDeliveryZone);
@@ -1251,7 +1256,7 @@ const PDV = () => {
   };
 
   const getFinalTotal = () => {
-    return getTotalValue() + getDeliveryFee();
+    return Math.max(0, getTotalValue() + getDeliveryFee() + getSurchargeValue() - getDiscountValue());
   };
 
   const getChangeValue = () => {
@@ -1271,6 +1276,8 @@ const PDV = () => {
     setSelectedTable('');
     setTableLaunchId('');
     setChangeAmount('');
+    setDiscountAmount('');
+    setSurchargeAmount('');
     setTefData(null);
     setCardProcessingMode('maquininha');
     setPaymentMethod('pix');
@@ -1571,6 +1578,15 @@ const PDV = () => {
         return;
       }
 
+      if (parseBRL(discountAmount) > 0 && !canGiveDiscount(operatorSession)) {
+        toast({
+          title: 'Sem permissão para desconto',
+          description: 'O administrador precisa liberar a permissão "Aplicar Descontos" para este operador.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const orderData: any = {
         customer_name: orderType === 'dine_in' ? (customerName.trim() || `Mesa ${selectedTable}`) : (orderType === 'counter' ? (customerName.trim() || 'Venda Balcão') : customerName.trim()),
         customer_phone: customerPhone.trim() || null,
@@ -1580,6 +1596,7 @@ const PDV = () => {
         table_id: orderType === 'dine_in' ? selectedTable || null : null,
         items: orderItems,
         total: getFinalTotal(),
+        discount: parseBRL(discountAmount),
         delivery_fee: getDeliveryFee(),
         payment_method: paymentMethod,
         change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseBRL(changeAmount) : null,
@@ -1593,6 +1610,11 @@ const PDV = () => {
         variations: {
           operator: operatorSession ? { id: operatorSession.id, name: operatorSession.name } : null,
           source: 'PDV',
+          financial_adjustments: {
+            subtotal: getTotalValue(),
+            discount: parseBRL(discountAmount),
+            surcharge: parseBRL(surchargeAmount),
+          },
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
           tef: paymentMethod === 'cartao' && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
@@ -2267,6 +2289,20 @@ const PDV = () => {
                           <div className="text-xs text-muted-foreground">Cartão via maquininha</div>
                         )
                       )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <CurrencyTextInput
+                          placeholder="Desconto"
+                          value={discountAmount}
+                          onValueChange={setDiscountAmount}
+                          className="h-8 text-xs"
+                        />
+                        <CurrencyTextInput
+                          placeholder="Acréscimo"
+                          value={surchargeAmount}
+                          onValueChange={setSurchargeAmount}
+                          className="h-8 text-xs"
+                        />
+                      </div>
                     </div>
                 </div>
 
@@ -2280,6 +2316,18 @@ const PDV = () => {
                     <div className="flex justify-between text-gray-500">
                       <span>Entrega</span>
                       <span>{formatCurrency(getDeliveryFee())}</span>
+                    </div>
+                  )}
+                  {getDiscountValue() > 0 && (
+                    <div className="flex justify-between text-red-600">
+                      <span>Desconto</span>
+                      <span>-{formatCurrency(getDiscountValue())}</span>
+                    </div>
+                  )}
+                  {getSurchargeValue() > 0 && (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Acréscimo</span>
+                      <span>{formatCurrency(getSurchargeValue())}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-sm text-gray-900 pt-1 border-t border-gray-200 mt-1">
@@ -2569,6 +2617,20 @@ const PDV = () => {
                           <div className="text-sm text-muted-foreground">Cartão via maquininha</div>
                         )
                       )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <CurrencyTextInput
+                          placeholder="Desconto"
+                          value={discountAmount}
+                          onValueChange={setDiscountAmount}
+                          className="h-7.5 text-[10px]"
+                        />
+                        <CurrencyTextInput
+                          placeholder="Acréscimo"
+                          value={surchargeAmount}
+                          onValueChange={setSurchargeAmount}
+                          className="h-7.5 text-[10px]"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2581,6 +2643,18 @@ const PDV = () => {
                       <div className="flex justify-between text-gray-500">
                         <span>Entrega</span>
                         <span>{formatCurrency(getDeliveryFee())}</span>
+                      </div>
+                    )}
+                    {getDiscountValue() > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Desconto</span>
+                        <span>-{formatCurrency(getDiscountValue())}</span>
+                      </div>
+                    )}
+                    {getSurchargeValue() > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Acréscimo</span>
+                        <span>{formatCurrency(getSurchargeValue())}</span>
                       </div>
                     )}
                     <div className="mt-2 flex justify-between border-t pt-2 text-[14px] font-bold">

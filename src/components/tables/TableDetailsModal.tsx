@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { Users, Clock, ArrowRightLeft, Printer, WalletCards, ReceiptText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { getOpenCashRegisterSession } from '@/utils/cashSession';
 import { PrinterService } from '@/utils/printerService';
+import { parseBRL } from '@/lib/currency';
 
 interface Table {
   id: string;
@@ -94,6 +96,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [selectedTransferTable, setSelectedTransferTable] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao' | 'dinheiro'>('pix');
+  const [checkoutDiscount, setCheckoutDiscount] = useState('');
+  const [checkoutSurcharge, setCheckoutSurcharge] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -108,6 +112,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
 
     try {
       setLoading(true);
+      setCheckoutDiscount('');
+      setCheckoutSurcharge('');
 
       const { data: accountData, error: accountError } = await supabase
         .from('table_accounts')
@@ -329,6 +335,12 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
     throw error;
   };
 
+  const checkoutDiscountValue = parseBRL(checkoutDiscount);
+  const checkoutSurchargeValue = parseBRL(checkoutSurcharge);
+  const checkoutTotal = currentOrder
+    ? Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue)
+    : 0;
+
   const handleFinishOrder = async () => {
     if (!table || !currentOrder) return;
 
@@ -348,10 +360,27 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       let printableOrder: any = null;
       const paymentTimestamp = new Date().toISOString();
       const waiterPaymentMethod = mapPaymentMethodToWaiterPayment(paymentMethod);
+      const adjustedTotal = checkoutTotal;
+      const financialAdjustments = {
+        subtotal: Number(currentOrder.total || 0),
+        discount: checkoutDiscountValue,
+        surcharge: checkoutSurchargeValue,
+        total: adjustedTotal,
+      };
 
       if (currentOrder.source === 'table_accounts') {
         const accountId = currentOrder.account_id || currentOrder.id;
         let finalizedOrders: any[] = [];
+
+        if (accountId && (checkoutDiscountValue > 0 || checkoutSurchargeValue > 0)) {
+          const { error: accountTotalError } = await supabase
+            .from('table_accounts')
+            .update({ total: adjustedTotal, updated_at: paymentTimestamp } as any)
+            .eq('id', accountId)
+            .eq('user_id', user?.id);
+
+          if (accountTotalError) throw accountTotalError;
+        }
 
         if (accountId) {
           const { data: relatedOrders, error: relatedOrdersError } = await supabase
@@ -371,10 +400,13 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             .from('orders')
             .update({
               payment_method: paymentMethod,
+              total: adjustedTotal,
+              discount: checkoutDiscountValue,
               cash_register_session_id: openCashSession.id,
               status: 'completed',
               acceptance_status: 'accepted',
-              updated_at: paymentTimestamp
+              updated_at: paymentTimestamp,
+              variations: { financial_adjustments: financialAdjustments },
             })
             .in('id', relatedOrderIds);
 
@@ -387,7 +419,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             customer_phone: currentOrder.customer_phone || null,
             table_id: table.id,
             items: currentOrder.items,
-            total: Number(currentOrder.total || 0),
+            total: adjustedTotal,
+            discount: checkoutDiscountValue,
             order_type: 'dine_in',
             status: 'completed',
             acceptance_status: 'accepted',
@@ -399,6 +432,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             variations: {
               source: 'table_account_closure',
               original_account_id: currentOrder.id,
+              financial_adjustments: financialAdjustments,
             },
           };
 
@@ -422,7 +456,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           if (paymentRowsError) throw paymentRowsError;
 
           const paidAmount = (paymentRows || []).reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0);
-          const remainingAmount = Math.max(Number(currentOrder.total || 0) - paidAmount, 0);
+          const remainingAmount = Math.max(adjustedTotal - paidAmount, 0);
 
           if (remainingAmount > 0.009) {
             const { error: paymentInsertError } = await supabase
@@ -450,7 +484,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           customer_phone: currentOrder.customer_phone || null,
           table_id: table.id,
           items: currentOrder.items,
-          total: Number(currentOrder.total || 0),
+          total: adjustedTotal,
+          discount: checkoutDiscountValue,
           order_type: 'dine_in',
           status: 'completed',
           acceptance_status: 'accepted',
@@ -462,10 +497,13 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           .from('orders')
           .update({
             payment_method: paymentMethod,
+            total: adjustedTotal,
+            discount: checkoutDiscountValue,
             cash_register_session_id: openCashSession.id,
             status: 'completed',
             acceptance_status: 'accepted',
-            updated_at: paymentTimestamp
+            updated_at: paymentTimestamp,
+            variations: { financial_adjustments: financialAdjustments },
           })
           .eq('id', currentOrder.id)
           .eq('user_id', user?.id)
@@ -485,7 +523,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           if (paymentRowsError) throw paymentRowsError;
 
           const paidAmount = (paymentRows || []).reduce((sum: number, row: any) => sum + Number(row?.amount || 0), 0);
-          const remainingAmount = Math.max(Number(currentOrder.total || 0) - paidAmount, 0);
+          const remainingAmount = Math.max(adjustedTotal - paidAmount, 0);
 
           if (remainingAmount > 0.009) {
             const { error: paymentInsertError } = await supabase
@@ -719,7 +757,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                 
                 <div className="flex justify-between items-center font-bold text-lg">
                   <span>Total:</span>
-                  <span>{formatCurrency(currentOrder.total)}</span>
+                  <span>{formatCurrency(checkoutTotal)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -797,7 +835,38 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                       <span>Total para receber</span>
                       <ReceiptText size={14} />
                     </div>
-                    <div className="mt-2 break-words text-2xl font-bold text-slate-900">{formatCurrency(currentOrder.total)}</div>
+                    <div className="mt-2 break-words text-2xl font-bold text-slate-900">{formatCurrency(checkoutTotal)}</div>
+                    {(checkoutDiscountValue > 0 || checkoutSurchargeValue > 0) && (
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        <div className="flex justify-between">
+                          <span>Subtotal</span>
+                          <span>{formatCurrency(currentOrder.total)}</span>
+                        </div>
+                        {checkoutDiscountValue > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span>Desconto</span>
+                            <span>-{formatCurrency(checkoutDiscountValue)}</span>
+                          </div>
+                        )}
+                        {checkoutSurchargeValue > 0 && (
+                          <div className="flex justify-between text-emerald-700">
+                            <span>Acréscimo</span>
+                            <span>{formatCurrency(checkoutSurchargeValue)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Desconto</Label>
+                      <CurrencyTextInput value={checkoutDiscount} onValueChange={setCheckoutDiscount} placeholder="R$ 0,00" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Acréscimo</Label>
+                      <CurrencyTextInput value={checkoutSurcharge} onValueChange={setCheckoutSurcharge} placeholder="R$ 0,00" />
+                    </div>
                   </div>
 
                   <div className="space-y-2">

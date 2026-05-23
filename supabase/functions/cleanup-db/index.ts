@@ -113,6 +113,50 @@ Deno.serve(async (req) => {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+      CREATE TABLE IF NOT EXISTS public.waiter_service_charge_settings (
+        user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+        enabled boolean NOT NULL DEFAULT true,
+        percentage numeric(6, 2) NOT NULL DEFAULT 10,
+        tax_withhold_percent numeric(6, 2) NOT NULL DEFAULT 0,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS public.waiter_service_charges (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        session_id uuid NOT NULL REFERENCES public.table_sessions(id) ON DELETE CASCADE,
+        account_id uuid REFERENCES public.table_accounts(id) ON DELETE SET NULL,
+        waiter_id uuid REFERENCES public.waiters(id) ON DELETE SET NULL,
+        base_amount numeric(12, 2) NOT NULL DEFAULT 0,
+        percentage numeric(6, 2) NOT NULL DEFAULT 10,
+        gross_amount numeric(12, 2) NOT NULL DEFAULT 0,
+        tax_withhold_percent numeric(6, 2) NOT NULL DEFAULT 0,
+        tax_amount numeric(12, 2) NOT NULL DEFAULT 0,
+        net_waiter_amount numeric(12, 2) NOT NULL DEFAULT 0,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      ALTER TABLE public.waiter_service_charge_settings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.waiter_service_charges ENABLE ROW LEVEL SECURITY;
+
+      DROP POLICY IF EXISTS service_charge_settings_owner_all ON public.waiter_service_charge_settings;
+      CREATE POLICY service_charge_settings_owner_all
+        ON public.waiter_service_charge_settings
+        FOR ALL
+        USING (auth.uid() = user_id)
+        WITH CHECK (auth.uid() = user_id);
+
+      DROP POLICY IF EXISTS service_charges_owner_all ON public.waiter_service_charges;
+      CREATE POLICY service_charges_owner_all
+        ON public.waiter_service_charges
+        FOR ALL
+        USING (auth.uid() = user_id)
+        WITH CHECK (auth.uid() = user_id);
+
+      CREATE INDEX IF NOT EXISTS idx_waiter_service_charges_user_id ON public.waiter_service_charges(user_id);
+      CREATE INDEX IF NOT EXISTS idx_waiter_service_charges_session_id ON public.waiter_service_charges(session_id);
+      CREATE INDEX IF NOT EXISTS idx_waiter_service_charges_waiter_id ON public.waiter_service_charges(waiter_id);
     `;
 
     await client.queryArray(sql);

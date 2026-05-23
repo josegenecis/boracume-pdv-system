@@ -35,7 +35,9 @@ const PERMISSIONS_GROUPS = [
     label: 'Vendas e PDV',
     icon: <CreditCard className="w-4 h-4" />,
     permissions: [
+      { id: 'dashboard_view', label: 'Ver Painel Inicial', description: 'Pode acessar apenas os indicadores operacionais do início' },
       { id: 'pos_access', label: 'Acessar PDV', description: 'Pode entrar na tela de vendas' },
+      { id: 'tables_access', label: 'Acessar Mesas', description: 'Pode abrir mesas e lançar produtos' },
       { id: 'pos_discount', label: 'Aplicar Descontos', description: 'Pode dar descontos manuais' },
       { id: 'pos_cancel_item', label: 'Cancelar Itens', description: 'Pode remover itens do pedido' },
     ]
@@ -55,8 +57,10 @@ const PERMISSIONS_GROUPS = [
     icon: <Box className="w-4 h-4" />,
     permissions: [
       { id: 'orders_manage', label: 'Gerenciar Pedidos', description: 'Ver e editar pedidos ativos' },
+      { id: 'kds_access', label: 'Ver KDS', description: 'Acessar a tela de preparo da cozinha' },
       { id: 'menu_manage', label: 'Gerenciar Cardápio', description: 'Criar/Editar produtos' },
       { id: 'stock_manage', label: 'Gerenciar Estoque', description: 'Ajustar quantidades' },
+      { id: 'delivery_manage', label: 'Gerenciar Delivery', description: 'Configurar entrega e áreas atendidas' },
     ]
   },
   {
@@ -65,11 +69,20 @@ const PERMISSIONS_GROUPS = [
     icon: <Settings className="w-4 h-4" />,
     permissions: [
       { id: 'financial_view', label: 'Ver Financeiro', description: 'Relatórios de faturamento' },
+      { id: 'reports_view', label: 'Ver Relatórios', description: 'Relatórios gerais e históricos' },
+      { id: 'marketing_manage', label: 'Marketing', description: 'Campanhas, ofertas e disparos autorizados' },
+      { id: 'fiscal_manage', label: 'Fiscal/NFC-e', description: 'Configurações fiscais e emissão de documentos' },
       { id: 'users_manage', label: 'Gerenciar Equipe', description: 'Criar e editar usuários' },
       { id: 'settings_manage', label: 'Configurações', description: 'Configurações do sistema' },
     ]
   }
 ];
+
+type ServiceChargeSettings = {
+  enabled: boolean;
+  percentage: number;
+  taxWithholdPercent: number;
+};
 
 const Garcons = () => {
   const { user } = useAuth();
@@ -79,6 +92,12 @@ const Garcons = () => {
   // Data State
   const [waiters, setWaiters] = useState<Waiter[]>([]);
   const [loading, setLoading] = useState(false);
+  const [serviceChargeSettings, setServiceChargeSettings] = useState<ServiceChargeSettings>({
+    enabled: true,
+    percentage: 10,
+    taxWithholdPercent: 0,
+  });
+  const [savingServiceCharge, setSavingServiceCharge] = useState(false);
   
   // Modal State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -128,7 +147,10 @@ const Garcons = () => {
   };
 
   useEffect(() => {
-    if (user) loadWaiters();
+    if (user) {
+      loadWaiters();
+      loadServiceChargeSettings();
+    }
   }, [user]);
 
   const loadWaiters = async () => {
@@ -143,6 +165,57 @@ const Garcons = () => {
       setWaiters((data as any) || []);
     } catch (e: any) {
       console.error('Erro ao carregar:', e);
+    }
+  };
+
+  const loadServiceChargeSettings = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await (supabase as any)
+        .from('waiter_service_charge_settings')
+        .select('enabled, percentage, tax_withhold_percent')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return;
+
+      setServiceChargeSettings({
+        enabled: data.enabled !== false,
+        percentage: Number(data.percentage ?? 10),
+        taxWithholdPercent: Number(data.tax_withhold_percent ?? 0),
+      });
+    } catch (error: any) {
+      console.warn('Service charge settings unavailable:', error?.message || error);
+    }
+  };
+
+  const saveServiceChargeSettings = async () => {
+    if (!user?.id) return;
+
+    const percentage = Math.min(30, Math.max(0, Number(serviceChargeSettings.percentage || 0)));
+    const taxWithholdPercent = Math.min(100, Math.max(0, Number(serviceChargeSettings.taxWithholdPercent || 0)));
+
+    try {
+      setSavingServiceCharge(true);
+      const { error } = await (supabase as any)
+        .from('waiter_service_charge_settings')
+        .upsert({
+          user_id: user.id,
+          enabled: Boolean(serviceChargeSettings.enabled),
+          percentage,
+          tax_withhold_percent: taxWithholdPercent,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      setServiceChargeSettings({ enabled: Boolean(serviceChargeSettings.enabled), percentage, taxWithholdPercent });
+      toast({ title: 'Taxa do garçom salva', description: 'A regra já vale no app do garçom.' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao salvar taxa', description: error?.message || 'Nao foi possivel salvar a configuracao.', variant: 'destructive' });
+    } finally {
+      setSavingServiceCharge(false);
     }
   };
 
@@ -367,6 +440,57 @@ const Garcons = () => {
           Novo Usuário
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BadgePercent className="h-5 w-5 text-primary" />
+            Taxa opcional do garçom
+          </CardTitle>
+          <CardDescription>
+            Configure a cobrança sugerida no app do garçom e o percentual retido para cobrir impostos/encargos do restaurante.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-[1.2fr,0.8fr,0.8fr,auto] md:items-end">
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 p-4">
+            <div>
+              <Label className="text-base font-semibold">Permitir perguntar os 10%</Label>
+              <p className="mt-1 text-sm text-muted-foreground">
+                O garçom decide no fechamento se o cliente autorizou a taxa.
+              </p>
+            </div>
+            <Switch
+              checked={serviceChargeSettings.enabled}
+              onCheckedChange={(checked) => setServiceChargeSettings((current) => ({ ...current, enabled: checked }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Percentual cobrado</Label>
+            <Input
+              type="number"
+              min="0"
+              max="30"
+              step="0.1"
+              value={serviceChargeSettings.percentage}
+              onChange={(event) => setServiceChargeSettings((current) => ({ ...current, percentage: Number(event.target.value) }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Retenção fiscal (%)</Label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={serviceChargeSettings.taxWithholdPercent}
+              onChange={(event) => setServiceChargeSettings((current) => ({ ...current, taxWithholdPercent: Number(event.target.value) }))}
+            />
+          </div>
+          <Button onClick={saveServiceChargeSettings} disabled={savingServiceCharge}>
+            {savingServiceCharge ? 'Salvando...' : 'Salvar taxa'}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
