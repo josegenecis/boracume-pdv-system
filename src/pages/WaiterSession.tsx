@@ -84,14 +84,18 @@ const createPaymentLine = (accountId: string, amount: number, method: PaymentMet
   id: `${accountId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   accountId,
   method,
-  amount: amount > 0 ? amount.toFixed(2) : '',
+  amount: amount > 0 ? amount.toFixed(2).replace('.', ',') : '',
 });
 
 const parsePaymentAmount = (value: string) => {
-  const normalized = String(value || '')
-    .replace(/[^\d,.-]/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
+  const raw = String(value || '').replace(/[^\d,.-]/g, '').trim();
+  const hasComma = raw.includes(',');
+  const hasDot = raw.includes('.');
+  const normalized = hasComma
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : hasDot
+      ? raw.replace(/,/g, '')
+      : raw;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -1666,150 +1670,157 @@ const WaiterSessionPage = () => {
       </Dialog>
 
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent className="rounded-[28px] border-0 sm:max-w-2xl">
-          <DialogTitle className="text-2xl font-semibold text-[#082F23]">Recebimento da mesa</DialogTitle>
-          <DialogDescription>
-            Divida pagamentos por comanda e por forma de pagamento, incluindo parcelamento manual em linhas separadas.
-          </DialogDescription>
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-[100dvw] max-w-[100dvw] grid-rows-none flex-col overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[92dvh] sm:w-[calc(100dvw-2rem)] sm:max-w-2xl sm:rounded-[28px]">
+          <div className="border-b border-[#E7E1D8] bg-white px-4 pb-3 pt-5 sm:px-6">
+            <DialogTitle className="pr-8 text-xl font-semibold leading-tight text-[#082F23] sm:text-2xl">Recebimento da mesa</DialogTitle>
+            <DialogDescription className="mt-1 text-sm leading-5">
+              Divida pagamentos por comanda e por forma de pagamento.
+            </DialogDescription>
+          </div>
 
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-[#F4F8F2] p-4">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Total</div>
-                <div className="mt-2 text-xl font-semibold text-[#082F23]">{formatMoney(session.total)}</div>
-              </div>
-              <div className="rounded-2xl bg-[#F4F8F2] p-4">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Recebido</div>
-                <div className="mt-2 text-xl font-semibold text-[#082F23]">{formatMoney(session.paidTotal)}</div>
-              </div>
-              <div className="rounded-2xl bg-[#F4F8F2] p-4">
-                <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Saldo</div>
-                <div className="mt-2 text-xl font-semibold text-[#082F23]">{formatMoney(session.dueAmount)}</div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {paymentLines.map((line) => (
-                <div key={line.id} className="grid gap-3 rounded-2xl border border-[#DCE6D8] bg-[#FBFCFA] p-4 sm:grid-cols-[1.15fr,0.85fr,0.7fr,auto]">
-                  <div className="space-y-2">
-                    <Label>Comanda</Label>
-                    <Select value={line.accountId} onValueChange={(value) => handlePaymentLineChange(line.id, 'accountId', value)}>
-                      <SelectTrigger className="h-12 rounded-2xl">
-                        <SelectValue placeholder="Selecione a comanda" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {session.accounts
-                          .filter((account) => account.dueAmount > 0)
-                          .map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.name} - {formatMoney(account.dueAmount)}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Forma</Label>
-                    <Select value={line.method} onValueChange={(value: PaymentMethod) => handlePaymentLineChange(line.id, 'method', value)}>
-                      <SelectTrigger className="h-12 rounded-2xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pix">PIX</SelectItem>
-                        <SelectItem value="cash">Dinheiro</SelectItem>
-                        <SelectItem value="card">Cartao</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Valor</Label>
-                    <Input
-                      value={line.amount}
-                      onChange={(event) => handlePaymentLineChange(line.id, 'amount', event.target.value)}
-                      className="h-12 rounded-2xl"
-                    />
-                  </div>
-
-                  <div className="flex items-end">
-                    <Button
-                      variant="outline"
-                      className="h-12 rounded-2xl"
-                      onClick={() => setPaymentLines((current) => current.filter((entry) => entry.id !== line.id))}
-                      disabled={paymentLines.length === 1}
-                    >
-                      Remover
-                    </Button>
-                  </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Total</div>
+                  <div className="mt-2 text-sm font-semibold leading-tight text-[#082F23] sm:text-xl">{formatMoney(session.total)}</div>
                 </div>
-              ))}
-            </div>
-
-            {canUseServiceCharge ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-[#082F23]">
-                      Cliente autorizou adicionar {serviceChargePercent}% do garçom?
-                    </div>
-                    <div className="mt-1 text-xs leading-5 text-amber-800">
-                      O valor entra junto no recebimento da mesa. Retenção configurada: {Number(serviceChargeSettings?.taxWithholdPercent || 0)}%.
-                    </div>
-                  </div>
-                  <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+                <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Recebido</div>
+                  <div className="mt-2 text-sm font-semibold leading-tight text-[#082F23] sm:text-xl">{formatMoney(session.paidTotal)}</div>
                 </div>
-                {serviceChargeAccepted ? (
-                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                    <div className="rounded-xl bg-white/80 p-3">
-                      <div className="text-xs text-slate-500">Taxa</div>
-                      <div className="font-semibold text-[#082F23]">{formatMoney(serviceChargeAmount)}</div>
-                    </div>
-                    <div className="rounded-xl bg-white/80 p-3">
-                      <div className="text-xs text-slate-500">Retenção</div>
-                      <div className="font-semibold text-red-700">{formatMoney(serviceChargeTax)}</div>
-                    </div>
-                    <div className="rounded-xl bg-white/80 p-3">
-                      <div className="text-xs text-slate-500">Líquido garçom</div>
-                      <div className="font-semibold text-emerald-700">{formatMoney(serviceChargeNet)}</div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="flex items-center justify-between rounded-2xl bg-[#082F23] px-4 py-3 text-white">
-              <div>
-                <div className="text-xs uppercase tracking-[0.16em] text-white/65">Total a receber</div>
-                <div className="text-sm text-white/80">
-                  Pagamento {formatMoney(paymentBaseTotal)}
-                  {serviceChargeAmount > 0 ? ` + taxa ${formatMoney(serviceChargeAmount)}` : ''}
+                <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Saldo</div>
+                  <div className="mt-2 text-sm font-semibold leading-tight text-[#082F23] sm:text-xl">{formatMoney(session.dueAmount)}</div>
                 </div>
               </div>
-              <div className="text-xl font-semibold">{formatMoney(paymentFinalTotal)}</div>
-            </div>
 
-            <div className="flex justify-start">
-              <Button
-                variant="outline"
-                className="rounded-2xl"
-                onClick={() => {
-                  const nextAccount = session.accounts.find((account) => account.dueAmount > 0);
-                  setPaymentLines((current) => [...current, createPaymentLine(nextAccount?.id || '', 0, 'pix')]);
-                }}
-              >
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Adicionar linha
-              </Button>
+              <div className="space-y-3">
+                {paymentLines.map((line) => (
+                  <div key={line.id} className="grid gap-3 rounded-2xl border border-[#DCE6D8] bg-[#FBFCFA] p-3 sm:grid-cols-[1.15fr,0.85fr,0.7fr,auto] sm:p-4">
+                    <div className="space-y-2">
+                      <Label>Comanda</Label>
+                      <Select value={line.accountId} onValueChange={(value) => handlePaymentLineChange(line.id, 'accountId', value)}>
+                        <SelectTrigger className="h-11 rounded-2xl sm:h-12">
+                          <SelectValue placeholder="Selecione a comanda" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {session.accounts
+                            .filter((account) => account.dueAmount > 0)
+                            .map((account) => (
+                              <SelectItem key={account.id} value={account.id}>
+                                {account.name} - {formatMoney(account.dueAmount)}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-[1fr,0.9fr] gap-3 sm:contents">
+                      <div className="space-y-2">
+                        <Label>Forma</Label>
+                        <Select value={line.method} onValueChange={(value: PaymentMethod) => handlePaymentLineChange(line.id, 'method', value)}>
+                          <SelectTrigger className="h-11 rounded-2xl sm:h-12">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pix">PIX</SelectItem>
+                            <SelectItem value="cash">Dinheiro</SelectItem>
+                            <SelectItem value="card">Cartao</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Valor</Label>
+                        <Input
+                          value={line.amount}
+                          inputMode="decimal"
+                          onChange={(event) => handlePaymentLineChange(line.id, 'amount', event.target.value)}
+                          className="h-11 rounded-2xl text-base sm:h-12"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-end">
+                      <Button
+                        variant="outline"
+                        className="h-11 w-full rounded-2xl sm:h-12 sm:w-auto"
+                        onClick={() => setPaymentLines((current) => current.filter((entry) => entry.id !== line.id))}
+                        disabled={paymentLines.length === 1}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {canUseServiceCharge ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-[#082F23]">
+                        Cliente autorizou adicionar {serviceChargePercent}% do garçom?
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-amber-800">
+                        O valor entra junto no recebimento da mesa. Retenção configurada: {Number(serviceChargeSettings?.taxWithholdPercent || 0)}%.
+                      </div>
+                    </div>
+                    <Switch checked={serviceChargeAccepted} onCheckedChange={setServiceChargeAccepted} />
+                  </div>
+                  {serviceChargeAccepted ? (
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                      <div className="rounded-xl bg-white/80 p-3">
+                        <div className="text-xs text-slate-500">Taxa</div>
+                        <div className="font-semibold text-[#082F23]">{formatMoney(serviceChargeAmount)}</div>
+                      </div>
+                      <div className="rounded-xl bg-white/80 p-3">
+                        <div className="text-xs text-slate-500">Retenção</div>
+                        <div className="font-semibold text-red-700">{formatMoney(serviceChargeTax)}</div>
+                      </div>
+                      <div className="rounded-xl bg-white/80 p-3">
+                        <div className="text-xs text-slate-500">Líquido garçom</div>
+                        <div className="font-semibold text-emerald-700">{formatMoney(serviceChargeNet)}</div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#082F23] px-4 py-3 text-white">
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-[0.16em] text-white/65">Total a receber</div>
+                  <div className="text-sm text-white/80">
+                    Pagamento {formatMoney(paymentBaseTotal)}
+                    {serviceChargeAmount > 0 ? ` + taxa ${formatMoney(serviceChargeAmount)}` : ''}
+                  </div>
+                </div>
+                <div className="shrink-0 text-lg font-semibold sm:text-xl">{formatMoney(paymentFinalTotal)}</div>
+              </div>
+
+              <div className="flex justify-start pb-2">
+                <Button
+                  variant="outline"
+                  className="h-11 w-full rounded-2xl sm:w-auto"
+                  onClick={() => {
+                    const nextAccount = session.accounts.find((account) => account.dueAmount > 0);
+                    setPaymentLines((current) => [...current, createPaymentLine(nextAccount?.id || '', 0, 'pix')]);
+                  }}
+                >
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Adicionar linha
+                </Button>
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="gap-3 sm:justify-between">
-            <Button variant="outline" className="rounded-2xl" onClick={() => setPaymentDialogOpen(false)} disabled={submitting}>
+          <DialogFooter className="grid grid-cols-2 gap-2 border-t border-[#E7E1D8] bg-white p-4 sm:flex sm:justify-between sm:px-6">
+            <Button variant="outline" className="h-11 rounded-2xl" onClick={() => setPaymentDialogOpen(false)} disabled={submitting}>
               Cancelar
             </Button>
-            <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleSavePayments} disabled={submitting}>
-              Confirmar pagamentos
+            <Button className="h-11 rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleSavePayments} disabled={submitting}>
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
