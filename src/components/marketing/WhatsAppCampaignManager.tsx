@@ -207,6 +207,7 @@ export default function WhatsAppCampaignManager() {
     inactiveMinDays: audienceType === 'inactive_range' ? inactiveMinDays : null,
     inactiveMaxDays: audienceType === 'inactive_range' && inactiveMaxDays > 0 ? inactiveMaxDays : null,
     immediateManualTest: audienceType === 'manual' ? immediateManualTest : false,
+    allowRecentManualResend: audienceType === 'manual',
   });
 
   const createCampaign = async () => {
@@ -293,7 +294,7 @@ export default function WhatsAppCampaignManager() {
     const product = products.find((item) => item.id === productId);
     if (!product) return;
     if (!title.trim()) setTitle(`Oferta: ${product.name}`);
-    setMessage(`Oi {nome}! Oferta especial de hoje: ${product.name} por ${displayPrice(product.price)}.\n\nPeça aqui: {cardapio}`);
+    setMessage(`Olá {nome}! Oferta especial de hoje: ${product.name} por ${displayPrice(product.price)}.\n\nPeça aqui: {cardapio}`);
     if (product.image_url && !promoImageUrl) setPromoImageUrl(product.image_url);
   };
 

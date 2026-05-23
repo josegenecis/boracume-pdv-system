@@ -18,6 +18,7 @@ type AudienceFilters = {
   manualPhones: string[];
   inactiveMinDays: number | null;
   inactiveMaxDays: number | null;
+  allowRecentManualResend: boolean;
 };
 
 function json(data: Record<string, unknown>, status = 200) {
@@ -74,6 +75,7 @@ function parseAudienceFilters(body: any = {}): AudienceFilters {
     manualPhones: parseManualPhones(body.manualPhones ?? body.manual_phones),
     inactiveMinDays: Number.isFinite(min as number) ? min : null,
     inactiveMaxDays: Number.isFinite(max as number) ? max : null,
+    allowRecentManualResend: Boolean(body.allowRecentManualResend || body.immediateManualTest || body.immediate_manual_test),
   };
 }
 
@@ -266,8 +268,12 @@ async function loadEligibleAudience(serviceClient: any, userId: string, filters:
   let eligible = active
     .map((item: any) => ({ ...item, customer_phone: normalizePhone(item.customer_phone) }))
     .filter((item: any) => item.customer_phone && inboundSet.has(item.id))
-    .filter((item: any) => !optoutSet.has(item.customer_phone))
-    .filter((item: any) => !recentSet.has(item.customer_phone));
+    .filter((item: any) => !optoutSet.has(item.customer_phone));
+
+  const bypassRecentCooldown = filters.audienceType === "manual" && filters.allowRecentManualResend;
+  if (!bypassRecentCooldown) {
+    eligible = eligible.filter((item: any) => !recentSet.has(item.customer_phone));
+  }
 
   if (filters.audienceType === "manual") {
     const manualSet = new Set(filters.manualPhones.flatMap((phone) => buildPhoneCandidates(phone)));
