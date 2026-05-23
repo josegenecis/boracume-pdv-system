@@ -538,6 +538,11 @@ async function sendMedia(userId: string, instanceName: string, number: string, t
   const instance = String(instanceName || Deno.env.get("EVOLUTION_DEFAULT_INSTANCE") || `rest_${userId.replace(/-/g, "")}`).trim();
   const mimeType = mediaMimeType(mediaUrl);
   const transportsFor = (media: string) => [
+    {
+      url: `${EVOLUTION_URL}/send/media`,
+      headers: { "Content-Type": "application/json", apikey: instanceToken },
+      body: { number, url: media, type: "image", caption: text },
+    },
     ...(standardBaseUrl && standardApiKey
       ? buildMediaPayloads(number, text, media, mimeType).map((body) => ({
         url: `${standardBaseUrl}/message/sendMedia/${encodeURIComponent(instance)}`,
