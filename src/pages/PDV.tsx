@@ -2290,18 +2290,26 @@ const PDV = () => {
                         )
                       )}
                       <div className="grid grid-cols-2 gap-2">
-                        <CurrencyTextInput
-                          placeholder="Desconto"
-                          value={discountAmount}
-                          onValueChange={setDiscountAmount}
-                          className="h-8 text-xs"
-                        />
-                        <CurrencyTextInput
-                          placeholder="Acréscimo"
-                          value={surchargeAmount}
-                          onValueChange={setSurchargeAmount}
-                          className="h-8 text-xs"
-                        />
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-600">Desconto</div>
+                          <CurrencyTextInput
+                            aria-label="Desconto"
+                            placeholder="R$ 0,00"
+                            value={discountAmount}
+                            onValueChange={setDiscountAmount}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Acréscimo</div>
+                          <CurrencyTextInput
+                            aria-label="Acréscimo"
+                            placeholder="R$ 0,00"
+                            value={surchargeAmount}
+                            onValueChange={setSurchargeAmount}
+                            className="h-8 text-xs"
+                          />
+                        </div>
                       </div>
                     </div>
                 </div>
@@ -2618,18 +2626,26 @@ const PDV = () => {
                         )
                       )}
                       <div className="grid grid-cols-2 gap-2">
-                        <CurrencyTextInput
-                          placeholder="Desconto"
-                          value={discountAmount}
-                          onValueChange={setDiscountAmount}
-                          className="h-7.5 text-[10px]"
-                        />
-                        <CurrencyTextInput
-                          placeholder="Acréscimo"
-                          value={surchargeAmount}
-                          onValueChange={setSurchargeAmount}
-                          className="h-7.5 text-[10px]"
-                        />
+                        <div className="space-y-1">
+                          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-red-600">Desconto</div>
+                          <CurrencyTextInput
+                            aria-label="Desconto"
+                            placeholder="R$ 0,00"
+                            value={discountAmount}
+                            onValueChange={setDiscountAmount}
+                            className="h-7.5 text-[10px]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Acréscimo</div>
+                          <CurrencyTextInput
+                            aria-label="Acréscimo"
+                            placeholder="R$ 0,00"
+                            value={surchargeAmount}
+                            onValueChange={setSurchargeAmount}
+                            className="h-7.5 text-[10px]"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
