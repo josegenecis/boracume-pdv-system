@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  User,
   Menu,
   Wallet,
-  Settings,
-  Package,
-  Layers,
-  CookingPot,
-  BarChart3,
   MessageCircle,
   ClipboardList,
   Monitor,
@@ -35,10 +29,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { FeatureKey } from '@/lib/featureAccess';
 import { useFeatureGate } from '@/components/subscription/FeatureGateProvider';
-import { clearLocalOperatorSession } from '@/services/operatorAuth';
 
 const FixedHeader = () => {
-  const { signOut, user } = useAuth();
+  const { user } = useAuth();
   const { isMobile, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
   const { canAccessFeature, openFeatureDialog } = useFeatureGate();
@@ -105,12 +98,6 @@ const FixedHeader = () => {
     };
   }, []);
 
-  const handleSignOut = async () => {
-    clearLocalOperatorSession();
-    await signOut();
-    navigate('/login');
-  };
-
   const goToFeature = (path: string, feature: FeatureKey) => {
     if (!canAccessFeature(feature)) {
       openFeatureDialog(feature);
@@ -143,26 +130,6 @@ const FixedHeader = () => {
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <div className="hidden lg:block">
-            <OperatorSwitcher />
-          </div>
-          <div className="hidden items-center gap-1.5 xl:flex">
-            {primaryShortcuts.map((shortcut) => {
-              const Icon = shortcut.icon;
-              return (
-                <Button
-                  key={shortcut.label}
-                  variant="outline"
-                  size="sm"
-                  className="h-9 rounded-xl border-[#DCE6DF] bg-white px-3 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
-                  onClick={() => goToFeature(shortcut.path, shortcut.feature)}
-                >
-                  <Icon size={15} className="mr-2" />
-                  {shortcut.label}
-                </Button>
-              );
-            })}
-          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -201,97 +168,37 @@ const FixedHeader = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden h-9 rounded-xl border-[#DCE6DF] bg-white px-4 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex"
-            onClick={() => goToFeature('/relatorios', 'reports')}
-          >
-            Abrir relatorio diario
-          </Button>
-          <Button
-            size="sm"
-            className="hidden h-9 rounded-xl bg-[#FF6400] px-4 font-semibold text-white hover:bg-[#E85C00] sm:inline-flex"
-            onClick={() => goToFeature('/pdv', 'pdv')}
-          >
-            + Novo pedido
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`h-9 rounded-xl border-[#DCE6DF] bg-white font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${isMobile ? 'h-8 w-8 rounded-[16px] p-0' : 'px-4'}`}
-              >
-                {isMobile ? <User size={16} /> : 'Gerencial'}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Gerencial</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => goToFeature('/pedidos', 'orders')}>
-                <ClipboardList className="mr-2 h-4 w-4" />
-                Pedidos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/mesas', 'tables')}>
-                <Table2 className="mr-2 h-4 w-4" />
-                Mesas
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/whatsapp-bot', 'whatsapp')}>
-                <MessageCircle className="mr-2 h-4 w-4" />
-                WhatsApp
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => goToFeature('/caixa', 'finance')}>
-                <Wallet className="mr-2 h-4 w-4" />
-                Caixa Geral
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/financeiro', 'finance')}>
-                <BarChart3 className="mr-2 h-4 w-4" />
-                Financeiro
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/pdv', 'pdv')}>
-                <Wallet className="mr-2 h-4 w-4" />
-                Caixa / PDV
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => goToFeature('/produtos', 'products')}>
-                <Package className="mr-2 h-4 w-4" />
-                Produtos
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/produtos?tab=categories', 'products')}>
-                <Layers className="mr-2 h-4 w-4" />
-                Categorias
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/cozinha', 'kds')}>
-                <CookingPot className="mr-2 h-4 w-4" />
-                Cozinha (KDS)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => goToFeature('/configuracoes', 'settings')}>
-                <Settings className="mr-2 h-4 w-4" />
-                Configuracoes
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goToFeature('/configuracoes?tab=whatsapp', 'whatsapp')}>
-                <MessageCircle className="mr-2 h-4 w-4" />
-                WhatsApp
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
-                <User className="mr-2 h-4 w-4" />
-                Sair do sistema
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            className="relative hidden h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex"
-            onClick={() => goToFeature('/whatsapp-bot', 'whatsapp')}
-          >
-            <MessageCircle size={18} />
-            <span className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} />
-          </Button>
+          <div className="hidden lg:block">
+            <OperatorSwitcher />
+          </div>
+          <div className="hidden items-center gap-1.5 lg:flex">
+            {primaryShortcuts.map((shortcut) => {
+              const Icon = shortcut.icon;
+              const isWhatsApp = shortcut.label === 'WhatsApp';
+              return (
+                <Button
+                  key={shortcut.label}
+                  variant="outline"
+                  size="sm"
+                  className={`relative h-9 rounded-xl border-[#DCE6DF] bg-white px-3 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6] ${
+                    isWhatsApp && whatsAppConnected ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]' : ''
+                  }`}
+                  onClick={() => goToFeature(shortcut.path, shortcut.feature)}
+                >
+                  <Icon size={15} className="mr-2" />
+                  {shortcut.label}
+                  {isWhatsApp && (
+                    <span
+                      className={`ml-2 h-2.5 w-2.5 rounded-full border border-white ${
+                        whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'
+                      }`}
+                      aria-label={whatsAppConnected ? 'WhatsApp conectado' : 'WhatsApp desconectado'}
+                    />
+                  )}
+                </Button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </header>
