@@ -1174,6 +1174,8 @@ export type Database = {
           image_url: string | null
           name: string
           price: number
+          receipt_ingredients: string | null
+          receipt_ingredients_enabled: boolean | null
           send_to_kds: boolean | null
           show_in_delivery: boolean | null
           show_in_pdv: boolean | null
@@ -1193,6 +1195,8 @@ export type Database = {
           image_url?: string | null
           name: string
           price: number
+          receipt_ingredients?: string | null
+          receipt_ingredients_enabled?: boolean | null
           send_to_kds?: boolean | null
           show_in_delivery?: boolean | null
           show_in_pdv?: boolean | null
@@ -1212,6 +1216,8 @@ export type Database = {
           image_url?: string | null
           name?: string
           price?: number
+          receipt_ingredients?: string | null
+          receipt_ingredients_enabled?: boolean | null
           send_to_kds?: boolean | null
           show_in_delivery?: boolean | null
           show_in_pdv?: boolean | null

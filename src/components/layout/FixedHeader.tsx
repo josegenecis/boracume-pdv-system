@@ -9,6 +9,14 @@ import {
   CookingPot,
   BarChart3,
   MessageCircle,
+  ClipboardList,
+  Monitor,
+  Table2,
+  ArrowDown,
+  ArrowUp,
+  Lock,
+  Unlock,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -111,6 +119,14 @@ const FixedHeader = () => {
     navigate(path);
   };
 
+  const cashActionPath = (action: 'open' | 'close' | 'in' | 'out') => `/caixa?cashAction=${action}`;
+  const primaryShortcuts = [
+    { label: 'Pedidos', icon: ClipboardList, path: '/pedidos', feature: 'orders' as FeatureKey },
+    { label: 'PDV', icon: Monitor, path: '/pdv', feature: 'pdv' as FeatureKey },
+    { label: 'Mesas', icon: Table2, path: '/mesas', feature: 'tables' as FeatureKey },
+    { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp-bot', feature: 'whatsapp' as FeatureKey },
+  ];
+
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-[#E7ECE8] bg-white shadow-[0_12px_30px_-24px_rgba(0,50,35,0.16)]">
       <div className={`flex items-center justify-between ${isMobile ? 'mobile-safe-x px-3 py-2' : 'px-3 py-3 sm:px-6'}`}>
@@ -130,19 +146,61 @@ const FixedHeader = () => {
           <div className="hidden lg:block">
             <OperatorSwitcher />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-9 rounded-xl border font-semibold shadow-sm hover:bg-[#F5F8F6] ${
-              cashStatus === 'open'
-                ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]'
-                : 'border-[#DCE6DF] bg-white text-[#003223]'
-            } ${isMobile ? 'h-8 w-8 rounded-[16px] p-0 md:hidden' : 'hidden px-4 md:inline-flex'}`}
-            onClick={() => goToFeature('/caixa', 'finance')}
-          >
-            <Wallet size={16} className={isMobile ? '' : 'mr-2'} />
-            {!isMobile && 'Caixa'}
-          </Button>
+          <div className="hidden items-center gap-1.5 xl:flex">
+            {primaryShortcuts.map((shortcut) => {
+              const Icon = shortcut.icon;
+              return (
+                <Button
+                  key={shortcut.label}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-xl border-[#DCE6DF] bg-white px-3 font-semibold text-[#003223] shadow-sm hover:bg-[#F5F8F6]"
+                  onClick={() => goToFeature(shortcut.path, shortcut.feature)}
+                >
+                  <Icon size={15} className="mr-2" />
+                  {shortcut.label}
+                </Button>
+              );
+            })}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`h-9 rounded-xl border font-semibold shadow-sm hover:bg-[#F5F8F6] ${
+                  cashStatus === 'open'
+                    ? 'border-[#8CC850] bg-[#F4FAEC] text-[#245B2B]'
+                    : 'border-[#DCE6DF] bg-white text-[#003223]'
+                } ${isMobile ? 'h-8 w-8 rounded-[16px] p-0 md:hidden' : 'hidden px-3 md:inline-flex'}`}
+              >
+                <Wallet size={16} className={isMobile ? '' : 'mr-2'} />
+                {!isMobile && 'Caixa'}
+                {!isMobile && <ChevronDown size={14} className="ml-2 opacity-70" />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Operação de caixa</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => goToFeature(cashActionPath(cashStatus === 'open' ? 'close' : 'open'), 'finance')}>
+                {cashStatus === 'open' ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                {cashStatus === 'open' ? 'Fechar caixa' : 'Abrir caixa'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => goToFeature(cashActionPath('in'), 'finance')}>
+                <ArrowUp className="mr-2 h-4 w-4" />
+                Suprimento
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => goToFeature(cashActionPath('out'), 'finance')}>
+                <ArrowDown className="mr-2 h-4 w-4" />
+                Sangria
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => goToFeature('/caixa', 'finance')}>
+                <Wallet className="mr-2 h-4 w-4" />
+                Ver caixa
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"
@@ -170,6 +228,19 @@ const FixedHeader = () => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Gerencial</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => goToFeature('/pedidos', 'orders')}>
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Pedidos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => goToFeature('/mesas', 'tables')}>
+                <Table2 className="mr-2 h-4 w-4" />
+                Mesas
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => goToFeature('/whatsapp-bot', 'whatsapp')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                WhatsApp
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => goToFeature('/caixa', 'finance')}>
                 <Wallet className="mr-2 h-4 w-4" />
@@ -216,7 +287,7 @@ const FixedHeader = () => {
             variant="outline"
             size="sm"
             className="relative hidden h-9 w-9 rounded-xl border-[#DCE6DF] bg-white p-0 text-[#003223] shadow-sm hover:bg-[#F5F8F6] md:inline-flex"
-            onClick={() => goToFeature('/configuracoes?tab=whatsapp', 'whatsapp')}
+            onClick={() => goToFeature('/whatsapp-bot', 'whatsapp')}
           >
             <MessageCircle size={18} />
             <span className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white ${whatsAppConnected ? 'bg-[#22c55e]' : 'bg-red-500'}`} />

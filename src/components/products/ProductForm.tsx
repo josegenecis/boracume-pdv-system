@@ -42,6 +42,8 @@ interface ProductItem {
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
+  receipt_ingredients_enabled?: boolean;
+  receipt_ingredients?: string;
   track_stock: boolean;
   stock_quantity: number;
   low_stock_threshold: number;
@@ -122,6 +124,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     send_to_kds: false,
     show_in_pdv: true,
     show_in_delivery: true,
+    receipt_ingredients_enabled: false,
+    receipt_ingredients: '',
     track_stock: false,
     stock_quantity: 0,
     low_stock_threshold: 5,
@@ -777,6 +781,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       send_to_kds: formData.send_to_kds,
       show_in_pdv: formData.weight_based ? true : formData.show_in_pdv,
       show_in_delivery: formData.weight_based ? false : formData.show_in_delivery,
+      receipt_ingredients_enabled: Boolean(formData.receipt_ingredients_enabled),
+      receipt_ingredients: formData.receipt_ingredients?.trim() || null,
       image_url: formData.image_url || null,
     };
 
@@ -1242,6 +1248,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           send_to_kds: formData.send_to_kds,
           show_in_pdv: formData.show_in_pdv,
           show_in_delivery: formData.show_in_delivery,
+          receipt_ingredients_enabled: Boolean(formData.receipt_ingredients_enabled),
+          receipt_ingredients: formData.receipt_ingredients?.trim() || null,
         } as const;
 
         let insertResultId: string | null = null;
@@ -1353,6 +1361,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           send_to_kds: formData.send_to_kds,
           show_in_pdv: formData.show_in_pdv,
           show_in_delivery: formData.show_in_delivery,
+          receipt_ingredients_enabled: Boolean(formData.receipt_ingredients_enabled),
+          receipt_ingredients: formData.receipt_ingredients?.trim() || null,
         } as const;
         const { data: insertData, error: insertErr } = await supabase
           .from('products')
@@ -1394,7 +1404,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [user?.id, loading, createdProductId, formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
@@ -1806,6 +1816,38 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
                 rows={2}
                 className="bg-white rounded-xl shadow-sm"
               />
+            </div>
+            <div className="rounded-2xl border border-[#FF6400]/15 bg-[#FFF8F2] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label htmlFor="receipt_ingredients_enabled" className="text-boracume-dark-green font-semibold">
+                    Imprimir ingredientes no cupom
+                  </Label>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Use somente em produtos preparados com composição fixa. A descrição comum continua apenas no cardápio.
+                  </p>
+                </div>
+                <Switch
+                  id="receipt_ingredients_enabled"
+                  checked={Boolean(formData.receipt_ingredients_enabled)}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, receipt_ingredients_enabled: Boolean(checked) }))}
+                />
+              </div>
+              {formData.receipt_ingredients_enabled ? (
+                <div className="mt-3 space-y-1">
+                  <Label htmlFor="receipt_ingredients" className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Ingredientes/complementos fixos
+                  </Label>
+                  <Textarea
+                    id="receipt_ingredients"
+                    value={formData.receipt_ingredients || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, receipt_ingredients: e.target.value }))}
+                    rows={2}
+                    className="bg-white rounded-xl shadow-sm"
+                    placeholder="Ex: banana, leite em pó, granola, leite condensado"
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

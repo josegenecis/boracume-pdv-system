@@ -195,12 +195,13 @@ async function fetchProductDescriptions(productIds: string[]) {
 
   const { data } = await supabase
     .from('products')
-    .select('id,description')
+    .select('id,receipt_ingredients_enabled,receipt_ingredients')
     .in('id', ids as any) as any;
 
   (Array.isArray(data) ? data : []).forEach((row: any) => {
-    const description = String(row?.description || '').trim();
-    if (description) result.set(String(row.id), description);
+    if (!row?.receipt_ingredients_enabled) return;
+    const ingredients = String(row?.receipt_ingredients || '').trim();
+    if (ingredients) result.set(String(row.id), ingredients);
   });
 
   return result;
@@ -1244,7 +1245,7 @@ export const PrinterService = {
         finalLines = optionsToReceiptLines(optionNames, groups);
       }
 
-      const fixedDescription = String(it?.description || it?.product_description || productDescriptions.get(pid) || '').trim();
+      const fixedDescription = String(it?.receipt_ingredients || productDescriptions.get(pid) || '').trim();
       const receiptDescriptionLines = fixedDescription
         ? fixedDescription
             .split(/\n|,|;/)

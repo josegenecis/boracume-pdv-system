@@ -98,6 +98,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'cartao' | 'dinheiro'>('pix');
   const [checkoutDiscount, setCheckoutDiscount] = useState('');
   const [checkoutSurcharge, setCheckoutSurcharge] = useState('');
+  const [cashReceived, setCashReceived] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -114,6 +115,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       setLoading(true);
       setCheckoutDiscount('');
       setCheckoutSurcharge('');
+      setCashReceived('');
 
       const { data: accountData, error: accountError } = await supabase
         .from('table_accounts')
@@ -340,6 +342,8 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
   const checkoutTotal = currentOrder
     ? Math.max(0, Number(currentOrder.total || 0) + checkoutSurchargeValue - checkoutDiscountValue)
     : 0;
+  const cashReceivedValue = parseBRL(cashReceived);
+  const changeAmount = paymentMethod === 'dinheiro' ? Math.max(0, cashReceivedValue - checkoutTotal) : 0;
 
   const handleFinishOrder = async () => {
     if (!table || !currentOrder) return;
@@ -361,11 +365,22 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
       const paymentTimestamp = new Date().toISOString();
       const waiterPaymentMethod = mapPaymentMethodToWaiterPayment(paymentMethod);
       const adjustedTotal = checkoutTotal;
+      if (paymentMethod === 'dinheiro' && cashReceived && cashReceivedValue + 0.009 < adjustedTotal) {
+        toast({
+          title: 'Valor insuficiente',
+          description: 'O valor recebido em espécie é menor que o total da mesa.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const financialAdjustments = {
         subtotal: Number(currentOrder.total || 0),
         discount: checkoutDiscountValue,
         surcharge: checkoutSurchargeValue,
         total: adjustedTotal,
+        cash_received: paymentMethod === 'dinheiro' ? cashReceivedValue : null,
+        change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
       };
 
       if (currentOrder.source === 'table_accounts') {
@@ -402,6 +417,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
               payment_method: paymentMethod,
               total: adjustedTotal,
               discount: checkoutDiscountValue,
+              change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
               cash_register_session_id: openCashSession.id,
               status: 'completed',
               acceptance_status: 'accepted',
@@ -425,6 +441,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             status: 'completed',
             acceptance_status: 'accepted',
             payment_method: paymentMethod,
+            change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
             cash_register_session_id: openCashSession.id,
             estimated_time: '15-20 min',
             session_id: currentOrder.session_id || null,
@@ -490,6 +507,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           status: 'completed',
           acceptance_status: 'accepted',
           payment_method: paymentMethod,
+          change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
           created_at: currentOrder.created_at,
         };
       } else {
@@ -499,6 +517,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
             payment_method: paymentMethod,
             total: adjustedTotal,
             discount: checkoutDiscountValue,
+            change_amount: paymentMethod === 'dinheiro' ? changeAmount : null,
             cash_register_session_id: openCashSession.id,
             status: 'completed',
             acceptance_status: 'accepted',
@@ -873,7 +892,11 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                     <Label className="text-xs uppercase tracking-[0.16em] text-slate-500">Pagamento</Label>
                     <RadioGroup
                       value={paymentMethod}
-                      onValueChange={(value) => setPaymentMethod(value as 'pix' | 'cartao' | 'dinheiro')}
+                      onValueChange={(value) => {
+                        const nextMethod = value as 'pix' | 'cartao' | 'dinheiro';
+                        setPaymentMethod(nextMethod);
+                        if (nextMethod !== 'dinheiro') setCashReceived('');
+                      }}
                       className="grid gap-2"
                     >
                       <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2">
@@ -890,6 +913,26 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
                       </label>
                     </RadioGroup>
                   </div>
+
+                  {paymentMethod === 'dinheiro' && (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-900">
+                          Valor recebido em espécie
+                        </Label>
+                        <CurrencyTextInput
+                          value={cashReceived}
+                          onValueChange={setCashReceived}
+                          placeholder="R$ 0,00"
+                          className="bg-white"
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                        <span className="font-medium text-slate-600">Troco</span>
+                        <span className="text-lg font-bold text-emerald-700">{formatCurrency(changeAmount)}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <Button
                     onClick={handleFinishOrder}

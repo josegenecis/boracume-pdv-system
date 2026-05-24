@@ -47,7 +47,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
 import { getLocalOperatorSession } from '@/services/operatorAuth';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -98,6 +98,7 @@ const Financeiro = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -954,6 +955,14 @@ const Financeiro = () => {
     setCashDescription('');
     setIsCashDialogOpen(true);
   };
+
+  useEffect(() => {
+    const action = new URLSearchParams(location.search).get('cashAction');
+    if (!action || !['open', 'close', 'in', 'out'].includes(action)) return;
+
+    openCashActionDialog(action as 'open' | 'close' | 'in' | 'out');
+    navigate(location.pathname, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   const refreshFinanceData = async () => {
     await Promise.all([fetchData(), checkOpenSession(), fetchCashSessions()]);

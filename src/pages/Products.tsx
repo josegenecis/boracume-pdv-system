@@ -36,6 +36,8 @@ interface ProductItem {
   send_to_kds: boolean;
   show_in_pdv: boolean;
   show_in_delivery: boolean;
+  receipt_ingredients_enabled?: boolean;
+  receipt_ingredients?: string | null;
   display_order?: number;
   track_stock: boolean;
   stock_quantity: number;
@@ -208,6 +210,8 @@ const Products = () => {
         show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
         weight_based: product.weight_based !== undefined ? product.weight_based : false,
         send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false,
+        receipt_ingredients_enabled: Boolean(product.receipt_ingredients_enabled),
+        receipt_ingredients: product.receipt_ingredients || null,
         track_stock: product.track_stock !== undefined ? product.track_stock : false,
         stock_quantity: product.stock_quantity !== undefined ? product.stock_quantity : 0,
         low_stock_threshold: product.low_stock_threshold !== undefined ? product.low_stock_threshold : 5
@@ -236,6 +240,8 @@ const Products = () => {
             show_in_delivery: product.show_in_delivery !== undefined ? product.show_in_delivery : true,
             weight_based: product.weight_based !== undefined ? product.weight_based : false,
             send_to_kds: product.send_to_kds !== undefined ? product.send_to_kds : false,
+            receipt_ingredients_enabled: Boolean(product.receipt_ingredients_enabled),
+            receipt_ingredients: product.receipt_ingredients || null,
             track_stock: product.track_stock !== undefined ? product.track_stock : false,
             stock_quantity: product.stock_quantity !== undefined ? product.stock_quantity : 0,
             low_stock_threshold: product.low_stock_threshold !== undefined ? product.low_stock_threshold : 5
@@ -482,6 +488,8 @@ const Products = () => {
       send_to_kds: Boolean(product.send_to_kds),
       show_in_pdv: product.show_in_pdv !== false,
       show_in_delivery: product.show_in_delivery !== false,
+      receipt_ingredients_enabled: Boolean(product.receipt_ingredients_enabled),
+      receipt_ingredients: product.receipt_ingredients || null,
       display_order: products.length + 1,
       track_stock: Boolean(product.track_stock),
       stock_quantity: Number(product.stock_quantity || 0),
@@ -501,6 +509,8 @@ const Products = () => {
       send_to_kds: Boolean(product.send_to_kds),
       show_in_pdv: product.show_in_pdv !== false,
       show_in_delivery: product.show_in_delivery !== false,
+      receipt_ingredients_enabled: Boolean(product.receipt_ingredients_enabled),
+      receipt_ingredients: product.receipt_ingredients || null,
     };
 
     try {
