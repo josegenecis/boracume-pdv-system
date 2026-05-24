@@ -531,7 +531,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       localStorage.removeItem('operator_session');
       localStorage.removeItem('waiter_session');
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       
       // Limpar cache
       clearAllCache();

@@ -1140,6 +1140,7 @@ Deno.serve(async (req: Request) => {
       const tableId = String(body?.tableId || '')
       const tableNumber = Math.max(1, Number(body?.tableNumber || 0))
       const guestCount = Math.max(1, Number(body?.guestCount || 1))
+      const customerName = String(body?.customerName || '').trim().slice(0, 80)
 
       if (!tableId || !tableNumber) return fail('Mesa invalida.', 400)
 
@@ -1174,7 +1175,7 @@ Deno.serve(async (req: Request) => {
         session_id: sessionRow.id,
         table_id: null,
         account_number: index + 1,
-        name: `Conta ${index + 1}`,
+        name: customerName && index === 0 ? customerName : `Conta ${index + 1}`,
         total: 0,
         status: 'open',
         opened_by_waiter_id: waiterSession.profile.id,

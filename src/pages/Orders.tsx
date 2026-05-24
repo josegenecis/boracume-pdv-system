@@ -64,6 +64,8 @@ const isTableServiceOrder = (order: any) => {
   return orderType === 'dine_in' && (Boolean(order?.table_id) || source.includes('table'));
 };
 
+const getAutoAcceptKey = (userId?: string) => `orders_auto_accept:${userId || 'local'}`;
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
@@ -95,6 +97,7 @@ const Orders = () => {
   const [assignOrderIds, setAssignOrderIds] = useState<string[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [assigningDriver, setAssigningDriver] = useState(false);
+  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
 
   // PIX Modal State
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
@@ -105,6 +108,7 @@ const Orders = () => {
   const { sendToKitchen } = useKitchenIntegration();
   const realtimeOkRef = useRef(false);
   const hasLoadedOrdersRef = useRef(false);
+  const autoAcceptingRef = useRef<Set<string>>(new Set());
 
   const normalizeItems = (value: any) => {
     if (Array.isArray(value)) return value;
@@ -220,6 +224,27 @@ const Orders = () => {
       };
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setAutoAcceptEnabled(localStorage.getItem(getAutoAcceptKey(user.id)) === 'true');
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !autoAcceptEnabled) return;
+
+    const targets = orders.filter((order) => {
+      const pending = order.acceptance_status === 'pending_acceptance' || order.status === 'pending';
+      return pending && !autoAcceptingRef.current.has(order.id);
+    });
+
+    targets.forEach((order) => {
+      autoAcceptingRef.current.add(order.id);
+      void updateOrderStatus(order.id, 'preparing', { silent: true }).finally(() => {
+        autoAcceptingRef.current.delete(order.id);
+      });
+    });
+  }, [orders, autoAcceptEnabled, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -402,6 +427,7 @@ const Orders = () => {
     options?: {
       ifoodCancellationCode?: string;
       ifoodCancellationReason?: string;
+      silent?: boolean;
     }
   ) => {
     let optimisticOrderSnapshot: Order | null = null;
@@ -538,10 +564,12 @@ const Orders = () => {
 
       // Se status mudou para 'preparing', enviar para KDS
       if (newStatus === 'preparing' && order) {
-        toast({
-          title: "Pedido aceito!",
-          description: "Status atualizado com sucesso.",
-        });
+        if (!options?.silent) {
+          toast({
+            title: "Pedido aceito!",
+            description: "Status atualizado com sucesso.",
+          });
+        }
 
         const orderData = {
           user_id: order.user_id || user?.id || '',
@@ -565,10 +593,12 @@ const Orders = () => {
         PrinterService.printOrderOnAccept(order);
 
       } else {
-        toast({
-          title: "Status atualizado",
-          description: `Status do pedido atualizado com sucesso.`,
-        });
+        if (!options?.silent) {
+          toast({
+            title: "Status atualizado",
+            description: `Status do pedido atualizado com sucesso.`,
+          });
+        }
       }
 
     } catch (error: any) {
@@ -1297,6 +1327,21 @@ const Orders = () => {
               >
                 Entregas/Despachados
               </Button>
+              <Button
+                variant={autoAcceptEnabled ? 'default' : 'outline'}
+                className={autoAcceptEnabled ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : ''}
+                onClick={() => {
+                  const next = !autoAcceptEnabled;
+                  setAutoAcceptEnabled(next);
+                  if (user?.id) localStorage.setItem(getAutoAcceptKey(user.id), String(next));
+                  toast({
+                    title: next ? 'Aceite automático ligado' : 'Aceite automático desligado',
+                    description: next ? 'Novos pedidos serão aceitos e enviados para preparo automaticamente.' : 'Novos pedidos voltarão a aguardar confirmação manual.',
+                  });
+                }}
+              >
+                {autoAcceptEnabled ? 'Autoaceite ligado' : 'Autoaceite'}
+              </Button>
               <Button onClick={() => fetchOrders({ background: true })} variant="outline">
                 {refreshing ? 'Atualizando...' : 'Atualizar'}
               </Button>
@@ -1351,6 +1396,21 @@ const Orders = () => {
                 />
               </div>
             )}
+            <Button
+              variant={autoAcceptEnabled ? 'default' : 'outline'}
+              className={`mt-3 h-10 rounded-2xl text-xs ${autoAcceptEnabled ? 'bg-[#8CC850] text-[#003223] hover:bg-[#79b541]' : 'bg-white'}`}
+              onClick={() => {
+                const next = !autoAcceptEnabled;
+                setAutoAcceptEnabled(next);
+                if (user?.id) localStorage.setItem(getAutoAcceptKey(user.id), String(next));
+                toast({
+                  title: next ? 'Aceite automático ligado' : 'Aceite automático desligado',
+                  description: next ? 'Novos pedidos serão aceitos automaticamente.' : 'Confirmação manual reativada.',
+                });
+              }}
+            >
+              {autoAcceptEnabled ? 'Autoaceite ligado' : 'Ligar autoaceite'}
+            </Button>
 
             <TabsContent value="novos" className="mt-4 space-y-3">
               {pendingOrders.length === 0 ? <Card className="rounded-[22px] border border-dashed border-slate-200 bg-white/90"><CardContent className="py-8 text-center text-sm text-slate-500">Nenhum pedido novo.</CardContent></Card> : pendingOrders.map(renderMobileOrderCard)}

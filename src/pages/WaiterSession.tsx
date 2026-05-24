@@ -73,6 +73,7 @@ type PaymentLine = {
   accountId: string;
   method: PaymentMethod;
   amount: string;
+  cashReceived?: string;
 };
 
 type WaiterPixCheckoutState = WaiterPixCheckout & {
@@ -85,6 +86,7 @@ const createPaymentLine = (accountId: string, amount: number, method: PaymentMet
   accountId,
   method,
   amount: amount > 0 ? amount.toFixed(2).replace('.', ',') : '',
+  cashReceived: method === 'cash' && amount > 0 ? amount.toFixed(2).replace('.', ',') : '',
 });
 
 const parsePaymentAmount = (value: string) => {
@@ -219,6 +221,14 @@ const WaiterSessionPage = () => {
     : 0;
   const serviceChargeNet = Math.max(0, serviceChargeAmount - serviceChargeTax);
   const paymentFinalTotal = paymentBaseTotal + serviceChargeAmount;
+  const cashChangeTotal = useMemo(() => {
+    return paymentLines.reduce((total, line) => {
+      if (line.method !== 'cash') return total;
+      const received = parsePaymentAmount(line.cashReceived || '');
+      const amount = parsePaymentAmount(line.amount || '');
+      return total + Math.max(0, received - amount);
+    }, 0);
+  }, [paymentLines]);
 
   const loadSession = async (silent = false) => {
     if (!sessionId) return;
@@ -615,7 +625,14 @@ const WaiterSessionPage = () => {
 
   const handlePaymentLineChange = (lineId: string, key: keyof PaymentLine, value: string) => {
     setPaymentLines((current) =>
-      current.map((line) => (line.id === lineId ? { ...line, [key]: value } : line)),
+      current.map((line) => {
+        if (line.id !== lineId) return line;
+        const next = { ...line, [key]: value };
+        if (key === 'method') {
+          next.cashReceived = value === 'cash' ? line.cashReceived || line.amount : '';
+        }
+        return next;
+      }),
     );
   };
 
@@ -1742,6 +1759,29 @@ const WaiterSessionPage = () => {
                       </div>
                     </div>
 
+                    {line.method === 'cash' ? (
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-3 sm:col-span-4">
+                        <div className="grid gap-3 sm:grid-cols-[1fr,1fr] sm:items-end">
+                          <div className="space-y-2">
+                            <Label>Valor recebido em espécie</Label>
+                            <Input
+                              value={line.cashReceived || ''}
+                              inputMode="decimal"
+                              onChange={(event) => handlePaymentLineChange(line.id, 'cashReceived', event.target.value)}
+                              className="h-11 rounded-2xl bg-white text-base"
+                              placeholder="Ex: 100,00"
+                            />
+                          </div>
+                          <div className="rounded-2xl bg-white px-4 py-3">
+                            <div className="text-xs uppercase tracking-[0.14em] text-emerald-700/70">Troco</div>
+                            <div className="mt-1 text-lg font-semibold text-emerald-800">
+                              {formatMoney(Math.max(0, parsePaymentAmount(line.cashReceived || '') - parsePaymentAmount(line.amount || '')))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div className="flex items-end">
                       <Button
                         variant="outline"
@@ -1794,6 +1834,7 @@ const WaiterSessionPage = () => {
                   <div className="text-sm text-white/80">
                     Pagamento {formatMoney(paymentBaseTotal)}
                     {serviceChargeAmount > 0 ? ` + taxa ${formatMoney(serviceChargeAmount)}` : ''}
+                    {cashChangeTotal > 0 ? ` • troco ${formatMoney(cashChangeTotal)}` : ''}
                   </div>
                 </div>
                 <div className="shrink-0 text-lg font-semibold sm:text-xl">{formatMoney(paymentFinalTotal)}</div>

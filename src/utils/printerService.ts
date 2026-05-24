@@ -188,6 +188,24 @@ async function fetchVariationOrderMaps(productIds: string[]) {
   return result;
 }
 
+async function fetchProductDescriptions(productIds: string[]) {
+  const ids = Array.from(new Set((productIds || []).map((x) => String(x || '').trim()).filter(Boolean)));
+  const result = new Map<string, string>();
+  if (ids.length === 0) return result;
+
+  const { data } = await supabase
+    .from('products')
+    .select('id,description')
+    .in('id', ids as any) as any;
+
+  (Array.isArray(data) ? data : []).forEach((row: any) => {
+    const description = String(row?.description || '').trim();
+    if (description) result.set(String(row.id), description);
+  });
+
+  return result;
+}
+
 function sortReceiptVariations(variations: any[], orderMap?: Map<string, number>) {
   const arr = Array.isArray(variations) ? variations.map((v) => String(v || '').trim()).filter(Boolean) : [];
   if (!orderMap || orderMap.size === 0) return arr;
@@ -641,7 +659,14 @@ function buildOrderHtml(order: any, config: any, store?: any) {
               </div>
               ${(() => {
                 const detailGroups = getOrderItemDetailGroups(item);
-                return detailGroups.map((group) => `
+                const ingredientLines = Array.isArray(item.receiptDescriptionLines) ? item.receiptDescriptionLines : [];
+                const ingredients = ingredientLines.length > 0
+                  ? `
+                    <div class="notes"><span class="bold">Ingredientes:</span></div>
+                    ${ingredientLines.map((line: string) => `<div class="notes">&nbsp;&nbsp;&bull; ${escapeHtml(line)}</div>`).join('')}
+                  `
+                  : '';
+                return `${ingredients}${detailGroups.map((group) => `
                   ${group.label ? `<div class="notes"><span class="bold">${escapeHtml(group.label)}:</span></div>` : ''}
                   ${group.items.map((detail) => `
                     <div class="notes">
@@ -649,7 +674,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
                       ${detail.price && detail.price > 0 ? ` (${escapeHtml(formatCurrencyValue(detail.price))})` : ''}
                     </div>
                   `).join('')}
-                `).join('');
+                `).join('')}`;
               })()}
               ${item.notes ? `<div class="notes"><span class="bold">Obs:</span> ${escapeHtml(item.notes)}</div>` : ''}
             </div>
@@ -772,12 +797,19 @@ function buildKitchenTicketHtml(order: any, config: any) {
               <div class="item-title">${Number(item.quantity || 1)}x ${escapeHtml(item.product_name || item.name || 'Produto')}</div>
               ${(() => {
                 const detailGroups = getOrderItemDetailGroups(item);
-                return detailGroups.map((group) => `
+                const ingredientLines = Array.isArray(item.receiptDescriptionLines) ? item.receiptDescriptionLines : [];
+                const ingredients = ingredientLines.length > 0
+                  ? `
+                    <div class="notes"><span class="bold">Ingredientes:</span></div>
+                    ${ingredientLines.map((line: string) => `<div class="notes">&nbsp;&nbsp;&bull; ${escapeHtml(line)}</div>`).join('')}
+                  `
+                  : '';
+                return `${ingredients}${detailGroups.map((group) => `
                   ${group.label ? `<div class="notes"><span class="bold">${escapeHtml(group.label)}:</span></div>` : ''}
                   ${group.items.map((detail) => `
                     <div class="notes">${group.label ? '&nbsp;&nbsp;&bull; ' : ''}${escapeHtml(detail.text)}</div>
                   `).join('')}
-                `).join('');
+                `).join('')}`;
               })()}
               ${item.notes ? `<div class="notes"><span class="bold">Obs:</span> ${escapeHtml(item.notes)}</div>` : ''}
             </div>
@@ -1016,7 +1048,12 @@ async function printElectron(order: any, config: any) {
       price: Number(it.price || it.unit_price || 0),
       subtotal: Number(it.subtotal || it.total || (Number(it.price || 0) * Number(it.quantity || 1)) || 0),
       notes: it.notes || it.observations || '',
-      variations: Array.isArray(it.variations) ? it.variations : []
+      variations: [
+        ...(Array.isArray(it.receiptDescriptionLines) && it.receiptDescriptionLines.length > 0
+          ? [`Ingredientes: ${it.receiptDescriptionLines.join(', ')}`]
+          : []),
+        ...(Array.isArray(it.variations) ? it.variations : []),
+      ]
     })),
     total: Number(order.total || 0),
     subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
@@ -1184,7 +1221,11 @@ export const PrinterService = {
       ? enrichedOrder.items.map((it: any) => String(it?.product_id || '').trim()).filter(Boolean)
       : [];
 
-    const [groupsByProduct, orderMaps] = await Promise.all([fetchVariationGroups(productIds), fetchVariationOrderMaps(productIds)]);
+    const [groupsByProduct, orderMaps, productDescriptions] = await Promise.all([
+      fetchVariationGroups(productIds),
+      fetchVariationOrderMaps(productIds),
+      fetchProductDescriptions(productIds),
+    ]);
 
     const itemsSorted = (Array.isArray(enrichedOrder.items) ? enrichedOrder.items : []).map((it: any) => {
       const pid = String(it?.product_id || '').trim();
@@ -1203,7 +1244,16 @@ export const PrinterService = {
         finalLines = optionsToReceiptLines(optionNames, groups);
       }
 
-      return { ...it, variations: finalLines };
+      const fixedDescription = String(it?.description || it?.product_description || productDescriptions.get(pid) || '').trim();
+      const receiptDescriptionLines = fixedDescription
+        ? fixedDescription
+            .split(/\n|,|;/)
+            .map((line: string) => line.trim())
+            .filter(Boolean)
+            .slice(0, 8)
+        : [];
+
+      return { ...it, receiptDescriptionLines, variations: finalLines };
     });
     (enrichedOrder as any).items = itemsSorted;
 

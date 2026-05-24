@@ -52,6 +52,7 @@ const WaiterDashboard = () => {
   const [releaseTable, setReleaseTable] = useState<RestaurantTable | null>(null);
   const [createTableOpen, setCreateTableOpen] = useState(false);
   const [guestCount, setGuestCount] = useState('2');
+  const [customerName, setCustomerName] = useState('');
   const [createNumber, setCreateNumber] = useState('');
   const [createCapacity, setCreateCapacity] = useState('4');
   const [createLocation, setCreateLocation] = useState('');
@@ -163,6 +164,7 @@ const WaiterDashboard = () => {
         selectedTable.id,
         selectedTable.number,
         Math.max(1, Number(guestCount || 1)),
+        customerName,
       );
       navigate(`/waiter-session/${response.sessionId}`);
     } catch (error: any) {
@@ -206,6 +208,7 @@ const WaiterDashboard = () => {
           response.table.id,
           response.table.number,
           Math.max(1, Number(guestCount || 1)),
+          customerName,
         );
         navigate(`/waiter-session/${createdSession.sessionId}`);
       }
@@ -333,6 +336,7 @@ const WaiterDashboard = () => {
                         return;
                       }
 
+                      setCustomerName('');
                       setSelectedTable(table);
                       setGuestCount('2');
                     }}
@@ -344,6 +348,7 @@ const WaiterDashboard = () => {
                           return;
                         }
 
+                        setCustomerName('');
                         setSelectedTable(table);
                         setGuestCount('2');
                       }
@@ -397,7 +402,12 @@ const WaiterDashboard = () => {
         ]}
       />
 
-      <Dialog open={Boolean(selectedTable)} onOpenChange={(open) => !open && setSelectedTable(null)}>
+      <Dialog open={Boolean(selectedTable)} onOpenChange={(open) => {
+        if (!open) {
+          setCustomerName('');
+          setSelectedTable(null);
+        }
+      }}>
         <DialogContent className="rounded-[28px] border-0 p-0 sm:max-w-md">
           <div className="bg-[#082F23] px-6 py-6 text-white">
             <DialogTitle className="text-2xl font-semibold">Abrir Mesa {selectedTable?.number}</DialogTitle>
@@ -410,6 +420,16 @@ const WaiterDashboard = () => {
               O app cria uma comanda por pessoa inicialmente, mas depois voce pode renomear, juntar, mover itens e abrir novas comandas.
             </div>
             <div className="space-y-2">
+              <Label htmlFor="customerName">Nome do cliente</Label>
+              <Input
+                id="customerName"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                className="h-12 rounded-2xl"
+                placeholder="Ex: Mesa do João"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="guestCount">Quantidade inicial de comandas</Label>
               <Input
                 id="guestCount"
@@ -420,7 +440,10 @@ const WaiterDashboard = () => {
               />
             </div>
             <DialogFooter className="gap-3 sm:justify-between">
-              <Button variant="outline" className="rounded-2xl" onClick={() => setSelectedTable(null)} disabled={submitting}>
+              <Button variant="outline" className="rounded-2xl" onClick={() => {
+                setCustomerName('');
+                setSelectedTable(null);
+              }} disabled={submitting}>
                 Cancelar
               </Button>
               <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleOpenSession} disabled={submitting}>

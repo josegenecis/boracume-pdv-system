@@ -555,7 +555,7 @@ export async function createWaiterTable(input: {
   );
 }
 
-export async function openWaiterTableSession(tableId: string, tableNumber: number, guestCount: number) {
+export async function openWaiterTableSession(tableId: string, tableNumber: number, guestCount: number, customerName = '') {
   const session = requireSession();
   return invokeFunction<{ sessionId: string }>(
     'waiter-web',
@@ -564,6 +564,7 @@ export async function openWaiterTableSession(tableId: string, tableNumber: numbe
       tableId,
       tableNumber,
       guestCount,
+      customerName,
     },
     session.token,
   );

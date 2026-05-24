@@ -18,6 +18,8 @@ import { FeatureGateProvider } from '@/components/subscription/FeatureGateProvid
 import { FeatureRoute } from '@/components/subscription/FeatureRoute';
 import { OperatorRoute } from '@/components/auth/OperatorRoute';
 import { OperatorGate } from '@/components/auth/OperatorGate';
+import { PrinterService } from '@/utils/printerService';
+import { toast } from 'sonner';
 
 import Index from '@/pages/Index';
 import Login from '@/pages/Login';
@@ -236,6 +238,33 @@ function HardwareAutoConnect() {
   return null;
 }
 
+function CashDrawerShortcut() {
+  useEffect(() => {
+    const api = (window as any)?.electronAPI;
+    if (!api?.isElectron) return;
+
+    const handleKeyDown = async (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(String(target?.tagName || '')) || Boolean(target?.isContentEditable);
+      if (isTyping) return;
+      if (!(event.ctrlKey && event.altKey && event.key.toLowerCase() === 'g')) return;
+
+      event.preventDefault();
+      const result = await PrinterService.openCashDrawer();
+      if (result?.success) {
+        toast.success('Gaveta aberta');
+      } else {
+        toast.error(result?.error || 'Não foi possível abrir a gaveta');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  return null;
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -248,6 +277,7 @@ function App() {
                   <ErrorBoundary>
                     <FeatureGateProvider>
                       <HardwareAutoConnect />
+                      <CashDrawerShortcut />
                       <AppContent />
                       <GlobalNotificationSystem />
                       <SonnerToaster />
