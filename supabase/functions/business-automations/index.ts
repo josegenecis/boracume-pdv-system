@@ -29,9 +29,19 @@ function csvEscape(value: unknown) {
   return /[",\n;]/.test(text) ? `"${text}"` : text;
 }
 
-function formatDateTime(value: string | null | undefined) {
+function formatDate(value: string | null | undefined) {
   if (!value) return "";
-  return new Date(value).toLocaleString("pt-BR", { timeZone: "America/Fortaleza" });
+  return new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Fortaleza" });
+}
+
+function formatTime(value: string | null | undefined) {
+  if (!value) return "";
+  return new Date(value).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Fortaleza",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function formatMoney(value: number | null | undefined) {
@@ -82,6 +92,7 @@ async function sendEmail(payload: {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "User-Agent": "PopSystem-Business-Automations/1.0",
     },
     body: JSON.stringify({
       from: Deno.env.get("RESEND_FROM_EMAIL") || "PopSystem <noreply@boracume.com>",
@@ -171,7 +182,7 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
     clock_out: "Saida",
   };
   const csvLines = [
-    ["Funcionario", "Cargo", "Email", "CPF", "Evento", "Status", "Horario", "Distancia", "Dentro do raio", "Facial", "Observacao"].map(csvEscape).join(";"),
+    ["Funcionario", "Cargo", "Email", "CPF", "Evento", "Status", "Data", "Hora", "Distancia", "Dentro do raio", "Facial", "Observacao"].map(csvEscape).join(";"),
     ...(events || []).map((event: any) => {
       const waiter = waiters.get(event.waiter_id) || {};
       return [
@@ -181,7 +192,8 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
         waiter.cpf || "",
         labels[event.event_type] || event.event_type,
         event.status || "",
-        formatDateTime(event.occurred_at),
+        formatDate(event.occurred_at),
+        formatTime(event.occurred_at),
         event.distance_meters == null ? "" : `${Math.round(Number(event.distance_meters))}m`,
         event.within_geofence === null || event.within_geofence === undefined ? "" : event.within_geofence ? "Sim" : "Nao",
         event.face_status || "",

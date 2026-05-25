@@ -95,6 +95,7 @@ export default function ControlePonto() {
   const [saving, setSaving] = useState(false);
   const [sendingReport, setSendingReport] = useState(false);
   const [sendingXml, setSendingXml] = useState(false);
+  const [reviewingEventId, setReviewingEventId] = useState<string | null>(null);
   const employeeAppUrl = `${window.location.origin}/funcionario-login`;
 
   const todayEvents = useMemo(() => {
@@ -218,6 +219,45 @@ export default function ControlePonto() {
   const copyEmployeeLink = async () => {
     await navigator.clipboard.writeText(employeeAppUrl);
     toast({ title: 'Link copiado', description: 'Envie este link para os funcionarios baterem ponto pelo celular.' });
+  };
+
+  const formatEventDate = (value: string) => new Date(value).toLocaleDateString('pt-BR');
+  const formatEventTime = (value: string) => new Date(value).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  const reviewEvent = async (eventId: string, nextStatus: 'approved' | 'rejected') => {
+    setReviewingEventId(eventId);
+    try {
+      const { error } = await supabase
+        .from('employee_time_clock_events' as any)
+        .update({
+          status: nextStatus,
+          reviewed_at: new Date().toISOString(),
+          review_reason: nextStatus === 'approved'
+            ? 'Registro aprovado manualmente pelo responsavel.'
+            : 'Registro rejeitado manualmente pelo responsavel.',
+        })
+        .eq('id', eventId)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+
+      toast({
+        title: nextStatus === 'approved' ? 'Ponto aprovado' : 'Ponto rejeitado',
+        description: 'A revisão foi salva no histórico do controle de ponto.',
+      });
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: 'Erro na revisão',
+        description: error?.message || 'Nao foi possivel revisar este ponto.',
+        variant: 'destructive',
+      });
+    } finally {
+      setReviewingEventId(null);
+    }
   };
 
   const persistAutomationSettings = async () => {
@@ -491,7 +531,9 @@ export default function ControlePonto() {
                     <TableHead>Evento</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>GPS</TableHead>
-                    <TableHead>Horário</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Hora</TableHead>
+                    <TableHead className="text-right">Revisão</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -500,17 +542,48 @@ export default function ControlePonto() {
                       <TableCell className="font-medium">{event.waiter?.name || 'Funcionário'}</TableCell>
                       <TableCell>{eventLabels[event.event_type] || event.event_type}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={statusTone[event.status] || 'bg-slate-50 text-slate-700'}>
-                          {event.status === 'approved' ? 'Aprovado' : event.status === 'rejected' ? 'Rejeitado' : 'Revisão'}
-                        </Badge>
+                        <div className="space-y-1">
+                          <Badge variant="outline" className={statusTone[event.status] || 'bg-slate-50 text-slate-700'}>
+                            {event.status === 'approved' ? 'Aprovado' : event.status === 'rejected' ? 'Rejeitado' : 'Revisão'}
+                          </Badge>
+                          {event.review_reason && (
+                            <div className="max-w-[260px] text-xs leading-4 text-slate-500">{event.review_reason}</div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{event.distance_meters != null ? `${Math.round(Number(event.distance_meters))}m` : '-'}</TableCell>
-                      <TableCell>{new Date(event.occurred_at).toLocaleString('pt-BR')}</TableCell>
+                      <TableCell>{formatEventDate(event.occurred_at)}</TableCell>
+                      <TableCell>{formatEventTime(event.occurred_at)}</TableCell>
+                      <TableCell className="text-right">
+                        {event.status === 'pending_review' ? (
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 rounded-xl border-red-200 text-red-700 hover:bg-red-50"
+                              onClick={() => void reviewEvent(event.id, 'rejected')}
+                              disabled={reviewingEventId === event.id}
+                            >
+                              Rejeitar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-9 rounded-xl bg-[#063B2A] hover:bg-[#04291D]"
+                              onClick={() => void reviewEvent(event.id, 'approved')}
+                              disabled={reviewingEventId === event.id}
+                            >
+                              Aprovar
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">Concluída</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {events.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-10 text-center text-slate-500">
+                      <TableCell colSpan={7} className="py-10 text-center text-slate-500">
                         Nenhum ponto registrado ainda.
                       </TableCell>
                     </TableRow>
