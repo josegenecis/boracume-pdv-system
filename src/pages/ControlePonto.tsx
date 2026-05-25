@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Clock3, Copy, Mail, MapPin, RefreshCw, Send, ShieldCheck, Users } from 'lucide-react';
+import { CalendarDays, Clock3, Copy, FileText, Mail, MapPin, RefreshCw, Send, ShieldCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +22,11 @@ type TimeClockSettings = {
   restaurant_latitude: number | null;
   restaurant_longitude: number | null;
   allowed_radius_meters: number;
+  standard_daily_minutes: number;
+  standard_weekly_minutes: number;
+  minimum_break_minutes: number;
+  overtime_tolerance_minutes: number;
+  workdays: number[];
   face_provider: string;
   policy_notice: string | null;
 };
@@ -51,6 +58,19 @@ type WaiterRow = {
   role?: string | null;
 };
 
+type OccurrenceRow = {
+  id: string;
+  waiter_id: string;
+  occurrence_type: string;
+  start_date: string;
+  end_date: string;
+  paid: boolean;
+  affects_expected_hours: boolean;
+  notes: string | null;
+  status: string;
+  waiter?: { name?: string | null; role?: string | null } | null;
+};
+
 const defaultSettings: TimeClockSettings = {
   enabled: true,
   require_location: true,
@@ -60,6 +80,11 @@ const defaultSettings: TimeClockSettings = {
   restaurant_latitude: null,
   restaurant_longitude: null,
   allowed_radius_meters: 120,
+  standard_daily_minutes: 480,
+  standard_weekly_minutes: 2640,
+  minimum_break_minutes: 60,
+  overtime_tolerance_minutes: 10,
+  workdays: [1, 2, 3, 4, 5, 6],
   face_provider: 'manual_review',
   policy_notice: 'O ponto registra horário, localização, aparelho e verificação facial/liveness somente para controle de jornada.',
 };
@@ -85,17 +110,60 @@ const statusTone: Record<string, string> = {
   rejected: 'bg-red-50 text-red-700 border-red-200',
 };
 
+const occurrenceLabels: Record<string, string> = {
+  vacation: 'Férias',
+  medical_certificate: 'Atestado',
+  paid_leave: 'Licença remunerada',
+  day_off: 'Folga',
+  holiday: 'Feriado',
+  justified_absence: 'Falta justificada',
+  unjustified_absence: 'Falta não justificada',
+  manual_adjustment: 'Ajuste manual',
+  suspension: 'Suspensão',
+  other: 'Outro',
+};
+
+const weekdayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const minutesToHourInput = (minutes: number) => {
+  const hours = Math.floor(Number(minutes || 0) / 60);
+  const mins = Number(minutes || 0) % 60;
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+};
+
+const hourInputToMinutes = (value: string, fallback: number) => {
+  const [hoursRaw, minutesRaw] = String(value || '').split(':');
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback;
+  return Math.max(0, hours * 60 + minutes);
+};
+
 export default function ControlePonto() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [settings, setSettings] = useState<TimeClockSettings>(defaultSettings);
   const [automationSettings, setAutomationSettings] = useState<AutomationSettings>(defaultAutomationSettings);
   const [events, setEvents] = useState<TimeClockEvent[]>([]);
+  const [waiters, setWaiters] = useState<WaiterRow[]>([]);
+  const [occurrences, setOccurrences] = useState<OccurrenceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingReport, setSendingReport] = useState(false);
   const [sendingXml, setSendingXml] = useState(false);
   const [reviewingEventId, setReviewingEventId] = useState<string | null>(null);
+  const [savingOccurrence, setSavingOccurrence] = useState(false);
+  const [occurrenceForm, setOccurrenceForm] = useState({
+    waiter_id: '',
+    occurrence_type: 'medical_certificate',
+    start_date: todayIso(),
+    end_date: todayIso(),
+    notes: '',
+    paid: true,
+    affects_expected_hours: true,
+  });
   const employeeAppUrl = `${window.location.origin}/funcionario-login`;
 
   const todayEvents = useMemo(() => {
@@ -134,17 +202,22 @@ export default function ControlePonto() {
       if (settingsResult.error) throw settingsResult.error;
       if (eventsResult.error) throw eventsResult.error;
 
-      const waiterIds = Array.from(new Set(((eventsResult.data || []) as any[]).map((event) => event.waiter_id).filter(Boolean)));
-      let waitersById = new Map<string, WaiterRow>();
-      if (waiterIds.length > 0) {
-        const { data: waiterRows, error: waiterError } = await supabase
-          .from('waiters' as any)
-          .select('id, name, role')
-          .eq('user_id', user.id)
-          .in('id', waiterIds);
-        if (waiterError) throw waiterError;
-        waitersById = new Map(((waiterRows || []) as WaiterRow[]).map((waiter) => [waiter.id, waiter]));
-      }
+      const { data: waiterRows, error: waiterError } = await supabase
+        .from('waiters' as any)
+        .select('id, name, role')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
+      if (waiterError) throw waiterError;
+
+      const waitersById = new Map(((waiterRows || []) as WaiterRow[]).map((waiter) => [waiter.id, waiter]));
+
+      const { data: occurrenceRows, error: occurrenceError } = await supabase
+        .from('employee_time_clock_occurrences' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .order('start_date', { ascending: false })
+        .limit(60);
+      if (occurrenceError) throw occurrenceError;
 
       const { data: automationData, error: automationError } = await supabase
         .from('business_email_automation_settings' as any)
@@ -153,8 +226,21 @@ export default function ControlePonto() {
         .maybeSingle();
       if (automationError) throw automationError;
 
-      setSettings({ ...defaultSettings, ...(settingsResult.data || {}) } as TimeClockSettings);
+      setSettings({
+        ...defaultSettings,
+        ...(settingsResult.data || {}),
+        workdays: Array.isArray((settingsResult.data as any)?.workdays) ? (settingsResult.data as any).workdays : defaultSettings.workdays,
+      } as TimeClockSettings);
       setAutomationSettings({ ...defaultAutomationSettings, ...(automationData || {}) } as AutomationSettings);
+      setWaiters((waiterRows || []) as WaiterRow[]);
+      setOccurrences(((occurrenceRows || []) as OccurrenceRow[]).map((occurrence) => ({
+        ...occurrence,
+        waiter: waitersById.get(occurrence.waiter_id) || null,
+      })));
+      setOccurrenceForm((current) => ({
+        ...current,
+        waiter_id: current.waiter_id || ((waiterRows || []) as WaiterRow[])[0]?.id || '',
+      }));
       setEvents(((eventsResult.data || []) as TimeClockEvent[]).map((event) => ({
         ...event,
         waiter: waitersById.get(event.waiter_id) || null,
@@ -182,6 +268,11 @@ export default function ControlePonto() {
         ...settings,
         user_id: user.id,
         allowed_radius_meters: Math.max(20, Number(settings.allowed_radius_meters || 120)),
+        standard_daily_minutes: Math.max(0, Number(settings.standard_daily_minutes || 480)),
+        standard_weekly_minutes: Math.max(0, Number(settings.standard_weekly_minutes || 2640)),
+        minimum_break_minutes: Math.max(0, Number(settings.minimum_break_minutes || 60)),
+        overtime_tolerance_minutes: Math.max(0, Number(settings.overtime_tolerance_minutes || 10)),
+        workdays: Array.isArray(settings.workdays) && settings.workdays.length > 0 ? settings.workdays : defaultSettings.workdays,
         restaurant_latitude: settings.restaurant_latitude === null ? null : Number(settings.restaurant_latitude),
         restaurant_longitude: settings.restaurant_longitude === null ? null : Number(settings.restaurant_longitude),
         updated_at: new Date().toISOString(),
@@ -257,6 +348,76 @@ export default function ControlePonto() {
       });
     } finally {
       setReviewingEventId(null);
+    }
+  };
+
+  const toggleWorkday = (day: number) => {
+    setSettings((current) => {
+      const currentDays = Array.isArray(current.workdays) ? current.workdays : [];
+      const nextDays = currentDays.includes(day)
+        ? currentDays.filter((item) => item !== day)
+        : [...currentDays, day].sort((left, right) => left - right);
+      return { ...current, workdays: nextDays.length > 0 ? nextDays : currentDays };
+    });
+  };
+
+  const saveOccurrence = async () => {
+    if (!user?.id || !occurrenceForm.waiter_id) {
+      toast({
+        title: 'Informe o funcionário',
+        description: 'Selecione quem receberá a ocorrência.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSavingOccurrence(true);
+    try {
+      const payload = {
+        user_id: user.id,
+        waiter_id: occurrenceForm.waiter_id,
+        occurrence_type: occurrenceForm.occurrence_type,
+        start_date: occurrenceForm.start_date,
+        end_date: occurrenceForm.end_date || occurrenceForm.start_date,
+        paid: occurrenceForm.paid,
+        affects_expected_hours: occurrenceForm.affects_expected_hours,
+        notes: occurrenceForm.notes.trim() || null,
+        created_by: user.id,
+        status: 'approved',
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from('employee_time_clock_occurrences' as any).insert([payload]);
+      if (error) throw error;
+
+      toast({ title: 'Ocorrência registrada', description: 'O relatório do RH já passa a considerar esse lançamento.' });
+      setOccurrenceForm((current) => ({ ...current, start_date: todayIso(), end_date: todayIso(), notes: '' }));
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao registrar ocorrência',
+        description: error?.message || 'Nao foi possivel salvar férias, atestado ou ajuste.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingOccurrence(false);
+    }
+  };
+
+  const deleteOccurrence = async (occurrenceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('employee_time_clock_occurrences' as any)
+        .delete()
+        .eq('id', occurrenceId)
+        .eq('user_id', user?.id);
+      if (error) throw error;
+      toast({ title: 'Ocorrência removida', description: 'O lançamento saiu do histórico do ponto.' });
+      await loadData();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao remover',
+        description: error?.message || 'Nao foi possivel remover a ocorrência.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -424,6 +585,81 @@ export default function ControlePonto() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-[#E6E0D5] bg-white p-4">
+                <div className="mb-3 flex items-center gap-2 font-semibold text-[#063B2A]">
+                  <CalendarDays className="h-4 w-4 text-[#FF6400]" />
+                  Jornada e banco de horas
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Jornada diária</Label>
+                    <Input
+                      type="time"
+                      value={minutesToHourInput(settings.standard_daily_minutes)}
+                      onChange={(event) => setSettings((current) => ({
+                        ...current,
+                        standard_daily_minutes: hourInputToMinutes(event.target.value, current.standard_daily_minutes),
+                      }))}
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Jornada semanal</Label>
+                    <Input
+                      type="text"
+                      value={minutesToHourInput(settings.standard_weekly_minutes)}
+                      placeholder="44:00"
+                      onChange={(event) => setSettings((current) => ({
+                        ...current,
+                        standard_weekly_minutes: hourInputToMinutes(event.target.value, current.standard_weekly_minutes),
+                      }))}
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Intervalo mínimo</Label>
+                    <Input
+                      type="time"
+                      value={minutesToHourInput(settings.minimum_break_minutes)}
+                      onChange={(event) => setSettings((current) => ({
+                        ...current,
+                        minimum_break_minutes: hourInputToMinutes(event.target.value, current.minimum_break_minutes),
+                      }))}
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Tolerância extra/atraso em min</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={settings.overtime_tolerance_minutes}
+                      onChange={(event) => setSettings((current) => ({
+                        ...current,
+                        overtime_tolerance_minutes: Math.max(0, Number(event.target.value || 0)),
+                      }))}
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  <Label>Dias previstos de trabalho</Label>
+                  <div className="grid grid-cols-7 gap-2">
+                    {weekdayLabels.map((label, index) => (
+                      <Button
+                        key={label}
+                        type="button"
+                        variant={settings.workdays?.includes(index) ? 'default' : 'outline'}
+                        className={`h-10 rounded-xl px-0 text-xs ${settings.workdays?.includes(index) ? 'bg-[#063B2A] hover:bg-[#04291D]' : ''}`}
+                        onClick={() => toggleWorkday(index)}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <Button className="w-full rounded-2xl bg-[#063B2A] hover:bg-[#04291D]" onClick={() => void saveSettings()} disabled={saving}>
                 {saving ? 'Salvando...' : 'Salvar regras'}
               </Button>
@@ -517,6 +753,163 @@ export default function ControlePonto() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="rounded-[26px] border-[#E6E0D5]">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-[#FF6400]" />
+              Ocorrências trabalhistas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1fr_1fr]">
+              <div className="space-y-2">
+                <Label>Funcionário</Label>
+                <Select
+                  value={occurrenceForm.waiter_id}
+                  onValueChange={(value) => setOccurrenceForm((current) => ({ ...current, waiter_id: value }))}
+                >
+                  <SelectTrigger className="h-11 rounded-2xl">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {waiters.map((waiter) => (
+                      <SelectItem key={waiter.id} value={waiter.id}>{waiter.name || 'Funcionário'}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={occurrenceForm.occurrence_type}
+                  onValueChange={(value) => setOccurrenceForm((current) => ({
+                    ...current,
+                    occurrence_type: value,
+                    affects_expected_hours: !['unjustified_absence', 'suspension'].includes(value),
+                    paid: !['unjustified_absence', 'suspension'].includes(value),
+                  }))}
+                >
+                  <SelectTrigger className="h-11 rounded-2xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(occurrenceLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Início</Label>
+                <Input
+                  type="date"
+                  value={occurrenceForm.start_date}
+                  onChange={(event) => setOccurrenceForm((current) => ({
+                    ...current,
+                    start_date: event.target.value,
+                    end_date: current.end_date || event.target.value,
+                  }))}
+                  className="h-11 rounded-2xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Fim</Label>
+                <Input
+                  type="date"
+                  value={occurrenceForm.end_date}
+                  onChange={(event) => setOccurrenceForm((current) => ({ ...current, end_date: event.target.value }))}
+                  className="h-11 rounded-2xl"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[1fr_220px_220px]">
+              <div className="space-y-2">
+                <Label>Observação</Label>
+                <Textarea
+                  value={occurrenceForm.notes}
+                  onChange={(event) => setOccurrenceForm((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="CID, número do atestado, decisão do RH, ajuste autorizado..."
+                  className="min-h-[92px] rounded-2xl"
+                />
+              </div>
+              <div className="space-y-3 rounded-2xl bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm font-semibold text-[#063B2A]">Abona horas</Label>
+                  <Switch
+                    checked={occurrenceForm.affects_expected_hours}
+                    onCheckedChange={(checked) => setOccurrenceForm((current) => ({ ...current, affects_expected_hours: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm font-semibold text-[#063B2A]">Remunerado</Label>
+                  <Switch
+                    checked={occurrenceForm.paid}
+                    onCheckedChange={(checked) => setOccurrenceForm((current) => ({ ...current, paid: checked }))}
+                  />
+                </div>
+              </div>
+              <Button
+                className="h-full min-h-[92px] rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]"
+                onClick={() => void saveOccurrence()}
+                disabled={savingOccurrence || waiters.length === 0}
+              >
+                {savingOccurrence ? 'Salvando...' : 'Registrar ocorrência'}
+              </Button>
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Funcionário</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Período</TableHead>
+                  <TableHead>Regra</TableHead>
+                  <TableHead>Observação</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {occurrences.map((occurrence) => (
+                  <TableRow key={occurrence.id}>
+                    <TableCell className="font-medium">{occurrence.waiter?.name || 'Funcionário'}</TableCell>
+                    <TableCell>{occurrenceLabels[occurrence.occurrence_type] || occurrence.occurrence_type}</TableCell>
+                    <TableCell>
+                      {new Date(`${occurrence.start_date}T00:00:00`).toLocaleDateString('pt-BR')}
+                      {' até '}
+                      {new Date(`${occurrence.end_date}T00:00:00`).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">{occurrence.affects_expected_hours ? 'Abona horas' : 'Não abona'}</Badge>
+                        <Badge variant="outline">{occurrence.paid ? 'Remunerado' : 'Não remunerado'}</Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[360px] text-sm text-slate-500">{occurrence.notes || '-'}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl border-red-200 text-red-700 hover:bg-red-50"
+                        onClick={() => void deleteOccurrence(occurrence.id)}
+                      >
+                        Remover
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {occurrences.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-8 text-center text-slate-500">
+                      Nenhuma ocorrência lançada. Use este espaço para férias, atestados, folgas, feriados e ajustes do RH.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-[1fr]">
           <Card className="rounded-[26px] border-[#E6E0D5]">

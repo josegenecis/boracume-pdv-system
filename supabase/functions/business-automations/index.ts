@@ -289,6 +289,132 @@ function previousMonthPeriod() {
   return { start, end, label: `${String(start.getMonth() + 1).padStart(2, "0")}/${start.getFullYear()}` };
 }
 
+const occurrenceLabels: Record<string, string> = {
+  vacation: "Ferias",
+  medical_certificate: "Atestado",
+  paid_leave: "Licenca remunerada",
+  day_off: "Folga",
+  holiday: "Feriado",
+  justified_absence: "Falta justificada",
+  unjustified_absence: "Falta nao justificada",
+  manual_adjustment: "Ajuste manual",
+  suspension: "Suspensao",
+  other: "Outro",
+};
+
+const weekdayNames = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"];
+
+function dateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function eachDateKey(start: Date, end: Date) {
+  const dates: string[] = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0, 0);
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 12, 0, 0, 0);
+  while (cursor.getTime() <= last.getTime()) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function minutesBetween(start?: string, end?: string) {
+  if (!start || !end) return 0;
+  return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
+}
+
+function formatMinutes(minutes: number) {
+  const safe = Math.max(0, Math.round(Number(minutes || 0)));
+  const hours = Math.floor(safe / 60);
+  const mins = safe % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function getOccurrenceForDate(occurrences: any[], key: string) {
+  return occurrences.find((occurrence) => occurrence.start_date <= key && occurrence.end_date >= key && occurrence.status !== "rejected");
+}
+
+function buildDailyMirrorRows(params: {
+  employeeEvents: any[];
+  employeeOccurrences: any[];
+  period: { start: Date; end: Date };
+  settings: any;
+}) {
+  const settings = params.settings || {};
+  const expectedDaily = Math.max(0, Number(settings.standard_daily_minutes || 480));
+  const minimumBreak = Math.max(0, Number(settings.minimum_break_minutes || 60));
+  const tolerance = Math.max(0, Number(settings.overtime_tolerance_minutes || 10));
+  const workdays = Array.isArray(settings.workdays) && settings.workdays.length > 0 ? settings.workdays : [1, 2, 3, 4, 5, 6];
+  const eventsByDate = new Map<string, any[]>();
+  for (const event of params.employeeEvents || []) {
+    const key = dateKey(new Date(event.occurred_at));
+    eventsByDate.set(key, [...(eventsByDate.get(key) || []), event]);
+  }
+
+  return eachDateKey(params.period.start, params.period.end).map((key) => {
+    const currentDate = parseDateKey(key);
+    const weekday = currentDate.getDay();
+    const expectedWorkday = workdays.includes(weekday);
+    const occurrence = getOccurrenceForDate(params.employeeOccurrences || [], key);
+    const dayEvents = (eventsByDate.get(key) || [])
+      .filter((event) => event.status !== "rejected")
+      .sort((left, right) => new Date(left.occurred_at).getTime() - new Date(right.occurred_at).getTime());
+    const firstIn = dayEvents.find((event) => event.event_type === "clock_in");
+    const lastOut = dayEvents.slice().reverse().find((event) => event.event_type === "clock_out");
+    const breakStart = dayEvents.find((event) => event.event_type === "break_start");
+    const breakEnd = dayEvents.find((event) => event.event_type === "break_end");
+    const grossMinutes = minutesBetween(firstIn?.occurred_at, lastOut?.occurred_at);
+    const breakMinutes = minutesBetween(breakStart?.occurred_at, breakEnd?.occurred_at);
+    const workedMinutes = Math.max(0, grossMinutes - breakMinutes);
+    const expectedMinutes = expectedWorkday && !(occurrence?.affects_expected_hours) ? expectedDaily : expectedWorkday && !occurrence ? expectedDaily : 0;
+    const balance = workedMinutes - expectedMinutes;
+    const overtime = balance > tolerance ? balance : 0;
+    const deficit = balance < -tolerance ? Math.abs(balance) : 0;
+    const missingPunch = dayEvents.length > 0 && (!firstIn || !lastOut);
+    const breakIssue = workedMinutes > expectedDaily && minimumBreak > 0 && breakMinutes < minimumBreak;
+    const absence = expectedWorkday && !occurrence && dayEvents.length === 0;
+    const pendingReview = dayEvents.some((event) => event.status === "pending_review");
+    const alerts = [
+      missingPunch ? "Batida incompleta" : "",
+      breakIssue ? "Intervalo abaixo do minimo" : "",
+      absence ? "Falta sem lancamento" : "",
+      pendingReview ? "Ponto em revisao" : "",
+    ].filter(Boolean);
+
+    return {
+      key,
+      date: currentDate.toLocaleDateString("pt-BR"),
+      weekday: weekdayNames[weekday],
+      expectedWorkday,
+      firstIn: firstIn ? formatTime(firstIn.occurred_at) : "",
+      breakStart: breakStart ? formatTime(breakStart.occurred_at) : "",
+      breakEnd: breakEnd ? formatTime(breakEnd.occurred_at) : "",
+      lastOut: lastOut ? formatTime(lastOut.occurred_at) : "",
+      workedMinutes,
+      breakMinutes,
+      expectedMinutes,
+      overtime,
+      deficit,
+      occurrenceLabel: occurrence ? occurrenceLabels[occurrence.occurrence_type] || occurrence.occurrence_type : "",
+      occurrenceNotes: occurrence?.notes || "",
+      status: alerts.length > 0 ? alerts.join("; ") : occurrence ? "Ocorrencia aprovada" : dayEvents.length > 0 ? "Ok" : expectedWorkday ? "Sem batida" : "Nao previsto",
+    };
+  });
+}
+
 async function sendEmail(payload: {
   to: string;
   subject: string;
@@ -381,7 +507,19 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
     .order("occurred_at", { ascending: true });
   if (error) throw error;
 
-  const waiterIds = Array.from(new Set((events || []).map((event: any) => event.waiter_id).filter(Boolean)));
+  const { data: occurrences, error: occurrenceError } = await supabase
+    .from("employee_time_clock_occurrences")
+    .select("*")
+    .eq("user_id", userId)
+    .lte("start_date", period.end.toISOString().slice(0, 10))
+    .gte("end_date", period.start.toISOString().slice(0, 10))
+    .order("start_date", { ascending: true });
+  if (occurrenceError) throw occurrenceError;
+
+  const waiterIds = Array.from(new Set([
+    ...(events || []).map((event: any) => event.waiter_id).filter(Boolean),
+    ...(occurrences || []).map((occurrence: any) => occurrence.waiter_id).filter(Boolean),
+  ]));
   let waiters = new Map<string, any>();
   if (waiterIds.length > 0) {
     const { data: waiterRows, error: waiterError } = await supabase
@@ -423,10 +561,58 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
   ];
   const eventsByWaiter = new Map<string, any[]>();
   for (const event of events || []) {
-    const waiter = waiters.get(event.waiter_id) || {};
-    const key = waiter.name || `Funcionario ${event.waiter_id || ""}`.trim();
+    const key = event.waiter_id || "sem-funcionario";
     eventsByWaiter.set(key, [...(eventsByWaiter.get(key) || []), event]);
   }
+  const occurrencesByWaiter = new Map<string, any[]>();
+  for (const occurrence of occurrences || []) {
+    const key = occurrence.waiter_id || "sem-funcionario";
+    occurrencesByWaiter.set(key, [...(occurrencesByWaiter.get(key) || []), occurrence]);
+  }
+  const employeeIds = Array.from(new Set([...eventsByWaiter.keys(), ...occurrencesByWaiter.keys()]));
+  const mirrorHeader = [
+    "Data",
+    "Dia",
+    "Entrada",
+    "Inicio intervalo",
+    "Fim intervalo",
+    "Saida",
+    "Horas previstas",
+    "Horas trabalhadas",
+    "Intervalo",
+    "Horas extras",
+    "Horas faltantes",
+    "Ocorrencia",
+    "Status/Auditoria",
+    "Observacao",
+  ];
+  const employeeMirrors = employeeIds.map((employeeId) => {
+    const waiter = waiters.get(employeeId) || {};
+    const dailyRows = buildDailyMirrorRows({
+      employeeEvents: eventsByWaiter.get(employeeId) || [],
+      employeeOccurrences: occurrencesByWaiter.get(employeeId) || [],
+      period,
+      settings,
+    });
+    const totals = dailyRows.reduce((acc, row) => ({
+      expected: acc.expected + row.expectedMinutes,
+      worked: acc.worked + row.workedMinutes,
+      breakMinutes: acc.breakMinutes + row.breakMinutes,
+      overtime: acc.overtime + row.overtime,
+      deficit: acc.deficit + row.deficit,
+      absences: acc.absences + (row.status.includes("Falta sem lancamento") ? 1 : 0),
+      alerts: acc.alerts + (["Ok", "Nao previsto", "Ocorrencia aprovada"].includes(row.status) ? 0 : 1),
+    }), { expected: 0, worked: 0, breakMinutes: 0, overtime: 0, deficit: 0, absences: 0, alerts: 0 });
+    return {
+      id: employeeId,
+      name: waiter.name || "Funcionario",
+      role: waiter.role || "",
+      email: waiter.email || "",
+      cpf: waiter.cpf || "",
+      dailyRows,
+      totals,
+    };
+  });
   const approvedCount = (events || []).filter((event: any) => event.status === "approved").length;
   const pendingCount = (events || []).filter((event: any) => event.status === "pending_review").length;
   const rejectedCount = (events || []).filter((event: any) => event.status === "rejected").length;
@@ -440,20 +626,62 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
         ["Aprovados", String(approvedCount)],
         ["Em revisao", String(pendingCount)],
         ["Rejeitados", String(rejectedCount)],
+        ["Jornada diaria configurada", formatMinutes(Number(settings.standard_daily_minutes || 480))],
+        ["Jornada semanal configurada", formatMinutes(Number(settings.standard_weekly_minutes || 2640))],
+        ["Intervalo minimo configurado", formatMinutes(Number(settings.minimum_break_minutes || 60))],
         [],
-        ["Funcionario", "Registros", "Aprovados", "Em revisao", "Rejeitados"],
-        ...Array.from(eventsByWaiter.entries()).map(([name, rows]) => [
-          name,
-          String(rows.length),
-          String(rows.filter((event: any) => event.status === "approved").length),
-          String(rows.filter((event: any) => event.status === "pending_review").length),
-          String(rows.filter((event: any) => event.status === "rejected").length),
+        ["Funcionario", "Cargo", "Registros", "Previstas", "Trabalhadas", "Extras", "Faltantes", "Faltas", "Alertas", "Aprovados", "Em revisao", "Rejeitados"],
+        ...employeeMirrors.map((employee) => [
+          employee.name,
+          employee.role,
+          String((eventsByWaiter.get(employee.id) || []).length),
+          formatMinutes(employee.totals.expected),
+          formatMinutes(employee.totals.worked),
+          formatMinutes(employee.totals.overtime),
+          formatMinutes(employee.totals.deficit),
+          String(employee.totals.absences),
+          String(employee.totals.alerts),
+          String((eventsByWaiter.get(employee.id) || []).filter((event: any) => event.status === "approved").length),
+          String((eventsByWaiter.get(employee.id) || []).filter((event: any) => event.status === "pending_review").length),
+          String((eventsByWaiter.get(employee.id) || []).filter((event: any) => event.status === "rejected").length),
         ]),
       ],
     },
-    ...Array.from(eventsByWaiter.entries()).map(([name, rows]) => ({
-      name,
-      rows: [headers, ...rows.map(rowForEvent)],
+    ...employeeMirrors.map((employee) => ({
+      name: employee.name,
+      rows: [
+        ["Funcionario", employee.name],
+        ["Cargo", employee.role],
+        ["Email", employee.email],
+        ["CPF", employee.cpf],
+        ["Periodo", `${period.start.toLocaleDateString("pt-BR")} a ${period.end.toLocaleDateString("pt-BR")}`],
+        ["Horas previstas", formatMinutes(employee.totals.expected)],
+        ["Horas trabalhadas", formatMinutes(employee.totals.worked)],
+        ["Horas extras", formatMinutes(employee.totals.overtime)],
+        ["Horas faltantes", formatMinutes(employee.totals.deficit)],
+        [],
+        mirrorHeader,
+        ...employee.dailyRows.map((row) => [
+          row.date,
+          row.weekday,
+          row.firstIn,
+          row.breakStart,
+          row.breakEnd,
+          row.lastOut,
+          formatMinutes(row.expectedMinutes),
+          formatMinutes(row.workedMinutes),
+          formatMinutes(row.breakMinutes),
+          formatMinutes(row.overtime),
+          formatMinutes(row.deficit),
+          row.occurrenceLabel,
+          row.status,
+          row.occurrenceNotes,
+        ]),
+        [],
+        ["Batidas brutas"],
+        headers,
+        ...(eventsByWaiter.get(employee.id) || []).map(rowForEvent),
+      ],
     })),
   ]);
   const html = `
@@ -462,7 +690,7 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
       <p>Periodo: ${period.start.toLocaleDateString("pt-BR")} a ${period.end.toLocaleDateString("pt-BR")}</p>
       <p><strong>Total de registros:</strong> ${(events || []).length}</p>
       <p><strong>Aprovados:</strong> ${approvedCount} | <strong>Em revisao:</strong> ${pendingCount}</p>
-      <p>Seguem anexos o CSV geral e a planilha Excel com uma aba de resumo e uma aba para cada funcionario.</p>
+      <p>Seguem anexos o CSV geral e a planilha Excel com resumo, espelho por funcionario, horas trabalhadas, extras, faltantes, ocorrencias e auditoria das batidas.</p>
     </div>
   `;
 
