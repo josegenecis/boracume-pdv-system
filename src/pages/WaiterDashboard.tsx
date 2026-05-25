@@ -13,12 +13,9 @@ import {
   loadWaiterWebSession,
   logoutWaiterWeb,
   openWaiterTableSession,
-  punchTimeClock,
   releaseWaiterTable,
   RestaurantTable,
   TableStatus,
-  TimeClockEventType,
-  TimeClockStatus,
   transferWaiterTable,
   WaiterWebStoredSession,
 } from '@/services/waiterWebClient';
@@ -26,13 +23,10 @@ import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import {
   Armchair,
-  Clock3,
   LayoutGrid,
   LogOut,
-  MapPin,
   PlusCircle,
   RefreshCw,
-  ShieldCheck,
 } from 'lucide-react';
 
 const tableTileTone: Record<TableStatus, string> = {
@@ -45,42 +39,6 @@ const tableTileTone: Record<TableStatus, string> = {
 };
 
 const tableOccupancyLabel = (status: TableStatus) => (status === 'free' ? 'Livre' : 'Ocupada');
-
-const timeClockLabels: Record<TimeClockEventType, string> = {
-  clock_in: 'Bater entrada',
-  break_start: 'Iniciar intervalo',
-  break_end: 'Voltar do intervalo',
-  clock_out: 'Bater saída',
-};
-
-const timeClockHistoryLabels: Record<TimeClockEventType, string> = {
-  clock_in: 'Entrada',
-  break_start: 'Intervalo',
-  break_end: 'Retorno',
-  clock_out: 'Saída',
-};
-
-const getDeviceFingerprint = () => {
-  const key = 'employee_time_clock_device_id';
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const created = `${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
-  localStorage.setItem(key, created);
-  return created;
-};
-
-const getCurrentPosition = () =>
-  new Promise<GeolocationPosition>((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Este aparelho nao liberou GPS para o navegador.'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-    });
-  });
 
 const WaiterDashboard = () => {
   const navigate = useNavigate();
@@ -100,8 +58,6 @@ const WaiterDashboard = () => {
   const [createLocation, setCreateLocation] = useState('');
   const [targetTableId, setTargetTableId] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [timeClock, setTimeClock] = useState<TimeClockStatus | null>(null);
-  const [punchingClock, setPunchingClock] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -168,7 +124,6 @@ const WaiterDashboard = () => {
     try {
       const response = await bootstrapWaiterWeb();
       setTables(response.tables || []);
-      setTimeClock(response.timeClock || null);
       setLoadError('');
       setWaiterSession((current) => (current ? { ...current, profile: response.profile } : current));
     } catch (error: any) {
@@ -198,48 +153,6 @@ const WaiterDashboard = () => {
   const handleLogout = async () => {
     await logoutWaiterWeb();
     navigate('/waiter-login', { replace: true });
-  };
-
-  const handlePunchClock = async () => {
-    if (!timeClock) return;
-
-    setPunchingClock(true);
-    try {
-      const position = timeClock.settings.requireLocation ? await getCurrentPosition() : null;
-      const response = await punchTimeClock({
-        eventType: timeClock.nextEventType,
-        latitude: position?.coords.latitude ?? null,
-        longitude: position?.coords.longitude ?? null,
-        accuracyMeters: position?.coords.accuracy ?? null,
-        deviceFingerprint: getDeviceFingerprint(),
-        deviceLabel: navigator.platform || 'Aparelho do funcionario',
-        deviceMetadata: {
-          language: navigator.language,
-          platform: navigator.platform,
-        },
-        faceVerification: {
-          status: timeClock.settings.requireFaceLiveness ? 'pending_review' : 'verified',
-          metadata: {
-            provider: timeClock.settings.faceProvider,
-            note: 'Estrutura pronta para API facial/liveness no app nativo.',
-          },
-        },
-      });
-
-      setTimeClock(response.status);
-      toast({
-        title: response.event.status === 'approved' ? 'Ponto registrado' : 'Ponto enviado para revisão',
-        description: response.event.review_reason || `${timeClockHistoryLabels[response.event.event_type]} salvo com sucesso.`,
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Nao foi possivel bater ponto',
-        description: error?.message || 'Confira GPS, permissao de localizacao e tente novamente.',
-        variant: 'destructive',
-      });
-    } finally {
-      setPunchingClock(false);
-    }
   };
 
   const handleOpenSession = async () => {
@@ -393,60 +306,6 @@ const WaiterDashboard = () => {
         {loadError ? (
           <div className="mt-4 rounded-[20px] border border-red-300/60 bg-red-500/90 px-4 py-3 text-sm font-medium text-white">
             {loadError}
-          </div>
-        ) : null}
-
-        {timeClock?.settings.enabled ? (
-          <div className="mt-4 rounded-[28px] border border-white/12 bg-white/[0.08] p-4 shadow-[0_20px_45px_-30px_rgba(0,0,0,0.9)] backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-[#A4D65E]/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#D9FF9B]">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  Controle de ponto
-                </div>
-                <h2 className="mt-2 text-xl font-semibold text-white">{timeClockLabels[timeClock.nextEventType]}</h2>
-                <p className="mt-1 text-xs leading-5 text-white/65">
-                  GPS, aparelho autorizado e biometria facial/liveness ficam registrados para auditoria.
-                </p>
-              </div>
-              <Button
-                className="min-h-12 rounded-2xl bg-[#FF6400] px-4 text-sm font-semibold hover:bg-[#E25A00]"
-                onClick={() => void handlePunchClock()}
-                disabled={punchingClock}
-              >
-                {punchingClock ? 'Validando...' : 'Bater ponto'}
-              </Button>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl bg-black/12 p-3">
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Raio
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">{timeClock.settings.allowedRadiusMeters}m</div>
-              </div>
-              <div className="rounded-2xl bg-black/12 p-3">
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Facial
-                </div>
-                <div className="mt-1 text-sm font-semibold text-white">
-                  {timeClock.settings.requireFaceLiveness ? 'Exigido' : 'Opcional'}
-                </div>
-              </div>
-            </div>
-            {timeClock.todayEvents.length > 0 ? (
-              <div className="mt-3 space-y-2">
-                {timeClock.todayEvents.slice(0, 4).map((event) => (
-                  <div key={event.id} className="flex items-center justify-between rounded-2xl bg-white/8 px-3 py-2 text-xs">
-                    <span className="font-medium text-white/80">{timeClockHistoryLabels[event.event_type]}</span>
-                    <span className={event.status === 'approved' ? 'text-[#D9FF9B]' : event.status === 'rejected' ? 'text-red-200' : 'text-amber-100'}>
-                      {new Date(event.occurred_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </div>
         ) : null}
 

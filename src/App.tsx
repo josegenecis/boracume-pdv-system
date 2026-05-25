@@ -63,9 +63,11 @@ import MercadoPagoReturn from '@/pages/MercadoPagoReturn';
 import MpCallback from '@/pages/MpCallback';
 import AgentDashboard from '@/pages/AgentDashboard';
 import WaiterLogin from '@/pages/WaiterLogin';
+import EmployeeLogin from '@/pages/EmployeeLogin';
 import OperatorLogin from '@/pages/OperatorLogin';
 import WaiterDashboard from '@/pages/WaiterDashboard';
 import WaiterSession from '@/pages/WaiterSession';
+import EmployeeTimeClock from '@/pages/EmployeeTimeClock';
 import KDSView from '@/pages/KDSView';
 import CustomerView from '@/pages/CustomerView';
 import DebugPix from '@/pages/DebugPix';
@@ -103,6 +105,8 @@ function AppContent() {
       <Route path="/waiter-login" element={<WaiterLogin />} />
       <Route path="/waiter-dashboard" element={<WaiterDashboard />} />
       <Route path="/waiter-session/:sessionId" element={<WaiterSession />} />
+      <Route path="/funcionario-login" element={<EmployeeLogin />} />
+      <Route path="/funcionario-ponto" element={<EmployeeTimeClock />} />
 
       {/* Rota de callback OAuth */}
       <Route path="/auth/callback" element={<AuthCallback />} />

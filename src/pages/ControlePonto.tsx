@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Clock3, MapPin, RefreshCw, ShieldCheck, Users } from 'lucide-react';
+import { Clock3, Copy, MapPin, RefreshCw, ShieldCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -70,6 +70,7 @@ export default function ControlePonto() {
   const [events, setEvents] = useState<TimeClockEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const employeeAppUrl = `${window.location.origin}/funcionario-login`;
 
   const todayEvents = useMemo(() => {
     const start = new Date();
@@ -154,6 +155,11 @@ export default function ControlePonto() {
     }
   };
 
+  const copyEmployeeLink = async () => {
+    await navigator.clipboard.writeText(employeeAppUrl);
+    toast({ title: 'Link copiado', description: 'Envie este link para os funcionarios baterem ponto pelo celular.' });
+  };
+
   return (
     <div className="min-h-screen bg-[#FFFDF7] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -175,6 +181,19 @@ export default function ControlePonto() {
             </Button>
           </div>
         </div>
+
+        <Card className="rounded-[24px] border-[#E6E0D5]">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-bold text-[#063B2A]">Link do app de ponto do funcionário</div>
+              <div className="mt-1 break-all text-sm text-slate-500">{employeeAppUrl}</div>
+            </div>
+            <Button variant="outline" className="rounded-2xl" onClick={() => void copyEmployeeLink()}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar link
+            </Button>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="rounded-[22px] border-[#E6E0D5]">
