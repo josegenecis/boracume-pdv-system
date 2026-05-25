@@ -50,11 +50,229 @@ function formatMoney(value: number | null | undefined) {
 
 function encodeBase64Utf8(value: string) {
   const bytes = new TextEncoder().encode(value);
+  return encodeBase64Bytes(bytes);
+}
+
+function encodeBase64Bytes(bytes: Uint8Array) {
   let binary = "";
   for (let index = 0; index < bytes.length; index += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
   }
   return btoa(binary);
+}
+
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index++) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit++) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(target: Uint8Array, offset: number, value: number) {
+  target[offset] = value & 0xff;
+  target[offset + 1] = (value >>> 8) & 0xff;
+}
+
+function writeUint32(target: Uint8Array, offset: number, value: number) {
+  target[offset] = value & 0xff;
+  target[offset + 1] = (value >>> 8) & 0xff;
+  target[offset + 2] = (value >>> 16) & 0xff;
+  target[offset + 3] = (value >>> 24) & 0xff;
+}
+
+function concatBytes(parts: Uint8Array[]) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
+}
+
+function zipFiles(files: Array<{ path: string; content: string | Uint8Array }>) {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.path);
+    const contentBytes = typeof file.content === "string" ? encoder.encode(file.content) : file.content;
+    const checksum = crc32(contentBytes);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    writeUint32(localHeader, 0, 0x04034b50);
+    writeUint16(localHeader, 4, 20);
+    writeUint16(localHeader, 6, 0);
+    writeUint16(localHeader, 8, 0);
+    writeUint16(localHeader, 10, dosTime);
+    writeUint16(localHeader, 12, dosDate);
+    writeUint32(localHeader, 14, checksum);
+    writeUint32(localHeader, 18, contentBytes.length);
+    writeUint32(localHeader, 22, contentBytes.length);
+    writeUint16(localHeader, 26, nameBytes.length);
+    writeUint16(localHeader, 28, 0);
+    localHeader.set(nameBytes, 30);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    writeUint32(centralHeader, 0, 0x02014b50);
+    writeUint16(centralHeader, 4, 20);
+    writeUint16(centralHeader, 6, 20);
+    writeUint16(centralHeader, 8, 0);
+    writeUint16(centralHeader, 10, 0);
+    writeUint16(centralHeader, 12, dosTime);
+    writeUint16(centralHeader, 14, dosDate);
+    writeUint32(centralHeader, 16, checksum);
+    writeUint32(centralHeader, 20, contentBytes.length);
+    writeUint32(centralHeader, 24, contentBytes.length);
+    writeUint16(centralHeader, 28, nameBytes.length);
+    writeUint16(centralHeader, 30, 0);
+    writeUint16(centralHeader, 32, 0);
+    writeUint16(centralHeader, 34, 0);
+    writeUint16(centralHeader, 36, 0);
+    writeUint32(centralHeader, 38, 0);
+    writeUint32(centralHeader, 42, offset);
+    centralHeader.set(nameBytes, 46);
+
+    localParts.push(localHeader, contentBytes);
+    centralParts.push(centralHeader);
+    offset += localHeader.length + contentBytes.length;
+  }
+
+  const centralDirectory = concatBytes(centralParts);
+  const end = new Uint8Array(22);
+  writeUint32(end, 0, 0x06054b50);
+  writeUint16(end, 4, 0);
+  writeUint16(end, 6, 0);
+  writeUint16(end, 8, files.length);
+  writeUint16(end, 10, files.length);
+  writeUint32(end, 12, centralDirectory.length);
+  writeUint32(end, 16, offset);
+  writeUint16(end, 20, 0);
+
+  return concatBytes([...localParts, centralDirectory, end]);
+}
+
+function columnName(index: number) {
+  let name = "";
+  let current = index + 1;
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    current = Math.floor((current - 1) / 26);
+  }
+  return name;
+}
+
+function sheetXml(rows: unknown[][]) {
+  const rowXml = rows.map((row, rowIndex) => {
+    const cells = row.map((cell, cellIndex) => {
+      const ref = `${columnName(cellIndex)}${rowIndex + 1}`;
+      return `<c r="${ref}" t="inlineStr"><is><t>${htmlEscape(cell)}</t></is></c>`;
+    }).join("");
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+  <sheetData>${rowXml}</sheetData>
+</worksheet>`;
+}
+
+function safeSheetName(value: string, fallback: string) {
+  const clean = String(value || fallback).replace(/[\\/*?:[\]]/g, " ").replace(/\s+/g, " ").trim() || fallback;
+  return clean.slice(0, 31);
+}
+
+function uniqueSheetNames(names: string[]) {
+  const used = new Map<string, number>();
+  return names.map((name, index) => {
+    const base = safeSheetName(name, `Funcionario ${index + 1}`);
+    const count = used.get(base) || 0;
+    used.set(base, count + 1);
+    if (count === 0) return base;
+    const suffix = ` ${count + 1}`;
+    return `${base.slice(0, 31 - suffix.length)}${suffix}`;
+  });
+}
+
+function createXlsxWorkbook(sheets: Array<{ name: string; rows: unknown[][] }>) {
+  const sheetNames = uniqueSheetNames(sheets.map((sheet) => sheet.name));
+  const workbookSheets = sheetNames.map((name, index) =>
+    `<sheet name="${htmlEscape(name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`
+  ).join("");
+  const workbookRels = sheetNames.map((_name, index) =>
+    `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`
+  ).join("");
+  const contentTypesSheets = sheetNames.map((_name, index) =>
+    `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+  ).join("");
+
+  const files = [
+    {
+      path: "[Content_Types].xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${contentTypesSheets}
+</Types>`,
+    },
+    {
+      path: "_rels/.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    {
+      path: "xl/workbook.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>${workbookSheets}</sheets>
+</workbook>`,
+    },
+    {
+      path: "xl/_rels/workbook.xml.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${workbookRels}
+  <Relationship Id="rId${sheetNames.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    {
+      path: "xl/styles.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+</styleSheet>`,
+    },
+    ...sheets.map((sheet, index) => ({
+      path: `xl/worksheets/sheet${index + 1}.xml`,
+      content: sheetXml(sheet.rows),
+    })),
+  ];
+
+  return zipFiles(files);
 }
 
 function currentMonthPeriod() {
@@ -181,35 +399,70 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
     break_end: "Retorno intervalo",
     clock_out: "Saida",
   };
+  const headers = ["Funcionario", "Cargo", "Email", "CPF", "Evento", "Status", "Data", "Hora", "Distancia", "Dentro do raio", "Facial", "Observacao"];
+  const rowForEvent = (event: any) => {
+    const waiter = waiters.get(event.waiter_id) || {};
+    return [
+      waiter.name || "Funcionario",
+      waiter.role || "",
+      waiter.email || "",
+      waiter.cpf || "",
+      labels[event.event_type] || event.event_type,
+      event.status || "",
+      formatDate(event.occurred_at),
+      formatTime(event.occurred_at),
+      event.distance_meters == null ? "" : `${Math.round(Number(event.distance_meters))}m`,
+      event.within_geofence === null || event.within_geofence === undefined ? "" : event.within_geofence ? "Sim" : "Nao",
+      event.face_status || "",
+      event.review_reason || "",
+    ];
+  };
   const csvLines = [
-    ["Funcionario", "Cargo", "Email", "CPF", "Evento", "Status", "Data", "Hora", "Distancia", "Dentro do raio", "Facial", "Observacao"].map(csvEscape).join(";"),
-    ...(events || []).map((event: any) => {
-      const waiter = waiters.get(event.waiter_id) || {};
-      return [
-        waiter.name || "Funcionario",
-        waiter.role || "",
-        waiter.email || "",
-        waiter.cpf || "",
-        labels[event.event_type] || event.event_type,
-        event.status || "",
-        formatDate(event.occurred_at),
-        formatTime(event.occurred_at),
-        event.distance_meters == null ? "" : `${Math.round(Number(event.distance_meters))}m`,
-        event.within_geofence === null || event.within_geofence === undefined ? "" : event.within_geofence ? "Sim" : "Nao",
-        event.face_status || "",
-        event.review_reason || "",
-      ].map(csvEscape).join(";");
-    }),
+    headers.map(csvEscape).join(";"),
+    ...(events || []).map((event: any) => rowForEvent(event).map(csvEscape).join(";")),
   ];
+  const eventsByWaiter = new Map<string, any[]>();
+  for (const event of events || []) {
+    const waiter = waiters.get(event.waiter_id) || {};
+    const key = waiter.name || `Funcionario ${event.waiter_id || ""}`.trim();
+    eventsByWaiter.set(key, [...(eventsByWaiter.get(key) || []), event]);
+  }
   const approvedCount = (events || []).filter((event: any) => event.status === "approved").length;
   const pendingCount = (events || []).filter((event: any) => event.status === "pending_review").length;
+  const rejectedCount = (events || []).filter((event: any) => event.status === "rejected").length;
+  const workbook = createXlsxWorkbook([
+    {
+      name: "Resumo",
+      rows: [
+        ["Restaurante", profile.restaurantName],
+        ["Periodo", `${period.start.toLocaleDateString("pt-BR")} a ${period.end.toLocaleDateString("pt-BR")}`],
+        ["Total de registros", String((events || []).length)],
+        ["Aprovados", String(approvedCount)],
+        ["Em revisao", String(pendingCount)],
+        ["Rejeitados", String(rejectedCount)],
+        [],
+        ["Funcionario", "Registros", "Aprovados", "Em revisao", "Rejeitados"],
+        ...Array.from(eventsByWaiter.entries()).map(([name, rows]) => [
+          name,
+          String(rows.length),
+          String(rows.filter((event: any) => event.status === "approved").length),
+          String(rows.filter((event: any) => event.status === "pending_review").length),
+          String(rows.filter((event: any) => event.status === "rejected").length),
+        ]),
+      ],
+    },
+    ...Array.from(eventsByWaiter.entries()).map(([name, rows]) => ({
+      name,
+      rows: [headers, ...rows.map(rowForEvent)],
+    })),
+  ]);
   const html = `
     <div style="font-family:Arial,sans-serif;color:#063b2a">
       <h2>Relatorio mensal de ponto - ${htmlEscape(profile.restaurantName)}</h2>
       <p>Periodo: ${period.start.toLocaleDateString("pt-BR")} a ${period.end.toLocaleDateString("pt-BR")}</p>
       <p><strong>Total de registros:</strong> ${(events || []).length}</p>
       <p><strong>Aprovados:</strong> ${approvedCount} | <strong>Em revisao:</strong> ${pendingCount}</p>
-      <p>O arquivo CSV em anexo pode ser importado ou enviado ao RH para conferencia.</p>
+      <p>Seguem anexos o CSV geral e a planilha Excel com uma aba de resumo e uma aba para cada funcionario.</p>
     </div>
   `;
 
@@ -220,6 +473,9 @@ async function sendTimeClockReport(supabase: any, userId: string, userEmail?: st
     attachments: [{
       filename: `relatorio-ponto-${period.label.replace("/", "-")}.csv`,
       content: encodeBase64Utf8(csvLines.join("\n")),
+    }, {
+      filename: `relatorio-ponto-${period.label.replace("/", "-")}.xlsx`,
+      content: encodeBase64Bytes(workbook),
     }],
   });
 
