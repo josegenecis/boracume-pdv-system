@@ -22,6 +22,51 @@ export type WaiterWebStoredSession = {
   expiresAt: string;
 };
 
+export type TimeClockEventType = 'clock_in' | 'break_start' | 'break_end' | 'clock_out';
+export type TimeClockEventStatus = 'approved' | 'pending_review' | 'rejected';
+export type TimeClockFaceStatus = 'not_configured' | 'pending_review' | 'verified' | 'failed';
+
+export type TimeClockSettings = {
+  enabled: boolean;
+  requireLocation: boolean;
+  requireFaceLiveness: boolean;
+  requireDeviceBinding: boolean;
+  allowOutsideRadius: boolean;
+  restaurantLatitude: number | null;
+  restaurantLongitude: number | null;
+  allowedRadiusMeters: number;
+  faceProvider: string;
+  policyNotice?: string | null;
+};
+
+export type TimeClockEvent = {
+  id: string;
+  user_id?: string;
+  waiter_id?: string;
+  event_type: TimeClockEventType;
+  status: TimeClockEventStatus;
+  occurred_at: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_meters?: number | null;
+  distance_meters?: number | null;
+  within_geofence?: boolean | null;
+  device_fingerprint?: string | null;
+  device_trusted?: boolean | null;
+  face_provider?: string | null;
+  face_status: TimeClockFaceStatus;
+  face_score?: number | null;
+  selfie_url?: string | null;
+  review_reason?: string | null;
+};
+
+export type TimeClockStatus = {
+  settings: TimeClockSettings;
+  lastEvent: TimeClockEvent | null;
+  todayEvents: TimeClockEvent[];
+  nextEventType: TimeClockEventType;
+};
+
 export type WaiterTableChoice = {
   id: string;
   number: number;
@@ -527,7 +572,7 @@ export async function logoutWaiterWeb() {
 
 export async function bootstrapWaiterWeb() {
   const session = requireSession();
-  const response = await invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[] }>(
+  const response = await invokeFunction<{ profile: WaiterWebProfile; tables: RestaurantTable[]; timeClock?: TimeClockStatus }>(
     'waiter-web',
     {
       action: 'bootstrap',
@@ -537,6 +582,45 @@ export async function bootstrapWaiterWeb() {
 
   writeCache(WAITER_BOOTSTRAP_CACHE_KEY, response);
   return response;
+}
+
+export async function getTimeClockStatus() {
+  const session = requireSession();
+  return invokeFunction<TimeClockStatus>(
+    'waiter-web',
+    {
+      action: 'time_clock_status',
+    },
+    session.token,
+  );
+}
+
+export async function punchTimeClock(input: {
+  eventType: TimeClockEventType;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracyMeters?: number | null;
+  deviceFingerprint?: string;
+  deviceLabel?: string;
+  deviceMetadata?: Record<string, unknown>;
+  faceVerification?: {
+    status?: 'verified' | 'failed' | 'pending_review';
+    score?: number | null;
+    referenceId?: string;
+    selfieUrl?: string;
+    metadata?: Record<string, unknown>;
+  };
+}) {
+  const session = requireSession();
+  return invokeFunction<{ event: TimeClockEvent; status: TimeClockStatus }>(
+    'waiter-web',
+    {
+      action: 'time_clock_punch',
+      ...input,
+      userAgent: navigator.userAgent,
+    },
+    session.token,
+  );
 }
 
 export async function createWaiterTable(input: {

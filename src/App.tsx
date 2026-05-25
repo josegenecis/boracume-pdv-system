@@ -43,6 +43,7 @@ import Loyalty from '@/pages/Loyalty';
 import BairrosEntrega from '@/pages/BairrosEntrega';
 import Entregadores from '@/pages/Entregadores';
 import Garcons from '@/pages/Garcons';
+import ControlePonto from '@/pages/ControlePonto';
 import Ingredientes from '@/pages/Ingredientes';
 import InteligenciaCMV from '@/pages/InteligenciaCMV';
 import NFCe from '@/pages/NFCe';
@@ -154,6 +155,7 @@ function AppContent() {
           <Route path="/entregadores" element={<OperatorRoute area="delivery"><FeatureRoute feature="deliveryTeam"><Entregadores /></FeatureRoute></OperatorRoute>} />
           <Route path="/motoboys" element={<Navigate to="/entregadores" replace />} />
           <Route path="/garcons" element={<OperatorRoute area="team"><FeatureRoute feature="team"><Garcons /></FeatureRoute></OperatorRoute>} />
+          <Route path="/ponto" element={<OperatorRoute area="team"><FeatureRoute feature="team"><ControlePonto /></FeatureRoute></OperatorRoute>} />
           <Route path="/nfce" element={<OperatorRoute area="nfce"><FeatureRoute feature="nfce"><NFCe /></FeatureRoute></OperatorRoute>} />
           <Route path="/caixa" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />
           <Route path="/financeiro" element={<OperatorRoute area="finance"><FeatureRoute feature="finance"><Financeiro /></FeatureRoute></OperatorRoute>} />

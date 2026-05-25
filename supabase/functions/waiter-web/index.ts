@@ -9,6 +9,23 @@ type TableStatus = 'free' | 'occupied' | 'preparing' | 'ready' | 'check_requeste
 const minutesSince = (value: string) => Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000))
 const normalizeAmount = (value: unknown) => Number(value || 0)
 const isEffectivelyZero = (value: number) => Math.abs(value) <= EPSILON
+const toNumberOrNull = (value: unknown) => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const toRadians = (value: number) => (value * Math.PI) / 180
+const calculateDistanceMeters = (fromLat?: number | null, fromLng?: number | null, toLat?: number | null, toLng?: number | null) => {
+  if (![fromLat, fromLng, toLat, toLng].every((value) => Number.isFinite(Number(value)))) return null
+
+  const earthRadiusMeters = 6371000
+  const dLat = toRadians(Number(toLat) - Number(fromLat))
+  const dLng = toRadians(Number(toLng) - Number(fromLng))
+  const startLat = toRadians(Number(fromLat))
+  const endLat = toRadians(Number(toLat))
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) ** 2
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 const orderStatusLabel: Record<string, string> = {
   pending: 'enviado',
@@ -1079,6 +1096,161 @@ async function ensureTableIsFree(supabase: any, tableId: string, restaurantId: s
   return true
 }
 
+async function getTimeClockSettings(supabase: any, restaurantId: string) {
+  const { data, error } = await supabase
+    .from('employee_time_clock_settings')
+    .select('*')
+    .eq('user_id', restaurantId)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('employee_time_clock_settings unavailable:', error?.message || error)
+  }
+
+  return {
+    enabled: data?.enabled !== false,
+    requireLocation: data?.require_location !== false,
+    requireFaceLiveness: data?.require_face_liveness !== false,
+    requireDeviceBinding: data?.require_device_binding !== false,
+    allowOutsideRadius: data?.allow_outside_radius === true,
+    restaurantLatitude: toNumberOrNull(data?.restaurant_latitude),
+    restaurantLongitude: toNumberOrNull(data?.restaurant_longitude),
+    allowedRadiusMeters: Math.max(20, Number(data?.allowed_radius_meters ?? 120)),
+    faceProvider: String(data?.face_provider || 'manual_review'),
+    policyNotice: data?.policy_notice || null,
+  }
+}
+
+async function getTimeClockStatus(supabase: any, waiterSession: any) {
+  const settings = await getTimeClockSettings(supabase, waiterSession.profile.restaurantId)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const { data: events, error } = await supabase
+    .from('employee_time_clock_events')
+    .select('*')
+    .eq('user_id', waiterSession.profile.restaurantId)
+    .eq('waiter_id', waiterSession.profile.id)
+    .gte('occurred_at', today.toISOString())
+    .order('occurred_at', { ascending: false })
+    .limit(20)
+
+  if (error) throw error
+
+  const lastEvent = events?.[0] || null
+  const nextEventType =
+    !lastEvent || lastEvent.event_type === 'clock_out'
+      ? 'clock_in'
+      : lastEvent.event_type === 'clock_in'
+        ? 'break_start'
+        : lastEvent.event_type === 'break_start'
+          ? 'break_end'
+          : 'clock_out'
+
+  return {
+    settings,
+    lastEvent,
+    todayEvents: events ?? [],
+    nextEventType,
+  }
+}
+
+async function punchTimeClock(supabase: any, waiterSession: any, body: any) {
+  const settings = await getTimeClockSettings(supabase, waiterSession.profile.restaurantId)
+  if (!settings.enabled) return fail('Controle de ponto desativado para este restaurante.', 400)
+
+  const eventType = String(body?.eventType || '')
+  if (!['clock_in', 'break_start', 'break_end', 'clock_out'].includes(eventType)) {
+    return fail('Tipo de ponto invalido.', 400)
+  }
+
+  const latitude = toNumberOrNull(body?.latitude)
+  const longitude = toNumberOrNull(body?.longitude)
+  const accuracyMeters = toNumberOrNull(body?.accuracyMeters)
+  if (settings.requireLocation && (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude)))) {
+    return fail('Localizacao obrigatoria para bater ponto.', 400)
+  }
+
+  const distanceMeters = calculateDistanceMeters(latitude, longitude, settings.restaurantLatitude, settings.restaurantLongitude)
+  const hasGeofence = Number.isFinite(Number(distanceMeters))
+  const withinGeofence = hasGeofence ? Number(distanceMeters) <= settings.allowedRadiusMeters : null
+  const outsideBlocked = settings.requireLocation && hasGeofence && withinGeofence === false && !settings.allowOutsideRadius
+  const faceVerification = body?.faceVerification && typeof body.faceVerification === 'object' ? body.faceVerification : {}
+  const faceProvider = settings.requireFaceLiveness ? settings.faceProvider : 'not_required'
+  const providerStatus = String(faceVerification.status || '')
+  const faceStatus = settings.requireFaceLiveness
+    ? providerStatus === 'verified'
+      ? 'verified'
+      : providerStatus === 'failed'
+        ? 'failed'
+        : 'pending_review'
+    : 'not_configured'
+
+  const status = outsideBlocked || faceStatus === 'failed'
+    ? 'rejected'
+    : faceStatus === 'pending_review'
+      ? 'pending_review'
+      : 'approved'
+
+  const reviewReasons = [
+    outsideBlocked ? `Fora do raio permitido (${Math.round(Number(distanceMeters || 0))}m de ${settings.allowedRadiusMeters}m).` : '',
+    faceStatus === 'pending_review' ? 'Biometria facial/liveness pendente de verificacao do provedor.' : '',
+    faceStatus === 'failed' ? 'Biometria facial/liveness reprovada pelo provedor.' : '',
+  ].filter(Boolean)
+
+  const deviceFingerprint = String(body?.deviceFingerprint || '').trim().slice(0, 160)
+  let deviceTrusted = true
+  if (settings.requireDeviceBinding && deviceFingerprint) {
+    const { data: deviceRow, error: deviceError } = await supabase
+      .from('employee_time_clock_devices')
+      .upsert({
+        user_id: waiterSession.profile.restaurantId,
+        waiter_id: waiterSession.profile.id,
+        device_fingerprint: deviceFingerprint,
+        device_label: String(body?.deviceLabel || '').trim().slice(0, 120) || null,
+        last_seen_at: new Date().toISOString(),
+        metadata: body?.deviceMetadata && typeof body.deviceMetadata === 'object' ? body.deviceMetadata : {},
+      }, { onConflict: 'waiter_id,device_fingerprint' })
+      .select('trusted')
+      .maybeSingle()
+
+    if (deviceError) throw deviceError
+    deviceTrusted = deviceRow?.trusted !== false
+  }
+
+  const { data: eventRow, error: eventError } = await supabase
+    .from('employee_time_clock_events')
+    .insert({
+      user_id: waiterSession.profile.restaurantId,
+      waiter_id: waiterSession.profile.id,
+      event_type: eventType,
+      status,
+      latitude,
+      longitude,
+      accuracy_meters: accuracyMeters,
+      distance_meters: distanceMeters !== null ? Math.round(Number(distanceMeters) * 100) / 100 : null,
+      within_geofence: withinGeofence,
+      device_fingerprint: deviceFingerprint || null,
+      device_trusted: deviceTrusted,
+      face_provider: faceProvider,
+      face_status: faceStatus,
+      face_score: toNumberOrNull(faceVerification.score),
+      face_reference_id: String(faceVerification.referenceId || '').trim().slice(0, 240) || null,
+      selfie_url: String(faceVerification.selfieUrl || '').trim().slice(0, 600) || null,
+      review_reason: reviewReasons.join(' '),
+      metadata: {
+        userAgent: String(body?.userAgent || '').slice(0, 500),
+        source: 'waiter_web',
+        providerPayload: faceVerification.metadata && typeof faceVerification.metadata === 'object' ? faceVerification.metadata : {},
+      },
+    })
+    .select('*')
+    .single()
+
+  if (eventError) throw eventError
+  return ok({ event: eventRow, status: await getTimeClockStatus(supabase, waiterSession) })
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -1092,7 +1264,16 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'bootstrap') {
       const tables = await listRestaurantTables(supabase, waiterSession.profile.restaurantId)
-      return ok({ profile: waiterSession.profile, tables })
+      const timeClock = await getTimeClockStatus(supabase, waiterSession)
+      return ok({ profile: waiterSession.profile, tables, timeClock })
+    }
+
+    if (action === 'time_clock_status') {
+      return ok(await getTimeClockStatus(supabase, waiterSession))
+    }
+
+    if (action === 'time_clock_punch') {
+      return punchTimeClock(supabase, waiterSession, body)
     }
 
     if (action === 'create_table') {
