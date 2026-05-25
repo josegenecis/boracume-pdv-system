@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Clock3, Copy, MapPin, RefreshCw, ShieldCheck, Users } from 'lucide-react';
+import { Clock3, Copy, Mail, MapPin, RefreshCw, Send, ShieldCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,14 @@ type TimeClockSettings = {
   policy_notice: string | null;
 };
 
+type AutomationSettings = {
+  hr_email: string;
+  accounting_email: string;
+  send_time_clock_monthly: boolean;
+  send_nfce_xml_monthly: boolean;
+  report_day: number;
+};
+
 type TimeClockEvent = {
   id: string;
   waiter_id: string;
@@ -37,6 +45,12 @@ type TimeClockEvent = {
   waiter?: { name?: string | null; role?: string | null } | null;
 };
 
+type WaiterRow = {
+  id: string;
+  name?: string | null;
+  role?: string | null;
+};
+
 const defaultSettings: TimeClockSettings = {
   enabled: true,
   require_location: true,
@@ -48,6 +62,14 @@ const defaultSettings: TimeClockSettings = {
   allowed_radius_meters: 120,
   face_provider: 'manual_review',
   policy_notice: 'O ponto registra horário, localização, aparelho e verificação facial/liveness somente para controle de jornada.',
+};
+
+const defaultAutomationSettings: AutomationSettings = {
+  hr_email: '',
+  accounting_email: '',
+  send_time_clock_monthly: true,
+  send_nfce_xml_monthly: true,
+  report_day: 1,
 };
 
 const eventLabels: Record<string, string> = {
@@ -67,9 +89,12 @@ export default function ControlePonto() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [settings, setSettings] = useState<TimeClockSettings>(defaultSettings);
+  const [automationSettings, setAutomationSettings] = useState<AutomationSettings>(defaultAutomationSettings);
   const [events, setEvents] = useState<TimeClockEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [sendingXml, setSendingXml] = useState(false);
   const employeeAppUrl = `${window.location.origin}/funcionario-login`;
 
   const todayEvents = useMemo(() => {
@@ -99,7 +124,7 @@ export default function ControlePonto() {
           .maybeSingle(),
         supabase
           .from('employee_time_clock_events' as any)
-          .select('*, waiter:waiters(name, role)')
+          .select('*')
           .eq('user_id', user.id)
           .order('occurred_at', { ascending: false })
           .limit(80),
@@ -107,8 +132,32 @@ export default function ControlePonto() {
 
       if (settingsResult.error) throw settingsResult.error;
       if (eventsResult.error) throw eventsResult.error;
+
+      const waiterIds = Array.from(new Set(((eventsResult.data || []) as any[]).map((event) => event.waiter_id).filter(Boolean)));
+      let waitersById = new Map<string, WaiterRow>();
+      if (waiterIds.length > 0) {
+        const { data: waiterRows, error: waiterError } = await supabase
+          .from('waiters' as any)
+          .select('id, name, role')
+          .eq('user_id', user.id)
+          .in('id', waiterIds);
+        if (waiterError) throw waiterError;
+        waitersById = new Map(((waiterRows || []) as WaiterRow[]).map((waiter) => [waiter.id, waiter]));
+      }
+
+      const { data: automationData, error: automationError } = await supabase
+        .from('business_email_automation_settings' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (automationError) throw automationError;
+
       setSettings({ ...defaultSettings, ...(settingsResult.data || {}) } as TimeClockSettings);
-      setEvents((eventsResult.data || []) as TimeClockEvent[]);
+      setAutomationSettings({ ...defaultAutomationSettings, ...(automationData || {}) } as AutomationSettings);
+      setEvents(((eventsResult.data || []) as TimeClockEvent[]).map((event) => ({
+        ...event,
+        waiter: waitersById.get(event.waiter_id) || null,
+      })));
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar ponto',
@@ -142,7 +191,18 @@ export default function ControlePonto() {
         .upsert(payload, { onConflict: 'user_id' });
       if (error) throw error;
 
-      toast({ title: 'Controle de ponto salvo', description: 'As regras ja valem no app do funcionario.' });
+      const automationPayload = {
+        ...automationSettings,
+        user_id: user.id,
+        report_day: Math.max(1, Math.min(28, Number(automationSettings.report_day || 1))),
+        updated_at: new Date().toISOString(),
+      };
+      const { error: automationSaveError } = await supabase
+        .from('business_email_automation_settings' as any)
+        .upsert(automationPayload, { onConflict: 'user_id' });
+      if (automationSaveError) throw automationSaveError;
+
+      toast({ title: 'Controle de ponto salvo', description: 'As regras e automacoes ja valem para a equipe.' });
       await loadData();
     } catch (error: any) {
       toast({
@@ -158,6 +218,50 @@ export default function ControlePonto() {
   const copyEmployeeLink = async () => {
     await navigator.clipboard.writeText(employeeAppUrl);
     toast({ title: 'Link copiado', description: 'Envie este link para os funcionarios baterem ponto pelo celular.' });
+  };
+
+  const persistAutomationSettings = async () => {
+    if (!user?.id) throw new Error('Usuario nao autenticado.');
+    const automationPayload = {
+      ...automationSettings,
+      user_id: user.id,
+      hr_email: automationSettings.hr_email.trim(),
+      accounting_email: automationSettings.accounting_email.trim(),
+      report_day: Math.max(1, Math.min(28, Number(automationSettings.report_day || 1))),
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('business_email_automation_settings' as any)
+      .upsert(automationPayload, { onConflict: 'user_id' });
+    if (error) throw error;
+  };
+
+  const sendAutomationNow = async (operation: 'send_time_clock_monthly_report' | 'send_nfce_xml_monthly') => {
+    const isTimeClock = operation === 'send_time_clock_monthly_report';
+    if (isTimeClock) setSendingReport(true);
+    else setSendingXml(true);
+
+    try {
+      await persistAutomationSettings();
+      const { data, error } = await supabase.functions.invoke('business-automations', {
+        body: { operation, mode: 'manual' },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error(String((data as any).error));
+      toast({
+        title: isTimeClock ? 'Relatório enviado' : 'XML enviado',
+        description: (data as any)?.message || 'Automação executada com sucesso.',
+      });
+    } catch (error: any) {
+      toast({
+        title: isTimeClock ? 'Erro ao enviar relatório' : 'Erro ao enviar XML',
+        description: error?.message || 'Confira o email configurado e tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      if (isTimeClock) setSendingReport(false);
+      else setSendingXml(false);
+    }
   };
 
   return (
@@ -286,6 +390,95 @@ export default function ControlePonto() {
             </CardContent>
           </Card>
 
+          <Card className="rounded-[26px] border-[#E6E0D5]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-[#FF6400]" />
+                Automação RH e contabilidade
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Email do RH</Label>
+                  <Input
+                    type="email"
+                    value={automationSettings.hr_email}
+                    onChange={(event) => setAutomationSettings((current) => ({ ...current, hr_email: event.target.value }))}
+                    placeholder="rh@empresa.com"
+                    className="h-11 rounded-2xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email da contabilidade</Label>
+                  <Input
+                    type="email"
+                    value={automationSettings.accounting_email}
+                    onChange={(event) => setAutomationSettings((current) => ({ ...current, accounting_email: event.target.value }))}
+                    placeholder="contador@contabilidade.com"
+                    className="h-11 rounded-2xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="font-semibold text-[#063B2A]">Envio mensal automático</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">
+                    O sistema fica preparado para enviar no dia configurado. O disparo usa a Edge Function de automações.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia do mês</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={automationSettings.report_day}
+                    onChange={(event) => setAutomationSettings((current) => ({ ...current, report_day: Number(event.target.value || 1) }))}
+                    className="h-11 rounded-2xl"
+                  />
+                </div>
+              </div>
+
+              {[
+                ['send_time_clock_monthly', 'Enviar relatório mensal de ponto para RH'],
+                ['send_nfce_xml_monthly', 'Enviar XML mensal NFC-e para contabilidade'],
+              ].map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                  <Label className="text-sm font-semibold text-[#063B2A]">{label}</Label>
+                  <Switch
+                    checked={Boolean((automationSettings as any)[key])}
+                    onCheckedChange={(checked) => setAutomationSettings((current) => ({ ...current, [key]: checked }))}
+                  />
+                </div>
+              ))}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() => void sendAutomationNow('send_time_clock_monthly_report')}
+                  disabled={sendingReport}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {sendingReport ? 'Enviando...' : 'Enviar ponto agora'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() => void sendAutomationNow('send_nfce_xml_monthly')}
+                  disabled={sendingXml}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {sendingXml ? 'Enviando...' : 'Enviar XML agora'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr]">
           <Card className="rounded-[26px] border-[#E6E0D5]">
             <CardHeader>
               <CardTitle>Últimos pontos</CardTitle>
