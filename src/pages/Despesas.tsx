@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Calendar, Upload, FileText, Search, Undo2 } from 'lucide-react';
+import { Plus, DollarSign, Calendar, Upload, FileText, Search, Undo2, Sparkles, PackageCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -29,6 +29,31 @@ interface Expense {
   reversed_at?: string | null;
   reversal_reason?: string | null;
   reversed_by?: string | null;
+}
+
+interface SmartInvoiceItem {
+  id?: string;
+  description: string;
+  normalized_name: string;
+  category: string;
+  subcategory?: string | null;
+  quantity: number;
+  unit: string;
+  stock_unit: string;
+  unit_price: number;
+  total_price: number;
+  confidence: number;
+  similar_to?: string | null;
+  control_stock: boolean;
+}
+
+interface SmartInvoiceImport {
+  id: string;
+  supplier_name?: string | null;
+  invoice_number?: string | null;
+  invoice_date?: string | null;
+  total_amount: number;
+  expense_category: string;
 }
 
 const getExpenseDateKey = (exp: any) => {
@@ -69,6 +94,13 @@ export default function Despesas() {
   const [expenseDate, setExpenseDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [smartInvoiceFile, setSmartInvoiceFile] = useState<File | null>(null);
+  const [smartInvoiceImport, setSmartInvoiceImport] = useState<SmartInvoiceImport | null>(null);
+  const [smartInvoiceItems, setSmartInvoiceItems] = useState<SmartInvoiceItem[]>([]);
+  const [smartInvoiceLoading, setSmartInvoiceLoading] = useState(false);
+  const [smartInvoiceCommitting, setSmartInvoiceCommitting] = useState(false);
+  const [smartLaunchExpense, setSmartLaunchExpense] = useState(true);
+  const [smartLaunchStock, setSmartLaunchStock] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -307,6 +339,131 @@ export default function Despesas() {
     }
   };
 
+  const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleSmartInvoiceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    const maxSize = 8 * 1024 * 1024;
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Envie imagem JPG/PNG ou PDF da nota.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (file.size > maxSize) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'A nota deve ter no máximo 8MB.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setSmartInvoiceFile(file);
+    setSmartInvoiceImport(null);
+    setSmartInvoiceItems([]);
+  };
+
+  const analyzeSmartInvoice = async () => {
+    if (!smartInvoiceFile) {
+      toast({
+        title: 'Selecione a nota',
+        description: 'Envie uma imagem ou PDF para a IA processar.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSmartInvoiceLoading(true);
+    try {
+      const fileBase64 = await fileToBase64(smartInvoiceFile);
+      const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
+        body: {
+          operation: 'analyze',
+          fileBase64,
+          mimeType: smartInvoiceFile.type
+        }
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error(String((data as any).error));
+
+      setSmartInvoiceImport((data as any).import);
+      setSmartInvoiceItems(((data as any).items || []).map((item: any) => ({
+        ...item,
+        quantity: Number(item.quantity || 1),
+        unit_price: Number(item.unit_price || 0),
+        total_price: Number(item.total_price || 0),
+        confidence: Number(item.confidence || 0),
+        control_stock: item.control_stock !== false
+      })));
+      toast({
+        title: 'Nota processada',
+        description: 'Confira os itens antes de lançar no financeiro e estoque.'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao processar nota',
+        description: error?.message || 'A IA não conseguiu ler essa nota.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSmartInvoiceLoading(false);
+    }
+  };
+
+  const updateSmartInvoiceItem = (index: number, patch: Partial<SmartInvoiceItem>) => {
+    setSmartInvoiceItems((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      const next = { ...item, ...patch };
+      if (patch.quantity !== undefined || patch.unit_price !== undefined) {
+        next.total_price = Number(next.quantity || 0) * Number(next.unit_price || 0);
+      }
+      return next;
+    }));
+  };
+
+  const commitSmartInvoice = async () => {
+    if (!smartInvoiceImport?.id || smartInvoiceItems.length === 0) return;
+    setSmartInvoiceCommitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('smart-invoice-import', {
+        body: {
+          operation: 'commit',
+          importId: smartInvoiceImport.id,
+          launchExpense: smartLaunchExpense,
+          launchStock: smartLaunchStock,
+          items: smartInvoiceItems
+        }
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error(String((data as any).error));
+      toast({
+        title: 'Nota lançada',
+        description: `Despesa e ${((data as any)?.stock || []).length} item(ns) de estoque processados.`
+      });
+      setSmartInvoiceFile(null);
+      setSmartInvoiceImport(null);
+      setSmartInvoiceItems([]);
+      loadExpenses();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao lançar nota',
+        description: error?.message || 'Não foi possível concluir o lançamento.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSmartInvoiceCommitting(false);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -323,6 +480,8 @@ export default function Despesas() {
   const getTotalExpenses = () => {
     return filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   };
+
+  const smartInvoiceTotal = smartInvoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
 
   if (loading) {
     return (
@@ -341,6 +500,175 @@ export default function Despesas() {
           Registre e acompanhe suas despesas mensais
         </p>
       </div>
+
+      <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-emerald-950">
+            <Sparkles className="h-5 w-5 text-orange-600" />
+            Nota inteligente por imagem
+          </CardTitle>
+          <CardDescription>
+            Envie uma nota fiscal, cupom ou recibo. A IA lê os itens, classifica por categoria/subcategoria e prepara o lançamento de despesa e estoque.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+            <Input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              onChange={handleSmartInvoiceFile}
+              className="h-11 bg-white"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11"
+              onClick={analyzeSmartInvoice}
+              disabled={smartInvoiceLoading || !smartInvoiceFile}
+            >
+              {smartInvoiceLoading ? (
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-emerald-800" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              Processar com IA
+            </Button>
+            <Button
+              type="button"
+              className="h-11 bg-emerald-800 hover:bg-emerald-900"
+              onClick={commitSmartInvoice}
+              disabled={smartInvoiceCommitting || !smartInvoiceImport || smartInvoiceItems.length === 0}
+            >
+              <PackageCheck className="mr-2 h-4 w-4" />
+              {smartInvoiceCommitting ? 'Lançando...' : 'Lançar nota'}
+            </Button>
+          </div>
+
+          {smartInvoiceFile && (
+            <div className="text-sm text-slate-600">
+              Arquivo selecionado: <span className="font-semibold">{smartInvoiceFile.name}</span>
+            </div>
+          )}
+
+          {smartInvoiceImport && (
+            <div className="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-4 md:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase text-slate-500">Fornecedor</div>
+                <div className="font-semibold">{smartInvoiceImport.supplier_name || 'Não identificado'}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-slate-500">Nota</div>
+                <div className="font-semibold">{smartInvoiceImport.invoice_number || '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-slate-500">Data</div>
+                <div className="font-semibold">{smartInvoiceImport.invoice_date ? formatDate(smartInvoiceImport.invoice_date) : '-'}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-slate-500">Total lido</div>
+                <div className="font-semibold">{formatCurrency(smartInvoiceTotal || Number(smartInvoiceImport.total_amount || 0))}</div>
+              </div>
+            </div>
+          )}
+
+          {smartInvoiceItems.length > 0 && (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+                  <div>
+                    <div className="font-semibold text-emerald-950">Lançar no financeiro</div>
+                    <div className="text-xs text-slate-500">Cria uma despesa com o total da nota.</div>
+                  </div>
+                  <Switch checked={smartLaunchExpense} onCheckedChange={setSmartLaunchExpense} />
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3">
+                  <div>
+                    <div className="font-semibold text-emerald-950">Lançar no estoque</div>
+                    <div className="text-xs text-slate-500">Cria/atualiza insumos e movimentações de entrada.</div>
+                  </div>
+                  <Switch checked={smartLaunchStock} onCheckedChange={setSmartLaunchStock} />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Subcategoria</TableHead>
+                      <TableHead>Qtd</TableHead>
+                      <TableHead>Un</TableHead>
+                      <TableHead>Custo un.</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Estoque</TableHead>
+                      <TableHead>Conf.</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {smartInvoiceItems.map((item, index) => (
+                      <TableRow key={item.id || index}>
+                        <TableCell className="min-w-[220px]">
+                          <Input
+                            value={item.normalized_name}
+                            onChange={(event) => updateSmartInvoiceItem(index, { normalized_name: event.target.value })}
+                            className="h-9"
+                          />
+                          <div className="mt-1 text-xs text-slate-500">{item.description}</div>
+                          {item.similar_to && <div className="text-xs text-emerald-700">Parecido com: {item.similar_to}</div>}
+                        </TableCell>
+                        <TableCell className="min-w-[160px]">
+                          <Input value={item.category} onChange={(event) => updateSmartInvoiceItem(index, { category: event.target.value })} className="h-9" />
+                        </TableCell>
+                        <TableCell className="min-w-[160px]">
+                          <Input value={item.subcategory || ''} onChange={(event) => updateSmartInvoiceItem(index, { subcategory: event.target.value })} className="h-9" />
+                        </TableCell>
+                        <TableCell className="min-w-[110px]">
+                          <Input
+                            type="number"
+                            step="0.001"
+                            value={item.quantity}
+                            onChange={(event) => updateSmartInvoiceItem(index, { quantity: Number(event.target.value || 0) })}
+                            className="h-9"
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-[100px]">
+                          <Select value={item.stock_unit || item.unit || 'un'} onValueChange={(value) => updateSmartInvoiceItem(index, { stock_unit: value, unit: value })}>
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {['un', 'kg', 'g', 'l', 'ml'].map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="min-w-[120px]">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={item.unit_price}
+                            onChange={(event) => updateSmartInvoiceItem(index, { unit_price: Number(event.target.value || 0) })}
+                            className="h-9"
+                          />
+                        </TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(Number(item.total_price || 0))}</TableCell>
+                        <TableCell>
+                          <Switch checked={item.control_stock} onCheckedChange={(checked) => updateSmartInvoiceItem(index, { control_stock: checked })} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={item.confidence >= 0.8 ? 'default' : 'secondary'}>
+                            {Math.round(Number(item.confidence || 0) * 100)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Expense Form */}
