@@ -36,7 +36,7 @@ const Footer = () => {
               <div className="w-8 h-8 bg-boracume-orange rounded-lg flex items-center justify-center">
                 <ChefHat className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold">BoraCumê</span>
+              <span className="text-xl font-bold">PopSystem</span>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed">
               O sistema operacional completo para restaurantes que querem vender mais e ter menos dor de cabeça.
@@ -70,7 +70,7 @@ const Footer = () => {
             <div className="space-y-3 text-sm">
               <div className="flex items-center space-x-2 text-slate-400">
                 <Mail className="w-4 h-4 text-boracume-orange" />
-                <span>oi@boracume.com.br</span>
+                <span>contato@popsystem.com.br</span>
               </div>
               <div className="flex items-center space-x-2 text-slate-400">
                 <MapPin className="w-4 h-4 text-boracume-orange" />
@@ -82,7 +82,7 @@ const Footer = () => {
 
         <div className="border-t border-slate-900 mt-12 pt-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center">
           <p className="text-slate-500 text-sm">
-            © {currentYear} BoraCumê Tecnologia Ltda.
+            © {currentYear} PopSystem Tecnologia Ltda.
           </p>
           <div className="flex space-x-4 mt-4 md:mt-0">
              {/* Social icons if needed */}

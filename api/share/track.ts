@@ -3,6 +3,7 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY ||
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZnlyY3B1Z21kdWNwdGt0amljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MzAwNjUsImV4cCI6MjA2MzUwNjA2NX0.G9l2LEE6DtnSGChmGx5sTCQhC7yVHZJtq6rTTsti2aE';
+const PUBLIC_BASE_URL = (process.env.PUBLIC_WEB_BASE_URL || process.env.VITE_PUBLIC_WEB_BASE_URL || 'https://popsystem.com.br').replace(/\/+$/, '');
 
 function escHtml(v: string) {
   return String(v || '')
@@ -20,7 +21,7 @@ function normalizeAbsoluteUrl(value: string) {
   if (!clean || clean === 'null' || clean === 'undefined' || clean === '[object Object]') return '';
   if (/^https?:\/\//i.test(clean)) return clean.replace(/^http:\/\//i, 'https://');
   if (clean.startsWith('//')) return `https:${clean}`;
-  if (clean.startsWith('/')) return `https://boracume.com${clean}`;
+  if (clean.startsWith('/')) return `${PUBLIC_BASE_URL}${clean}`;
   if (clean.includes('supabase.co/storage/v1/')) return `https://${clean}`;
   if (clean.includes('ifood-static.com') || clean.includes('storage.googleapis.com')) return `https://${clean}`;
   if (clean.includes('/')) return `${SUPABASE_URL}/storage/v1/object/public/profile-images/${clean}`;
@@ -63,9 +64,9 @@ export default async function handler(req: any, res: any) {
     const description = String(profile?.description || 'Acompanhe o andamento do seu pedido.');
     const logoUrl =
       normalizeAbsoluteUrl(String(profile?.logo_url || profile?.banner_url || '')) ||
-      'https://boracume.com/LOGOMARCA/LOGO%20POPSYSTEM.png';
+      `${PUBLIC_BASE_URL}/LOGOMARCA/LOGO%20POPSYSTEM.png`;
     const title = orderNumber ? `${restaurantName} • Pedido ${orderNumber}` : `${restaurantName} • Acompanhar pedido`;
-    const pageUrl = `https://boracume.com/share/track/${encodeURIComponent(orderId)}`;
+    const pageUrl = `${PUBLIC_BASE_URL}/share/track/${encodeURIComponent(orderId)}`;
     const redirectUrl = `/track/${encodeURIComponent(orderId)}`;
 
     const html = `<!doctype html>

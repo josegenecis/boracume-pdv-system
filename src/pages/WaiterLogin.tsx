@@ -159,7 +159,7 @@ const WaiterLogin = () => {
           </form>
         </div>
 
-        <div className="text-xs tracking-[0.04em] text-white/55">boracume.com</div>
+        <div className="text-xs tracking-[0.04em] text-white/55">popsystem.com.br</div>
       </div>
     </div>
   );

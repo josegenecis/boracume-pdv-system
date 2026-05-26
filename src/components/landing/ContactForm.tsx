@@ -135,7 +135,7 @@ const ContactForm = () => {
               <span className="text-boracume-orange">restaurante</span>?
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Entre em contato conosco e descubra como o BoraCumê pode transformar seu negócio
+              Entre em contato conosco e descubra como o PopSystem pode transformar seu negócio
             </p>
           </motion.div>
 
@@ -176,7 +176,7 @@ const ContactForm = () => {
                   </div>
                   <div>
                     <h4 className="font-semibold text-gray-900 mb-1">E-mail</h4>
-                    <p className="text-gray-600">contato@boracume.com</p>
+                    <p className="text-gray-600">contato@popsystem.com.br</p>
                     <p className="text-sm text-gray-500">Resposta em até 2 horas</p>
                   </div>
                 </div>

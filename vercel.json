@@ -28,6 +28,18 @@
   ],
   "routes": [
     {
+      "src": "^/(.*)$",
+      "has": [{ "type": "host", "value": "boracume.com" }],
+      "status": 308,
+      "dest": "https://popsystem.com.br/$1"
+    },
+    {
+      "src": "^/(.*)$",
+      "has": [{ "type": "host", "value": "www.boracume.com" }],
+      "status": 308,
+      "dest": "https://popsystem.com.br/$1"
+    },
+    {
       "src": "^/menu/(.+)$",
       "has": [
         {
