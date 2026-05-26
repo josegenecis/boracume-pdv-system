@@ -129,7 +129,8 @@ function normalizeOfferGreeting(message: string) {
 }
 
 function buildMenuLink(restaurantId: string) {
-  return `https://boracume.com/share/menu/${restaurantId}`;
+  const base = (Deno.env.get("PUBLIC_WEB_BASE_URL") || Deno.env.get("VITE_PUBLIC_WEB_BASE_URL") || "https://popsystem.com.br").replace(/\/+$/, "");
+  return `${base}/share/menu/${restaurantId}`;
 }
 
 function appendOptOut(message: string, optOutText: string) {

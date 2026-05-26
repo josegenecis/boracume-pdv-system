@@ -212,15 +212,19 @@ const AuthForm: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(loginData.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { data, error } = await supabase.functions.invoke('auth-recovery-email', {
+        body: {
+          email: loginData.email,
+          redirectTo: `${window.location.origin}/reset-password`,
+        },
       });
       
       if (error) throw error;
+      if ((data as any)?.error) throw new Error(String((data as any).error));
       
       toast({
         title: "Email enviado",
-        description: "Verifique sua caixa de entrada para redefinir sua senha.",
+        description: "Enviamos um link seguro da PopSystem para redefinir sua senha.",
       });
     } catch (error: any) {
       console.error('Erro ao enviar email de recuperação:', error);
@@ -247,7 +251,7 @@ const AuthForm: React.FC = () => {
         <div className="flex justify-center mb-4">
           <Logo />
         </div>
-        <CardTitle className="text-2xl text-center">BoraCumê</CardTitle>
+        <CardTitle className="text-2xl text-center">POPSYSTEM</CardTitle>
         <CardDescription className="text-center">
           Sistema completo para seu restaurante
         </CardDescription>

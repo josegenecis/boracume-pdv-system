@@ -439,7 +439,7 @@ async function sendEmail(payload: {
       "User-Agent": "PopSystem-Business-Automations/1.0",
     },
     body: JSON.stringify({
-      from: Deno.env.get("RESEND_FROM_EMAIL") || "PopSystem <noreply@boracume.com>",
+      from: Deno.env.get("RESEND_FROM_EMAIL") || "PopSystem <relatorios@popsystem.com.br>",
       to: payload.to,
       subject: payload.subject,
       html: payload.html,

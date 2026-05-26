@@ -58,6 +58,11 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/smart-invoice-import/index.ts"
 
+[functions.auth-recovery-email]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/auth-recovery-email/index.ts"
+
 [functions.evogo-webhook]
 enabled = true
 verify_jwt = false

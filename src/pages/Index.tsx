@@ -37,7 +37,7 @@ const Index = () => {
       const hostname = window.location.hostname;
       
       // 1. Domínios que DEVEM mostrar a Landing Page (sistema principal)
-      const mainDomains = ['boracume.com', 'www.boracume.com', 'localhost', 'boracume-pdv-system.vercel.app'];
+      const mainDomains = ['popsystem.com.br', 'www.popsystem.com.br', 'boracume.com', 'www.boracume.com', 'localhost', 'boracume-pdv-system.vercel.app'];
       const isMainDomain = mainDomains.includes(hostname) || hostname.endsWith('.vercel.app'); // Simplificação para dev
 
       // Se estamos na rota raiz '/' E é um domínio principal -> Landing Page

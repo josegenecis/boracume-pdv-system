@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, DollarSign, Calendar, Upload, FileText, Search, Undo2, Sparkles, PackageCheck } from 'lucide-react';
+import { Plus, DollarSign, Upload, FileText, Search, Undo2, Sparkles, PackageCheck, Tags, ListFilter } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
@@ -481,6 +482,28 @@ export default function Despesas() {
     return filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   };
 
+  const categorySummary = Object.values(
+    filteredExpenses.reduce((acc, expense) => {
+      const key = expense.category || 'outros';
+      if (!acc[key]) {
+        acc[key] = {
+          category: key,
+          total: 0,
+          count: 0,
+          lastDate: '',
+          expenses: [] as Expense[],
+        };
+      }
+      acc[key].total += Number(expense.amount || 0);
+      acc[key].count += 1;
+      acc[key].expenses.push(expense);
+      const dateKey = getExpenseDateKey(expense);
+      if (!acc[key].lastDate || dateKey > acc[key].lastDate) acc[key].lastDate = dateKey;
+      return acc;
+    }, {} as Record<string, { category: string; total: number; count: number; lastDate: string; expenses: Expense[] }>)
+  ).sort((a, b) => b.total - a.total);
+
+  const totalForCategoryShare = Math.max(getTotalExpenses(), 1);
   const smartInvoiceTotal = smartInvoiceItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
 
   if (loading) {
@@ -872,73 +895,150 @@ export default function Despesas() {
         </CardContent>
       </Card>
 
-      {/* Expenses Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Despesas ({filteredExpenses.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredExpenses.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>Nenhuma despesa encontrada</p>
-              <p className="text-sm mt-1">Tente ajustar os filtros ou registrar uma nova despesa</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Comprovante</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExpenses.map((expense) => (
-                    <TableRow key={expense.id}>
-                      <TableCell className="font-medium">{expense.description}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {expense.category}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{formatCurrency(expense.amount)}</TableCell>
-                      <TableCell>
-                        {expense.receipt_url ? (
-                          <Button variant="outline" size="sm" asChild>
-                            <a href={expense.receipt_url} target="_blank" rel="noopener noreferrer">
-                              <Upload className="h-3 w-3 mr-1" />
-                              Ver
-                            </a>
+      <Tabs defaultValue="lancamentos" className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="lancamentos" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Lançamentos
+          </TabsTrigger>
+          <TabsTrigger value="categorias" className="gap-2">
+            <Tags className="h-4 w-4" />
+            Por categoria
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="lancamentos">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Despesas ({filteredExpenses.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredExpenses.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma despesa encontrada</p>
+                  <p className="text-sm mt-1">Tente ajustar os filtros ou registrar uma nova despesa</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Comprovante</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredExpenses.map((expense) => (
+                        <TableRow key={expense.id}>
+                          <TableCell className="font-medium">{expense.description}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="capitalize">
+                              {expense.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{formatCurrency(expense.amount)}</TableCell>
+                          <TableCell>
+                            {expense.receipt_url ? (
+                              <Button variant="outline" size="sm" asChild>
+                                <a href={expense.receipt_url} target="_blank" rel="noopener noreferrer">
+                                  <Upload className="h-3 w-3 mr-1" />
+                                  Ver
+                                </a>
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {expense.is_active === false ? (
+                              <Badge variant="secondary">Estornado</Badge>
+                            ) : (
+                              <Button variant="outline" size="sm" onClick={() => reverseExpense(expense)}>
+                                <Undo2 className="h-3 w-3 mr-1" />
+                                Estornar
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="categorias">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ListFilter className="h-5 w-5" />
+                Despesas por categoria
+              </CardTitle>
+              <CardDescription>
+                Os mesmos filtros acima controlam esta visão, facilitando a conferência por período.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {categorySummary.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Tags className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma categoria encontrada no período.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {categorySummary.map((item) => {
+                    const percentage = Math.round((item.total / totalForCategoryShare) * 100);
+                    return (
+                      <div key={item.category} className="rounded-2xl border bg-white p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge className="capitalize">{item.category}</Badge>
+                              <span className="text-sm text-muted-foreground">{item.count} lançamento(s)</span>
+                            </div>
+                            <div className="mt-2 text-2xl font-bold">{formatCurrency(item.total)}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {percentage}% do total filtrado
+                              {item.lastDate ? ` - último lançamento em ${formatDate(item.lastDate)}` : ''}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setSelectedCategory(item.category)}
+                          >
+                            Filtrar categoria
                           </Button>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {expense.is_active === false ? (
-                          <Badge variant="secondary">Estornado</Badge>
-                        ) : (
-                          <Button variant="outline" size="sm" onClick={() => reverseExpense(expense)}>
-                            <Undo2 className="h-3 w-3 mr-1" />
-                            Estornar
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                        </div>
+                        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(percentage, 100)}%` }} />
+                        </div>
+                        <div className="mt-4 grid gap-2">
+                          {item.expenses.slice(0, 4).map((expense) => (
+                            <div key={expense.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                              <span className="truncate pr-4">{expense.description}</span>
+                              <span className="whitespace-nowrap font-semibold">{formatCurrency(expense.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

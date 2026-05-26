@@ -29,7 +29,7 @@ const defaultResponses: Required<AutoResponses> = {
 };
 
 function baseUrl() {
-  return (Deno.env.get("PUBLIC_WEB_BASE_URL") || Deno.env.get("VITE_PUBLIC_WEB_BASE_URL") || "https://boracume.com").replace(/\/+$/, "");
+  return (Deno.env.get("PUBLIC_WEB_BASE_URL") || Deno.env.get("VITE_PUBLIC_WEB_BASE_URL") || "https://popsystem.com.br").replace(/\/+$/, "");
 }
 
 function parseAutoResponses(value: unknown): AutoResponses {

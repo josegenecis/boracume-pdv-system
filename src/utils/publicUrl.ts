@@ -26,7 +26,7 @@ export function getPublicWebBaseUrl() {
     if (window.location.protocol !== 'file:') return window.location.origin;
   } catch {}
 
-  return 'https://boracume.com';
+  return 'https://popsystem.com.br';
 }
 
 export function buildPublicMenuUrl(userId: string) {
@@ -54,4 +54,3 @@ export function buildPublicTrackShareUrl(orderId: string, opts?: { userId?: stri
   if (orderNumber) url.searchParams.set('n', orderNumber);
   return url.toString();
 }
-
