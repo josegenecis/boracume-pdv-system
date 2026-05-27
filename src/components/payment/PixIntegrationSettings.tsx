@@ -24,17 +24,10 @@ const PixIntegrationSettings: React.FC = () => {
   const [provider, setProvider] = useState('custom')
   const [apiKey, setApiKey] = useState('')
 
-  const projectRef = useMemo(() => {
-    try {
-      const url = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://gcfyrcpugmducptktjic.supabase.co'
-      const host = new URL(url).host
-      return host.split('.')[0]
-    } catch {
-      return 'gcfyrcpugmducptktjic'
-    }
+  const endpoint = useMemo(() => {
+    const baseUrl = ((import.meta as any).env?.VITE_SUPABASE_URL || 'https://auth.popsystem.com.br').replace(/\/+$/, '')
+    return `${baseUrl}/functions/v1/pix-webhook`
   }, [])
-
-  const endpoint = `https://${projectRef}.functions.supabase.co/pix-webhook`
 
   const load = async () => {
     if (!user) return
@@ -173,4 +166,3 @@ const PixIntegrationSettings: React.FC = () => {
 }
 
 export default PixIntegrationSettings
-
