@@ -27,6 +27,215 @@ const calculateDistanceMeters = (fromLat?: number | null, fromLng?: number | nul
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+const extractDataUrlPayload = (dataUrl: string) => {
+  const match = String(dataUrl || '').match(/^data:([a-z0-9/+.-]+);base64,(.+)$/i)
+  return match ? { mimeType: match[1], base64: match[2] } : null
+}
+
+const sha256Hex = async (value: string) => {
+  const bytes = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+const sanitizeFaceFrame = async (frame: any, index: number) => {
+  const payload = extractDataUrlPayload(String(frame?.dataUrl || ''))
+  const sizeBytes = payload?.base64 ? Math.floor((payload.base64.length * 3) / 4) : 0
+  return {
+    index,
+    step: String(frame?.step || `frame_${index + 1}`).slice(0, 40),
+    capturedAt: String(frame?.capturedAt || '').slice(0, 80) || null,
+    mimeType: payload?.mimeType || null,
+    sizeBytes,
+    imageSha256: payload?.base64 ? await sha256Hex(payload.base64) : null,
+    faceDetected: frame?.faceDetected === true,
+    faceBox: frame?.faceBox && typeof frame.faceBox === 'object'
+      ? {
+        x: Number(frame.faceBox.x || 0),
+        y: Number(frame.faceBox.y || 0),
+        width: Number(frame.faceBox.width || 0),
+        height: Number(frame.faceBox.height || 0),
+      }
+      : null,
+  }
+}
+
+async function analyzeTimeClockFaceCapture(settings: any, waiterSession: any, body: any) {
+  if (!settings.requireFaceLiveness) {
+    return {
+      faceProvider: 'not_required',
+      faceStatus: 'not_configured',
+      faceScore: null,
+      faceReferenceId: null,
+      faceLivenessPassed: null,
+      faceChallengeId: null,
+      faceChallengePrompt: null,
+      privacyAcknowledgedAt: null,
+      evidence: {},
+      providerPayload: {},
+      reviewReason: '',
+    }
+  }
+
+  const capture = body?.faceCapture && typeof body.faceCapture === 'object' ? body.faceCapture : null
+  const frames = Array.isArray(capture?.frames) ? capture.frames.slice(0, 4) : []
+  if (!capture || frames.length < 2) {
+    return {
+      faceProvider: settings.faceProvider,
+      faceStatus: 'failed',
+      faceScore: null,
+      faceReferenceId: null,
+      faceLivenessPassed: false,
+      faceChallengeId: String(capture?.challengeId || '').slice(0, 80) || null,
+      faceChallengePrompt: String(capture?.challengePrompt || '').slice(0, 180) || null,
+      privacyAcknowledgedAt: capture?.privacyAcknowledgedAt || null,
+      evidence: {
+        reason: 'missing_capture',
+        frameCount: frames.length,
+      },
+      providerPayload: {},
+      reviewReason: 'Prova de vida facial obrigatoria nao foi capturada.',
+    }
+  }
+
+  const evidenceFrames = await Promise.all(frames.map((frame: any, index: number) => sanitizeFaceFrame(frame, index)))
+  const clientChecks = capture?.clientChecks && typeof capture.clientChecks === 'object' ? capture.clientChecks : {}
+  const detectedFrames = Math.max(0, Number(clientChecks.detectedFrames || evidenceFrames.filter((frame) => frame.faceDetected).length))
+  const movementScore = Math.max(0, Math.min(1, Number(clientChecks.movementScore || 0)))
+  const browserLivenessPassed = clientChecks.browserLivenessPassed === true
+  const baseEvidence = {
+    mode: settings.faceLivenessMode,
+    policyVersion: settings.facePolicyVersion,
+    challengeId: String(capture.challengeId || '').slice(0, 80) || null,
+    challengePrompt: String(capture.challengePrompt || '').slice(0, 180) || null,
+    clientChecks: {
+      cameraPermission: clientChecks.cameraPermission === true,
+      faceDetectorAvailable: clientChecks.faceDetectorAvailable === true,
+      detectedFrames,
+      movementScore,
+      browserLivenessPassed,
+    },
+    frameCount: evidenceFrames.length,
+    frames: evidenceFrames,
+    storedRawImage: false,
+  }
+
+  if (settings.faceLivenessMode === 'provider_webhook') {
+    const providerUrl = Deno.env.get('TIME_CLOCK_FACE_PROVIDER_URL') || ''
+    const providerToken = Deno.env.get('TIME_CLOCK_FACE_PROVIDER_TOKEN') || ''
+    if (!providerUrl) {
+      return {
+        faceProvider: settings.faceProvider || 'provider_webhook',
+        faceStatus: 'pending_review',
+        faceScore: null,
+        faceReferenceId: null,
+        faceLivenessPassed: browserLivenessPassed,
+        faceChallengeId: baseEvidence.challengeId,
+        faceChallengePrompt: baseEvidence.challengePrompt,
+        privacyAcknowledgedAt: capture.privacyAcknowledgedAt || null,
+        evidence: { ...baseEvidence, providerConfigured: false },
+        providerPayload: {},
+        reviewReason: 'Prova de vida capturada, mas o provedor facial ainda nao foi configurado nos secrets.',
+      }
+    }
+
+    try {
+      const providerResponse = await fetch(providerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(providerToken ? { Authorization: `Bearer ${providerToken}` } : {}),
+        },
+        body: JSON.stringify({
+          employee: {
+            id: waiterSession.profile.id,
+            name: waiterSession.profile.name,
+            restaurantId: waiterSession.profile.restaurantId,
+          },
+          challenge: {
+            id: baseEvidence.challengeId,
+            prompt: baseEvidence.challengePrompt,
+          },
+          minScore: settings.faceMinScore,
+          frames: settings.faceStoreEvidence ? frames : frames.map((frame: any) => ({
+            step: frame?.step,
+            capturedAt: frame?.capturedAt,
+            dataUrl: frame?.dataUrl,
+          })),
+          clientChecks: baseEvidence.clientChecks,
+        }),
+      })
+      const providerJson = await providerResponse.json().catch(() => ({}))
+      const rawStatus = String(providerJson?.status || '').toLowerCase()
+      const providerScore = toNumberOrNull(providerJson?.score)
+      const passedByScore = providerScore !== null ? providerScore >= settings.faceMinScore : false
+      const faceStatus = rawStatus === 'verified' && passedByScore
+        ? 'verified'
+        : rawStatus === 'failed' || (providerScore !== null && !passedByScore)
+          ? 'failed'
+          : 'pending_review'
+
+      return {
+        faceProvider: settings.faceProvider || 'provider_webhook',
+        faceStatus,
+        faceScore: providerScore,
+        faceReferenceId: String(providerJson?.referenceId || providerJson?.id || '').slice(0, 240) || null,
+        faceLivenessPassed: faceStatus === 'verified',
+        faceChallengeId: baseEvidence.challengeId,
+        faceChallengePrompt: baseEvidence.challengePrompt,
+        privacyAcknowledgedAt: capture.privacyAcknowledgedAt || null,
+        evidence: {
+          ...baseEvidence,
+          providerConfigured: true,
+          providerStatusCode: providerResponse.status,
+          providerStatus: rawStatus || null,
+          providerReferenceId: String(providerJson?.referenceId || providerJson?.id || '').slice(0, 240) || null,
+        },
+        providerPayload: {
+          status: rawStatus || null,
+          score: providerScore,
+          referenceId: providerJson?.referenceId || providerJson?.id || null,
+        },
+        reviewReason: faceStatus === 'verified'
+          ? ''
+          : faceStatus === 'failed'
+            ? 'Biometria facial/liveness reprovada pelo provedor.'
+            : 'Biometria facial/liveness pendente de verificacao do provedor.',
+      }
+    } catch (error) {
+      return {
+        faceProvider: settings.faceProvider || 'provider_webhook',
+        faceStatus: 'pending_review',
+        faceScore: null,
+        faceReferenceId: null,
+        faceLivenessPassed: browserLivenessPassed,
+        faceChallengeId: baseEvidence.challengeId,
+        faceChallengePrompt: baseEvidence.challengePrompt,
+        privacyAcknowledgedAt: capture.privacyAcknowledgedAt || null,
+        evidence: { ...baseEvidence, providerError: String((error as Error)?.message || error).slice(0, 300) },
+        providerPayload: {},
+        reviewReason: 'Prova de vida capturada, mas o provedor facial nao respondeu. Revisao manual necessaria.',
+      }
+    }
+  }
+
+  return {
+    faceProvider: settings.faceProvider || 'manual_review',
+    faceStatus: 'pending_review',
+    faceScore: browserLivenessPassed ? Math.max(0.55, movementScore) : null,
+    faceReferenceId: null,
+    faceLivenessPassed: browserLivenessPassed,
+    faceChallengeId: baseEvidence.challengeId,
+    faceChallengePrompt: baseEvidence.challengePrompt,
+    privacyAcknowledgedAt: capture.privacyAcknowledgedAt || null,
+    evidence: baseEvidence,
+    providerPayload: {},
+    reviewReason: browserLivenessPassed
+      ? 'Prova de vida capturada no aparelho e aguardando revisao manual.'
+      : 'Prova de vida capturada, mas o navegador nao confirmou rosto/movimento com seguranca.',
+  }
+}
+
 const orderStatusLabel: Record<string, string> = {
   pending: 'enviado',
   accepted: 'aceito',
@@ -1117,6 +1326,10 @@ async function getTimeClockSettings(supabase: any, restaurantId: string) {
     restaurantLongitude: toNumberOrNull(data?.restaurant_longitude),
     allowedRadiusMeters: Math.max(20, Number(data?.allowed_radius_meters ?? 120)),
     faceProvider: String(data?.face_provider || 'manual_review'),
+    faceLivenessMode: String(data?.face_liveness_mode || 'manual_review'),
+    faceMinScore: Math.max(0.1, Math.min(0.99, Number(data?.face_min_score ?? 0.75))),
+    faceStoreEvidence: data?.face_store_evidence === true,
+    facePolicyVersion: String(data?.face_policy_version || '2026-05-lgpd-v1'),
     policyNotice: data?.policy_notice || null,
   }
 }
@@ -1175,16 +1388,8 @@ async function punchTimeClock(supabase: any, waiterSession: any, body: any) {
   const hasGeofence = Number.isFinite(Number(distanceMeters))
   const withinGeofence = hasGeofence ? Number(distanceMeters) <= settings.allowedRadiusMeters : null
   const outsideBlocked = settings.requireLocation && hasGeofence && withinGeofence === false && !settings.allowOutsideRadius
-  const faceVerification = body?.faceVerification && typeof body.faceVerification === 'object' ? body.faceVerification : {}
-  const faceProvider = settings.requireFaceLiveness ? settings.faceProvider : 'not_required'
-  const providerStatus = String(faceVerification.status || '')
-  const faceStatus = settings.requireFaceLiveness
-    ? providerStatus === 'verified'
-      ? 'verified'
-      : providerStatus === 'failed'
-        ? 'failed'
-        : 'pending_review'
-    : 'not_configured'
+  const faceAnalysis = await analyzeTimeClockFaceCapture(settings, waiterSession, body)
+  const faceStatus = faceAnalysis.faceStatus
 
   const status = outsideBlocked || faceStatus === 'failed'
     ? 'rejected'
@@ -1194,8 +1399,7 @@ async function punchTimeClock(supabase: any, waiterSession: any, body: any) {
 
   const reviewReasons = [
     outsideBlocked ? `Fora do raio permitido (${Math.round(Number(distanceMeters || 0))}m de ${settings.allowedRadiusMeters}m).` : '',
-    faceStatus === 'pending_review' ? 'Biometria facial/liveness pendente de verificacao do provedor.' : '',
-    faceStatus === 'failed' ? 'Biometria facial/liveness reprovada pelo provedor.' : '',
+    faceAnalysis.reviewReason,
   ].filter(Boolean)
 
   const deviceFingerprint = String(body?.deviceFingerprint || '').trim().slice(0, 160)
@@ -1232,16 +1436,21 @@ async function punchTimeClock(supabase: any, waiterSession: any, body: any) {
       within_geofence: withinGeofence,
       device_fingerprint: deviceFingerprint || null,
       device_trusted: deviceTrusted,
-      face_provider: faceProvider,
+      face_provider: faceAnalysis.faceProvider,
       face_status: faceStatus,
-      face_score: toNumberOrNull(faceVerification.score),
-      face_reference_id: String(faceVerification.referenceId || '').trim().slice(0, 240) || null,
-      selfie_url: String(faceVerification.selfieUrl || '').trim().slice(0, 600) || null,
+      face_score: faceAnalysis.faceScore,
+      face_reference_id: faceAnalysis.faceReferenceId,
+      face_liveness_passed: faceAnalysis.faceLivenessPassed,
+      face_challenge_id: faceAnalysis.faceChallengeId,
+      face_challenge_prompt: faceAnalysis.faceChallengePrompt,
+      face_evidence: faceAnalysis.evidence,
+      privacy_acknowledged_at: faceAnalysis.privacyAcknowledgedAt,
+      selfie_url: null,
       review_reason: reviewReasons.join(' '),
       metadata: {
         userAgent: String(body?.userAgent || '').slice(0, 500),
         source: 'waiter_web',
-        providerPayload: faceVerification.metadata && typeof faceVerification.metadata === 'object' ? faceVerification.metadata : {},
+        providerPayload: faceAnalysis.providerPayload,
       },
     })
     .select('*')

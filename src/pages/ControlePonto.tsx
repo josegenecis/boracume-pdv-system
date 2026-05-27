@@ -28,6 +28,10 @@ type TimeClockSettings = {
   overtime_tolerance_minutes: number;
   workdays: number[];
   face_provider: string;
+  face_liveness_mode: 'manual_review' | 'provider_webhook';
+  face_min_score: number;
+  face_store_evidence: boolean;
+  face_policy_version: string;
   policy_notice: string | null;
 };
 
@@ -48,6 +52,10 @@ type TimeClockEvent = {
   distance_meters: number | null;
   within_geofence: boolean | null;
   face_status: string;
+  face_score?: number | null;
+  face_liveness_passed?: boolean | null;
+  face_challenge_prompt?: string | null;
+  face_evidence?: Record<string, unknown> | null;
   review_reason: string | null;
   waiter?: { name?: string | null; role?: string | null } | null;
 };
@@ -86,6 +94,10 @@ const defaultSettings: TimeClockSettings = {
   overtime_tolerance_minutes: 10,
   workdays: [1, 2, 3, 4, 5, 6],
   face_provider: 'manual_review',
+  face_liveness_mode: 'manual_review',
+  face_min_score: 0.75,
+  face_store_evidence: false,
+  face_policy_version: '2026-05-lgpd-v1',
   policy_notice: 'O ponto registra horário, localização, aparelho e verificação facial/liveness somente para controle de jornada.',
 };
 
@@ -272,6 +284,10 @@ export default function ControlePonto() {
         standard_weekly_minutes: Math.max(0, Number(settings.standard_weekly_minutes || 2640)),
         minimum_break_minutes: Math.max(0, Number(settings.minimum_break_minutes || 60)),
         overtime_tolerance_minutes: Math.max(0, Number(settings.overtime_tolerance_minutes || 10)),
+        face_min_score: Math.max(0.1, Math.min(0.99, Number(settings.face_min_score || 0.75))),
+        face_liveness_mode: settings.face_liveness_mode || 'manual_review',
+        face_provider: settings.face_provider || (settings.face_liveness_mode === 'provider_webhook' ? 'provider_webhook' : 'manual_review'),
+        face_policy_version: settings.face_policy_version || '2026-05-lgpd-v1',
         workdays: Array.isArray(settings.workdays) && settings.workdays.length > 0 ? settings.workdays : defaultSettings.workdays,
         restaurant_latitude: settings.restaurant_latitude === null ? null : Number(settings.restaurant_latitude),
         restaurant_longitude: settings.restaurant_longitude === null ? null : Number(settings.restaurant_longitude),
@@ -330,6 +346,7 @@ export default function ControlePonto() {
           review_reason: nextStatus === 'approved'
             ? 'Registro aprovado manualmente pelo responsavel.'
             : 'Registro rejeitado manualmente pelo responsavel.',
+          face_status: nextStatus === 'approved' ? 'verified' : 'failed',
         })
         .eq('id', eventId)
         .eq('user_id', user?.id);
@@ -575,12 +592,76 @@ export default function ControlePonto() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Provedor facial</Label>
-                  <Input
-                    value={settings.face_provider}
-                    onChange={(event) => setSettings((current) => ({ ...current, face_provider: event.target.value || 'manual_review' }))}
-                    placeholder="manual_review, unico, caf, idwall..."
-                    className="h-11 rounded-2xl"
+                  <Label>Modo da prova de vida</Label>
+                  <Select
+                    value={settings.face_liveness_mode}
+                    onValueChange={(value) => setSettings((current) => ({
+                      ...current,
+                      face_liveness_mode: value as TimeClockSettings['face_liveness_mode'],
+                      face_provider: value === 'provider_webhook' ? 'provider_webhook' : 'manual_review',
+                    }))}
+                  >
+                    <SelectTrigger className="h-11 rounded-2xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual_review">Revisão manual auditável</SelectItem>
+                      <SelectItem value="provider_webhook">API facial por webhook</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#E6E0D5] bg-white p-4">
+                <div className="mb-3 flex items-center gap-2 font-semibold text-[#063B2A]">
+                  <ShieldCheck className="h-4 w-4 text-[#FF6400]" />
+                  Biometria facial e LGPD
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Provedor facial</Label>
+                    <Input
+                      value={settings.face_provider}
+                      onChange={(event) => setSettings((current) => ({ ...current, face_provider: event.target.value || 'manual_review' }))}
+                      placeholder="manual_review, provider_webhook, unico, caf..."
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Score mínimo da API</Label>
+                    <Input
+                      type="number"
+                      min={0.1}
+                      max={0.99}
+                      step={0.01}
+                      value={settings.face_min_score}
+                      onChange={(event) => setSettings((current) => ({
+                        ...current,
+                        face_min_score: Math.max(0.1, Math.min(0.99, Number(event.target.value || 0.75))),
+                      }))}
+                      className="h-11 rounded-2xl"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                  <div>
+                    <Label className="text-sm font-semibold text-[#063B2A]">Guardar imagem bruta como evidência</Label>
+                    <p className="mt-1 text-xs leading-4 text-slate-500">
+                      Recomendado deixar desligado. O sistema guarda hashes, desafio, score e metadados mínimos.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.face_store_evidence}
+                    onCheckedChange={(checked) => setSettings((current) => ({ ...current, face_store_evidence: checked }))}
+                  />
+                </div>
+                <div className="mt-3 space-y-2">
+                  <Label>Termo exibido ao funcionário</Label>
+                  <Textarea
+                    value={settings.policy_notice || ''}
+                    onChange={(event) => setSettings((current) => ({ ...current, policy_notice: event.target.value }))}
+                    className="min-h-[96px] rounded-2xl"
+                    placeholder="Informe de forma clara o uso de câmera, localização, finalidade e retenção."
                   />
                 </div>
               </div>
@@ -924,6 +1005,7 @@ export default function ControlePonto() {
                     <TableHead>Evento</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>GPS</TableHead>
+                    <TableHead>Facial</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Hora</TableHead>
                     <TableHead className="text-right">Revisão</TableHead>
@@ -945,6 +1027,33 @@ export default function ControlePonto() {
                         </div>
                       </TableCell>
                       <TableCell>{event.distance_meters != null ? `${Math.round(Number(event.distance_meters))}m` : '-'}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Badge variant="outline" className={
+                            event.face_status === 'verified'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : event.face_status === 'failed'
+                                ? 'border-red-200 bg-red-50 text-red-700'
+                                : event.face_status === 'pending_review'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                  : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }>
+                            {event.face_status === 'verified'
+                              ? 'Verificada'
+                              : event.face_status === 'failed'
+                                ? 'Falhou'
+                                : event.face_status === 'pending_review'
+                                  ? 'Revisão'
+                                  : 'Não exigida'}
+                          </Badge>
+                          {event.face_score != null && (
+                            <div className="text-xs text-slate-500">Score {(Number(event.face_score) * 100).toFixed(0)}%</div>
+                          )}
+                          {event.face_challenge_prompt && (
+                            <div className="max-w-[220px] text-xs leading-4 text-slate-500">{event.face_challenge_prompt}</div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{formatEventDate(event.occurred_at)}</TableCell>
                       <TableCell>{formatEventTime(event.occurred_at)}</TableCell>
                       <TableCell className="text-right">
@@ -976,7 +1085,7 @@ export default function ControlePonto() {
                   ))}
                   {events.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                      <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                         Nenhum ponto registrado ainda.
                       </TableCell>
                     </TableRow>

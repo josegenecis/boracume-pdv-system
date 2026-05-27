@@ -36,6 +36,10 @@ export type TimeClockSettings = {
   restaurantLongitude: number | null;
   allowedRadiusMeters: number;
   faceProvider: string;
+  faceLivenessMode?: 'manual_review' | 'provider_webhook';
+  faceMinScore?: number;
+  faceStoreEvidence?: boolean;
+  facePolicyVersion?: string | null;
   policyNotice?: string | null;
 };
 
@@ -56,6 +60,10 @@ export type TimeClockEvent = {
   face_provider?: string | null;
   face_status: TimeClockFaceStatus;
   face_score?: number | null;
+  face_liveness_passed?: boolean | null;
+  face_challenge_id?: string | null;
+  face_challenge_prompt?: string | null;
+  face_evidence?: Record<string, unknown> | null;
   selfie_url?: string | null;
   review_reason?: string | null;
 };
@@ -609,6 +617,25 @@ export async function punchTimeClock(input: {
     referenceId?: string;
     selfieUrl?: string;
     metadata?: Record<string, unknown>;
+  };
+  faceCapture?: {
+    challengeId: string;
+    challengePrompt: string;
+    privacyAcknowledgedAt?: string;
+    frames: Array<{
+      step: string;
+      dataUrl: string;
+      capturedAt: string;
+      faceDetected?: boolean;
+      faceBox?: { x: number; y: number; width: number; height: number } | null;
+    }>;
+    clientChecks: {
+      cameraPermission: boolean;
+      faceDetectorAvailable: boolean;
+      detectedFrames: number;
+      movementScore: number;
+      browserLivenessPassed: boolean;
+    };
   };
 }) {
   const session = requireSession();

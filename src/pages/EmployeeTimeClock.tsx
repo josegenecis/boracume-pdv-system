@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock3, LogOut, MapPin, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react';
+import { Camera, CheckCircle2, Clock3, LogOut, MapPin, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
@@ -28,6 +28,34 @@ const historyLabels: Record<TimeClockEventType, string> = {
   clock_out: 'Saída',
 };
 
+type FaceCaptureFrame = {
+  step: string;
+  dataUrl: string;
+  capturedAt: string;
+  faceDetected?: boolean;
+  faceBox?: { x: number; y: number; width: number; height: number } | null;
+};
+
+type FaceCapturePayload = {
+  challengeId: string;
+  challengePrompt: string;
+  privacyAcknowledgedAt?: string;
+  frames: FaceCaptureFrame[];
+  clientChecks: {
+    cameraPermission: boolean;
+    faceDetectorAvailable: boolean;
+    detectedFrames: number;
+    movementScore: number;
+    browserLivenessPassed: boolean;
+  };
+};
+
+const faceChallenges = [
+  'Centralize o rosto e pisque antes da captura.',
+  'Centralize o rosto e vire levemente para a direita.',
+  'Centralize o rosto e aproxime um pouco da camera.',
+];
+
 const getDeviceFingerprint = () => {
   const key = 'employee_time_clock_device_id';
   const existing = localStorage.getItem(key);
@@ -53,11 +81,25 @@ const getCurrentPosition = () =>
 export default function EmployeeTimeClock() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [session, setSession] = useState<WaiterWebStoredSession | null>(null);
   const [timeClock, setTimeClock] = useState<TimeClockStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [punching, setPunching] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [faceConsent, setFaceConsent] = useState(false);
+  const [faceCapture, setFaceCapture] = useState<FaceCapturePayload | null>(null);
+  const [capturingFace, setCapturingFace] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [faceError, setFaceError] = useState('');
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
 
   const loadStatus = async (showSpinner = false) => {
     if (showSpinner) setSyncing(true);
@@ -93,16 +135,144 @@ export default function EmployeeTimeClock() {
 
     return () => {
       mounted = false;
+      stopCamera();
     };
   }, [navigate]);
 
   const handleLogout = async () => {
+    stopCamera();
     await logoutWaiterWeb();
     navigate('/funcionario-login', { replace: true });
   };
 
+  const detectFace = async (canvas: HTMLCanvasElement) => {
+    const FaceDetectorConstructor = (window as any).FaceDetector;
+    if (!FaceDetectorConstructor) return { available: false, detected: false, box: null };
+    try {
+      const detector = new FaceDetectorConstructor({ fastMode: true, maxDetectedFaces: 1 });
+      const faces = await detector.detect(canvas);
+      const box = faces?.[0]?.boundingBox;
+      return {
+        available: true,
+        detected: Boolean(box),
+        box: box
+          ? {
+              x: Number(box.x || 0),
+              y: Number(box.y || 0),
+              width: Number(box.width || 0),
+              height: Number(box.height || 0),
+            }
+          : null,
+      };
+    } catch {
+      return { available: false, detected: false, box: null };
+    }
+  };
+
+  const captureFrame = async (step: string): Promise<{ frame: FaceCaptureFrame; detectorAvailable: boolean }> => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) throw new Error('Camera ainda nao foi iniciada.');
+    const width = Math.min(480, video.videoWidth || 480);
+    const height = Math.round(width * ((video.videoHeight || 640) / (video.videoWidth || 480)));
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Nao foi possivel preparar a captura.');
+    context.drawImage(video, 0, 0, width, height);
+    const face = await detectFace(canvas);
+    return {
+      detectorAvailable: face.available,
+      frame: {
+        step,
+        dataUrl: canvas.toDataURL('image/jpeg', 0.72),
+        capturedAt: new Date().toISOString(),
+        faceDetected: face.detected,
+        faceBox: face.box,
+      },
+    };
+  };
+
+  const buildMovementScore = (frames: FaceCaptureFrame[]) => {
+    const boxes = frames.map((frame) => frame.faceBox).filter(Boolean) as Array<{ x: number; y: number; width: number; height: number }>;
+    if (boxes.length < 2) return 0;
+    const first = boxes[0];
+    const last = boxes[boxes.length - 1];
+    const centerMove = Math.abs((last.x + last.width / 2) - (first.x + first.width / 2)) / Math.max(1, first.width);
+    const sizeMove = Math.abs(last.width - first.width) / Math.max(1, first.width);
+    return Math.max(0, Math.min(1, centerMove + sizeMove));
+  };
+
+  const startFaceCapture = async () => {
+    setFaceError('');
+    setFaceCapture(null);
+    setCapturingFace(true);
+    try {
+      if (!faceConsent) {
+        throw new Error('Confirme o uso da camera e da prova de vida para continuar.');
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Este navegador nao liberou camera para a prova de vida.');
+      }
+      stopCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const challengePrompt = faceChallenges[Math.floor(Math.random() * faceChallenges.length)];
+      const challengeId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      toast({ title: 'Prova de vida', description: challengePrompt });
+
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      const first = await captureFrame('inicio');
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const second = await captureFrame('desafio');
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const third = await captureFrame('confirmacao');
+      const frames = [first.frame, second.frame, third.frame];
+      const detectedFrames = frames.filter((frame) => frame.faceDetected).length;
+      const movementScore = buildMovementScore(frames);
+      const detectorAvailable = first.detectorAvailable || second.detectorAvailable || third.detectorAvailable;
+
+      setFaceCapture({
+        challengeId,
+        challengePrompt,
+        privacyAcknowledgedAt: new Date().toISOString(),
+        frames,
+        clientChecks: {
+          cameraPermission: true,
+          faceDetectorAvailable: detectorAvailable,
+          detectedFrames,
+          movementScore,
+          browserLivenessPassed: detectorAvailable ? detectedFrames >= 2 && movementScore >= 0.04 : false,
+        },
+      });
+      stopCamera();
+    } catch (error: any) {
+      setFaceError(error?.message || 'Nao foi possivel concluir a prova de vida.');
+      stopCamera();
+    } finally {
+      setCapturingFace(false);
+    }
+  };
+
   const handlePunch = async () => {
     if (!timeClock) return;
+    if (timeClock.settings.requireFaceLiveness && !faceCapture) {
+      toast({
+        title: 'Prova de vida obrigatoria',
+        description: 'Capture a biometria facial antes de bater o ponto.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setPunching(true);
     try {
       const position = timeClock.settings.requireLocation ? await getCurrentPosition() : null;
@@ -117,16 +287,11 @@ export default function EmployeeTimeClock() {
           language: navigator.language,
           platform: navigator.platform,
         },
-        faceVerification: {
-          status: timeClock.settings.requireFaceLiveness ? 'pending_review' : 'verified',
-          metadata: {
-            provider: timeClock.settings.faceProvider,
-            source: 'employee_time_clock_web',
-          },
-        },
+        faceCapture: faceCapture || undefined,
       });
 
       setTimeClock(response.status);
+      setFaceCapture(null);
       toast({
         title: response.event.status === 'approved' ? 'Ponto registrado' : 'Ponto enviado para revisão',
         description: response.event.review_reason || `${historyLabels[response.event.event_type]} salva com sucesso.`,
@@ -192,7 +357,7 @@ export default function EmployeeTimeClock() {
             disabled={punching || !timeClock.settings.enabled}
             onClick={() => void handlePunch()}
           >
-            {punching ? 'Validando localizacao...' : actionLabels[timeClock.nextEventType]}
+            {punching ? 'Validando ponto...' : actionLabels[timeClock.nextEventType]}
           </Button>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
@@ -213,6 +378,57 @@ export default function EmployeeTimeClock() {
             </div>
           </div>
         </div>
+
+        {timeClock.settings.requireFaceLiveness && (
+          <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Prova de vida facial</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  A camera registra somente a evidencia desta batida. O responsavel revisa quando nao houver provedor facial conectado.
+                </p>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-xs font-bold ${faceCapture ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {faceCapture ? 'Pronta' : 'Pendente'}
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
+              <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full object-cover`} muted playsInline />
+              {!cameraActive && (
+                <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-white/70">
+                  {faceCapture ? <CheckCircle2 className="h-10 w-10 text-[#A4D65E]" /> : <Camera className="h-10 w-10 text-white/50" />}
+                  <span className="text-sm">{faceCapture ? faceCapture.challengePrompt : 'Camera pronta para captura'}</span>
+                </div>
+              )}
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+
+            <label className="mt-4 flex items-start gap-3 rounded-2xl bg-[#F8FAF7] p-3 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={faceConsent}
+                onChange={(event) => setFaceConsent(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-[#063B2A]"
+              />
+              <span>{timeClock.settings.policyNotice || 'Autorizo o uso da camera e da prova de vida somente para validar este registro de ponto.'}</span>
+            </label>
+
+            {faceError && (
+              <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{faceError}</div>
+            )}
+
+            <Button
+              variant="outline"
+              className="mt-4 h-12 w-full rounded-2xl border-[#DCE6DF] bg-white font-bold"
+              disabled={capturingFace || punching}
+              onClick={() => void startFaceCapture()}
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              {capturingFace ? 'Capturando...' : faceCapture ? 'Refazer prova de vida' : 'Capturar prova de vida'}
+            </Button>
+          </div>
+        )}
 
         <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
           <div className="flex items-center justify-between">
