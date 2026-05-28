@@ -8,6 +8,7 @@ import {
   authenticateEmployeeFaceio,
   enrollEmployeeFaceio,
   extractFaceioFacialId,
+  prepareFaceio,
 } from '@/services/faceioClient';
 import {
   getTimeClockStatus,
@@ -153,6 +154,13 @@ export default function EmployeeTimeClock() {
       stopCamera();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!useFaceio) return;
+    void prepareFaceio().catch((error) => {
+      setFaceError(String(error?.message || 'Nao foi possivel preparar o FACEIO neste navegador.'));
+    });
+  }, [useFaceio]);
 
   const handleLogout = async () => {
     stopCamera();

@@ -25,6 +25,26 @@ declare global {
   }
 }
 
+function waitForFaceioGlobal(timeoutMs = 10000) {
+  if (window.faceIO) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.faceIO) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startedAt > timeoutMs) {
+        window.clearInterval(timer);
+        reject(new Error('FACEIO nao inicializou. Confira dominio permitido, bloqueadores do navegador e conexao com cdn.faceio.net.'));
+      }
+    }, 120);
+  });
+}
+
 function loadFaceioScript() {
   if (window.faceIO) return Promise.resolve();
   if (window.__popsystemFaceioLoading) return window.__popsystemFaceioLoading;
@@ -32,8 +52,7 @@ function loadFaceioScript() {
   window.__popsystemFaceioLoading = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${FACEIO_SCRIPT_URL}"]`);
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Nao foi possivel carregar o FACEIO.')), { once: true });
+      void waitForFaceioGlobal().then(resolve).catch(reject);
       return;
     }
 
@@ -63,8 +82,27 @@ async function getFaceio() {
   return window.__popsystemFaceioInstance;
 }
 
+async function withFaceioTimeout<T>(operation: Promise<T>) {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error('O FACEIO demorou demais para responder. Confira se o dominio popsystem.com.br esta liberado no console FACEIO e tente novamente fora do modo privado.'));
+    }, 30000);
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
 export function getFaceioPublicId() {
   return FACEIO_PUBLIC_ID;
+}
+
+export async function prepareFaceio() {
+  await getFaceio();
 }
 
 function normalizeFaceioError(error: unknown) {
@@ -82,10 +120,10 @@ function normalizeFaceioError(error: unknown) {
 export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
   try {
     const faceio = await getFaceio();
-    return await faceio.enroll({
+    return await withFaceioTimeout(faceio.enroll({
       locale: 'pt-br',
       payload,
-    });
+    }));
   } catch (error) {
     throw normalizeFaceioError(error);
   }
@@ -94,10 +132,10 @@ export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
 export async function authenticateEmployeeFaceio(payload: Record<string, unknown>) {
   try {
     const faceio = await getFaceio();
-    return await faceio.authenticate({
+    return await withFaceioTimeout(faceio.authenticate({
       locale: 'pt-br',
       payload,
-    });
+    }));
   } catch (error) {
     throw normalizeFaceioError(error);
   }
