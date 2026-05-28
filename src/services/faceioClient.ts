@@ -20,18 +20,34 @@ const faceioErrorMessages: Record<string, string> = {
 declare global {
   interface Window {
     faceIO?: new (publicId: string) => FaceioInstance;
+    __popsystemFaceIO?: new (publicId: string) => FaceioInstance;
     __popsystemFaceioLoading?: Promise<void>;
     __popsystemFaceioInstance?: FaceioInstance;
   }
 }
 
+function getFaceioConstructor() {
+  if (window.__popsystemFaceIO) return window.__popsystemFaceIO;
+  if (window.faceIO) return window.faceIO;
+
+  try {
+    const fromGlobalLexical = (0, eval)('typeof faceIO !== "undefined" ? faceIO : undefined');
+    if (fromGlobalLexical) {
+      window.__popsystemFaceIO = fromGlobalLexical;
+      return fromGlobalLexical as new (publicId: string) => FaceioInstance;
+    }
+  } catch {}
+
+  return null;
+}
+
 function waitForFaceioGlobal(timeoutMs = 10000) {
-  if (window.faceIO) return Promise.resolve();
+  if (getFaceioConstructor()) return Promise.resolve();
 
   return new Promise<void>((resolve, reject) => {
     const startedAt = Date.now();
     const timer = window.setInterval(() => {
-      if (window.faceIO) {
+      if (getFaceioConstructor()) {
         window.clearInterval(timer);
         resolve();
         return;
@@ -46,7 +62,7 @@ function waitForFaceioGlobal(timeoutMs = 10000) {
 }
 
 function loadFaceioScript() {
-  if (window.faceIO) return Promise.resolve();
+  if (getFaceioConstructor()) return Promise.resolve();
   if (window.__popsystemFaceioLoading) return window.__popsystemFaceioLoading;
 
   window.__popsystemFaceioLoading = new Promise<void>((resolve, reject) => {
@@ -75,9 +91,10 @@ async function getFaceio() {
     document.body.appendChild(modal);
   }
   await loadFaceioScript();
-  if (!window.faceIO) throw new Error('FACEIO indisponivel neste navegador.');
+  const FaceIOConstructor = getFaceioConstructor();
+  if (!FaceIOConstructor) throw new Error('FACEIO indisponivel neste navegador.');
   if (!window.__popsystemFaceioInstance) {
-    window.__popsystemFaceioInstance = new window.faceIO(FACEIO_PUBLIC_ID);
+    window.__popsystemFaceioInstance = new FaceIOConstructor(FACEIO_PUBLIC_ID);
   }
   return window.__popsystemFaceioInstance;
 }

@@ -40,8 +40,11 @@
     <div id="root"></div>
     <div id="faceio-modal"></div>
     
-    <script type="module" src="/src/main.tsx"></script>
     <script src="https://cdn.faceio.net/fio.js"></script>
+    <script>
+      window.__popsystemFaceIO = typeof faceIO !== 'undefined' ? faceIO : window.faceIO;
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
   </body>
