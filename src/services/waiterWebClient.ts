@@ -14,6 +14,7 @@ export type WaiterWebProfile = {
   cpf: string;
   role: string;
   permissions: Record<string, boolean>;
+  faceioFacialId?: string | null;
 };
 
 export type WaiterWebStoredSession = {
@@ -36,7 +37,7 @@ export type TimeClockSettings = {
   restaurantLongitude: number | null;
   allowedRadiusMeters: number;
   faceProvider: string;
-  faceLivenessMode?: 'manual_review' | 'provider_webhook';
+  faceLivenessMode?: 'manual_review' | 'provider_webhook' | 'faceio';
   faceMinScore?: number;
   faceStoreEvidence?: boolean;
   facePolicyVersion?: string | null;
@@ -637,6 +638,14 @@ export async function punchTimeClock(input: {
       browserLivenessPassed: boolean;
     };
   };
+  faceioVerification?: {
+    status: 'verified' | 'failed';
+    facialId?: string;
+    confidence?: number | null;
+    auditId?: string;
+    response?: Record<string, unknown>;
+    verifiedAt?: string;
+  };
 }) {
   const session = requireSession();
   return invokeFunction<{ event: TimeClockEvent; status: TimeClockStatus }>(
@@ -648,6 +657,25 @@ export async function punchTimeClock(input: {
     },
     session.token,
   );
+}
+
+export async function saveWaiterFaceioEnrollment(input: {
+  facialId: string;
+  enrollmentPayload?: Record<string, unknown>;
+}) {
+  const session = requireSession();
+  const response = await invokeFunction<{ session: WaiterWebStoredSession }>(
+    'waiter-web-auth',
+    {
+      action: 'save_faceio_enrollment',
+      facialId: input.facialId,
+      enrollmentPayload: input.enrollmentPayload || {},
+    },
+    session.token,
+  );
+
+  waiterWebSessionStorage.save(response.session);
+  return response.session;
 }
 
 export async function createWaiterTable(input: {

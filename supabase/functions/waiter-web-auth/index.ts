@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
       const supabase = createServiceClient()
       const { data, error } = await supabase
         .from('waiters')
-        .select('id, user_id, name, role, permissions, active, password, cpf')
+        .select('id, user_id, name, role, permissions, active, password, cpf, faceio_facial_id')
         .eq('cpf', cpf)
         .eq('active', true)
         .maybeSingle()
@@ -79,6 +79,7 @@ Deno.serve(async (req: Request) => {
             cpf: data.cpf || cpf,
             role: data.role || 'cashier',
             permissions,
+            faceioFacialId: data.faceio_facial_id || null,
           },
         },
       })
@@ -91,6 +92,45 @@ Deno.serve(async (req: Request) => {
           token: session.rawToken,
           expiresAt: session.expiresAt,
           profile: session.profile,
+        },
+      })
+    }
+
+    if (action === 'save_faceio_enrollment') {
+      const session = await getWaiterSession(req)
+      const facialId = String(body?.facialId || '').trim().slice(0, 240)
+      if (!facialId) {
+        return fail('FACEIO nao retornou o identificador facial.', 400)
+      }
+
+      const enrollmentPayload = body?.enrollmentPayload && typeof body.enrollmentPayload === 'object'
+        ? body.enrollmentPayload
+        : {}
+
+      const { error } = await session.supabase
+        .from('waiters')
+        .update({
+          faceio_facial_id: facialId,
+          faceio_enrolled_at: new Date().toISOString(),
+          faceio_payload: {
+            facialId,
+            enrolledAt: new Date().toISOString(),
+            response: enrollmentPayload,
+          },
+        })
+        .eq('id', session.profile.id)
+        .eq('user_id', session.profile.restaurantId)
+
+      if (error) return fail(error.message, 400)
+
+      return ok({
+        session: {
+          token: session.rawToken,
+          expiresAt: session.expiresAt,
+          profile: {
+            ...session.profile,
+            faceioFacialId: facialId,
+          },
         },
       })
     }

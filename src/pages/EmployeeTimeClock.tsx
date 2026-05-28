@@ -5,10 +5,17 @@ import { Button } from '@/components/ui/button';
 import Logo from '@/components/Logo';
 import { useToast } from '@/hooks/use-toast';
 import {
+  authenticateEmployeeFaceio,
+  enrollEmployeeFaceio,
+  extractFaceioFacialId,
+  getFaceioPublicId,
+} from '@/services/faceioClient';
+import {
   getTimeClockStatus,
   loadWaiterWebSession,
   logoutWaiterWeb,
   punchTimeClock,
+  saveWaiterFaceioEnrollment,
   TimeClockEventType,
   TimeClockStatus,
   WaiterWebStoredSession,
@@ -94,6 +101,9 @@ export default function EmployeeTimeClock() {
   const [capturingFace, setCapturingFace] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [faceError, setFaceError] = useState('');
+  const [faceioBusy, setFaceioBusy] = useState(false);
+
+  const useFaceio = timeClock?.settings.requireFaceLiveness && timeClock.settings.faceLivenessMode === 'faceio';
 
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -143,6 +153,56 @@ export default function EmployeeTimeClock() {
     stopCamera();
     await logoutWaiterWeb();
     navigate('/funcionario-login', { replace: true });
+  };
+
+  const handleFaceioEnroll = async () => {
+    if (!session) return;
+    setFaceioBusy(true);
+    setFaceError('');
+    try {
+      const response = await enrollEmployeeFaceio({
+        employeeId: session.profile.id,
+        restaurantId: session.profile.restaurantId,
+        name: session.profile.name,
+        cpf: session.profile.cpf,
+        source: 'popsystem_time_clock',
+      });
+      const facialId = extractFaceioFacialId(response);
+      if (!facialId) throw new Error('O FACEIO nao retornou o facialId do funcionario.');
+      const updatedSession = await saveWaiterFaceioEnrollment({ facialId, enrollmentPayload: response });
+      setSession(updatedSession);
+      toast({
+        title: 'Biometria cadastrada',
+        description: 'O rosto deste funcionario foi vinculado ao ponto.',
+      });
+    } catch (error: any) {
+      const message = String(error?.message || 'Nao foi possivel cadastrar a biometria facial.');
+      setFaceError(message);
+      toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
+    } finally {
+      setFaceioBusy(false);
+    }
+  };
+
+  const authenticateFaceioForPunch = async () => {
+    if (!session) throw new Error('Sessao do funcionario nao encontrada.');
+    const response = await authenticateEmployeeFaceio({
+      employeeId: session.profile.id,
+      restaurantId: session.profile.restaurantId,
+      source: 'popsystem_time_clock',
+      eventType: timeClock?.nextEventType,
+    });
+    const facialId = extractFaceioFacialId(response);
+    if (!facialId) throw new Error('O FACEIO nao retornou o facialId autenticado.');
+
+    return {
+      status: 'verified' as const,
+      facialId,
+      confidence: Number((response as any)?.confidence || (response as any)?.confidenceScore || 0) || null,
+      auditId: String((response as any)?.auditId || (response as any)?.transactionId || (response as any)?.sessionId || ''),
+      response,
+      verifiedAt: new Date().toISOString(),
+    };
   };
 
   const detectFace = async (canvas: HTMLCanvasElement) => {
@@ -265,7 +325,15 @@ export default function EmployeeTimeClock() {
 
   const handlePunch = async () => {
     if (!timeClock) return;
-    if (timeClock.settings.requireFaceLiveness && !faceCapture) {
+    if (useFaceio && !session?.profile.faceioFacialId) {
+      toast({
+        title: 'Biometria nao cadastrada',
+        description: 'Cadastre o rosto neste aparelho antes de bater o ponto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (timeClock.settings.requireFaceLiveness && !useFaceio && !faceCapture) {
       toast({
         title: 'Prova de vida obrigatoria',
         description: 'Capture a biometria facial antes de bater o ponto.',
@@ -275,6 +343,7 @@ export default function EmployeeTimeClock() {
     }
     setPunching(true);
     try {
+      const faceioVerification = useFaceio ? await authenticateFaceioForPunch() : undefined;
       const position = timeClock.settings.requireLocation ? await getCurrentPosition() : null;
       const response = await punchTimeClock({
         eventType: timeClock.nextEventType,
@@ -287,7 +356,8 @@ export default function EmployeeTimeClock() {
           language: navigator.language,
           platform: navigator.platform,
         },
-        faceCapture: faceCapture || undefined,
+        faceCapture: !useFaceio ? faceCapture || undefined : undefined,
+        faceioVerification,
       });
 
       setTimeClock(response.status);
@@ -379,7 +449,41 @@ export default function EmployeeTimeClock() {
           </div>
         </div>
 
-        {timeClock.settings.requireFaceLiveness && (
+        {useFaceio && (
+          <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Biometria FACEIO</h2>
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  Cadastre o rosto uma vez. Em cada batida, o FACEIO valida prova de vida e confirma se é o funcionário logado.
+                </p>
+              </div>
+              <div className={`rounded-full px-3 py-1 text-xs font-bold ${session.profile.faceioFacialId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {session.profile.faceioFacialId ? 'Cadastrada' : 'Cadastrar'}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-[#F8FAF7] px-4 py-3 text-sm text-slate-600">
+              App FACEIO: <strong>{getFaceioPublicId()}</strong>
+            </div>
+
+            {faceError && (
+              <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{faceError}</div>
+            )}
+
+            <Button
+              variant={session.profile.faceioFacialId ? 'outline' : 'default'}
+              className={`mt-4 h-12 w-full rounded-2xl font-bold ${session.profile.faceioFacialId ? 'border-[#DCE6DF] bg-white text-[#063B2A]' : 'bg-[#FF6400] text-white hover:bg-[#E25A00]'}`}
+              disabled={faceioBusy || punching}
+              onClick={() => void handleFaceioEnroll()}
+            >
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              {faceioBusy ? 'Abrindo FACEIO...' : session.profile.faceioFacialId ? 'Recadastrar biometria' : 'Cadastrar biometria facial'}
+            </Button>
+          </div>
+        )}
+
+        {timeClock.settings.requireFaceLiveness && !useFaceio && (
           <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>

@@ -50,6 +50,7 @@ type WaiterSessionWaiterRow = {
   permissions: Record<string, boolean> | null
   cpf: string | null
   active: boolean | null
+  faceio_facial_id: string | null
 }
 
 export async function getWaiterSession(req: Request) {
@@ -74,7 +75,8 @@ export async function getWaiterSession(req: Request) {
         role,
         permissions,
         cpf,
-        active
+        active,
+        faceio_facial_id
       )
     `)
     .eq('token_hash', tokenHash)
@@ -117,6 +119,7 @@ export async function getWaiterSession(req: Request) {
       cpf: waiter.cpf || '',
       role: waiter.role || 'cashier',
       permissions,
+      faceioFacialId: waiter.faceio_facial_id || null,
     },
     expiresAt: data.expires_at,
     supabase,

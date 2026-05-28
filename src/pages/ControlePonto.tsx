@@ -28,7 +28,7 @@ type TimeClockSettings = {
   overtime_tolerance_minutes: number;
   workdays: number[];
   face_provider: string;
-  face_liveness_mode: 'manual_review' | 'provider_webhook';
+  face_liveness_mode: 'manual_review' | 'provider_webhook' | 'faceio';
   face_min_score: number;
   face_store_evidence: boolean;
   face_policy_version: string;
@@ -598,7 +598,7 @@ export default function ControlePonto() {
                     onValueChange={(value) => setSettings((current) => ({
                       ...current,
                       face_liveness_mode: value as TimeClockSettings['face_liveness_mode'],
-                      face_provider: value === 'provider_webhook' ? 'provider_webhook' : 'manual_review',
+                      face_provider: value === 'provider_webhook' ? 'provider_webhook' : value === 'faceio' ? 'faceio' : 'manual_review',
                     }))}
                   >
                     <SelectTrigger className="h-11 rounded-2xl">
@@ -606,6 +606,7 @@ export default function ControlePonto() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="manual_review">Revisão manual auditável</SelectItem>
+                      <SelectItem value="faceio">FACEIO liveness</SelectItem>
                       <SelectItem value="provider_webhook">API facial por webhook</SelectItem>
                     </SelectContent>
                   </Select>

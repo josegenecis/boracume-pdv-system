@@ -77,6 +77,55 @@ async function analyzeTimeClockFaceCapture(settings: any, waiterSession: any, bo
     }
   }
 
+  if (settings.faceLivenessMode === 'faceio') {
+    const verification = body?.faceioVerification && typeof body.faceioVerification === 'object'
+      ? body.faceioVerification
+      : null
+    const facialId = String(verification?.facialId || '').trim().slice(0, 240)
+    const expectedFacialId = String(waiterSession.profile?.faceioFacialId || '').trim()
+    const rawStatus = String(verification?.status || '').toLowerCase()
+    const confidence = toNumberOrNull(verification?.confidence)
+    const verified = rawStatus === 'verified' && facialId && expectedFacialId && facialId === expectedFacialId
+    const failed = rawStatus === 'failed' || !facialId || !expectedFacialId || facialId !== expectedFacialId
+
+    return {
+      faceProvider: 'faceio',
+      faceStatus: verified ? 'verified' : failed ? 'failed' : 'pending_review',
+      faceScore: confidence,
+      faceReferenceId: facialId || null,
+      faceLivenessPassed: verified,
+      faceChallengeId: 'faceio_widget',
+      faceChallengePrompt: 'Autenticacao facial/liveness via FACEIO',
+      privacyAcknowledgedAt: verification?.verifiedAt || new Date().toISOString(),
+      evidence: {
+        mode: 'faceio',
+        provider: 'FACEIO',
+        expectedFacialIdSha256: expectedFacialId ? await sha256Hex(expectedFacialId) : null,
+        returnedFacialIdSha256: facialId ? await sha256Hex(facialId) : null,
+        facialIdMatched: Boolean(facialId && expectedFacialId && facialId === expectedFacialId),
+        status: rawStatus || null,
+        confidence,
+        auditId: String(verification?.auditId || '').slice(0, 240) || null,
+        response: verification?.response && typeof verification.response === 'object'
+          ? verification.response
+          : {},
+      },
+      providerPayload: {
+        provider: 'FACEIO',
+        status: rawStatus || null,
+        confidence,
+        auditId: verification?.auditId || null,
+      },
+      reviewReason: verified
+        ? ''
+        : !expectedFacialId
+          ? 'Funcionario ainda nao cadastrou biometria facial no FACEIO.'
+          : facialId && facialId !== expectedFacialId
+            ? 'FACEIO autenticou um rosto diferente do funcionario logado.'
+            : 'FACEIO nao confirmou a biometria facial/liveness.',
+    }
+  }
+
   const capture = body?.faceCapture && typeof body.faceCapture === 'object' ? body.faceCapture : null
   const frames = Array.isArray(capture?.frames) ? capture.frames.slice(0, 4) : []
   if (!capture || frames.length < 2) {
