@@ -6,6 +6,17 @@ type FaceioInstance = {
   authenticate: (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
 
+const faceioErrorMessages: Record<string, string> = {
+  '1': 'A câmera não pôde ser acessada. Confira a permissão do navegador.',
+  '2': 'Permissão de câmera negada.',
+  '3': 'Nenhum rosto foi detectado com segurança.',
+  '4': 'Muitos rostos foram detectados. Deixe somente o funcionário na câmera.',
+  '5': 'Sessão expirada. Tente novamente.',
+  '6': 'Tentativa cancelada.',
+  '7': 'O domínio atual não está liberado no FACEIO.',
+  '8': 'O FACEIO bloqueou a operação por política de segurança.',
+};
+
 declare global {
   interface Window {
     faceIO?: new (publicId: string) => FaceioInstance;
@@ -39,6 +50,11 @@ function loadFaceioScript() {
 }
 
 async function getFaceio() {
+  if (!document.getElementById('faceio-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'faceio-modal';
+    document.body.appendChild(modal);
+  }
   await loadFaceioScript();
   if (!window.faceIO) throw new Error('FACEIO indisponivel neste navegador.');
   if (!window.__popsystemFaceioInstance) {
@@ -51,20 +67,40 @@ export function getFaceioPublicId() {
   return FACEIO_PUBLIC_ID;
 }
 
+function normalizeFaceioError(error: unknown) {
+  const rawCode = String(
+    (error as any)?.code ||
+    (error as any)?.fioErrCode ||
+    (error as any)?.errorCode ||
+    '',
+  );
+  const rawMessage = String((error as any)?.message || error || '').trim();
+  const friendly = faceioErrorMessages[rawCode];
+  return new Error(friendly || rawMessage || 'O FACEIO não conseguiu concluir a operação.');
+}
+
 export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
-  const faceio = await getFaceio();
-  return faceio.enroll({
-    locale: 'pt-br',
-    payload,
-  });
+  try {
+    const faceio = await getFaceio();
+    return await faceio.enroll({
+      locale: 'pt-br',
+      payload,
+    });
+  } catch (error) {
+    throw normalizeFaceioError(error);
+  }
 }
 
 export async function authenticateEmployeeFaceio(payload: Record<string, unknown>) {
-  const faceio = await getFaceio();
-  return faceio.authenticate({
-    locale: 'pt-br',
-    payload,
-  });
+  try {
+    const faceio = await getFaceio();
+    return await faceio.authenticate({
+      locale: 'pt-br',
+      payload,
+    });
+  } catch (error) {
+    throw normalizeFaceioError(error);
+  }
 }
 
 export function extractFaceioFacialId(response: Record<string, unknown> | null | undefined) {
