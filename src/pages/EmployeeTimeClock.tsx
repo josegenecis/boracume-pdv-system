@@ -8,7 +8,6 @@ import {
   authenticateEmployeeFaceio,
   enrollEmployeeFaceio,
   extractFaceioFacialId,
-  getFaceioPublicId,
 } from '@/services/faceioClient';
 import {
   getTimeClockStatus,
@@ -103,7 +102,13 @@ export default function EmployeeTimeClock() {
   const [faceError, setFaceError] = useState('');
   const [faceioBusy, setFaceioBusy] = useState(false);
 
-  const useFaceio = timeClock?.settings.requireFaceLiveness && timeClock.settings.faceLivenessMode === 'faceio';
+  const useFaceio = Boolean(
+    timeClock?.settings.requireFaceLiveness &&
+    (
+      String(timeClock.settings.faceLivenessMode || '').toLowerCase() === 'faceio' ||
+      String(timeClock.settings.faceProvider || '').toLowerCase() === 'faceio'
+    ),
+  );
 
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -450,12 +455,14 @@ export default function EmployeeTimeClock() {
         </div>
 
         {useFaceio && (
-          <div className="mt-5 rounded-[28px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
+          <div className="mt-5 rounded-[22px] border border-[#E2E7DD] bg-white p-4 shadow-[0_20px_60px_-45px_rgba(0,50,35,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold">Biometria FACEIO</h2>
+                <h2 className="text-base font-bold">Biometria FACEIO</h2>
                 <p className="mt-1 text-sm leading-5 text-slate-500">
-                  Cadastre o rosto uma vez. Em cada batida, o FACEIO valida prova de vida e confirma se é o funcionário logado.
+                  {session.profile.faceioFacialId
+                    ? 'Ao registrar o ponto, o FACEIO abre a câmera e valida o rosto automaticamente.'
+                    : 'Cadastre o rosto uma vez para liberar as batidas com prova de vida.'}
                 </p>
               </div>
               <div className={`rounded-full px-3 py-1 text-xs font-bold ${session.profile.faceioFacialId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -463,23 +470,20 @@ export default function EmployeeTimeClock() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl bg-[#F8FAF7] px-4 py-3 text-sm text-slate-600">
-              App FACEIO: <strong>{getFaceioPublicId()}</strong>
-            </div>
-
             {faceError && (
               <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{faceError}</div>
             )}
 
-            <Button
-              variant={session.profile.faceioFacialId ? 'outline' : 'default'}
-              className={`mt-4 h-12 w-full rounded-2xl font-bold ${session.profile.faceioFacialId ? 'border-[#DCE6DF] bg-white text-[#063B2A]' : 'bg-[#FF6400] text-white hover:bg-[#E25A00]'}`}
-              disabled={faceioBusy || punching}
-              onClick={() => void handleFaceioEnroll()}
-            >
-              <ShieldCheck className="mr-2 h-4 w-4" />
-              {faceioBusy ? 'Abrindo FACEIO...' : session.profile.faceioFacialId ? 'Recadastrar biometria' : 'Cadastrar biometria facial'}
-            </Button>
+            {!session.profile.faceioFacialId && (
+              <Button
+                className="mt-4 h-12 w-full rounded-2xl bg-[#FF6400] font-bold text-white hover:bg-[#E25A00]"
+                disabled={faceioBusy || punching}
+                onClick={() => void handleFaceioEnroll()}
+              >
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                {faceioBusy ? 'Abrindo FACEIO...' : 'Cadastrar biometria facial'}
+              </Button>
+            )}
           </div>
         )}
 
@@ -498,7 +502,7 @@ export default function EmployeeTimeClock() {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-[22px] bg-[#06271D]">
-              <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full object-cover`} muted playsInline />
+              <video ref={videoRef} className={`${cameraActive ? 'block' : 'hidden'} aspect-[4/5] w-full scale-x-[-1] object-cover`} muted playsInline />
               {!cameraActive && (
                 <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-white/70">
                   {faceCapture ? <CheckCircle2 className="h-10 w-10 text-[#A4D65E]" /> : <Camera className="h-10 w-10 text-white/50" />}

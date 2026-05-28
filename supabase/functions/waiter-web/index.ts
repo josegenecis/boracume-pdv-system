@@ -77,7 +77,7 @@ async function analyzeTimeClockFaceCapture(settings: any, waiterSession: any, bo
     }
   }
 
-  if (settings.faceLivenessMode === 'faceio') {
+  if (settings.faceLivenessMode === 'faceio' || settings.faceProvider === 'faceio') {
     const verification = body?.faceioVerification && typeof body.faceioVerification === 'object'
       ? body.faceioVerification
       : null
@@ -1374,8 +1374,8 @@ async function getTimeClockSettings(supabase: any, restaurantId: string) {
     restaurantLatitude: toNumberOrNull(data?.restaurant_latitude),
     restaurantLongitude: toNumberOrNull(data?.restaurant_longitude),
     allowedRadiusMeters: Math.max(20, Number(data?.allowed_radius_meters ?? 120)),
-    faceProvider: String(data?.face_provider || 'manual_review'),
-    faceLivenessMode: String(data?.face_liveness_mode || 'manual_review'),
+    faceProvider: String(data?.face_provider || (data?.face_liveness_mode === 'faceio' ? 'faceio' : 'manual_review')),
+    faceLivenessMode: String(data?.face_liveness_mode || (data?.face_provider === 'faceio' ? 'faceio' : 'manual_review')),
     faceMinScore: Math.max(0.1, Math.min(0.99, Number(data?.face_min_score ?? 0.75))),
     faceStoreEvidence: data?.face_store_evidence === true,
     facePolicyVersion: String(data?.face_policy_version || '2026-05-lgpd-v1'),
