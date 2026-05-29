@@ -1358,9 +1358,13 @@ const PDV = () => {
 
   const setSelectedPaymentMethod = (method: PdvPaymentMethod) => {
     setPaymentMethod(method);
-    if (!hasManualPaymentSplit()) return;
-
     const currentAmount = parseBRL(paymentAmounts[method]);
+
+    if (!hasManualPaymentSplit()) {
+      if (method === 'dinheiro') setChangeAmount(formatBRL(getFinalTotal()));
+      return;
+    }
+
     if (currentAmount > 0) return;
 
     const remaining = getPaymentRemaining();
@@ -1369,6 +1373,7 @@ const PDV = () => {
         ...prev,
         [method]: formatBRL(remaining),
       }));
+      if (method === 'dinheiro') setChangeAmount(formatBRL(remaining));
     }
   };
 
@@ -1377,6 +1382,13 @@ const PDV = () => {
       ...prev,
       [method]: value,
     }));
+    if (method === 'dinheiro') {
+      const currentCashReceived = parseBRL(changeAmount);
+      const nextCashAmount = parseBRL(value);
+      if (!changeAmount || currentCashReceived + 0.009 < nextCashAmount) {
+        setChangeAmount(value);
+      }
+    }
   };
 
   const clearPaymentSplit = () => {
@@ -1967,6 +1979,7 @@ const PDV = () => {
       ? 'text-[9px] font-semibold uppercase tracking-[0.12em]'
       : 'text-[10px] font-semibold uppercase tracking-[0.12em]';
     const selectedAmount = paymentAmounts[paymentMethod];
+    const displayedPaymentAmount = selectedAmount || formatCurrency(getFinalTotal());
     const splitActive = hasManualPaymentSplit();
     const remaining = getPaymentRemaining();
     const paidTotal = getPaymentPaidTotal();
@@ -2000,8 +2013,8 @@ const PDV = () => {
         <div className="rounded-xl border border-[#003223]/10 bg-[#F8FBF6] p-2">
           <div className={`${labelClassName} text-[#003223]/70`}>Valor neste método</div>
           <CurrencyTextInput
-            placeholder={formatCurrency(getFinalTotal())}
-            value={selectedAmount}
+            placeholder="R$ 0,00"
+            value={displayedPaymentAmount}
             onValueChange={(value) => updatePaymentAmount(paymentMethod, value)}
             className={`${inputClassName} mt-1 bg-white`}
           />
@@ -2016,7 +2029,7 @@ const PDV = () => {
               <div className={`${labelClassName} text-emerald-800`}>Valor recebido</div>
               <CurrencyTextInput
                 placeholder={formatCurrency(cashPortion || getFinalTotal())}
-                value={changeAmount}
+                value={changeAmount || formatCurrency(cashPortion || getFinalTotal())}
                 onValueChange={setChangeAmount}
                 className={`${inputClassName} bg-white`}
               />

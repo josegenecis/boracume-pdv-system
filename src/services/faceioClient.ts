@@ -6,6 +6,8 @@ type FaceioInstance = {
   authenticate: (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
 
+const FACEIO_LOCALE = 'pt';
+
 const faceioErrorMessages: Record<string, string> = {
   '1': 'Permissão de câmera recusada. Libere a câmera do navegador e tente novamente.',
   '2': 'Nenhum rosto foi detectado com segurança.',
@@ -49,7 +51,76 @@ declare global {
     __popsystemFaceIO?: new (publicId: string) => FaceioInstance;
     __popsystemFaceioLoading?: Promise<void>;
     __popsystemFaceioInstance?: FaceioInstance;
+    __popsystemFaceioPortuguesePatch?: boolean;
   }
+}
+
+const faceioPortugueseTranslations: Array<[RegExp, string]> = [
+  [/Terms & Camera Authorization/gi, 'Termos e autorizacao da camera'],
+  [/You are about to enroll via face recognition\.\.\./gi, 'Vamos cadastrar sua biometria facial...'],
+  [/You are about to authenticate via face recognition\.\.\./gi, 'Vamos validar sua biometria facial...'],
+  [/Simply face your camera and enter a PIN to complete enrollment\.\.\./gi, 'Olhe para a camera e informe um PIN para concluir o cadastro.'],
+  [/Simply face your camera and enter your PIN to complete authentication\.\.\./gi, 'Olhe para a camera e informe seu PIN para concluir a validacao.'],
+  [/No photo or image of you will be saved\./gi, 'Nenhuma foto ou imagem sua sera salva.'],
+  [/Only a secure, anonymized feature vector!/gi, 'Somente um vetor facial seguro e anonimizado.'],
+  [/Failed to enroll!/gi, 'Falha ao cadastrar a biometria.'],
+  [/Failed to authenticate!/gi, 'Falha ao validar a biometria.'],
+  [/Facial Recognition/gi, 'Reconhecimento facial'],
+  [/Face Recognition/gi, 'Reconhecimento facial'],
+  [/Camera Access/gi, 'Acesso a camera'],
+  [/Allow Camera Access/gi, 'Permitir acesso a camera'],
+  [/Waiting for camera permission/gi, 'Aguardando permissao da camera'],
+  [/Processing/gi, 'Processando'],
+  [/Please wait/gi, 'Aguarde'],
+  [/Enter PIN/gi, 'Informe o PIN'],
+  [/Choose PIN/gi, 'Escolha um PIN'],
+  [/Confirm PIN/gi, 'Confirme o PIN'],
+];
+
+function translateFaceioText(value: string) {
+  return faceioPortugueseTranslations.reduce((text, [pattern, replacement]) => {
+    return text.replace(pattern, replacement);
+  }, value);
+}
+
+function translateFaceioShadowRoot(root: ShadowRoot) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  let current = walker.nextNode();
+  while (current) {
+    nodes.push(current as Text);
+    current = walker.nextNode();
+  }
+
+  nodes.forEach((node) => {
+    const translated = translateFaceioText(node.nodeValue || '');
+    if (translated !== node.nodeValue) node.nodeValue = translated;
+  });
+}
+
+function installFaceioPortuguesePatch() {
+  if (window.__popsystemFaceioPortuguesePatch) return;
+  window.__popsystemFaceioPortuguesePatch = true;
+
+  const attach = () => {
+    const host = document.getElementById('faceio-modal');
+    const root = host?.shadowRoot;
+    if (!root) return false;
+
+    translateFaceioShadowRoot(root);
+    const observer = new MutationObserver(() => translateFaceioShadowRoot(root));
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return true;
+  };
+
+  if (attach()) return;
+
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    if (attach() || Date.now() - startedAt > 10000) {
+      window.clearInterval(timer);
+    }
+  }, 150);
 }
 
 function getFaceioConstructor() {
@@ -117,6 +188,7 @@ async function getFaceio() {
     document.body.appendChild(modal);
   }
   await loadFaceioScript();
+  installFaceioPortuguesePatch();
   const FaceIOConstructor = getFaceioConstructor();
   if (!FaceIOConstructor) throw new Error('FACEIO indisponivel neste navegador.');
   if (!window.__popsystemFaceioInstance) {
@@ -168,7 +240,7 @@ export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
   try {
     const faceio = await getFaceio();
     return await withFaceioTimeout(faceio.enroll({
-      locale: 'pt-br',
+      locale: FACEIO_LOCALE,
       payload,
       userConsent: true,
       showAbortBtn: true,
@@ -186,7 +258,7 @@ export async function authenticateEmployeeFaceio(payload: Record<string, unknown
   try {
     const faceio = await getFaceio();
     return await withFaceioTimeout(faceio.authenticate({
-      locale: 'pt-br',
+      locale: FACEIO_LOCALE,
       payload,
       showAbortBtn: true,
       permissionTimeout: 20,

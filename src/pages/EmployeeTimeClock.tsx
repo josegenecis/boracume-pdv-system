@@ -195,6 +195,13 @@ export default function EmployeeTimeClock() {
       const message = String(error?.message || 'Nao foi possivel cadastrar a biometria facial.');
       if (isFaceioDuplicateError(error)) {
         setFaceioDuplicateDetected(true);
+        setFaceError('Este rosto ja existe no FACEIO. Vamos validar agora para vincular ao funcionario correto.');
+        toast({
+          title: 'Rosto ja cadastrado',
+          description: 'Vou abrir a validacao facial para vincular este rosto ao funcionario.',
+        });
+        await handleFaceioLinkExisting();
+        return;
       }
       setFaceError(message);
       toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
