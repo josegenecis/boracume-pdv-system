@@ -86,6 +86,27 @@ function getOrderTypeLabel(order: any) {
   return 'Balcão';
 }
 
+function getPaymentSplitLines(order: any) {
+  const lines = order?.variations?.payment_split?.lines;
+  if (!Array.isArray(lines)) return [];
+  return lines
+    .map((line: any) => ({
+      label: normalizeSingleLine(line?.label || line?.method),
+      amount: Number(line?.amount || 0),
+    }))
+    .filter((line) => line.label && Number.isFinite(line.amount) && line.amount > 0);
+}
+
+function formatPaymentMethodLabel(method: any) {
+  const value = String(method || '').trim().toLowerCase();
+  if (value === 'pix') return 'PIX';
+  if (value === 'cartao' || value === 'cartão') return 'CARTAO';
+  if (value === 'dinheiro') return 'DINHEIRO';
+  if (value === 'cartao_credito') return 'CREDITO';
+  if (value === 'cartao_debito') return 'DEBITO';
+  return String(method || 'N/A').toUpperCase().replace('_', ' ');
+}
+
 function getKitchenCustomerLabel(order: any) {
   const customerName = normalizeSingleLine(order?.customer_name);
   if (customerName) return customerName;
@@ -705,8 +726,17 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             <span class="total-value">${formatCurrencyValue(order.total)}</span>
           </div>
           
-          <div style="margin-top: 5px;">Pagamento: ${order.payment_method?.toUpperCase().replace('_', ' ') || 'N/A'}</div>
-          ${order.change_amount ? `<div>Troco para: R$ ${order.change_amount.toFixed(2)}</div>` : ''}
+          ${(() => {
+            const splitLines = getPaymentSplitLines(order);
+            if (splitLines.length === 0) {
+              return `<div style="margin-top: 5px;">Pagamento: ${formatPaymentMethodLabel(order.payment_method)}</div>`;
+            }
+            return `
+              <div style="margin-top: 5px;">Pagamento: MISTO</div>
+              ${splitLines.map((line) => `<div>${line.label}: ${formatCurrencyValue(line.amount)}</div>`).join('')}
+            `;
+          })()}
+          ${order.change_amount ? `<div>Troco: ${formatCurrencyValue(Number(order.change_amount || 0))}</div>` : ''}
           
           <div class="divider"></div>
           <div class="center" style="margin-top: 10px;">${config.print_footer}</div>
@@ -1512,9 +1542,19 @@ export const PrinterService = {
     });
     bold(false);
     
-    commands += text(`Pagamento: ${order.payment_method?.toUpperCase() || 'N/A'}`);
+    const splitLines = getPaymentSplitLines(order);
+    if (splitLines.length > 0) {
+      commands += text('Pagamento: MISTO');
+      splitLines.forEach((line) => {
+        formatColumns(line.label, formatCurrencyValue(line.amount), lineWidth).forEach((value) => {
+          commands += text(value);
+        });
+      });
+    } else {
+      commands += text(`Pagamento: ${formatPaymentMethodLabel(order.payment_method)}`);
+    }
     if (order.change_amount) {
-      formatColumns('Troco para', formatCurrencyValue(Number(order.change_amount || 0)), lineWidth).forEach((value) => {
+      formatColumns('Troco', formatCurrencyValue(Number(order.change_amount || 0)), lineWidth).forEach((value) => {
         commands += text(value);
       });
     }

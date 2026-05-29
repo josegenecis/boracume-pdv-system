@@ -88,6 +88,26 @@ interface Table {
   status: string;
 }
 
+type PdvPaymentMethod = 'pix' | 'cartao' | 'dinheiro';
+
+type PdvPaymentAmounts = Record<PdvPaymentMethod, string>;
+
+const PDV_PAYMENT_METHODS: Array<{ value: PdvPaymentMethod; label: string }> = [
+  { value: 'pix', label: 'PIX' },
+  { value: 'cartao', label: 'Cartão' },
+  { value: 'dinheiro', label: 'Dinheiro' },
+];
+
+const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
+  pix: '',
+  cartao: '',
+  dinheiro: '',
+});
+
+const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
+  return PDV_PAYMENT_METHODS.find((option) => option.value === method)?.label || String(method || '-');
+};
+
 interface CashSession {
   id: string;
   opened_at: string;
@@ -141,7 +161,8 @@ const PDV = () => {
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState('pix');
+  const [paymentMethod, setPaymentMethod] = useState<PdvPaymentMethod>('pix');
+  const [paymentAmounts, setPaymentAmounts] = useState<PdvPaymentAmounts>(() => emptyPdvPaymentAmounts());
   const [changeAmount, setChangeAmount] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [surchargeAmount, setSurchargeAmount] = useState('');
@@ -204,8 +225,13 @@ const PDV = () => {
     selectedDeliveryZone: string;
     selectedTable: string;
     paymentMethod: string;
+    paymentAmounts?: PdvPaymentAmounts;
     changeAmount: string;
   }) => {
+    const hasPaymentAmounts = payload.paymentAmounts
+      ? Object.values(payload.paymentAmounts).some((value) => parseBRL(value) > 0)
+      : false;
+
     return (
       payload.cart.length === 0 &&
       !payload.customerName &&
@@ -215,6 +241,7 @@ const PDV = () => {
       !payload.selectedDeliveryZone &&
       !payload.selectedTable &&
       payload.paymentMethod === 'pix' &&
+      !hasPaymentAmounts &&
       !payload.changeAmount
     );
   };
@@ -270,7 +297,16 @@ const PDV = () => {
       if (['delivery', 'pickup', 'dine_in', 'counter'].includes(parsed?.orderType)) setOrderType(parsed.orderType);
       if (typeof parsed?.selectedDeliveryZone === 'string') setSelectedDeliveryZone(parsed.selectedDeliveryZone);
       if (typeof parsed?.selectedTable === 'string') setSelectedTable(parsed.selectedTable);
-      if (typeof parsed?.paymentMethod === 'string') setPaymentMethod(parsed.paymentMethod);
+      if (PDV_PAYMENT_METHODS.some((method) => method.value === parsed?.paymentMethod)) {
+        setPaymentMethod(parsed.paymentMethod);
+      }
+      if (parsed?.paymentAmounts && typeof parsed.paymentAmounts === 'object') {
+        setPaymentAmounts({
+          pix: typeof parsed.paymentAmounts.pix === 'string' ? parsed.paymentAmounts.pix : '',
+          cartao: typeof parsed.paymentAmounts.cartao === 'string' ? parsed.paymentAmounts.cartao : '',
+          dinheiro: typeof parsed.paymentAmounts.dinheiro === 'string' ? parsed.paymentAmounts.dinheiro : '',
+        });
+      }
       if (typeof parsed?.changeAmount === 'string') setChangeAmount(parsed.changeAmount);
     } catch {
       clearPdvDraft();
@@ -289,6 +325,7 @@ const PDV = () => {
       selectedDeliveryZone,
       selectedTable,
       paymentMethod,
+      paymentAmounts,
       changeAmount,
       updatedAt: new Date().toISOString()
     };
@@ -300,7 +337,7 @@ const PDV = () => {
         localStorage.setItem(getPdvDraftKey(), JSON.stringify(payload));
       }
     } catch {}
-  }, [user?.id, cart, customerName, customerPhone, customerAddress, orderType, selectedDeliveryZone, selectedTable, paymentMethod, changeAmount]);
+  }, [user?.id, cart, customerName, customerPhone, customerAddress, orderType, selectedDeliveryZone, selectedTable, paymentMethod, paymentAmounts, changeAmount]);
 
   useEffect(() => {
     if (!tefSettings.enabled) {
@@ -381,6 +418,17 @@ const PDV = () => {
       return installments > 1 ? 'credit' : 'card';
     }
     return 'other';
+  };
+
+  const getOrderPaymentLines = (order: any) => {
+    const lines = order?.variations?.payment_split?.lines;
+    if (!Array.isArray(lines)) return [];
+    return lines
+      .map((line: any) => ({
+        method: String(line?.method || '').trim().toLowerCase(),
+        amount: Number(line?.amount || 0),
+      }))
+      .filter((line) => line.method && Number.isFinite(line.amount) && line.amount > 0);
   };
 
   const averageMinutesFromOrders = (orders: any[]) => {
@@ -482,13 +530,18 @@ const PDV = () => {
 
     for (const order of sales) {
       const total = Number(order?.total || 0);
-      const bucket = normalizePaymentBucket(order);
-      if (bucket === 'pix') pix += total;
-      else if (bucket === 'cash') cash += total;
-      else if (bucket === 'credit') credit += total;
-      else if (bucket === 'debit') debit += total;
-      else if (bucket === 'voucher') voucher += total;
-      else if (bucket === 'card') genericCard += total;
+      const splitLines = getOrderPaymentLines(order);
+      const lines = splitLines.length > 0 ? splitLines : [{ method: String(order?.payment_method || ''), amount: total }];
+
+      for (const line of lines) {
+        const bucket = normalizePaymentBucket({ ...order, payment_method: line.method });
+        if (bucket === 'pix') pix += line.amount;
+        else if (bucket === 'cash') cash += line.amount;
+        else if (bucket === 'credit') credit += line.amount;
+        else if (bucket === 'debit') debit += line.amount;
+        else if (bucket === 'voucher') voucher += line.amount;
+        else if (bucket === 'card') genericCard += line.amount;
+      }
     }
 
     const totalReceived = pix + cash + credit + debit + voucher + genericCard;
@@ -1259,11 +1312,80 @@ const PDV = () => {
     return Math.max(0, getTotalValue() + getDeliveryFee() + getSurchargeValue() - getDiscountValue());
   };
 
-  const getChangeValue = () => {
-    if (paymentMethod === 'dinheiro' && changeAmount) {
-      return parseBRL(changeAmount) - getFinalTotal();
+  const getManualPaymentTotal = () => {
+    return PDV_PAYMENT_METHODS.reduce((sum, method) => sum + parseBRL(paymentAmounts[method.value]), 0);
+  };
+
+  const hasManualPaymentSplit = () => getManualPaymentTotal() > 0.009;
+
+  const getPaymentLines = () => {
+    const finalTotal = getFinalTotal();
+    if (!hasManualPaymentSplit()) {
+      return finalTotal > 0
+        ? [{ method: paymentMethod, label: getPaymentMethodLabel(paymentMethod), amount: finalTotal }]
+        : [];
     }
-    return 0;
+
+    return PDV_PAYMENT_METHODS
+      .map((method) => ({
+        method: method.value,
+        label: method.label,
+        amount: parseBRL(paymentAmounts[method.value]),
+      }))
+      .filter((line) => line.amount > 0.009);
+  };
+
+  const getPaymentPaidTotal = () => {
+    return getPaymentLines().reduce((sum, line) => sum + line.amount, 0);
+  };
+
+  const getPaymentRemaining = () => {
+    return Math.max(0, getFinalTotal() - getPaymentPaidTotal());
+  };
+
+  const getCashPaymentPortion = () => {
+    const cashLine = getPaymentLines().find((line) => line.method === 'dinheiro');
+    return Number(cashLine?.amount || 0);
+  };
+
+  const getCashReceivedValue = () => parseBRL(changeAmount);
+
+  const getCashChangeValue = () => {
+    const cashPortion = getCashPaymentPortion();
+    if (cashPortion <= 0) return 0;
+    return Math.max(0, getCashReceivedValue() - cashPortion);
+  };
+
+  const setSelectedPaymentMethod = (method: PdvPaymentMethod) => {
+    setPaymentMethod(method);
+    if (!hasManualPaymentSplit()) return;
+
+    const currentAmount = parseBRL(paymentAmounts[method]);
+    if (currentAmount > 0) return;
+
+    const remaining = getPaymentRemaining();
+    if (remaining > 0.009) {
+      setPaymentAmounts((prev) => ({
+        ...prev,
+        [method]: formatBRL(remaining),
+      }));
+    }
+  };
+
+  const updatePaymentAmount = (method: PdvPaymentMethod, value: string) => {
+    setPaymentAmounts((prev) => ({
+      ...prev,
+      [method]: value,
+    }));
+  };
+
+  const clearPaymentSplit = () => {
+    setPaymentAmounts(emptyPdvPaymentAmounts());
+    setChangeAmount('');
+  };
+
+  const getChangeValue = () => {
+    return getCashChangeValue();
   };
 
   const resetCurrentSale = (nextOrderType: 'delivery' | 'pickup' | 'dine_in' | 'counter' = 'counter') => {
@@ -1275,6 +1397,7 @@ const PDV = () => {
     setSelectedDeliveryZone('');
     setSelectedTable('');
     setTableLaunchId('');
+    setPaymentAmounts(emptyPdvPaymentAmounts());
     setChangeAmount('');
     setDiscountAmount('');
     setSurchargeAmount('');
@@ -1513,10 +1636,38 @@ const PDV = () => {
       }
     }
 
-    if (paymentMethod === 'dinheiro' && changeAmount && parseBRL(changeAmount) < getFinalTotal()) {
+    const paymentLines = getPaymentLines();
+    const paymentPaidTotal = getPaymentPaidTotal();
+    const paymentRemaining = getPaymentRemaining();
+    const cashPaymentPortion = getCashPaymentPortion();
+    const cashReceivedValue = getCashReceivedValue();
+    const hasSplitPayment = paymentLines.length > 1 || hasManualPaymentSplit();
+    const primaryPaymentMethod = paymentLines.reduce((winner, line) => (
+      line.amount > Number(winner?.amount || 0) ? line : winner
+    ), paymentLines[0])?.method || paymentMethod;
+
+    if (paymentLines.length === 0 || paymentPaidTotal + 0.009 < getFinalTotal()) {
+      toast({
+        title: "Pagamento incompleto",
+        description: `Ainda falta ${formatCurrency(paymentRemaining)} para finalizar a venda.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paymentPaidTotal - getFinalTotal() > 0.009 && cashPaymentPortion <= 0) {
+      toast({
+        title: "Pagamento acima do total",
+        description: "Só é possível gerar troco quando uma parte do pagamento é em dinheiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (cashPaymentPortion > 0 && changeAmount && cashReceivedValue + 0.009 < cashPaymentPortion) {
       toast({
         title: "Valor insuficiente",
-        description: "O valor recebido é menor que o total do pedido.",
+        description: "O valor recebido em dinheiro é menor que a parte em espécie.",
         variant: "destructive",
       });
       return;
@@ -1598,8 +1749,8 @@ const PDV = () => {
         total: getFinalTotal(),
         discount: parseBRL(discountAmount),
         delivery_fee: getDeliveryFee(),
-        payment_method: paymentMethod,
-        change_amount: paymentMethod === 'dinheiro' && changeAmount ? parseBRL(changeAmount) : null,
+        payment_method: primaryPaymentMethod,
+        change_amount: cashPaymentPortion > 0 ? getCashChangeValue() : null,
         status: isCounterPdvSale ? 'completed' : (paymentMethod === 'pix' ? 'pending' : 'preparing'),
         acceptance_status: isCounterPdvSale ? 'accepted' : (paymentMethod === 'pix' ? 'awaiting_pix_payment' : 'accepted'),
         order_number: orderNumber,
@@ -1615,12 +1766,25 @@ const PDV = () => {
             discount: parseBRL(discountAmount),
             surcharge: parseBRL(surchargeAmount),
           },
+          payment_split: {
+            enabled: hasSplitPayment,
+            total: getFinalTotal(),
+            paid_total: paymentPaidTotal,
+            remaining: paymentRemaining,
+            cash_received: cashPaymentPortion > 0 ? cashReceivedValue : null,
+            change_amount: cashPaymentPortion > 0 ? getCashChangeValue() : null,
+            lines: paymentLines.map((line) => ({
+              method: line.method,
+              label: line.label,
+              amount: Number(line.amount.toFixed(2)),
+            })),
+          },
           environment: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
           tef: paymentMethod === 'cartao' && cardProcessingMode === 'tef' ? (tefData || null) : null
         }
       };
 
-      if (paymentMethod === 'pix') {
+      if (paymentMethod === 'pix' && !hasSplitPayment) {
         const { data: pixCfg, error: pixCfgErr } = await supabase
           .from('pix_settings')
           .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
@@ -1796,6 +1960,158 @@ const PDV = () => {
     { value: 'pickup', label: 'Retirada' },
     { value: 'dine_in', label: 'Mesa' },
   ];
+
+  const renderPaymentControls = (compact = false) => {
+    const inputClassName = compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs';
+    const labelClassName = compact
+      ? 'text-[9px] font-semibold uppercase tracking-[0.12em]'
+      : 'text-[10px] font-semibold uppercase tracking-[0.12em]';
+    const selectedAmount = paymentAmounts[paymentMethod];
+    const splitActive = hasManualPaymentSplit();
+    const remaining = getPaymentRemaining();
+    const paidTotal = getPaymentPaidTotal();
+    const cashPortion = getCashPaymentPortion();
+    const cashChange = getCashChangeValue();
+
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          {PDV_PAYMENT_METHODS.map((method) => (
+            <Button
+              key={method.value}
+              type="button"
+              size={compact ? undefined : 'sm'}
+              variant={paymentMethod === method.value ? 'default' : 'outline'}
+              className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
+              onClick={() => {
+                setSelectedPaymentMethod(method.value);
+                if (method.value !== 'cartao') setTefData(null);
+                if (method.value === 'cartao') {
+                  setCardProcessingMode('maquininha');
+                  setTefOpen(false);
+                }
+              }}
+            >
+              {method.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="rounded-xl border border-[#003223]/10 bg-[#F8FBF6] p-2">
+          <div className={`${labelClassName} text-[#003223]/70`}>Valor neste método</div>
+          <CurrencyTextInput
+            placeholder={formatCurrency(getFinalTotal())}
+            value={selectedAmount}
+            onValueChange={(value) => updatePaymentAmount(paymentMethod, value)}
+            className={`${inputClassName} mt-1 bg-white`}
+          />
+          <div className="mt-1 text-[10px] leading-4 text-slate-500">
+            Deixe em branco para receber o total em {getPaymentMethodLabel(paymentMethod)}. Digite um valor para dividir em mais métodos.
+          </div>
+        </div>
+
+        {paymentMethod === 'dinheiro' && (
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-2">
+            <div className="space-y-1">
+              <div className={`${labelClassName} text-emerald-800`}>Valor recebido</div>
+              <CurrencyTextInput
+                placeholder={formatCurrency(cashPortion || getFinalTotal())}
+                value={changeAmount}
+                onValueChange={setChangeAmount}
+                className={`${inputClassName} bg-white`}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className={`${labelClassName} text-emerald-800`}>Troco</div>
+              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-3 font-bold text-emerald-700`}>
+                {formatCurrency(cashChange)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {paymentMethod === 'cartao' && (
+          tefSettings.enabled ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size={compact ? undefined : 'sm'}
+                  variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
+                  className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
+                  onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
+                >
+                  Maquininha
+                </Button>
+                <Button
+                  type="button"
+                  size={compact ? undefined : 'sm'}
+                  variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
+                  className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
+                  onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
+                >
+                  TEF
+                </Button>
+              </div>
+              {cardProcessingMode === 'tef' && (
+                <Button type="button" size={compact ? undefined : 'sm'} variant="outline" className={`${compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'} w-full`} onClick={() => setTefOpen(true)}>
+                  Editar dados TEF
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className={compact ? 'text-[10px] text-muted-foreground' : 'text-xs text-muted-foreground'}>Cartão via maquininha</div>
+          )
+        )}
+
+        {splitActive && (
+          <div className="rounded-xl border border-[#FF6400]/15 bg-white p-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-500">Pago</span>
+              <span className="font-bold text-[#003223]">{formatCurrency(paidTotal)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="font-semibold text-slate-500">Restante</span>
+              <span className={`font-bold ${remaining > 0.009 ? 'text-red-600' : 'text-emerald-700'}`}>{formatCurrency(remaining)}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {getPaymentLines().map((line) => (
+                <Badge key={line.method} variant="outline" className="rounded-full bg-[#F8FBF6] text-[10px]">
+                  {line.label}: {formatCurrency(line.amount)}
+                </Badge>
+              ))}
+              <Button type="button" variant="ghost" className="h-6 rounded-full px-2 text-[10px] text-slate-500" onClick={clearPaymentSplit}>
+                Limpar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <div className={`${labelClassName} text-red-600`}>Desconto</div>
+            <CurrencyTextInput
+              aria-label="Desconto"
+              placeholder="R$ 0,00"
+              value={discountAmount}
+              onValueChange={setDiscountAmount}
+              className={inputClassName}
+            />
+          </div>
+          <div className="space-y-1">
+            <div className={`${labelClassName} text-emerald-700`}>Acréscimo</div>
+            <CurrencyTextInput
+              aria-label="Acréscimo"
+              placeholder="R$ 0,00"
+              value={surchargeAmount}
+              onValueChange={setSurchargeAmount}
+              className={inputClassName}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="-mx-4 -mt-4 -mb-4 flex h-[calc(100%+1rem)] flex-col overflow-hidden bg-white sm:-mx-6 sm:-mt-6 sm:-mb-6 sm:h-[calc(100%+1.5rem)]">
@@ -2218,100 +2534,7 @@ const PDV = () => {
                       </div>
                     ) : null}
                     
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={paymentMethod === 'pix' ? 'default' : 'outline'}
-                          className="h-8 text-xs"
-                          onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
-                        >
-                          PIX
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
-                          className="h-8 text-xs"
-                          onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
-                        >
-                          Cartão
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
-                          className="h-8 text-xs"
-                          onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
-                        >
-                          Dinheiro
-                        </Button>
-                      </div>
-                      {paymentMethod === 'dinheiro' && (
-                        <CurrencyTextInput
-                          placeholder="Valor pago"
-                          value={changeAmount}
-                          onValueChange={setChangeAmount}
-                          className="h-8 text-xs"
-                        />
-                      )}
-                      {paymentMethod === 'cartao' && (
-                        tefSettings.enabled ? (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
-                                className="h-8 text-xs"
-                                onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
-                              >
-                                Maquininha
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
-                                className="h-8 text-xs"
-                                onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
-                              >
-                                TEF
-                              </Button>
-                            </div>
-                            {cardProcessingMode === 'tef' && (
-                              <Button type="button" size="sm" variant="outline" className="h-8 text-xs w-full" onClick={() => setTefOpen(true)}>
-                                Editar dados TEF
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">Cartão via maquininha</div>
-                        )
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-600">Desconto</div>
-                          <CurrencyTextInput
-                            aria-label="Desconto"
-                            placeholder="R$ 0,00"
-                            value={discountAmount}
-                            onValueChange={setDiscountAmount}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Acréscimo</div>
-                          <CurrencyTextInput
-                            aria-label="Acréscimo"
-                            placeholder="R$ 0,00"
-                            value={surchargeAmount}
-                            onValueChange={setSurchargeAmount}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    {renderPaymentControls(false)}
                 </div>
 
                 {/* Totals Summary */}
@@ -2559,95 +2782,7 @@ const PDV = () => {
                      </div>
                    ) : null}
                     
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <Button
-                          type="button"
-                          variant={paymentMethod === 'pix' ? 'default' : 'outline'}
-                          className="h-7.5 text-[10px]"
-                          onClick={() => { setPaymentMethod('pix'); setTefData(null); }}
-                        >
-                          PIX
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={paymentMethod === 'cartao' ? 'default' : 'outline'}
-                          className="h-7.5 text-[10px]"
-                          onClick={() => { setPaymentMethod('cartao'); setCardProcessingMode('maquininha'); setTefOpen(false); }}
-                        >
-                          Cartão
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={paymentMethod === 'dinheiro' ? 'default' : 'outline'}
-                          className="h-7.5 text-[10px]"
-                          onClick={() => { setPaymentMethod('dinheiro'); setTefData(null); }}
-                        >
-                          Dinheiro
-                        </Button>
-                      </div>
-                      {paymentMethod === 'dinheiro' && (
-                        <CurrencyTextInput
-                          placeholder="Valor pago"
-                          value={changeAmount}
-                          onValueChange={setChangeAmount}
-                          className="h-7.5 text-[10px]"
-                        />
-                      )}
-                      {paymentMethod === 'cartao' && (
-                        tefSettings.enabled ? (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              <Button
-                                type="button"
-                                variant={cardProcessingMode === 'maquininha' ? 'default' : 'outline'}
-                                className="h-7.5 text-[10px]"
-                                onClick={() => { setCardProcessingMode('maquininha'); setTefData(null); setTefOpen(false); }}
-                              >
-                                Maquininha
-                              </Button>
-                              <Button
-                                type="button"
-                                variant={cardProcessingMode === 'tef' ? 'default' : 'outline'}
-                                className="h-7.5 text-[10px]"
-                                onClick={() => { setCardProcessingMode('tef'); setTefOpen(true); }}
-                              >
-                                TEF
-                              </Button>
-                            </div>
-                            {cardProcessingMode === 'tef' && (
-                              <Button type="button" variant="outline" className="h-7.5 w-full text-[10px]" onClick={() => setTefOpen(true)}>
-                                Editar dados TEF
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Cartão via maquininha</div>
-                        )
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-red-600">Desconto</div>
-                          <CurrencyTextInput
-                            aria-label="Desconto"
-                            placeholder="R$ 0,00"
-                            value={discountAmount}
-                            onValueChange={setDiscountAmount}
-                            className="h-7.5 text-[10px]"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700">Acréscimo</div>
-                          <CurrencyTextInput
-                            aria-label="Acréscimo"
-                            placeholder="R$ 0,00"
-                            value={surchargeAmount}
-                            onValueChange={setSurchargeAmount}
-                            className="h-7.5 text-[10px]"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    {renderPaymentControls(true)}
                   </div>
 
                   <div className="mb-3 space-y-1 text-[12px]">

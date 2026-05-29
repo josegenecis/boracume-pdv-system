@@ -7,15 +7,41 @@ type FaceioInstance = {
 };
 
 const faceioErrorMessages: Record<string, string> = {
-  '1': 'A câmera não pôde ser acessada. Confira a permissão do navegador.',
-  '2': 'Permissão de câmera negada.',
-  '3': 'Nenhum rosto foi detectado com segurança.',
+  '1': 'Permissão de câmera recusada. Libere a câmera do navegador e tente novamente.',
+  '2': 'Nenhum rosto foi detectado com segurança.',
+  '3': 'Rosto não reconhecido pelo FACEIO.',
   '4': 'Muitos rostos foram detectados. Deixe somente o funcionário na câmera.',
-  '5': 'Sessão expirada. Tente novamente.',
-  '6': 'Tentativa cancelada.',
-  '7': 'O domínio atual não está liberado no FACEIO.',
-  '8': 'O FACEIO bloqueou a operação por política de segurança.',
+  '5': 'A prova de vida não foi aprovada. Tente novamente com boa iluminação.',
+  '6': 'O rosto não confere com a biometria cadastrada.',
+  '7': 'Falha de rede ao falar com o FACEIO. Confira a conexão e tente novamente.',
+  '8': 'PIN incorreto no FACEIO.',
+  '9': 'O FACEIO não conseguiu processar a operação.',
+  '10': 'Aplicação FACEIO não autorizada. Confira o Public ID.',
+  '11': 'Os termos e a autorização da câmera não foram aceitos.',
+  '12': 'Interface do FACEIO ainda não está pronta. Tente novamente.',
+  '13': 'Sessão do FACEIO expirada. Tente novamente.',
+  '14': 'Tempo esgotado no FACEIO. Tente novamente.',
+  '15': 'Muitas tentativas no FACEIO. Aguarde alguns minutos.',
+  '16': 'Origem/domínio vazio no FACEIO.',
+  '17': 'Domínio atual não está liberado no console FACEIO.',
+  '18': 'País bloqueado pela política da aplicação FACEIO.',
+  '19': 'O FACEIO exige um PIN único para este cadastro.',
+  '20': 'Já existe uma sessão FACEIO em andamento.',
+  '21': 'Este rosto já está cadastrado no FACEIO. Use a opção de vincular rosto existente.',
+  '22': 'Menores de idade não são permitidos nesta aplicação FACEIO.',
+  '23': 'Seu plano FACEIO precisa de upgrade para este recurso.',
+  '24': 'Operação cancelada pelo usuário.',
 };
+
+export class FaceioOperationError extends Error {
+  code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'FaceioOperationError';
+    this.code = code;
+  }
+}
 
 declare global {
   interface Window {
@@ -104,7 +130,7 @@ async function withFaceioTimeout<T>(operation: Promise<T>) {
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => {
       reject(new Error('O FACEIO demorou demais para responder. Confira se o dominio popsystem.com.br esta liberado no console FACEIO e tente novamente fora do modo privado.'));
-    }, 30000);
+    }, 90000);
   });
 
   try {
@@ -131,7 +157,11 @@ function normalizeFaceioError(error: unknown) {
   );
   const rawMessage = String((error as any)?.message || error || '').trim();
   const friendly = faceioErrorMessages[rawCode];
-  return new Error(friendly || rawMessage || 'O FACEIO não conseguiu concluir a operação.');
+  return new FaceioOperationError(friendly || rawMessage || 'O FACEIO não conseguiu concluir a operação.', rawCode);
+}
+
+export function isFaceioDuplicateError(error: unknown) {
+  return String((error as any)?.code || '').trim() === '21';
 }
 
 export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
@@ -140,6 +170,12 @@ export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
     return await withFaceioTimeout(faceio.enroll({
       locale: 'pt-br',
       payload,
+      userConsent: true,
+      showAbortBtn: true,
+      enrollIntroTimeout: 5,
+      permissionTimeout: 20,
+      idleTimeout: 20,
+      replyTimeout: 30,
     }));
   } catch (error) {
     throw normalizeFaceioError(error);
@@ -152,6 +188,10 @@ export async function authenticateEmployeeFaceio(payload: Record<string, unknown
     return await withFaceioTimeout(faceio.authenticate({
       locale: 'pt-br',
       payload,
+      showAbortBtn: true,
+      permissionTimeout: 20,
+      idleTimeout: 20,
+      replyTimeout: 30,
     }));
   } catch (error) {
     throw normalizeFaceioError(error);

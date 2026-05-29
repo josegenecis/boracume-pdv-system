@@ -8,6 +8,7 @@ import {
   authenticateEmployeeFaceio,
   enrollEmployeeFaceio,
   extractFaceioFacialId,
+  isFaceioDuplicateError,
   prepareFaceio,
 } from '@/services/faceioClient';
 import {
@@ -102,6 +103,7 @@ export default function EmployeeTimeClock() {
   const [cameraActive, setCameraActive] = useState(false);
   const [faceError, setFaceError] = useState('');
   const [faceioBusy, setFaceioBusy] = useState(false);
+  const [faceioDuplicateDetected, setFaceioDuplicateDetected] = useState(false);
 
   const useFaceio = Boolean(
     timeClock?.settings.requireFaceLiveness &&
@@ -172,6 +174,7 @@ export default function EmployeeTimeClock() {
     if (!session) return;
     setFaceioBusy(true);
     setFaceError('');
+    setFaceioDuplicateDetected(false);
     try {
       const response = await enrollEmployeeFaceio({
         employeeId: session.profile.id,
@@ -190,6 +193,45 @@ export default function EmployeeTimeClock() {
       });
     } catch (error: any) {
       const message = String(error?.message || 'Nao foi possivel cadastrar a biometria facial.');
+      if (isFaceioDuplicateError(error)) {
+        setFaceioDuplicateDetected(true);
+      }
+      setFaceError(message);
+      toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
+    } finally {
+      setFaceioBusy(false);
+    }
+  };
+
+  const handleFaceioLinkExisting = async () => {
+    if (!session) return;
+    setFaceioBusy(true);
+    setFaceError('');
+    try {
+      const response = await authenticateEmployeeFaceio({
+        employeeId: session.profile.id,
+        restaurantId: session.profile.restaurantId,
+        name: session.profile.name,
+        cpf: session.profile.cpf,
+        source: 'popsystem_time_clock_link_existing_face',
+      });
+      const facialId = extractFaceioFacialId(response);
+      if (!facialId) throw new Error('O FACEIO nao retornou o facialId autenticado.');
+      const updatedSession = await saveWaiterFaceioEnrollment({
+        facialId,
+        enrollmentPayload: {
+          linkedFromExistingFace: true,
+          response,
+        },
+      });
+      setSession(updatedSession);
+      setFaceioDuplicateDetected(false);
+      toast({
+        title: 'Biometria vinculada',
+        description: 'O rosto existente no FACEIO foi vinculado a este funcionario.',
+      });
+    } catch (error: any) {
+      const message = String(error?.message || 'Nao foi possivel vincular a biometria existente.');
       setFaceError(message);
       toast({ title: 'Erro no FACEIO', description: message, variant: 'destructive' });
     } finally {
@@ -483,14 +525,26 @@ export default function EmployeeTimeClock() {
             )}
 
             {!session.profile.faceioFacialId && (
-              <Button
-                className="mt-4 h-12 w-full rounded-2xl bg-[#FF6400] font-bold text-white hover:bg-[#E25A00]"
-                disabled={faceioBusy || punching}
-                onClick={() => void handleFaceioEnroll()}
-              >
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                {faceioBusy ? 'Abrindo FACEIO...' : 'Cadastrar biometria facial'}
-              </Button>
+              <div className="mt-4 space-y-2">
+                <Button
+                  className="h-12 w-full rounded-2xl bg-[#FF6400] font-bold text-white hover:bg-[#E25A00]"
+                  disabled={faceioBusy || punching}
+                  onClick={() => void handleFaceioEnroll()}
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  {faceioBusy ? 'Abrindo FACEIO...' : 'Cadastrar biometria facial'}
+                </Button>
+                {faceioDuplicateDetected && (
+                  <Button
+                    variant="outline"
+                    className="h-12 w-full rounded-2xl border-[#003223]/20 font-bold text-[#003223]"
+                    disabled={faceioBusy || punching}
+                    onClick={() => void handleFaceioLinkExisting()}
+                  >
+                    Vincular rosto já cadastrado
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         )}

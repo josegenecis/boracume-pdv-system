@@ -302,6 +302,18 @@ const Financeiro = () => {
     return 'outros';
   };
 
+  const getOrderPaymentLines = (order: Record<string, unknown>) => {
+    const variations = (order?.variations && typeof order.variations === 'object' ? order.variations : {}) as Record<string, any>;
+    const lines = variations?.payment_split?.lines;
+    if (!Array.isArray(lines)) return [];
+    return lines
+      .map((line: any) => ({
+        method: String(line?.method || '').trim().toLowerCase(),
+        amount: Number(line?.amount || 0),
+      }))
+      .filter((line) => line.method && Number.isFinite(line.amount) && line.amount > 0);
+  };
+
   const averageMinutesFromOrders = (orders: Array<Record<string, unknown>>) => {
     const validDurations = (Array.isArray(orders) ? orders : [])
       .map((order) => {
@@ -395,8 +407,15 @@ const Financeiro = () => {
     const netRevenue = grossRevenue - discounts + deliveryFee;
 
     const paymentTotals = sales.reduce<Record<string, number>>((acc, order) => {
-      const bucket = getPaymentBucket(order?.payment_method);
-      acc[bucket] = (acc[bucket] || 0) + Number(order?.total || 0);
+      const splitLines = getOrderPaymentLines(order);
+      const lines = splitLines.length > 0
+        ? splitLines
+        : [{ method: String(order?.payment_method || ''), amount: Number(order?.total || 0) }];
+
+      for (const line of lines) {
+        const bucket = getPaymentBucket(line.method);
+        acc[bucket] = (acc[bucket] || 0) + line.amount;
+      }
       return acc;
     }, {});
 
@@ -926,9 +945,20 @@ const Financeiro = () => {
   const selectedSession = cashSessions.find(s => s.id === selectedSessionId) || currentSession || null;
   const sessionSales = sessionOrders.filter(o => o?.status !== 'cancelled');
   const sessionTotal = sessionSales.reduce((sum, o) => sum + Number(o.total || 0), 0);
-  const sessionPix = sessionSales.filter(o => o.payment_method === 'pix').reduce((sum, o) => sum + Number(o.total || 0), 0);
-  const sessionCard = sessionSales.filter(o => o.payment_method === 'cartao').reduce((sum, o) => sum + Number(o.total || 0), 0);
-  const sessionCash = sessionSales.filter(o => o.payment_method === 'dinheiro').reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const sessionPaymentTotals = sessionSales.reduce<Record<string, number>>((acc, order) => {
+    const splitLines = getOrderPaymentLines(order as any);
+    const lines = splitLines.length > 0
+      ? splitLines
+      : [{ method: String(order?.payment_method || ''), amount: Number(order?.total || 0) }];
+    for (const line of lines) {
+      const bucket = getPaymentBucket(line.method);
+      acc[bucket] = (acc[bucket] || 0) + line.amount;
+    }
+    return acc;
+  }, {});
+  const sessionPix = Number(sessionPaymentTotals.pix || 0);
+  const sessionCard = Number(sessionPaymentTotals.cartao || 0) + Number(sessionPaymentTotals.credito || 0) + Number(sessionPaymentTotals.debito || 0) + Number(sessionPaymentTotals.voucher || 0);
+  const sessionCash = Number(sessionPaymentTotals.dinheiro || 0);
   const sessionIn = sessionMovements.filter(m => m.type === 'in').reduce((sum, m) => sum + Number(m.amount || 0), 0);
   const sessionOut = sessionMovements.filter(m => m.type === 'out').reduce((sum, m) => sum + Number(m.amount || 0), 0);
   const paymentMix = [
