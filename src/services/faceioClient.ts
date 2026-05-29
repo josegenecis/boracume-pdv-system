@@ -4,6 +4,7 @@ const FACEIO_PUBLIC_ID = import.meta.env.VITE_FACEIO_PUBLIC_ID || 'fioae156';
 type FaceioInstance = {
   enroll: (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   authenticate: (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  restartSession?: () => boolean;
 };
 
 const FACEIO_LOCALE = 'pt';
@@ -76,6 +77,12 @@ const faceioPortugueseTranslations: Array<[RegExp, string]> = [
   [/Choose PIN/gi, 'Escolha um PIN'],
   [/Confirm PIN/gi, 'Confirme o PIN'],
 ];
+
+function isVisibleElement(element: HTMLElement | null) {
+  if (!element || element.hasAttribute('hidden')) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+}
 
 function translateFaceioText(value: string) {
   return faceioPortugueseTranslations.reduce((text, [pattern, replacement]) => {
@@ -197,6 +204,40 @@ async function getFaceio() {
   return window.__popsystemFaceioInstance;
 }
 
+function skipFaceioEnrollmentIntro(faceio: FaceioInstance) {
+  const internalFaceio = faceio as FaceioInstance & {
+    _enrollProceed?: () => void;
+    _state?: number;
+  };
+
+  if (typeof internalFaceio._enrollProceed !== 'function') return;
+
+  let attempts = 0;
+  const timer = window.setInterval(() => {
+    attempts += 1;
+    const root = document.getElementById('faceio-modal')?.shadowRoot;
+    const enrollIntro = root?.getElementById('fioEnrollIntro') as HTMLElement | null;
+    const extraIntro = root?.getElementById('fioExtraOpIntro') as HTMLElement | null;
+
+    if (isVisibleElement(enrollIntro) || isVisibleElement(extraIntro)) {
+      try {
+        internalFaceio._enrollProceed?.();
+      } catch {}
+      window.clearInterval(timer);
+      return;
+    }
+
+    if (attempts > 80) window.clearInterval(timer);
+  }, 50);
+}
+
+export async function restartFaceioSession() {
+  try {
+    const faceio = await getFaceio();
+    faceio.restartSession?.();
+  } catch {}
+}
+
 async function withFaceioTimeout<T>(operation: Promise<T>) {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -239,7 +280,7 @@ export function isFaceioDuplicateError(error: unknown) {
 export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
   try {
     const faceio = await getFaceio();
-    return await withFaceioTimeout(faceio.enroll({
+    const operation = faceio.enroll({
       locale: FACEIO_LOCALE,
       payload,
       userConsent: true,
@@ -248,7 +289,9 @@ export async function enrollEmployeeFaceio(payload: Record<string, unknown>) {
       permissionTimeout: 20,
       idleTimeout: 20,
       replyTimeout: 30,
-    }));
+    });
+    skipFaceioEnrollmentIntro(faceio);
+    return await withFaceioTimeout(operation);
   } catch (error) {
     throw normalizeFaceioError(error);
   }
