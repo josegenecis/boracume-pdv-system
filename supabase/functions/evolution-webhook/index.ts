@@ -28,6 +28,32 @@ function toTextFromMessage(msg: any): string {
   return '';
 }
 
+function pickMediaFromMessage(msg: any) {
+  if (!msg || typeof msg !== 'object') return null;
+
+  const candidates = [
+    { type: 'audio', payload: msg.audioMessage },
+    { type: 'image', payload: msg.imageMessage },
+    { type: 'video', payload: msg.videoMessage },
+    { type: 'document', payload: msg.documentMessage },
+    { type: 'sticker', payload: msg.stickerMessage }
+  ];
+  const found = candidates.find((item) => item.payload && typeof item.payload === 'object');
+  if (!found) return null;
+
+  const payload = found.payload;
+  return {
+    type: found.type,
+    mimeType: String(payload?.mimetype || payload?.mimeType || ''),
+    caption: String(payload?.caption || ''),
+    url: String(payload?.url || payload?.mediaUrl || payload?.directPath || payload?.jpegThumbnail || ''),
+    fileName: String(payload?.fileName || payload?.title || ''),
+    seconds: Number(payload?.seconds || payload?.duration || 0) || null,
+    hasInlineBytes: Boolean(payload?.base64 || payload?.mediaBase64),
+    base64: payload?.base64 || payload?.mediaBase64 || ''
+  };
+}
+
 function normalizeNumber(remoteJid: string): string {
   const digits = String(remoteJid || '').split('@')[0].replace(/\D/g, '');
   return digits;
@@ -153,7 +179,9 @@ Deno.serve(async (req: Request) => {
   if (!remoteJid || remoteJid.includes('@g.us')) return json({ success: true, ignored: true });
 
   const customerPhone = normalizeNumber(remoteJid);
-  const text = toTextFromMessage(data?.message || data?.text || data?.content || data);
+  const messagePayload = data?.message || data?.text || data?.content || data;
+  const media = pickMediaFromMessage(messagePayload);
+  const text = toTextFromMessage(messagePayload) || (media ? `[${media.type === 'audio' ? 'áudio recebido' : media.type === 'image' ? 'imagem recebida' : 'mídia recebida'}]` : '');
   if (!customerPhone || !text) return json({ success: true, ignored: true });
 
   let userId = getMappedUserIdForInstance(instance);
@@ -236,7 +264,8 @@ Deno.serve(async (req: Request) => {
     rawEvent,
     instanceName: instance,
     customerPhone,
-    textPreview: text.slice(0, 120)
+    textPreview: text.slice(0, 120),
+    media: media ? { type: media.type, mimeType: media.mimeType, hasInlineBytes: media.hasInlineBytes, hasUrl: Boolean(media.url) } : null
   });
 
   const result = await processRestaurantBotMessage({
@@ -244,7 +273,8 @@ Deno.serve(async (req: Request) => {
     restaurantId: userId,
     instanceName: instance,
     customerPhone,
-    text
+    text,
+    media
   });
 
   if (!result.ok) {

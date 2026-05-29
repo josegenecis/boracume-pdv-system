@@ -179,6 +179,445 @@ function buildProductInfoReply(restaurantId: string, products: any[]) {
   return `${products.length === 1 ? 'Temos sim:' : 'Encontrei essas opções:'}\n${lines.join('\n')}\n\nPara pedir, acesse o cardápio: ${buildMenuShareUrl(restaurantId)}`;
 }
 
+function wantsToOrder(text: string) {
+  const value = normalizeIntentText(text);
+  return /(quero|queria|vou querer|manda|separa|pode fazer|fazer pedido|pedir|pedido|adiciona|coloca|fechar pedido|finalizar pedido|confirmar pedido|confirmo|pode confirmar|isso mesmo|entrega|retirada|pix|dinheiro|cartao|cartão)/i.test(value);
+}
+
+function isOrderConfirmation(text: string) {
+  const value = normalizeIntentText(text);
+  return /^(confirmo|confirmar|pode confirmar|isso|isso mesmo|fechado|fecha|finalizar|sim pode|sim|ok pode|tudo certo)\b/.test(value);
+}
+
+function isOrderCancel(text: string) {
+  const value = normalizeIntentText(text);
+  return /^(cancelar|cancela|apagar|limpar|desistir|nao quero|não quero)\b/.test(value);
+}
+
+function parseMoneyFromText(text: string) {
+  const match = String(text || '').match(/(?:r\$\s*)?(\d{1,4})(?:[,.](\d{1,2}))?/i);
+  if (!match) return null;
+  const value = Number(`${match[1]}.${(match[2] || '00').padEnd(2, '0')}`);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function parseQuantityFromText(text: string) {
+  const normalized = normalizeIntentText(text);
+  const numeric = normalized.match(/\b(\d{1,2})\s*(x|un|unidade|unidades)?\b/);
+  if (numeric) return Math.max(1, Math.min(50, Number(numeric[1]) || 1));
+  if (/\b(um|uma)\b/.test(normalized)) return 1;
+  if (/\b(dois|duas)\b/.test(normalized)) return 2;
+  if (/\b(tres|três)\b/.test(normalized)) return 3;
+  return 1;
+}
+
+function parseVariationOptions(raw: any): any[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return raw.split(/[,;\n]/).map((name) => ({ name: String(name).trim(), price: 0 })).filter((item) => item.name);
+    }
+  }
+  if (typeof raw === 'object') {
+    return Object.entries(raw).map(([name, price]) => ({ name, price: Number(price) || 0 }));
+  }
+  return [];
+}
+
+function optionPrice(option: any) {
+  return Math.max(0, Number(option?.price ?? option?.base_price ?? 0) || 0);
+}
+
+function normalizeForMatch(value: unknown) {
+  return normalizeIntentText(String(value || '')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function productMatchScore(text: string, product: any, desiredPrice: number | null) {
+  const normalizedText = normalizeForMatch(text);
+  const name = normalizeForMatch(product?.name);
+  const category = normalizeForMatch(product?.category);
+  if (!name) return 0;
+
+  const nameTokens = name.split(' ').filter((token) => token.length >= 3);
+  const tokenHits = nameTokens.filter((token) => normalizedText.includes(token)).length;
+  let score = normalizedText.includes(name) ? 100 : tokenHits * 12;
+  if (category && normalizedText.includes(category)) score += 8;
+  if (desiredPrice !== null && Math.abs(Number(product?.price || 0) - desiredPrice) <= 0.01) score += 45;
+  if (String(product?.available) === 'false') score -= 80;
+  return score;
+}
+
+function findBestProduct(text: string, products: any[]) {
+  const desiredPrice = parseMoneyFromText(text);
+  const ranked = (products || [])
+    .map((product: any) => ({ product, score: productMatchScore(text, product, desiredPrice) }))
+    .filter((item: any) => item.score > 0)
+    .sort((a: any, b: any) => b.score - a.score);
+  return ranked[0]?.score >= 12 ? ranked[0].product : null;
+}
+
+function buildOrderSummary(draft: any) {
+  const items = Array.isArray(draft?.items) ? draft.items : [];
+  const lines = items.map((item: any, index: number) => {
+    const options = Array.isArray(item.options) && item.options.length
+      ? `\n   ${item.options.map((option: any) => `- ${option.group ? `${option.group}: ` : ''}${option.name}${Number(option.price || 0) > 0 ? ` (+${formatBRL(option.price)})` : ''}`).join('\n   ')}`
+      : '';
+    return `${index + 1}. ${item.quantity}x ${item.product_name} - ${formatBRL(item.total)}${options}`;
+  });
+  const deliveryFee = Number(draft?.delivery_fee || 0);
+  const total = Number(draft?.total || 0) + deliveryFee;
+  return [
+    'Anotei seu pedido:',
+    lines.join('\n') || '- Nenhum item',
+    deliveryFee > 0 ? `Taxa de entrega: ${formatBRL(deliveryFee)}` : '',
+    `Total: ${formatBRL(total)}`
+  ].filter(Boolean).join('\n');
+}
+
+async function loadOrderDraft(supabase: any, conversationId: string) {
+  const { data } = await supabase
+    .from('whatsapp_messages')
+    .select('id, content')
+    .eq('conversation_id', conversationId)
+    .eq('sender', 'bot')
+    .eq('message_type', 'order_draft')
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  try {
+    return data?.content ? JSON.parse(String(data.content)) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveOrderDraft(supabase: any, conversationId: string, draft: any) {
+  await supabase.from('whatsapp_messages').insert({
+    conversation_id: conversationId,
+    content: JSON.stringify({ ...draft, updated_at: new Date().toISOString() }),
+    sender: 'bot',
+    message_type: 'order_draft',
+    delivered: false
+  });
+}
+
+async function clearOrderDraft(supabase: any, conversationId: string) {
+  await supabase.from('whatsapp_messages').insert({
+    conversation_id: conversationId,
+    content: JSON.stringify({ cleared: true, updated_at: new Date().toISOString() }),
+    sender: 'bot',
+    message_type: 'order_draft',
+    delivered: false
+  });
+}
+
+async function loadMenuForOrdering(supabase: any, restaurantId: string) {
+  const { data: products } = await supabase
+    .from('products')
+    .select('id,name,description,price,category,category_id,available,show_in_delivery,available_delivery,image_url,send_to_kds')
+    .eq('user_id', restaurantId)
+    .eq('available', true)
+    .order('category', { ascending: true })
+    .limit(300);
+
+  const productRows = Array.isArray(products) ? products : [];
+  const ids = productRows.map((product: any) => String(product.id)).filter(Boolean);
+  if (ids.length === 0) return { products: [], variationsByProduct: new Map() };
+
+  const variationsByProduct = new Map<string, any[]>();
+  const addVariation = (productId: string, variation: any) => {
+    if (!productId || !variation) return;
+    const arr = variationsByProduct.get(productId) || [];
+    arr.push({
+      ...variation,
+      options: parseVariationOptions(variation?.options).filter((option: any) => option?.active !== false)
+    });
+    variationsByProduct.set(productId, arr);
+  };
+
+  const { data: localVariations } = await supabase
+    .from('product_variations')
+    .select('product_id,id,name,required,max_selections,options,price')
+    .in('product_id', ids);
+  for (const variation of localVariations || []) addVariation(String(variation.product_id), variation);
+
+  try {
+    const { data: links } = await supabase
+      .from('product_global_variation_links')
+      .select('product_id,global_variation_id,required,min_selections,max_selections,pricing_mode,fixed_option_price,price_multiplier,option_price_overrides')
+      .in('product_id', ids);
+    const globalIds = Array.from(new Set((links || []).map((link: any) => String(link.global_variation_id)).filter(Boolean)));
+    if (globalIds.length) {
+      const { data: globals } = await supabase
+        .from('global_variations')
+        .select('id,name,required,max_selections,options,active')
+        .in('id', globalIds);
+      const byId = new Map<string, any>((globals || []).map((item: any) => [String(item.id), item]));
+      for (const link of links || []) {
+        const global = byId.get(String(link.global_variation_id));
+        if (!global || global.active === false) continue;
+        addVariation(String(link.product_id), {
+          ...global,
+          required: link.required !== null && link.required !== undefined ? Boolean(link.required) : Boolean(global.required),
+          max_selections: link.max_selections ?? global.max_selections,
+          pricing_mode: link.pricing_mode,
+          fixed_option_price: link.fixed_option_price,
+          price_multiplier: link.price_multiplier,
+          option_price_overrides: link.option_price_overrides
+        });
+      }
+    }
+  } catch {
+    // Global variations are optional in old installs.
+  }
+
+  return { products: productRows, variationsByProduct };
+}
+
+function applyMentionedOptions(text: string, product: any, variationsByProduct: Map<string, any[]>) {
+  const normalizedText = normalizeForMatch(text);
+  const variations = variationsByProduct.get(String(product?.id)) || [];
+  const selected: any[] = [];
+  const missing: any[] = [];
+
+  for (const variation of variations) {
+    const max = Math.max(1, Number(variation?.max_selections || 1));
+    const options = parseVariationOptions(variation?.options);
+    const matched = options.filter((option: any) => {
+      const name = normalizeForMatch(option?.name);
+      return name && normalizedText.includes(name);
+    }).slice(0, max);
+
+    if (matched.length) {
+      for (const option of matched) {
+        selected.push({
+          group: String(variation?.name || ''),
+          name: String(option?.name || ''),
+          price: optionPrice(option)
+        });
+      }
+    } else if (variation?.required) {
+      missing.push({ variation, options });
+    }
+  }
+
+  return { selected, missing };
+}
+
+function recalculateDraft(draft: any) {
+  const items = (Array.isArray(draft?.items) ? draft.items : []).map((item: any) => {
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const optionsTotal = (Array.isArray(item.options) ? item.options : []).reduce((total: number, option: any) => total + Number(option?.price || 0), 0);
+    const unit = Number(item.price || 0) + optionsTotal;
+    return { ...item, quantity, unit_total: unit, total: unit * quantity };
+  });
+  return {
+    ...draft,
+    items,
+    total: items.reduce((total: number, item: any) => total + Number(item.total || 0), 0)
+  };
+}
+
+function readCustomerFieldsFromText(text: string, draft: any) {
+  const normalized = normalizeIntentText(text);
+  const next = { ...draft };
+  if (/\b(entrega|delivery|entregar)\b/.test(normalized)) next.order_type = 'delivery';
+  if (/\b(retirada|retirar|buscar|balcao|balcão)\b/.test(normalized)) next.order_type = 'pickup';
+  if (/\bpix\b/.test(normalized)) next.payment_method = 'pix';
+  if (/\b(dinheiro|especie|espécie)\b/.test(normalized)) next.payment_method = 'dinheiro';
+  if (/\b(cartao|cartão|credito|crédito|debito|débito)\b/.test(normalized)) next.payment_method = 'cartao';
+
+  const addressMatch = String(text || '').match(/(?:endereco|endereço|rua|av\.?|avenida|travessa|tv\.?)[:\s].{6,}/i);
+  if (addressMatch) next.customer_address = addressMatch[0].replace(/^(endereco|endereço)\s*:?\s*/i, '').trim();
+  if (next.order_type === 'delivery' && !next.customer_address && String(text || '').trim().length >= 8 && !/\b(pix|dinheiro|cartao|cartão|retirada|confirmo|confirmar)\b/i.test(text)) {
+    next.customer_address = String(text || '').trim();
+  }
+  return next;
+}
+
+function getNextOrderQuestion(draft: any, customerName: string) {
+  const items = Array.isArray(draft?.items) ? draft.items : [];
+  if (items.length === 0) return 'Me diga o que você quer pedir. Ex: 1 açaí de 15 com granola e banana.';
+  if (!draft.customer_name || /^cliente whatsapp$/i.test(String(draft.customer_name || '')) || /^cliente$/i.test(String(customerName || ''))) {
+    return `${buildOrderSummary(draft)}\n\nQual é o nome para o pedido?`;
+  }
+  if (!draft.order_type) return `${buildOrderSummary(draft)}\n\nVai ser entrega ou retirada?`;
+  if (draft.order_type === 'delivery' && !String(draft.customer_address || '').trim()) {
+    return `${buildOrderSummary(draft)}\n\nMe envie o endereço de entrega, por favor.`;
+  }
+  if (!draft.payment_method) return `${buildOrderSummary(draft)}\n\nQual vai ser a forma de pagamento? PIX, dinheiro ou cartão?`;
+  return `${buildOrderSummary(draft)}\n\nPosso confirmar esse pedido?`;
+}
+
+async function notifyOrderCreatedInternally(orderId: string) {
+  const SUPABASE_URL = getEnv('SUPABASE_URL');
+  const SERVICE_ROLE_KEY = getEnv('SUPABASE_SERVICE_ROLE_KEY', getEnv('SERVICE_ROLE_KEY'));
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !orderId) return;
+  await fetch(`${SUPABASE_URL}/functions/v1/whatsapp-order-created`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`
+    },
+    body: JSON.stringify({ orderId })
+  }).catch(() => null);
+}
+
+async function createOrderFromDraft(supabase: any, restaurantId: string, customerPhone: string, draft: any) {
+  const orderNumber = `WA-${new Date().toISOString().slice(2, 10).replace(/\D/g, '')}-${String(Date.now()).slice(-5)}`;
+  const deliveryFee = Number(draft?.delivery_fee || 0);
+  const total = Number(draft?.total || 0) + deliveryFee;
+  const items = (Array.isArray(draft?.items) ? draft.items : []).map((item: any) => ({
+    product_id: item.product_id,
+    product_name: item.product_name,
+    quantity: item.quantity,
+    price: Number(item.unit_total || item.price || 0),
+    options: Array.isArray(item.options) ? item.options : [],
+    variations: (Array.isArray(item.options) ? item.options : []).map((option: any) => `${option.group ? `${option.group}: ` : ''}${option.name}`),
+    notes: item.notes || '',
+    total: Number(item.total || 0)
+  }));
+
+  const { data, error } = await supabase
+    .from('orders')
+    .insert({
+      user_id: restaurantId,
+      order_number: orderNumber,
+      customer_name: String(draft?.customer_name || 'Cliente WhatsApp').trim(),
+      customer_phone: customerPhone,
+      customer_address: draft?.order_type === 'delivery' ? String(draft?.customer_address || '').trim() : null,
+      order_type: draft?.order_type === 'pickup' ? 'pickup' : 'delivery',
+      payment_method: String(draft?.payment_method || 'pix'),
+      items,
+      total,
+      delivery_fee: deliveryFee || null,
+      status: 'pending',
+      acceptance_status: 'pending_acceptance',
+      estimated_time: '30-45 min',
+      variations: {
+        source: 'WHATSAPP_AI',
+        channel: 'whatsapp',
+        customer_confirmed_at: new Date().toISOString(),
+        draft
+      }
+    })
+    .select('id, order_number')
+    .single();
+
+  if (error) throw error;
+  await notifyOrderCreatedInternally(String(data?.id || ''));
+  return data;
+}
+
+async function handleWhatsAppOrderFlow(params: {
+  supabase: any;
+  restaurantId: string;
+  customerPhone: string;
+  customerName: string;
+  conversationId: string;
+  text: string;
+}) {
+  const { supabase, restaurantId, customerPhone, conversationId } = params;
+  const text = String(params.text || '').trim();
+  const existingDraft = await loadOrderDraft(supabase, conversationId);
+  const draftActive = existingDraft && !existingDraft.cleared && Array.isArray(existingDraft.items);
+  if (!draftActive && !wantsToOrder(text)) return null;
+
+  if (isOrderCancel(text)) {
+    await clearOrderDraft(supabase, conversationId);
+    return { replyText: 'Pedido cancelado por aqui. Se quiser começar outro, é só me dizer o que deseja pedir.', strategy: 'order_cancelled' };
+  }
+
+  let draft = draftActive
+    ? { ...existingDraft }
+    : { items: [], customer_name: params.customerName, customer_phone: customerPhone, order_type: null, payment_method: null };
+
+  draft = readCustomerFieldsFromText(text, draft);
+
+  const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
+  const matchedProduct = findBestProduct(text, products);
+  if (matchedProduct) {
+    const quantity = parseQuantityFromText(text);
+    const { selected, missing } = applyMentionedOptions(text, matchedProduct, variationsByProduct);
+    if (missing.length > 0) {
+      const first = missing[0];
+      const optionList = first.options.slice(0, 12).map((option: any) => `- ${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`).join('\n');
+      draft.pending_product = { product_id: matchedProduct.id, text, quantity };
+      await saveOrderDraft(supabase, conversationId, draft);
+      return {
+        replyText: `Esse item precisa de uma escolha em "${first.variation.name}".\n${optionList}\n\nQual opção você prefere?`,
+        strategy: 'order_missing_required_option'
+      };
+    }
+
+    draft.items = [
+      ...(Array.isArray(draft.items) ? draft.items : []),
+      {
+        product_id: matchedProduct.id,
+        product_name: matchedProduct.name,
+        quantity,
+        price: Number(matchedProduct.price || 0),
+        options: selected,
+        notes: ''
+      }
+    ];
+    draft.pending_product = null;
+  } else if (draft.pending_product) {
+    const pendingProduct = products.find((product: any) => String(product.id) === String(draft.pending_product.product_id));
+    if (pendingProduct) {
+      const { selected, missing } = applyMentionedOptions(`${draft.pending_product.text} ${text}`, pendingProduct, variationsByProduct);
+      if (missing.length === 0) {
+        draft.items = [
+          ...(Array.isArray(draft.items) ? draft.items : []),
+          {
+            product_id: pendingProduct.id,
+            product_name: pendingProduct.name,
+            quantity: Number(draft.pending_product.quantity || 1),
+            price: Number(pendingProduct.price || 0),
+            options: selected,
+            notes: ''
+          }
+        ];
+        draft.pending_product = null;
+      }
+    }
+  }
+
+  const itemsNow = Array.isArray(draft.items) ? draft.items : [];
+  const maybeOnlyName = /^[A-Za-zÀ-ÿ' ]{2,60}$/.test(text) && !matchedProduct && !/\b(entrega|retirada|pix|dinheiro|cart[aã]o|rua|avenida|av\.?)\b/i.test(text);
+  if (itemsNow.length > 0 && maybeOnlyName && (!draft.customer_name || /^cliente whatsapp$/i.test(String(draft.customer_name || '')))) {
+    draft.customer_name = text.trim();
+  }
+
+  draft = recalculateDraft(draft);
+  const nextQuestion = getNextOrderQuestion(draft, params.customerName);
+  const ready = !/Qual é o nome|Vai ser entrega|endereço|forma de pagamento|Me diga o que/i.test(nextQuestion);
+
+  if (ready && isOrderConfirmation(text)) {
+    const order = await createOrderFromDraft(supabase, restaurantId, customerPhone, draft);
+    await clearOrderDraft(supabase, conversationId);
+    return {
+      replyText: `Pedido confirmado! ✅\nNúmero do pedido: #${order?.order_number || ''}\nO restaurante já recebeu no sistema e vai acompanhar por lá.`,
+      strategy: 'order_created'
+    };
+  }
+
+  if (!matchedProduct && !draft.pending_product && !draftActive && wantsToOrder(text)) {
+    const suggestions = products.slice(0, 8).map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`).join('\n');
+    return {
+      replyText: `Não consegui identificar exatamente o produto. Você pode escrever o nome como está no cardápio?\n\nAlgumas opções:\n${suggestions}\n\nCardápio completo: ${buildMenuShareUrl(restaurantId)}`,
+      strategy: 'order_product_not_found'
+    };
+  }
+
+  await saveOrderDraft(supabase, conversationId, draft);
+  return { replyText: nextQuestion, strategy: ready ? 'order_confirmation_pending' : 'order_collecting_data' };
+}
+
 function minutesSince(dateString?: string | null) {
   if (!dateString) return Number.POSITIVE_INFINITY;
   const time = new Date(dateString).getTime();
@@ -305,6 +744,7 @@ async function callOpenAiBot(payload: {
   restaurantId: string;
   customerPhone: string;
   instance: string;
+  media?: any;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
 }) {
   const SUPABASE_URL = getEnv('SUPABASE_URL');
@@ -396,11 +836,13 @@ export async function processRestaurantBotMessage(params: {
   instanceName: string;
   customerPhone: string;
   text: string;
+  media?: any;
 }) {
   const supabase = params.supabase;
   const restaurantId = String(params.restaurantId || '').trim();
   const customerPhone = normalizePhone(params.customerPhone);
   const text = String(params.text || '').trim();
+  const media = params.media || null;
   const instanceName = String(params.instanceName || '').trim();
 
   if (!restaurantId || !customerPhone || !text) {
@@ -633,6 +1075,48 @@ export async function processRestaurantBotMessage(params: {
     : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
 
+  try {
+    const orderFlow = await handleWhatsAppOrderFlow({
+      supabase,
+      restaurantId,
+      customerPhone,
+      customerName,
+      conversationId,
+      text
+    });
+    if (orderFlow?.replyText) {
+      await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_reply', 'Fluxo de pedido por WhatsApp respondeu', {
+        instanceName,
+        customerPhone,
+        conversationId,
+        strategy: orderFlow.strategy,
+        replyPreview: String(orderFlow.replyText).slice(0, 160)
+      });
+
+      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, orderFlow.replyText);
+      if (!sendResult?.ok) {
+        return { ok: false, error: 'send_failed', details: sendResult };
+      }
+
+      await supabase.from('whatsapp_messages').insert({
+        conversation_id: conversationId,
+        content: orderFlow.replyText,
+        sender: 'bot',
+        message_type: 'text',
+        delivered: true
+      });
+
+      return { ok: true, replyText: orderFlow.replyText, conversationId, strategy: orderFlow.strategy };
+    }
+  } catch (error: any) {
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_error', 'Fluxo de pedido por WhatsApp falhou', {
+      instanceName,
+      customerPhone,
+      conversationId,
+      error: String(error?.message || error || 'unknown_error')
+    });
+  }
+
   if (lowSignalIntent && !explicitMenuIntent && !trackIntent && !openingHoursIntent && !promotionsIntent && !humanIntent && !problemIntent) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_low_signal_silent', 'Mensagem curta/agradecimento; resposta suprimida', {
       instanceName,
@@ -794,6 +1278,7 @@ export async function processRestaurantBotMessage(params: {
         restaurantId,
         customerPhone,
         instance: instanceName,
+        media,
         conversationHistory: (history || [])
           .map((item: any) => ({
             role: item?.sender === 'customer' ? 'user' : 'assistant',
