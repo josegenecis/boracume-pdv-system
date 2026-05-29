@@ -42,6 +42,19 @@ function normalizeIntentText(text: string) {
     .replace(/\s+/g, ' ');
 }
 
+const GENERIC_MATCH_WORDS = new Set([
+  'com', 'sem', 'para', 'por', 'pra', 'uma', 'uns', 'das', 'dos', 'que', 'tem',
+  'sistema', 'pedido', 'pedidos', 'pagamento', 'pagamentos', 'opcao', 'opcoes',
+  'opção', 'opções', 'troco', 'automatico', 'automático', 'atualizar', 'reinicia'
+]);
+
+function relevantTokens(value: string) {
+  return normalizeForMatch(value)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !GENERIC_MATCH_WORDS.has(token));
+}
+
 function isLowSignalMessage(text: string) {
   const value = normalizeIntentText(text).replace(/[!?.\s]+$/g, '');
   if (!value) return true;
@@ -143,21 +156,19 @@ function formatBRL(value: unknown) {
 }
 
 function findMentionedProducts(text: string, products: any[]) {
-  const normalizedText = normalizeIntentText(text);
+  const normalizedText = normalizeForMatch(text);
   if (!normalizedText || !Array.isArray(products)) return [];
 
-  const tokens = normalizedText
-    .split(/\s+/)
-    .map((token) => token.replace(/[^a-z0-9]/g, ''))
-    .filter((token) => token.length >= 3);
+  const tokens = relevantTokens(text);
+  if (tokens.length === 0) return [];
 
   return products
     .map((product: any) => {
       const name = String(product?.name || '').trim();
-      const normalizedName = normalizeIntentText(name);
+      const normalizedName = normalizeForMatch(name);
       if (!name || !normalizedName) return null;
       const direct = normalizedText.includes(normalizedName);
-      const nameTokens = normalizedName.split(/\s+/).filter((token) => token.length >= 3);
+      const nameTokens = relevantTokens(name);
       const score = direct
         ? 100
         : nameTokens.filter((token) => tokens.includes(token)).length;
@@ -181,7 +192,7 @@ function buildProductInfoReply(restaurantId: string, products: any[]) {
 
 function wantsToOrder(text: string) {
   const value = normalizeIntentText(text);
-  return /(quero|queria|vou querer|manda|separa|pode fazer|fazer pedido|pedir|pedido|adiciona|coloca|fechar pedido|finalizar pedido|confirmar pedido|confirmo|pode confirmar|isso mesmo|entrega|retirada|pix|dinheiro|cartao|cartão)/i.test(value);
+  return /(quero|queria|gostaria|vou querer|manda|separa|pode fazer|posso fazer|fazer pedido|pedir|pedido|adiciona|coloca|fechar pedido|finalizar pedido|confirmar pedido|confirmo|pode confirmar|isso mesmo|entrega|retirada|pix|dinheiro|cartao|cartão)/i.test(value);
 }
 
 function isOrderConfirmation(text: string) {
@@ -203,8 +214,8 @@ function parseMoneyFromText(text: string) {
 
 function parseQuantityFromText(text: string) {
   const normalized = normalizeIntentText(text);
-  const numeric = normalized.match(/\b(\d{1,2})\s*(x|un|unidade|unidades)?\b/);
-  if (numeric) return Math.max(1, Math.min(50, Number(numeric[1]) || 1));
+  const numeric = normalized.match(/^\s*(\d{1,2})\b(?![,.]\d)|\b(\d{1,2})\s*(x|un|unidade|unidades)\b/);
+  if (numeric) return Math.max(1, Math.min(50, Number(numeric[1] || numeric[2]) || 1));
   if (/\b(um|uma)\b/.test(normalized)) return 1;
   if (/\b(dois|duas)\b/.test(normalized)) return 2;
   if (/\b(tres|três)\b/.test(normalized)) return 3;
@@ -242,11 +253,15 @@ function productMatchScore(text: string, product: any, desiredPrice: number | nu
   const category = normalizeForMatch(product?.category);
   if (!name) return 0;
 
-  const nameTokens = name.split(' ').filter((token) => token.length >= 3);
+  const nameTokens = relevantTokens(String(product?.name || ''));
+  const categoryTokens = relevantTokens(String(product?.category || ''));
   const tokenHits = nameTokens.filter((token) => normalizedText.includes(token)).length;
+  const categoryHits = categoryTokens.filter((token) => normalizedText.includes(token)).length;
   let score = normalizedText.includes(name) ? 100 : tokenHits * 12;
-  if (category && normalizedText.includes(category)) score += 8;
+  if (category && normalizedText.includes(category)) score += 15;
+  if (categoryHits > 0) score += categoryHits * 18;
   if (desiredPrice !== null && Math.abs(Number(product?.price || 0) - desiredPrice) <= 0.01) score += 45;
+  if (desiredPrice !== null && categoryHits > 0) score += 25;
   if (String(product?.available) === 'false') score -= 80;
   return score;
 }
@@ -258,6 +273,13 @@ function findBestProduct(text: string, products: any[]) {
     .filter((item: any) => item.score > 0)
     .sort((a: any, b: any) => b.score - a.score);
   return ranked[0]?.score >= 12 ? ranked[0].product : null;
+}
+
+function hasProductClue(text: string) {
+  const value = normalizeIntentText(text);
+  if (parseMoneyFromText(text) !== null) return true;
+  if (/(a[cç]a[ií]|pizza|hamb[uú]rguer|burger|bebida|suco|refrigerante|combo|copo|barca|marmita|lanche|por[cç][aã]o|pastel|agua|água)/i.test(value)) return true;
+  return relevantTokens(text).some((token) => token.length >= 4 && !/(gostaria|fazer|posso|pedido|pedir|quero|queria)/i.test(token));
 }
 
 function buildOrderSummary(draft: any) {
@@ -541,6 +563,23 @@ async function handleWhatsAppOrderFlow(params: {
   const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
   const matchedProduct = findBestProduct(text, products);
   if (matchedProduct) {
+    const desiredPrice = parseMoneyFromText(text);
+    if (desiredPrice !== null && Math.abs(Number(matchedProduct.price || 0) - desiredPrice) > 0.01) {
+      const productCategoryTokens = relevantTokens(String(matchedProduct.category || matchedProduct.name || ''));
+      const alternatives = products
+        .filter((product: any) => {
+          const priceOk = Math.abs(Number(product.price || 0) - desiredPrice) <= 0.01;
+          const categoryOk = productCategoryTokens.some((token) => normalizeForMatch(`${product.category} ${product.name}`).includes(token));
+          return priceOk || categoryOk;
+        })
+        .slice(0, 8)
+        .map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`)
+        .join('\n');
+      return {
+        replyText: `Entendi que você quer algo de ${formatBRL(desiredPrice)}, mas não encontrei esse valor exatamente para "${matchedProduct.name}".\n\nEscolha uma destas opções:\n${alternatives || `- ${matchedProduct.name}: ${formatBRL(matchedProduct.price)}`}`,
+        strategy: 'order_price_mismatch'
+      };
+    }
     const quantity = parseQuantityFromText(text);
     const { selected, missing } = applyMentionedOptions(text, matchedProduct, variationsByProduct);
     if (missing.length > 0) {
@@ -607,6 +646,13 @@ async function handleWhatsAppOrderFlow(params: {
   }
 
   if (!matchedProduct && !draft.pending_product && !draftActive && wantsToOrder(text)) {
+    if (!hasProductClue(text)) {
+      const examples = products.slice(0, 5).map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`).join('\n');
+      return {
+        replyText: `Pode sim, faço seu pedido por aqui. Me diga o item, tamanho/valor e complementos.\n\nExemplo: "1 açaí de 15 com granola e leite condensado".${examples ? `\n\nAlgumas opções:\n${examples}` : ''}`,
+        strategy: 'order_start_ask_item'
+      };
+    }
     const suggestions = products.slice(0, 8).map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`).join('\n');
     return {
       replyText: `Não consegui identificar exatamente o produto. Você pode escrever o nome como está no cardápio?\n\nAlgumas opções:\n${suggestions}\n\nCardápio completo: ${buildMenuShareUrl(restaurantId)}`,
