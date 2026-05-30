@@ -275,11 +275,125 @@ function findBestProduct(text: string, products: any[]) {
   return ranked[0]?.score >= 12 ? ranked[0].product : null;
 }
 
+function findBestProductByIntent(item: any, products: any[]) {
+  const text = [item?.product, item?.name, item?.category, item?.raw_text].filter(Boolean).join(' ');
+  const desiredPrice = item?.target_price !== undefined && item?.target_price !== null
+    ? Number(item.target_price)
+    : parseMoneyFromText(text);
+  const safeDesiredPrice = typeof desiredPrice === 'number' && Number.isFinite(desiredPrice) && desiredPrice > 0 ? desiredPrice : null;
+  const ranked = (products || [])
+    .map((product: any) => ({ product, score: productMatchScore(text, product, safeDesiredPrice) }))
+    .filter((entry: any) => entry.score > 0)
+    .sort((a: any, b: any) => b.score - a.score);
+  return ranked[0]?.score >= 12 ? ranked[0].product : null;
+}
+
 function hasProductClue(text: string) {
   const value = normalizeIntentText(text);
   if (parseMoneyFromText(text) !== null) return true;
   if (/(a[cç]a[ií]|pizza|hamb[uú]rguer|burger|bebida|suco|refrigerante|combo|copo|barca|marmita|lanche|por[cç][aã]o|pastel|agua|água)/i.test(value)) return true;
   return relevantTokens(text).some((token) => token.length >= 4 && !/(gostaria|fazer|posso|pedido|pedir|quero|queria)/i.test(token));
+}
+
+function safeJsonParse(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    const match = String(value || '').match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function compactMenuForAi(products: any[], variationsByProduct: Map<string, any[]>) {
+  return (products || []).slice(0, 140).map((product: any) => {
+    const variations = (variationsByProduct.get(String(product?.id)) || []).slice(0, 8).map((variation: any) => ({
+      name: String(variation?.name || ''),
+      required: Boolean(variation?.required),
+      max_selections: Number(variation?.max_selections || 1),
+      options: parseVariationOptions(variation?.options).slice(0, 30).map((option: any) => ({
+        name: String(option?.name || ''),
+        price: optionPrice(option)
+      }))
+    }));
+    return {
+      id: String(product?.id || ''),
+      name: String(product?.name || ''),
+      category: String(product?.category || ''),
+      price: Number(product?.price || 0),
+      variations
+    };
+  });
+}
+
+async function callOrderBrain(params: {
+  message: string;
+  restaurantName: string;
+  customerName: string;
+  draft: any;
+  products: any[];
+  variationsByProduct: Map<string, any[]>;
+  history?: Array<{ sender?: string; content?: string }>;
+}) {
+  const apiKey = getEnv('OPENAI_API_KEY');
+  if (!apiKey) return null;
+
+  const model = getEnv('OPENAI_ORDER_MODEL', getEnv('OPENAI_BOT_MODEL', getEnv('OPENAI_MODEL', 'gpt-4.1-mini')));
+  const menu = compactMenuForAi(params.products, params.variationsByProduct);
+  const historyText = (params.history || [])
+    .slice(-8)
+    .map((item: any) => `${item?.sender === 'bot' ? 'Atendente' : 'Cliente'}: ${String(item?.content || '').slice(0, 300)}`)
+    .join('\n');
+
+  const system = [
+    'Voce e o cerebro de pedidos por WhatsApp do PopSystem para restaurantes.',
+    'Sua tarefa e interpretar a mensagem do cliente e devolver SOMENTE JSON valido.',
+    'Nao crie produto, preco ou complemento fora do cardapio fornecido.',
+    'Se o cliente quer pedir, mesmo sem item, intent deve ser "order_start".',
+    'Se o cliente confirma um pedido pronto, intent deve ser "confirm_order".',
+    'Se o cliente quer cancelar/limpar/desistir, intent deve ser "cancel_order".',
+    'Se a mensagem e administrativa/suporte e nao e cliente comprando comida, intent deve ser "other".',
+    'Extraia itens mesmo quando o cliente fala por valor: "acai de 15", "um copo de 20".',
+    'Formato obrigatorio:',
+    '{"intent":"order_start|add_items|update_details|confirm_order|cancel_order|other|human_handoff","items":[{"product":"nome ou categoria","quantity":1,"target_price":15,"options":["granola"],"notes":""}],"customer_name":null,"order_type":null,"address":null,"payment_method":null,"assistant_hint":""}',
+    'order_type: delivery ou pickup. payment_method: pix, dinheiro ou cartao.'
+  ].join('\n');
+
+  const user = [
+    `Restaurante: ${params.restaurantName}`,
+    `Cliente conhecido: ${params.customerName}`,
+    `Rascunho atual: ${JSON.stringify(params.draft || null).slice(0, 5000)}`,
+    `Historico recente:\n${historyText || '-'}`,
+    `Cardapio JSON:\n${JSON.stringify(menu).slice(0, 45000)}`,
+    `Mensagem atual do cliente: ${params.message}`
+  ].join('\n\n');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.15,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ]
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return null;
+  const parsed = safeJsonParse(String(payload?.choices?.[0]?.message?.content || ''));
+  if (!parsed || typeof parsed !== 'object') return null;
+  return parsed;
 }
 
 function buildOrderSummary(draft: any) {
@@ -430,6 +544,29 @@ function applyMentionedOptions(text: string, product: any, variationsByProduct: 
   return { selected, missing };
 }
 
+function applyRequestedOptions(requestedOptions: any[], product: any, variationsByProduct: Map<string, any[]>) {
+  const optionText = (requestedOptions || [])
+    .map((option: any) => typeof option === 'string' ? option : `${option?.group || ''} ${option?.name || option?.value || ''}`)
+    .join(' ');
+  return applyMentionedOptions(optionText, product, variationsByProduct);
+}
+
+function mergeBrainDetailsIntoDraft(draft: any, brain: any) {
+  const next = { ...draft };
+  const name = String(brain?.customer_name || '').trim();
+  if (name && !/^cliente whatsapp$/i.test(name)) next.customer_name = name;
+  const orderType = String(brain?.order_type || '').trim().toLowerCase();
+  if (orderType === 'delivery' || orderType === 'entrega') next.order_type = 'delivery';
+  if (orderType === 'pickup' || orderType === 'retirada' || orderType === 'balcao' || orderType === 'balcão') next.order_type = 'pickup';
+  const address = String(brain?.address || '').trim();
+  if (address) next.customer_address = address;
+  const payment = normalizeIntentText(String(brain?.payment_method || ''));
+  if (payment === 'pix') next.payment_method = 'pix';
+  if (payment.includes('dinheiro')) next.payment_method = 'dinheiro';
+  if (payment.includes('cartao') || payment.includes('cartão') || payment.includes('credito') || payment.includes('debito')) next.payment_method = 'cartao';
+  return next;
+}
+
 function recalculateDraft(draft: any) {
   const items = (Array.isArray(draft?.items) ? draft.items : []).map((item: any) => {
     const quantity = Math.max(1, Number(item.quantity || 1));
@@ -542,6 +679,8 @@ async function handleWhatsAppOrderFlow(params: {
   customerName: string;
   conversationId: string;
   text: string;
+  restaurantName?: string;
+  history?: any[];
 }) {
   const { supabase, restaurantId, customerPhone, conversationId } = params;
   const text = String(params.text || '').trim();
@@ -561,14 +700,46 @@ async function handleWhatsAppOrderFlow(params: {
   draft = readCustomerFieldsFromText(text, draft);
 
   const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
-  const matchedProduct = findBestProduct(text, products);
-  if (matchedProduct) {
+  const brain = await callOrderBrain({
+    message: text,
+    restaurantName: params.restaurantName || 'restaurante',
+    customerName: params.customerName,
+    draft,
+    products,
+    variationsByProduct,
+    history: params.history || []
+  }).catch(() => null);
+
+  if (brain?.intent === 'human_handoff' || brain?.intent === 'other') {
+    if (!draftActive && !wantsToOrder(text)) return null;
+  }
+
+  if (brain?.intent === 'cancel_order') {
+    await clearOrderDraft(supabase, conversationId);
+    return { replyText: 'Pedido cancelado por aqui. Quando quiser começar outro, é só me chamar.', strategy: 'ai_order_cancelled' };
+  }
+
+  draft = mergeBrainDetailsIntoDraft(draft, brain);
+  const brainItems = Array.isArray(brain?.items) ? brain.items.filter((item: any) => String(item?.product || item?.name || '').trim()) : [];
+  const itemsToProcess = brainItems.length > 0
+    ? brainItems
+    : (() => {
+        const matched = findBestProduct(text, products);
+        return matched ? [{ product: matched.name, quantity: parseQuantityFromText(text), target_price: parseMoneyFromText(text), options: [], raw_text: text, __matchedProduct: matched }] : [];
+      })();
+
+  let processedProduct = false;
+  for (const requestedItem of itemsToProcess) {
+    const matchedProduct = requestedItem.__matchedProduct || findBestProductByIntent(requestedItem, products);
+    if (!matchedProduct) continue;
+    processedProduct = true;
     const desiredPrice = parseMoneyFromText(text);
-    if (desiredPrice !== null && Math.abs(Number(matchedProduct.price || 0) - desiredPrice) > 0.01) {
+    const requestedPrice = Number(requestedItem?.target_price || desiredPrice || 0);
+    if (requestedPrice > 0 && Math.abs(Number(matchedProduct.price || 0) - requestedPrice) > 0.01) {
       const productCategoryTokens = relevantTokens(String(matchedProduct.category || matchedProduct.name || ''));
       const alternatives = products
         .filter((product: any) => {
-          const priceOk = Math.abs(Number(product.price || 0) - desiredPrice) <= 0.01;
+          const priceOk = Math.abs(Number(product.price || 0) - requestedPrice) <= 0.01;
           const categoryOk = productCategoryTokens.some((token) => normalizeForMatch(`${product.category} ${product.name}`).includes(token));
           return priceOk || categoryOk;
         })
@@ -576,20 +747,23 @@ async function handleWhatsAppOrderFlow(params: {
         .map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`)
         .join('\n');
       return {
-        replyText: `Entendi que você quer algo de ${formatBRL(desiredPrice)}, mas não encontrei esse valor exatamente para "${matchedProduct.name}".\n\nEscolha uma destas opções:\n${alternatives || `- ${matchedProduct.name}: ${formatBRL(matchedProduct.price)}`}`,
-        strategy: 'order_price_mismatch'
+        replyText: `Entendi que você quer algo de ${formatBRL(requestedPrice)}, mas não encontrei esse valor exatamente para "${matchedProduct.name}".\n\nEscolha uma destas opções:\n${alternatives || `- ${matchedProduct.name}: ${formatBRL(matchedProduct.price)}`}`,
+        strategy: 'ai_order_price_mismatch'
       };
     }
-    const quantity = parseQuantityFromText(text);
-    const { selected, missing } = applyMentionedOptions(text, matchedProduct, variationsByProduct);
+    const quantity = Math.max(1, Math.min(50, Number(requestedItem?.quantity || parseQuantityFromText(text)) || 1));
+    const requestedOptions = Array.isArray(requestedItem?.options) ? requestedItem.options : [];
+    const { selected, missing } = requestedOptions.length > 0
+      ? applyRequestedOptions(requestedOptions, matchedProduct, variationsByProduct)
+      : applyMentionedOptions(text, matchedProduct, variationsByProduct);
     if (missing.length > 0) {
       const first = missing[0];
       const optionList = first.options.slice(0, 12).map((option: any) => `- ${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`).join('\n');
-      draft.pending_product = { product_id: matchedProduct.id, text, quantity };
+      draft.pending_product = { product_id: matchedProduct.id, text: `${text} ${requestedOptions.join(' ')}`, quantity };
       await saveOrderDraft(supabase, conversationId, draft);
       return {
         replyText: `Esse item precisa de uma escolha em "${first.variation.name}".\n${optionList}\n\nQual opção você prefere?`,
-        strategy: 'order_missing_required_option'
+        strategy: 'ai_order_missing_required_option'
       };
     }
 
@@ -601,14 +775,19 @@ async function handleWhatsAppOrderFlow(params: {
         quantity,
         price: Number(matchedProduct.price || 0),
         options: selected,
-        notes: ''
+        notes: String(requestedItem?.notes || '')
       }
     ];
     draft.pending_product = null;
-  } else if (draft.pending_product) {
+  }
+
+  if (itemsToProcess.length === 0 && draft.pending_product) {
     const pendingProduct = products.find((product: any) => String(product.id) === String(draft.pending_product.product_id));
     if (pendingProduct) {
-      const { selected, missing } = applyMentionedOptions(`${draft.pending_product.text} ${text}`, pendingProduct, variationsByProduct);
+      const pendingOptions = brainItems.flatMap((item: any) => Array.isArray(item?.options) ? item.options : []);
+      const { selected, missing } = pendingOptions.length > 0
+        ? applyRequestedOptions(pendingOptions, pendingProduct, variationsByProduct)
+        : applyMentionedOptions(`${draft.pending_product.text} ${text}`, pendingProduct, variationsByProduct);
       if (missing.length === 0) {
         draft.items = [
           ...(Array.isArray(draft.items) ? draft.items : []),
@@ -627,7 +806,7 @@ async function handleWhatsAppOrderFlow(params: {
   }
 
   const itemsNow = Array.isArray(draft.items) ? draft.items : [];
-  const maybeOnlyName = /^[A-Za-zÀ-ÿ' ]{2,60}$/.test(text) && !matchedProduct && !/\b(entrega|retirada|pix|dinheiro|cart[aã]o|rua|avenida|av\.?)\b/i.test(text);
+  const maybeOnlyName = /^[A-Za-zÀ-ÿ' ]{2,60}$/.test(text) && !processedProduct && !/\b(entrega|retirada|pix|dinheiro|cart[aã]o|rua|avenida|av\.?)\b/i.test(text);
   if (itemsNow.length > 0 && maybeOnlyName && (!draft.customer_name || /^cliente whatsapp$/i.test(String(draft.customer_name || '')))) {
     draft.customer_name = text.trim();
   }
@@ -636,7 +815,7 @@ async function handleWhatsAppOrderFlow(params: {
   const nextQuestion = getNextOrderQuestion(draft, params.customerName);
   const ready = !/Qual é o nome|Vai ser entrega|endereço|forma de pagamento|Me diga o que/i.test(nextQuestion);
 
-  if (ready && isOrderConfirmation(text)) {
+  if (ready && (isOrderConfirmation(text) || brain?.intent === 'confirm_order')) {
     const order = await createOrderFromDraft(supabase, restaurantId, customerPhone, draft);
     await clearOrderDraft(supabase, conversationId);
     return {
@@ -645,7 +824,7 @@ async function handleWhatsAppOrderFlow(params: {
     };
   }
 
-  if (!matchedProduct && !draft.pending_product && !draftActive && wantsToOrder(text)) {
+  if (!processedProduct && !draft.pending_product && !draftActive && wantsToOrder(text)) {
     if (!hasProductClue(text)) {
       const examples = products.slice(0, 5).map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`).join('\n');
       return {
@@ -1128,7 +1307,9 @@ export async function processRestaurantBotMessage(params: {
       customerPhone,
       customerName,
       conversationId,
-      text
+      text,
+      restaurantName: context.restaurantName,
+      history: history || []
     });
     if (orderFlow?.replyText) {
       await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_reply', 'Fluxo de pedido por WhatsApp respondeu', {
