@@ -22,7 +22,8 @@ function wantsOrderTracking(text: string) {
 }
 
 function wantsOpeningHours(text: string) {
-  return /(que horas (fecha|abre)|hor[aá]rio|horario de funcionamento|voc[eê]s abrem|voc[eê]s fecham|at[eé] que horas|qual o hor[aá]rio)/i.test(text);
+  const value = normalizeIntentText(text);
+  return /(que\s*horas.*(abre|abrem|abrir|fecha|fecham|fechar)|horario|hora.*funcion|funcionamento|abre\s*que\s*horas|fecha\s*que\s*horas|voce?s?\s*(abre|abrem|fecha|fecham)|at[eé]?\s*que\s*horas|qual\s*o\s*horario)/i.test(value);
 }
 
 function wantsComplementsInfo(text: string) {
@@ -920,6 +921,16 @@ function getPauseState(status: unknown) {
   };
 }
 
+function isActionableCustomerIntent(text: string) {
+  return wantsOpeningHours(text) ||
+    wantsMenuLink(text) ||
+    wantsOrderTracking(text) ||
+    wantsPromotions(text) ||
+    wantsComplementsInfo(text) ||
+    wantsToOrder(text) ||
+    isGreeting(text);
+}
+
 export async function pauseRestaurantBotForConversation(params: {
   supabase: any;
   restaurantId: string;
@@ -1194,7 +1205,7 @@ export async function processRestaurantBotMessage(params: {
 
   const { data: existingConversation } = await supabase
     .from('whatsapp_conversations')
-    .select('id, status')
+    .select('id, status, bot_paused_at, bot_paused_by')
     .eq('user_id', restaurantId)
     .eq('customer_phone', customerPhone)
     .maybeSingle();
@@ -1288,7 +1299,14 @@ export async function processRestaurantBotMessage(params: {
   }
 
   const pauseState = getPauseState(existingConversation?.status);
-  if (pauseState.expired) {
+  const shouldResumeExpiredPause = pauseState.expired;
+  const shouldResumeTemporaryPauseForCustomer =
+    pauseState.paused &&
+    pauseState.reason === 'temporary' &&
+    minutesSince(existingConversation?.bot_paused_at) >= 10 &&
+    isActionableCustomerIntent(text);
+
+  if (shouldResumeExpiredPause || shouldResumeTemporaryPauseForCustomer) {
     const resumePayload = {
       status: 'active',
       bot_paused: false,
@@ -1308,9 +1326,19 @@ export async function processRestaurantBotMessage(params: {
         .update({ status: 'active', updated_at: new Date().toISOString() })
         .eq('id', conversationId);
     }
+
+    if (shouldResumeTemporaryPauseForCustomer) {
+      await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_auto_resumed', 'Bot reativado automaticamente por nova intenção do cliente', {
+        instanceName,
+        customerPhone,
+        conversationId,
+        pauseState,
+        textPreview: text.slice(0, 120)
+      });
+    }
   }
 
-  if (pauseState.paused) {
+  if (pauseState.paused && !shouldResumeTemporaryPauseForCustomer) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused', 'Bot pausado por atendimento humano', {
       instanceName,
       customerPhone,
@@ -1591,24 +1619,15 @@ export async function processRestaurantBotMessage(params: {
       replyStrategy = `multi_intent_${replyStrategy}`;
     }
   } else if (explicitMenuIntent && !canRepeatMenuReply && deterministicReplies.length === 0) {
-    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_menu_repeat_silent', 'Pedido de cardapio repetido em curto intervalo; resposta suprimida', {
-      instanceName,
-      customerPhone,
-      conversationId,
-      recentBotReplyMinutes
-    });
-    return { ok: true, skipped: true, reason: 'menu_recently_sent', conversationId };
+    deterministicReplies.push(`Acabei de te mandar o cardápio acima. Se quiser, também posso montar seu pedido por aqui.`);
+    replyStrategy = 'menu_repeat_guidance';
   }
 
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
   } else if (!explicitMenuIntent && greetingIntent && menuWasSentToday) {
-    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_menu_daily_silent', 'Cardapio automatico ja enviado hoje; resposta suprimida', {
-      instanceName,
-      customerPhone,
-      conversationId
-    });
-    return { ok: true, skipped: true, reason: 'menu_sent_today', conversationId };
+    replyText = `Olá! Como posso te ajudar agora?\n\nPosso montar um pedido por aqui, tirar dúvidas do cardápio ou consultar o status de um pedido.`;
+    replyStrategy = 'greeting_after_menu_help';
   } else {
     replyStrategy = 'openai';
     try {

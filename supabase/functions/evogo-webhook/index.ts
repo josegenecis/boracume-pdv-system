@@ -98,6 +98,13 @@ function isLikelyBotEcho(text: string) {
     value.includes('/share/track/') ||
     value.includes('sou o assistente') ||
     value.includes('bem-vindo ao') ||
+    value.includes('como posso te ajudar') ||
+    value.includes('posso te mandar o cardápio') ||
+    value.includes('posso te mandar o cardapio') ||
+    value.includes('funciona neste horário') ||
+    value.includes('funciona neste horario') ||
+    value.includes('faço seu pedido por aqui') ||
+    value.includes('faco seu pedido por aqui') ||
     value.includes('acompanhe seu pedido') ||
     value.includes('cardápio completo') ||
     value.includes('cardapio completo');
