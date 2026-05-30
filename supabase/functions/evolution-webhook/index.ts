@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { logWhatsAppBotStep, pauseRestaurantBotForConversation, processRestaurantBotMessage } from '../_shared/whatsapp-bot.ts';
+import { logWhatsAppBotStep, pauseRestaurantBotForConversation } from '../_shared/whatsapp-bot.ts';
+import { processPopAiMessage } from '../_shared/pop-ai/whatsappAiWebhookHandler.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -275,7 +276,7 @@ Deno.serve(async (req: Request) => {
     media: media ? { type: media.type, mimeType: media.mimeType, hasInlineBytes: media.hasInlineBytes, hasUrl: Boolean(media.url) } : null
   });
 
-  const result = await processRestaurantBotMessage({
+  const result = await processPopAiMessage({
     supabase,
     restaurantId: userId,
     instanceName: instance,

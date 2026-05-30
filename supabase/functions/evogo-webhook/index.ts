@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { extractPhoneFromRemoteJid } from "../_shared/restaurant-whatsapp.ts";
-import { logWhatsAppBotStep, pauseRestaurantBotForConversation, processRestaurantBotMessage } from "../_shared/whatsapp-bot.ts";
+import { logWhatsAppBotStep, pauseRestaurantBotForConversation } from "../_shared/whatsapp-bot.ts";
+import { processPopAiMessage } from "../_shared/pop-ai/whatsappAiWebhookHandler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -350,7 +351,7 @@ serve(async (req) => {
         const phone = extractPhoneFromRemoteJid(remoteJid);
 
         if (phone && text) {
-          const result = await processRestaurantBotMessage({
+          const result = await processPopAiMessage({
             supabase: supabaseClient,
             restaurantId: instanceRow.restaurant_id,
             instanceName: instanceRow.instance_name || instanceName,

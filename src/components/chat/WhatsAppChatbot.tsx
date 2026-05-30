@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle } from 'lucide-react';
+import { MessageSquare, Send, Phone, Bot, User, Users, Mail, Search, PauseCircle, PlayCircle, Sparkles, Settings, Activity, Save, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -26,7 +26,43 @@ interface Conversation {
   created_at: string;
   bot_paused?: boolean;
   bot_paused_at?: string | null;
+  ai_conversation_id?: string | null;
+  ai_status?: string | null;
+  human_required?: boolean | null;
 }
+
+interface AiSettings {
+  enabled: boolean;
+  assistant_name: string;
+  tone: string;
+  welcome_message: string;
+  out_of_hours_message: string;
+  human_transfer_message: string;
+  upsell_enabled: boolean;
+  max_history_messages: number;
+  specific_rules: string;
+}
+
+interface AiLog {
+  id: string;
+  action: string;
+  input: any;
+  output: any;
+  error: string | null;
+  created_at: string;
+}
+
+const defaultAiSettings: AiSettings = {
+  enabled: true,
+  assistant_name: 'POP AI',
+  tone: 'simples',
+  welcome_message: '',
+  out_of_hours_message: '',
+  human_transfer_message: 'Vou chamar alguém da equipe para te ajudar.',
+  upsell_enabled: true,
+  max_history_messages: 30,
+  specific_rules: ''
+};
 
 const buildTemporaryPauseStatus = (minutes = 5) =>
   `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
@@ -55,12 +91,18 @@ const WhatsAppChatbot = () => {
   const [massMessage, setMassMessage] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [activeTab, setActiveTab] = useState('conversations');
+  const [aiSettings, setAiSettings] = useState<AiSettings>(defaultAiSettings);
+  const [savingAiSettings, setSavingAiSettings] = useState(false);
+  const [aiLogs, setAiLogs] = useState<AiLog[]>([]);
+  const [loadingAiLogs, setLoadingAiLogs] = useState(false);
 
   // Buscar conversas
   useEffect(() => {
     if (user?.id) {
       fetchConversations();
       fetchCustomers();
+      fetchAiSettings();
+      fetchAiLogs();
     }
   }, [user?.id]);
 
@@ -68,6 +110,7 @@ const WhatsAppChatbot = () => {
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation);
+      fetchAiLogs();
     }
   }, [selectedConversation]);
 
@@ -89,7 +132,10 @@ const WhatsAppChatbot = () => {
         status: conv.status,
         created_at: conv.created_at,
         bot_paused: isBotPaused(conv as any),
-        bot_paused_at: (conv as any).bot_paused_at || null
+        bot_paused_at: (conv as any).bot_paused_at || null,
+        ai_conversation_id: (conv as any).ai_conversation_id || null,
+        ai_status: (conv as any).ai_status || null,
+        human_required: (conv as any).human_required || false
       }));
       
       setConversations(typedConversations);
@@ -285,6 +331,110 @@ const WhatsAppChatbot = () => {
     }
   };
 
+  const fetchAiSettings = async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from('ai_settings')
+        .select('*')
+        .eq('restaurant_id', user.id)
+        .maybeSingle();
+
+      if (error && !String(error.message || '').includes('relation "public.ai_settings" does not exist')) {
+        throw error;
+      }
+
+      if (data) {
+        setAiSettings({
+          enabled: data.enabled !== false,
+          assistant_name: data.assistant_name || 'POP AI',
+          tone: data.tone || 'simples',
+          welcome_message: data.welcome_message || '',
+          out_of_hours_message: data.out_of_hours_message || '',
+          human_transfer_message: data.human_transfer_message || defaultAiSettings.human_transfer_message,
+          upsell_enabled: data.upsell_enabled !== false,
+          max_history_messages: Number(data.max_history_messages || 30),
+          specific_rules: data.specific_rules || ''
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar POP AI:', error);
+    }
+  };
+
+  const saveAiSettings = async () => {
+    if (!user?.id) return;
+    setSavingAiSettings(true);
+    try {
+      const payload = {
+        restaurant_id: user.id,
+        enabled: aiSettings.enabled,
+        assistant_name: aiSettings.assistant_name || 'POP AI',
+        tone: aiSettings.tone || 'simples',
+        welcome_message: aiSettings.welcome_message || null,
+        out_of_hours_message: aiSettings.out_of_hours_message || null,
+        human_transfer_message: aiSettings.human_transfer_message || defaultAiSettings.human_transfer_message,
+        upsell_enabled: aiSettings.upsell_enabled,
+        max_history_messages: Math.min(80, Math.max(10, Number(aiSettings.max_history_messages || 30))),
+        specific_rules: aiSettings.specific_rules || null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await (supabase as any)
+        .from('ai_settings')
+        .upsert(payload, { onConflict: 'restaurant_id' });
+
+      if (error) throw error;
+
+      await supabase
+        .from('whatsapp_settings')
+        .update({ ai_enabled: aiSettings.enabled } as any)
+        .eq('user_id', user.id);
+
+      toast({
+        title: 'POP AI atualizado',
+        description: 'As regras do atendente virtual foram salvas.'
+      });
+      fetchAiSettings();
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error?.message || 'Não foi possível salvar o POP AI.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingAiSettings(false);
+    }
+  };
+
+  const fetchAiLogs = async () => {
+    if (!user?.id) return;
+    setLoadingAiLogs(true);
+    try {
+      let query = (supabase as any)
+        .from('ai_logs')
+        .select('*')
+        .eq('restaurant_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(40);
+
+      const current = conversations.find(item => item.id === selectedConversation);
+      if (current?.ai_conversation_id) {
+        query = query.eq('conversation_id', current.ai_conversation_id);
+      }
+
+      const { data, error } = await query;
+      if (error && !String(error.message || '').includes('relation "public.ai_logs" does not exist')) {
+        throw error;
+      }
+      setAiLogs(data || []);
+    } catch (error: any) {
+      console.error('Erro ao carregar logs POP AI:', error);
+    } finally {
+      setLoadingAiLogs(false);
+    }
+  };
+
   const toggleCustomerSelection = (customerId: string) => {
     setSelectedCustomers(prev => 
       prev.includes(customerId) 
@@ -390,16 +540,32 @@ const WhatsAppChatbot = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">WhatsApp Chatbot</h1>
-        <Button onClick={createTestConversation} className="flex items-center gap-2">
-          <MessageSquare size={16} />
-          Criar Conversa Teste
-        </Button>
+      <div className="rounded-lg border bg-gradient-to-r from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em]">
+              <Sparkles size={14} />
+              POP AI
+            </div>
+            <h1 className="text-3xl font-bold">Atendente Virtual Inteligente</h1>
+            <p className="mt-2 max-w-3xl text-sm text-white/85">
+              Atendimento pelo WhatsApp com memória, cardápio inteligente, montagem de pedidos e transferência para humano quando precisar.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={aiSettings.enabled ? 'bg-lime-400 text-emerald-950' : 'bg-red-100 text-red-700'}>
+              {aiSettings.enabled ? 'IA ativa' : 'IA pausada'}
+            </Badge>
+            <Button onClick={createTestConversation} variant="secondary" className="flex items-center gap-2">
+              <MessageSquare size={16} />
+              Criar Conversa Teste
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="conversations" className="flex items-center gap-2">
             <MessageSquare size={16} />
             Conversas ({conversations.length})
@@ -407,6 +573,14 @@ const WhatsAppChatbot = () => {
           <TabsTrigger value="customers" className="flex items-center gap-2">
             <Users size={16} />
             Clientes ({customers.length})
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-2">
+            <Settings size={16} />
+            Configuração
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-2">
+            <Activity size={16} />
+            Logs
           </TabsTrigger>
         </TabsList>
 
@@ -450,6 +624,11 @@ const WhatsAppChatbot = () => {
                         {conversation.bot_paused && (
                           <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
                             Robô pausado
+                          </Badge>
+                        )}
+                        {conversation.ai_status && (
+                          <Badge variant="outline" className={conversation.human_required ? 'border-red-300 bg-red-50 text-red-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700'}>
+                            {conversation.human_required ? 'Humano' : conversation.ai_status}
                           </Badge>
                         )}
                       </div>
@@ -693,6 +872,178 @@ const WhatsAppChatbot = () => {
                       Cancelar
                     </Button>
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles size={20} />
+                  Cérebro do POP AI
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold">Nome do atendente</span>
+                    <Input
+                      value={aiSettings.assistant_name}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, assistant_name: e.target.value }))}
+                      placeholder="POP AI"
+                    />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold">Tom de voz</span>
+                    <Input
+                      value={aiSettings.tone}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, tone: e.target.value }))}
+                      placeholder="simples, vendedor, divertido..."
+                    />
+                  </label>
+                </div>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Saudação inicial</span>
+                  <Textarea
+                    value={aiSettings.welcome_message}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, welcome_message: e.target.value }))}
+                    placeholder="Olá! Como posso te ajudar hoje?"
+                    rows={3}
+                  />
+                </label>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Mensagem fora de horário</span>
+                  <Textarea
+                    value={aiSettings.out_of_hours_message}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, out_of_hours_message: e.target.value }))}
+                    placeholder="Agora estamos fechados, mas posso deixar seu pedido encaminhado."
+                    rows={3}
+                  />
+                </label>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Transferência para humano</span>
+                  <Textarea
+                    value={aiSettings.human_transfer_message}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, human_transfer_message: e.target.value }))}
+                    rows={2}
+                  />
+                </label>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Regras específicas do restaurante</span>
+                  <Textarea
+                    value={aiSettings.specific_rules}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, specific_rules: e.target.value }))}
+                    placeholder="Ex: nunca oferecer entrega fora do bairro X; priorizar combo família; pedir ponto da carne..."
+                    rows={5}
+                  />
+                </label>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className="rounded-lg border p-4">
+                    <span className="text-sm font-semibold">IA ativa</span>
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={aiSettings.enabled}
+                        onChange={(e) => setAiSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                        className="h-5 w-5 accent-green-600"
+                      />
+                      <span className="text-sm text-gray-600">{aiSettings.enabled ? 'Atendendo' : 'Pausada'}</span>
+                    </div>
+                  </label>
+                  <label className="rounded-lg border p-4">
+                    <span className="text-sm font-semibold">Upsell inteligente</span>
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={aiSettings.upsell_enabled}
+                        onChange={(e) => setAiSettings(prev => ({ ...prev, upsell_enabled: e.target.checked }))}
+                        className="h-5 w-5 accent-green-600"
+                      />
+                      <span className="text-sm text-gray-600">{aiSettings.upsell_enabled ? 'Ligado' : 'Desligado'}</span>
+                    </div>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold">Memória da conversa</span>
+                    <Input
+                      type="number"
+                      min={10}
+                      max={80}
+                      value={aiSettings.max_history_messages}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, max_history_messages: Number(e.target.value || 30) }))}
+                    />
+                  </label>
+                </div>
+
+                <Button onClick={saveAiSettings} disabled={savingAiSettings} className="gap-2">
+                  {savingAiSettings ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  Salvar POP AI
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Primeira versão ativa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-gray-700">
+                <div className="rounded-lg bg-emerald-50 p-3 text-emerald-800">
+                  Recebe WhatsApp, identifica restaurante e cliente, grava memória, consulta cardápio, monta pedido simples e registra logs.
+                </div>
+                <div className="rounded-lg bg-orange-50 p-3 text-orange-800">
+                  Quando o humano responde pelo painel ou WhatsApp Web, a conversa é pausada para evitar o robô atrapalhar.
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3 text-slate-700">
+                  Próximos blocos naturais: PIX automático, pedidos recorrentes, resposta por áudio e campanhas acionadas por comportamento.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="logs" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2">
+                  <Activity size={20} />
+                  Logs do POP AI
+                </span>
+                <Button variant="outline" size="sm" onClick={fetchAiLogs} className="gap-2">
+                  <RefreshCw size={16} className={loadingAiLogs ? 'animate-spin' : ''} />
+                  Atualizar
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {aiLogs.length === 0 ? (
+                <div className="py-10 text-center text-gray-500">
+                  <Activity className="mx-auto mb-3 h-8 w-8" />
+                  <p>Nenhum log do POP AI ainda.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[620px] overflow-y-auto">
+                  {aiLogs.map((log) => (
+                    <div key={log.id} className="rounded-lg border bg-white p-4">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <Badge variant={log.error ? 'destructive' : 'outline'}>{log.action}</Badge>
+                        <span className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString('pt-BR')}</span>
+                      </div>
+                      {log.error && <p className="mb-2 rounded bg-red-50 p-2 text-sm text-red-700">{log.error}</p>}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 text-xs">
+                        <pre className="max-h-44 overflow-auto rounded bg-slate-50 p-3">{JSON.stringify(log.input || {}, null, 2)}</pre>
+                        <pre className="max-h-44 overflow-auto rounded bg-emerald-50 p-3">{JSON.stringify(log.output || {}, null, 2)}</pre>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
