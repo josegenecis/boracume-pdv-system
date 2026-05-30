@@ -8,12 +8,14 @@ import LoyaltyManager from '@/components/loyalty/LoyaltyManager';
 import HighlightsManager from '@/components/marketing/HighlightsManager';
 import UpsellManager from '@/components/marketing/UpsellManager';
 import WhatsAppCampaignManager from '@/components/marketing/WhatsAppCampaignManager';
+import PopMarketingAI from '@/components/marketing/PopMarketingAI';
 
 const TABS = [
   { value: 'banners', label: 'Banners' },
   { value: 'coupons', label: 'Cupons' },
   { value: 'highlights', label: 'Destaques' },
   { value: 'upsells', label: 'Upsells' },
+  { value: 'pop-ai', label: 'PopMarketing AI' },
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'loyalty', label: 'Fidelidade' },
   { value: 'pixels', label: 'Pixels' }
@@ -69,6 +71,9 @@ export default function Marketing() {
         </TabsContent>
         <TabsContent value="upsells">
           <UpsellManager />
+        </TabsContent>
+        <TabsContent value="pop-ai">
+          <PopMarketingAI />
         </TabsContent>
         <TabsContent value="whatsapp">
           <WhatsAppCampaignManager />
