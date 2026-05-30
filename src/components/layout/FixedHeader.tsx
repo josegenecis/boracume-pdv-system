@@ -126,7 +126,7 @@ const FixedHeader = () => {
           >
             <Menu size={16} />
           </Button>
-          <Logo size="sm" className={isMobile ? 'max-w-[112px]' : ''} />
+          <Logo size="sm" className={isMobile ? 'max-w-[150px]' : ''} />
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">

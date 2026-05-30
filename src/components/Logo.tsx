@@ -8,9 +8,9 @@ interface LogoProps {
 }
 
 const logoSizeMap = {
-  sm: { width: 100, height: 24 },
-  md: { width: 140, height: 32 },
-  lg: { width: 180, height: 44 }
+  sm: { width: 150, height: 28 },
+  md: { width: 210, height: 38 },
+  lg: { width: 260, height: 50 }
 };
 
 const Logo: React.FC<LogoProps> = ({ size = 'md', className = '', theme = 'light' }) => {
