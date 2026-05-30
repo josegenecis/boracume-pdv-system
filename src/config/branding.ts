@@ -1,5 +1,5 @@
 export const appLogoCandidates = [
-  '/LOGOMARCA/LOGO POPSYSTEM.png',
-  '/LOGOMARCA/logo-sistema.png',
+  '/LOGOMARCA/logo-pop.webp',
+  '/LOGOMARCA/Logo pop.png',
   '/icon-512x512.png'
 ];

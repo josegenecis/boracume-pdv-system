@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { clearAllMenuCartStorage } from '@/hooks/useSimpleCart';
 
-const BORACUME_LOGO_SRC = '/LOGOMARCA/logo-sistema.png';
+const BORACUME_LOGO_SRC = '/LOGOMARCA/logo-pop.webp';
 const MERCADO_PAGO_LOGO_SRC = '/LOGOMARCA/mercado-pago-handshake.svg';
 
 interface PixCheckoutModalProps {

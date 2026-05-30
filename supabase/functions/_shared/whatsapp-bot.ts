@@ -104,9 +104,13 @@ function ensureMenuLink(text: string, menuLink: string) {
   const message = String(text || '').trim();
   const normalizedLink = String(menuLink || '').trim();
   if (!normalizedLink) return message;
-  if (!message) return `📋 Confira nosso cardápio: ${normalizedLink}`;
+  if (!message) return `Clique aqui e faça seu pedido: ${normalizedLink}`;
   if (message.includes(normalizedLink)) return message;
-  return `${message}\n\n📋 Cardápio: ${normalizedLink}`;
+  return `${message}\n\nClique aqui e faça seu pedido: ${normalizedLink}`;
+}
+
+function buildMenuOrderCta(restaurantId: string) {
+  return `Clique aqui e faça seu pedido: ${buildMenuShareUrl(restaurantId)}`;
 }
 
 function buildOrderStatusLabel(status: string) {
@@ -185,8 +189,8 @@ function formatOpeningHours(openingHours: string) {
 function buildOpeningHoursReply(restaurantName: string, openingHours: string, restaurantId: string) {
   const formatted = formatOpeningHours(openingHours);
   return formatted
-    ? `Olá! O ${restaurantName} funciona nestes horários:\n${formatted}\n\nPosso te ajudar com o cardápio, montar um pedido ou consultar status de um pedido.`
-    : `Olá! Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Posso te ajudar com o cardápio ou montar seu pedido por aqui.`;
+    ? `Olá! O ${restaurantName} funciona nestes horários:\n${formatted}\n\n${buildMenuOrderCta(restaurantId)}`
+    : `Olá! Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}.\n\n${buildMenuOrderCta(restaurantId)}`;
 }
 
 function buildPromotionsReply(restaurantName: string, restaurantId: string, products: any[]) {
@@ -254,7 +258,7 @@ function wantsProductInfo(text: string) {
 
 function buildProductInfoReply(restaurantId: string, products: any[]) {
   const lines = products.map((product: any) => `- ${String(product?.name || 'Produto').trim()}: ${formatBRL(product?.price)}`);
-  return `${products.length === 1 ? 'Temos sim:' : 'Encontrei essas opções:'}\n${lines.join('\n')}\n\nPara pedir, acesse o cardápio: ${buildMenuShareUrl(restaurantId)}`;
+  return `${products.length === 1 ? 'Temos sim:' : 'Encontrei essas opções:'}\n${lines.join('\n')}\n\n${buildMenuOrderCta(restaurantId)}`;
 }
 
 function wantsToOrder(text: string) {
@@ -808,7 +812,7 @@ function resolvePendingProductDraft(draft: any, text: string, brainItems: any[],
   };
 }
 
-function buildProductComplementsReply(product: any, variationsByProduct: Map<string, any[]>) {
+function buildProductComplementsReply(restaurantId: string, product: any, variationsByProduct: Map<string, any[]>) {
   const variations = variationsByProduct.get(String(product?.id)) || [];
   if (!variations.length) {
     return `Para ${String(product?.name || 'esse produto')}, não encontrei complementos cadastrados. Posso seguir com o item simples ou te mostrar outras opções.`;
@@ -825,7 +829,7 @@ function buildProductComplementsReply(product: any, variationsByProduct: Map<str
     return `• ${variation.name} (${required}): ${options || 'sem opções ativas'}`;
   });
 
-  return `Para ${product.name}, temos estes complementos:\n${lines.join('\n')}\n\nMe diga quais você quer que eu monto o pedido por aqui.`;
+  return `Para ${product.name}, temos estes complementos:\n${lines.join('\n')}\n\n${buildMenuOrderCta(restaurantId)}`;
 }
 
 function findComplementAvailability(text: string, products: any[], variationsByProduct: Map<string, any[]>) {
@@ -870,7 +874,7 @@ function buildComplementAvailabilityReply(text: string, matches: any[]) {
     .slice(0, 8)
     .map((match) => `- ${match.product.name}${match.price > 0 ? `: ${match.optionName} (+${formatBRL(match.price)})` : `: ${match.optionName}`}`);
 
-  return `Temos sim ${optionNames.join(', ')} em alguns itens.\n${productLines.join('\n')}\n\nSe quiser, eu monto o pedido por aqui.`;
+  return `Temos sim ${optionNames.join(', ')} em alguns itens.\n${productLines.join('\n')}`;
 }
 
 function mergeBrainDetailsIntoDraft(draft: any, brain: any) {
@@ -1184,7 +1188,7 @@ async function handleWhatsAppOrderFlow(params: {
     if (!hasProductClue(text)) {
       const examples = products.slice(0, 5).map((product: any) => `- ${product.name}: ${formatBRL(product.price)}`).join('\n');
       return {
-        replyText: `Pode sim, faço seu pedido por aqui. Me diga o item, tamanho/valor e complementos.\n\nExemplo: "1 açaí de 15 com granola e leite condensado".${examples ? `\n\nAlgumas opções:\n${examples}` : ''}`,
+        replyText: `Claro. ${buildMenuOrderCta(restaurantId)}${examples ? `\n\nAlgumas opções:\n${examples}` : ''}`,
         strategy: 'order_start_ask_item'
       };
     }
@@ -1769,7 +1773,7 @@ export async function processRestaurantBotMessage(params: {
     const product = findBestProduct(text, products) ||
       products.find((item: any) => String(item.id) === String(draftProductId));
     if (product) {
-      const replyText = buildProductComplementsReply(product, variationsByProduct);
+      const replyText = buildProductComplementsReply(restaurantId, product, variationsByProduct);
       const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
       if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
       await supabase.from('whatsapp_messages').insert({
@@ -1952,25 +1956,18 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (greetingIntent && deterministicReplies.length === 0 && !explicitMenuIntent) {
-    deterministicReplies.push(`Olá! Como posso te ajudar hoje?\n\nPosso te mandar o cardápio, montar um pedido por aqui ou consultar o status de um pedido.`);
+    deterministicReplies.push(`Olá! 👋\n\n${buildMenuOrderCta(restaurantId)}`);
     replyStrategy = 'greeting_help';
   }
 
   if (explicitMenuIntent && canRepeatMenuReply) {
-    const menuTemplate = explicitMenuIntent ? (context.autoResponses.menu_link || '') : (context.autoResponses.welcome || '');
-    const renderedMenuReply = fillTemplate(menuTemplate, {
-      restaurant_name: context.restaurantName,
-      menu_link: menuLink,
-      customer_name: customerName,
-      order_number: '',
-      track_link: ''
-    });
+    const renderedMenuReply = `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\nClique aqui e faça seu pedido: ${menuLink}`;
 
     deterministicReplies.push(
       ensureMenuLink(
         renderedMenuReply || (explicitMenuIntent
-          ? `📋 Confira nosso cardápio: ${menuLink}`
-          : `Olá! 👋 Bem-vindo ao ${context.restaurantName}. Aqui está nosso cardápio: ${menuLink}`),
+          ? `Clique aqui e faça seu pedido: ${menuLink}`
+          : `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\nClique aqui e faça seu pedido: ${menuLink}`),
         menuLink
       )
     );
@@ -1980,14 +1977,14 @@ export async function processRestaurantBotMessage(params: {
       replyStrategy = `multi_intent_${replyStrategy}`;
     }
   } else if (explicitMenuIntent && !canRepeatMenuReply && deterministicReplies.length === 0) {
-    deterministicReplies.push(`Acabei de te mandar o cardápio acima. Se quiser, também posso montar seu pedido por aqui.`);
+    deterministicReplies.push(`Acabei de te mandar o cardápio acima.\n\n${buildMenuOrderCta(restaurantId)}`);
     replyStrategy = 'menu_repeat_guidance';
   }
 
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
   } else if (!explicitMenuIntent && greetingIntent && menuWasSentToday) {
-    replyText = `Olá! Como posso te ajudar agora?\n\nPosso montar um pedido por aqui, tirar dúvidas do cardápio ou consultar o status de um pedido.`;
+    replyText = `Olá! 👋\n\n${buildMenuOrderCta(restaurantId)}`;
     replyStrategy = 'greeting_after_menu_help';
   } else {
     replyStrategy = 'openai';

@@ -117,6 +117,8 @@ function isLikelyBotEcho(text: string) {
     value.includes('como posso te ajudar') ||
     value.includes('posso te mandar o cardápio') ||
     value.includes('posso te mandar o cardapio') ||
+    value.includes('clique aqui e faça seu pedido') ||
+    value.includes('clique aqui e faca seu pedido') ||
     value.includes('funciona neste horário') ||
     value.includes('funciona neste horario') ||
     value.includes('faço seu pedido por aqui') ||

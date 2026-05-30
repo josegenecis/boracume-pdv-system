@@ -18,8 +18,8 @@ type RestaurantContext = {
 };
 
 const defaultResponses: Required<AutoResponses> = {
-  welcome: "Olá! 👋 Bem-vindo ao {restaurant_name}. Aqui está nosso cardápio: {menu_link}",
-  menu_link: "📋 Confira nosso cardápio: {menu_link}",
+  welcome: "Olá! 👋 Bem-vindo ao {restaurant_name}.\n\nClique aqui e faça seu pedido: {menu_link}",
+  menu_link: "Clique aqui e faça seu pedido: {menu_link}",
   order_received: "🎉 Recebemos seu pedido #{order_number}! Acompanhe aqui: {track_link}",
   preparing: "👨‍🍳 Seu pedido #{order_number} está sendo preparado. Acompanhe aqui: {track_link}",
   ready: "✅ Seu pedido #{order_number} está pronto! Acompanhe aqui: {track_link}",

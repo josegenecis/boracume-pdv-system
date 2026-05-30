@@ -16,8 +16,8 @@ const defaultAutoMessages = {
   out_for_delivery: '🚗 Seu pedido #{order_number} saiu para entrega. Acompanhe aqui: {track_link}',
   delivered: '📦 Seu pedido #{order_number} foi entregue. Obrigado pela preferência!',
   cancelled: '❌ Seu pedido #{order_number} foi cancelado. Se precisar, fale com a gente.',
-  menu_link: '📋 Confira nosso cardápio: {menu_link}',
-  welcome: 'Olá! 👋 Bem-vindo ao {restaurant_name}. Aqui está nosso cardápio: {menu_link}'
+  menu_link: 'Clique aqui e faça seu pedido: {menu_link}',
+  welcome: 'Olá! 👋 Bem-vindo ao {restaurant_name}.\n\nClique aqui e faça seu pedido: {menu_link}'
 };
 
 const WhatsAppIntegration: React.FC = () => {
@@ -375,7 +375,7 @@ const WhatsAppIntegration: React.FC = () => {
                   ...prev,
                   auto_messages: { ...prev.auto_messages, menu_link: e.target.value }
                 }))}
-                placeholder="📋 Confira nosso cardápio: {menu_link}"
+                placeholder="Clique aqui e faça seu pedido: {menu_link}"
               />
             </div>
 
@@ -387,7 +387,7 @@ const WhatsAppIntegration: React.FC = () => {
                   ...prev,
                   auto_messages: { ...prev.auto_messages, welcome: e.target.value }
                 }))}
-                placeholder="Olá! Bem-vindo ao {restaurant_name}! Como posso ajudar?"
+                placeholder="Olá! 👋 Bem-vindo ao {restaurant_name}.\n\nClique aqui e faça seu pedido: {menu_link}"
               />
             </div>
 

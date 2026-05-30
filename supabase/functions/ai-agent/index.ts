@@ -374,6 +374,28 @@ Deno.serve(async (req) => {
         {
             type: "function",
             function: {
+                name: "update_product",
+                description: "Edita um produto existente do cardápio com segurança. Use para alterar nome, preço, descrição, categoria, disponibilidade, destaque ou exibição no PDV/delivery. Não cria produto novo.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        product_name: { type: "string", description: "Nome atual do produto a localizar (busca aproximada)" },
+                        new_name: { type: "string", description: "Novo nome do produto, se solicitado" },
+                        price: { type: "number", description: "Novo preço do produto, se solicitado" },
+                        description: { type: "string", description: "Nova descrição do produto, se solicitada" },
+                        category: { type: "string", description: "Nova categoria do produto, se solicitada" },
+                        available: { type: "boolean", description: "Disponível no cardápio. false para pausar/desativar, true para ativar" },
+                        show_in_pdv: { type: "boolean", description: "Exibir no PDV" },
+                        show_in_delivery: { type: "boolean", description: "Exibir no cardápio digital/delivery" },
+                        is_highlight: { type: "boolean", description: "Marcar/remover destaque" }
+                    },
+                    required: ["product_name"]
+                }
+            }
+        },
+        {
+            type: "function",
+            function: {
                 name: "disable_product",
                 description: "Desativa/Remove um produto do cardápio (disponibilidade = false).",
                 parameters: {
@@ -628,6 +650,8 @@ Regras:
 - Não peça confirmação para passos triviais; execute e confirme o resultado.
 - Se faltar um dado indispensável (ex.: qual produto, qual período, qual categoria), faça 1 pergunta objetiva.
 - Se o pedido envolver cadastro completo de produto com tamanhos/variações e/ou complementos, use create_product_full.
+- Se o pedido envolver mudança em produto já existente (preço, nome, categoria, descrição, disponibilidade, PDV/delivery ou destaque), use update_product. Nunca crie um novo produto quando o usuário pediu para alterar um produto existente.
+- Para alterações de cardápio, preserve todos os campos que o usuário não pediu para mudar. Se houver mais de um produto possível, pare e peça uma confirmação objetiva com as opções encontradas.
 - Se o usuário pedir para listar ou alterar preços de grupos de complementos já existentes, use list_variation_group e adjust_variation_group_prices.
 - Se o pedido envolver imagem do produto, use generate_product_image ou generate_missing_product_images.
 - Mantenha respostas curtas e diretas.
@@ -640,6 +664,8 @@ Regras:
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
+- Se o usuário pedir para alterar produto existente (ex.: mudar preço, nome, categoria, descrição, disponibilidade, destacar, aparecer ou ocultar do delivery/PDV), use update_product e não crie duplicado.
+- Ao editar cardápio, seja conservador: localize o produto correto, preserve os campos não mencionados e peça confirmação se o nome estiver ambíguo.
 - Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
 - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
@@ -1007,6 +1033,110 @@ Regras:
                         
                         if (error) throw error;
                         result = { success: true, updated: products[0].name, new_price: next };
+                        }
+                    }
+                }
+
+                else if (fnName === "update_product") {
+                    const productName = String(args.product_name || '').trim();
+                    if (!productName) {
+                        result = { success: false, error: 'Informe o nome do produto que deve ser alterado.' };
+                    } else {
+                        const { data: products, error: findError } = await supabase
+                            .from('products')
+                            .select('id, name, price, category, category_id, available, show_in_pdv, show_in_delivery, is_highlight')
+                            .eq('user_id', userId)
+                            .ilike('name', `%${productName}%`)
+                            .limit(8);
+                        if (findError) throw findError;
+
+                        const list = products || [];
+                        const normalizedTarget = normalizeText(productName);
+                        const exactMatches = list.filter((product: any) => normalizeText(product.name) === normalizedTarget);
+                        const candidates = exactMatches.length > 0 ? exactMatches : list;
+
+                        if (candidates.length === 0) {
+                            result = { success: false, error: `Produto "${productName}" não encontrado.` };
+                        } else if (candidates.length > 1 && exactMatches.length !== 1) {
+                            result = {
+                                success: false,
+                                needs_confirmation: true,
+                                error: `Encontrei mais de um produto parecido com "${productName}".`,
+                                options: candidates.slice(0, 5).map((product: any) => ({
+                                    id: product.id,
+                                    name: product.name,
+                                    price: product.price,
+                                    category: product.category
+                                }))
+                            };
+                        } else {
+                            const product = candidates[0];
+                            const updatePayload: Record<string, any> = {};
+
+                            if (typeof args.new_name === 'string' && args.new_name.trim()) {
+                                updatePayload.name = args.new_name.trim();
+                            }
+                            if (args.price !== undefined && args.price !== null && String(args.price).trim() !== '') {
+                                const nextPrice = parseMoney(args.price);
+                                if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+                                    result = { success: false, error: 'Preço inválido.' };
+                                } else {
+                                    updatePayload.price = nextPrice;
+                                }
+                            }
+                            if (typeof args.description === 'string') {
+                                updatePayload.description = args.description.trim();
+                            }
+                            if (args.available !== undefined) updatePayload.available = Boolean(args.available);
+                            if (args.show_in_pdv !== undefined) updatePayload.show_in_pdv = Boolean(args.show_in_pdv);
+                            if (args.show_in_delivery !== undefined) updatePayload.show_in_delivery = Boolean(args.show_in_delivery);
+                            if (args.is_highlight !== undefined) updatePayload.is_highlight = Boolean(args.is_highlight);
+
+                            if (!result && typeof args.category === 'string' && args.category.trim()) {
+                                const catName = args.category.trim();
+                                let categoryId: string | null = null;
+                                const { data: existingCat, error: catFindError } = await supabase
+                                    .from('product_categories')
+                                    .select('id, name')
+                                    .eq('user_id', userId)
+                                    .ilike('name', `%${catName}%`)
+                                    .maybeSingle();
+                                if (catFindError) throw catFindError;
+                                if (existingCat) {
+                                    categoryId = existingCat.id;
+                                } else {
+                                    const { data: newCat, error: catCreateError } = await supabase
+                                        .from('product_categories')
+                                        .insert({ user_id: userId, name: catName })
+                                        .select('id')
+                                        .single();
+                                    if (catCreateError) throw catCreateError;
+                                    categoryId = newCat?.id || null;
+                                }
+                                updatePayload.category = catName;
+                                updatePayload.category_id = categoryId;
+                            }
+
+                            if (!result) {
+                                if (Object.keys(updatePayload).length === 0) {
+                                    result = { success: false, error: 'Nenhuma alteração válida foi informada.' };
+                                } else {
+                                    const { data: updated, error } = await supabase
+                                        .from('products')
+                                        .update(updatePayload)
+                                        .eq('user_id', userId)
+                                        .eq('id', product.id)
+                                        .select('id, name, price, category, available, show_in_pdv, show_in_delivery, is_highlight')
+                                        .single();
+                                    if (error) throw error;
+                                    result = {
+                                        success: true,
+                                        updated_product: updated,
+                                        changed_fields: Object.keys(updatePayload),
+                                        previous_product: product
+                                    };
+                                }
+                            }
                         }
                     }
                 }

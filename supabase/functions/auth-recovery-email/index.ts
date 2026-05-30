@@ -48,7 +48,7 @@ function escapeHtml(value: unknown) {
 }
 
 function buildEmailHtml(actionLink: string, baseUrl: string) {
-  const logoUrl = `${baseUrl}/LOGOMARCA/logo-sistema.png`;
+  const logoUrl = `${baseUrl}/LOGOMARCA/logo-pop.webp`;
   const safeLink = escapeHtml(actionLink);
   const safeLogo = escapeHtml(logoUrl);
   return `<!doctype html>
