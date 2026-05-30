@@ -14,7 +14,7 @@ function isGreeting(text: string) {
 }
 
 function wantsMenuLink(text: string) {
-  return /(link|card[aá]pio|cat[aá]logo|menu|me envia|me manda|manda o link|envia o link|quero pedir|fazer pedido|fazer um pedido|como pedir|me passa o link)/i.test(text);
+  return /(link|card[aá]pio|cat[aá]logo|menu|me envia|me manda|manda o link|envia o link|me passa o link)/i.test(text);
 }
 
 function wantsOrderTracking(text: string) {
@@ -23,6 +23,11 @@ function wantsOrderTracking(text: string) {
 
 function wantsOpeningHours(text: string) {
   return /(que horas (fecha|abre)|hor[aá]rio|horario de funcionamento|voc[eê]s abrem|voc[eê]s fecham|at[eé] que horas|qual o hor[aá]rio)/i.test(text);
+}
+
+function wantsComplementsInfo(text: string) {
+  const value = normalizeIntentText(text);
+  return /(complemento|complementos|adicional|adicionais|acompanhamento|acompanhamentos|opcoes|opções|sabor|sabores|tem.*granola|tem.*leite|tem.*banana)/i.test(value);
 }
 
 function wantsPromotions(text: string) {
@@ -118,8 +123,8 @@ function buildOrderStatusLabel(status: string) {
 
 function buildOpeningHoursReply(restaurantName: string, openingHours: string, restaurantId: string) {
   return openingHours
-    ? `🕒 O horário de funcionamento do ${restaurantName} é: ${openingHours}`
-    : `🕒 Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Se preferir, posso te enviar o cardápio: ${buildMenuShareUrl(restaurantId)}`;
+    ? `Olá! O ${restaurantName} funciona neste horário: ${openingHours}.\n\nPosso te ajudar com o cardápio, montar um pedido ou consultar status de um pedido.`
+    : `Olá! Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Posso te ajudar com o cardápio ou montar seu pedido por aqui.`;
 }
 
 function buildPromotionsReply(restaurantName: string, restaurantId: string, products: any[]) {
@@ -548,7 +553,40 @@ function applyRequestedOptions(requestedOptions: any[], product: any, variations
   const optionText = (requestedOptions || [])
     .map((option: any) => typeof option === 'string' ? option : `${option?.group || ''} ${option?.name || option?.value || ''}`)
     .join(' ');
-  return applyMentionedOptions(optionText, product, variationsByProduct);
+  const result = applyMentionedOptions(optionText, product, variationsByProduct);
+  const availableOptions = (variationsByProduct.get(String(product?.id)) || [])
+    .flatMap((variation: any) => parseVariationOptions(variation?.options).map((option: any) => ({
+      group: String(variation?.name || ''),
+      name: String(option?.name || ''),
+      price: optionPrice(option)
+    })))
+    .filter((option: any) => option.name);
+  const invalid = (requestedOptions || [])
+    .map((option: any) => typeof option === 'string' ? option : String(option?.name || option?.value || ''))
+    .map((option: string) => option.trim())
+    .filter(Boolean)
+    .filter((requested: string) => !availableOptions.some((option: any) => normalizeForMatch(option.name) === normalizeForMatch(requested) || normalizeForMatch(option.name).includes(normalizeForMatch(requested)) || normalizeForMatch(requested).includes(normalizeForMatch(option.name))));
+  return { ...result, invalid, availableOptions };
+}
+
+function buildProductComplementsReply(product: any, variationsByProduct: Map<string, any[]>) {
+  const variations = variationsByProduct.get(String(product?.id)) || [];
+  if (!variations.length) {
+    return `Para ${String(product?.name || 'esse produto')}, não encontrei complementos cadastrados. Posso seguir com o item simples ou te mostrar outras opções.`;
+  }
+
+  const lines = variations.map((variation: any) => {
+    const options = parseVariationOptions(variation?.options)
+      .filter((option: any) => option?.active !== false)
+      .slice(0, 18)
+      .map((option: any) => `${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`)
+      .filter(Boolean)
+      .join(', ');
+    const required = variation?.required ? 'obrigatório' : 'opcional';
+    return `• ${variation.name} (${required}): ${options || 'sem opções ativas'}`;
+  });
+
+  return `Para ${product.name}, temos estes complementos:\n${lines.join('\n')}\n\nMe diga quais você quer que eu monto o pedido por aqui.`;
 }
 
 function mergeBrainDetailsIntoDraft(draft: any, brain: any) {
@@ -753,9 +791,20 @@ async function handleWhatsAppOrderFlow(params: {
     }
     const quantity = Math.max(1, Math.min(50, Number(requestedItem?.quantity || parseQuantityFromText(text)) || 1));
     const requestedOptions = Array.isArray(requestedItem?.options) ? requestedItem.options : [];
-    const { selected, missing } = requestedOptions.length > 0
+    const optionResult: any = requestedOptions.length > 0
       ? applyRequestedOptions(requestedOptions, matchedProduct, variationsByProduct)
       : applyMentionedOptions(text, matchedProduct, variationsByProduct);
+    const { selected, missing, invalid, availableOptions } = optionResult;
+    if (Array.isArray(invalid) && invalid.length > 0) {
+      const alternatives = (availableOptions || [])
+        .slice(0, 18)
+        .map((option: any) => `- ${option.name}${option.price > 0 ? ` (+${formatBRL(option.price)})` : ''}`)
+        .join('\n');
+      return {
+        replyText: `Não encontrei ${invalid.map((item: string) => `"${item}"`).join(', ')} para ${matchedProduct.name}.\n\nOpções disponíveis:\n${alternatives || 'Nenhum complemento ativo cadastrado.'}\n\nQual dessas opções você prefere?`,
+        strategy: 'ai_order_invalid_option'
+      };
+    }
     if (missing.length > 0) {
       const first = missing[0];
       const optionList = first.options.slice(0, 12).map((option: any) => `- ${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`).join('\n');
@@ -850,7 +899,7 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
-function buildTemporaryPauseStatus(minutes = 5) {
+function buildTemporaryPauseStatus(minutes = 60) {
   return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
 }
 
@@ -904,7 +953,7 @@ export async function pauseRestaurantBotForConversation(params: {
         user_id: restaurantId,
         customer_phone: customerPhone,
         customer_name: customerName,
-        status: buildTemporaryPauseStatus(5)
+        status: buildTemporaryPauseStatus(60)
       })
       .select('id')
       .single();
@@ -914,7 +963,7 @@ export async function pauseRestaurantBotForConversation(params: {
   }
 
   const fullPausePayload = {
-    status: buildTemporaryPauseStatus(5),
+    status: buildTemporaryPauseStatus(60),
     bot_paused: true,
     bot_paused_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -930,7 +979,7 @@ export async function pauseRestaurantBotForConversation(params: {
     const fallbackResult = await supabase
       .from('whatsapp_conversations')
       .update({
-        status: buildTemporaryPauseStatus(5),
+        status: buildTemporaryPauseStatus(60),
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
@@ -1055,6 +1104,42 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
   };
 }
 
+async function transcribeIncomingAudio(media: any) {
+  if (!media || String(media?.type || '') !== 'audio') return '';
+  const apiKey = getEnv('OPENAI_API_KEY');
+  if (!apiKey) return '';
+
+  const mimeType = String(media?.mimeType || 'audio/ogg');
+  let blob: Blob | null = null;
+  const base64 = String(media?.base64 || '').trim();
+  const url = String(media?.url || '').trim();
+
+  if (base64) {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    blob = new Blob([bytes], { type: mimeType });
+  } else if (/^https?:\/\//i.test(url)) {
+    const response = await fetch(url).catch(() => null);
+    if (response?.ok) blob = await response.blob();
+  }
+
+  if (!blob) return '';
+
+  const extension = mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : mimeType.includes('wav') ? 'wav' : 'ogg';
+  const form = new FormData();
+  form.append('model', getEnv('OPENAI_TRANSCRIPTION_MODEL', 'gpt-4o-mini-transcribe'));
+  form.append('language', 'pt');
+  form.append('file', blob, `audio.${extension}`);
+
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form
+  }).catch(() => null);
+  if (!response?.ok) return '';
+  const data = await response.json().catch(() => ({}));
+  return String(data?.text || '').trim();
+}
+
 export async function processRestaurantBotMessage(params: {
   supabase: any;
   restaurantId: string;
@@ -1066,8 +1151,12 @@ export async function processRestaurantBotMessage(params: {
   const supabase = params.supabase;
   const restaurantId = String(params.restaurantId || '').trim();
   const customerPhone = normalizePhone(params.customerPhone);
-  const text = String(params.text || '').trim();
   const media = params.media || null;
+  let text = String(params.text || '').trim();
+  if (media?.type === 'audio') {
+    const transcription = await transcribeIncomingAudio(media).catch(() => '');
+    if (transcription) text = transcription;
+  }
   const instanceName = String(params.instanceName || '').trim();
 
   if (!restaurantId || !customerPhone || !text) {
@@ -1286,6 +1375,7 @@ export async function processRestaurantBotMessage(params: {
   const trackIntent = wantsOrderTracking(text);
   const openingHoursIntent = wantsOpeningHours(text);
   const promotionsIntent = wantsPromotions(text);
+  const complementsInfoIntent = wantsComplementsInfo(text);
   const productMatches = findMentionedProducts(text, Array.isArray(productsData) ? productsData : []);
   const productInfoIntent = wantsProductInfo(text) && productMatches.length > 0;
   const lowSignalIntent = isLowSignalMessage(text) || thanksIntent;
@@ -1299,6 +1389,24 @@ export async function processRestaurantBotMessage(params: {
     ? recentBotReplyMinutes > 2
     : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
+
+  if (complementsInfoIntent && !wantsToOrder(text)) {
+    const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
+    const product = findBestProduct(text, products);
+    if (product) {
+      const replyText = buildProductComplementsReply(product, variationsByProduct);
+      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
+      if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
+      await supabase.from('whatsapp_messages').insert({
+        conversation_id: conversationId,
+        content: replyText,
+        sender: 'bot',
+        message_type: 'text',
+        delivered: true
+      });
+      return { ok: true, replyText, conversationId, strategy: 'complements_info' };
+    }
+  }
 
   try {
     const orderFlow = await handleWhatsAppOrderFlow({
@@ -1454,7 +1562,12 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if ((explicitMenuIntent || greetingIntent || isFirstConversationTouch) && canRepeatMenuReply) {
+  if (greetingIntent && deterministicReplies.length === 0 && !explicitMenuIntent) {
+    deterministicReplies.push(`Olá! Como posso te ajudar hoje?\n\nPosso te mandar o cardápio, montar um pedido por aqui ou consultar o status de um pedido.`);
+    replyStrategy = 'greeting_help';
+  }
+
+  if (explicitMenuIntent && canRepeatMenuReply) {
     const menuTemplate = explicitMenuIntent ? (context.autoResponses.menu_link || '') : (context.autoResponses.welcome || '');
     const renderedMenuReply = fillTemplate(menuTemplate, {
       restaurant_name: context.restaurantName,
