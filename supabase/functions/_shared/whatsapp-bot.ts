@@ -273,10 +273,12 @@ function isOrderCancel(text: string) {
 }
 
 function parseMoneyFromText(text: string) {
-  const match = String(text || '').match(/(?:r\$\s*)?(\d{1,4})(?:[,.](\d{1,2}))?/i);
+  const raw = String(text || '');
+  const preferred = raw.match(/(?:r\$\s*|(?:\bde|\bpor|\bvalor(?:\s+de)?|\bcusta|\bcustando)\s+)(\d{1,4})(?:[,.](\d{1,2}))?/i);
+  const match = preferred || raw.match(/(?:r\$\s*)?(\d{1,4})(?:[,.](\d{1,2}))?/i);
   if (!match) return null;
-  const value = Number(`${match[1]}.${(match[2] || '00').padEnd(2, '0')}`);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  const amount = Number(`${match[1]}.${(match[2] || '00').padEnd(2, '0')}`);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 function parseQuantityFromText(text: string) {
@@ -363,6 +365,8 @@ function productMatchScore(text: string, product: any, desiredPrice: number | nu
 
 function findBestProduct(text: string, products: any[]) {
   const desiredPrice = parseMoneyFromText(text);
+  const exactByPrice = findBestExactPriceProduct(text, products, desiredPrice);
+  if (exactByPrice) return exactByPrice;
   const ranked = (products || [])
     .map((product: any) => ({ product, score: productMatchScore(text, product, desiredPrice) }))
     .filter((item: any) => item.score > 0)
@@ -376,11 +380,32 @@ function findBestProductByIntent(item: any, products: any[]) {
     ? Number(item.target_price)
     : parseMoneyFromText(text);
   const safeDesiredPrice = typeof desiredPrice === 'number' && Number.isFinite(desiredPrice) && desiredPrice > 0 ? desiredPrice : null;
+  const exactByPrice = findBestExactPriceProduct(text, products, safeDesiredPrice);
+  if (exactByPrice) return exactByPrice;
   const ranked = (products || [])
     .map((product: any) => ({ product, score: productMatchScore(text, product, safeDesiredPrice) }))
     .filter((entry: any) => entry.score > 0)
     .sort((a: any, b: any) => b.score - a.score);
   return ranked[0]?.score >= 12 ? ranked[0].product : null;
+}
+
+function findBestExactPriceProduct(text: string, products: any[], desiredPrice: number | null) {
+  if (!desiredPrice) return null;
+  const normalizedText = normalizeForMatch(text);
+  const textTokens = relevantTokens(text);
+  const exact = (products || [])
+    .filter((product: any) => Math.abs(Number(product?.price || 0) - desiredPrice) <= 0.01)
+    .map((product: any) => {
+      const haystack = normalizeForMatch(`${product?.category || ''} ${product?.name || ''} ${product?.description || ''}`);
+      const categoryHits = relevantTokens(String(product?.category || '')).filter((token) => normalizedText.includes(token)).length;
+      const nameHits = relevantTokens(String(product?.name || '')).filter((token) => normalizedText.includes(token)).length;
+      const textHits = textTokens.filter((token) => haystack.includes(token)).length;
+      const acaiBoost = /\bacai\b/.test(normalizedText) && /\bacai\b/.test(haystack) ? 30 : 0;
+      return { product, score: acaiBoost + categoryHits * 12 + nameHits * 10 + textHits * 4 };
+    })
+    .sort((a: any, b: any) => b.score - a.score);
+  if (!exact.length) return null;
+  return exact[0].score > 0 ? exact[0].product : exact[0].product;
 }
 
 function hasProductClue(text: string) {
@@ -689,6 +714,47 @@ function applyAdditionalOptionsToLastDraftItem(draft: any, text: string, product
   };
 }
 
+function resolvePendingProductDraft(draft: any, text: string, brainItems: any[], products: any[], variationsByProduct: Map<string, any[]>) {
+  if (!draft?.pending_product) return { draft, resolved: false, stillMissing: null as any, product: null as any };
+  const pendingProduct = products.find((product: any) => String(product.id) === String(draft.pending_product.product_id));
+  if (!pendingProduct) return { draft: { ...draft, pending_product: null }, resolved: false, stillMissing: null, product: null };
+
+  const pendingOptionsFromBrain = (brainItems || []).flatMap((item: any) => Array.isArray(item?.options) ? item.options : []);
+  const pendingOptions = [
+    ...(Array.isArray(draft.pending_product.requested_options) ? draft.pending_product.requested_options : []),
+    ...pendingOptionsFromBrain,
+    text,
+    String(draft.pending_product.text || '')
+  ].filter(Boolean);
+
+  const result = pendingOptions.length > 0
+    ? applyRequestedOptions(pendingOptions, pendingProduct, variationsByProduct)
+    : applyMentionedOptions(`${draft.pending_product.text || ''} ${text}`, pendingProduct, variationsByProduct);
+
+  if (result.missing.length > 0) {
+    return { draft, resolved: false, stillMissing: result.missing[0], product: pendingProduct };
+  }
+
+  const items = [
+    ...(Array.isArray(draft.items) ? draft.items : []),
+    {
+      product_id: pendingProduct.id,
+      product_name: pendingProduct.name,
+      quantity: Number(draft.pending_product.quantity || 1),
+      price: Number(pendingProduct.price || 0),
+      options: result.selected,
+      notes: ''
+    }
+  ];
+
+  return {
+    draft: recalculateDraft({ ...draft, items, pending_product: null }),
+    resolved: true,
+    stillMissing: null,
+    product: pendingProduct
+  };
+}
+
 function buildProductComplementsReply(product: any, variationsByProduct: Map<string, any[]>) {
   const variations = variationsByProduct.get(String(product?.id)) || [];
   if (!variations.length) {
@@ -878,7 +944,35 @@ async function handleWhatsAppOrderFlow(params: {
   }
 
   draft = mergeBrainDetailsIntoDraft(draft, brain);
-  const brainItems = Array.isArray(brain?.items) ? brain.items.filter((item: any) => String(item?.product || item?.name || '').trim()) : [];
+  const brainItems = Array.isArray(brain?.items)
+    ? brain.items
+        .filter((item: any) => String(item?.product || item?.name || '').trim())
+        .map((item: any) => ({ ...item, raw_text: item?.raw_text || text, target_price: item?.target_price ?? parseMoneyFromText(text) }))
+    : [];
+
+  if (draft.pending_product) {
+    const resolvedPending = resolvePendingProductDraft(draft, text, brainItems, products, variationsByProduct);
+    draft = resolvedPending.draft;
+    if (resolvedPending.stillMissing) {
+      const first = resolvedPending.stillMissing;
+      const optionList = first.options.slice(0, 12).map((option: any) => `- ${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`).join('\n');
+      await saveOrderDraft(supabase, conversationId, draft);
+      return {
+        replyText: `Ainda preciso da escolha em "${first.variation.name}".\n${optionList}\n\nQual opção você prefere?`,
+        strategy: 'ai_order_pending_required_option'
+      };
+    }
+    if (resolvedPending.resolved) {
+      const nextDraft = recalculateDraft(draft);
+      await saveOrderDraft(supabase, conversationId, nextDraft);
+      const nextQuestion = getNextOrderQuestion(nextDraft, params.customerName);
+      return {
+        replyText: nextQuestion,
+        strategy: 'ai_order_pending_product_completed'
+      };
+    }
+  }
+
   const itemsToProcess = brainItems.length > 0
     ? brainItems
     : (() => {
@@ -953,34 +1047,6 @@ async function handleWhatsAppOrderFlow(params: {
       }
     ];
     draft.pending_product = null;
-  }
-
-  if (itemsToProcess.length === 0 && draft.pending_product) {
-    const pendingProduct = products.find((product: any) => String(product.id) === String(draft.pending_product.product_id));
-    if (pendingProduct) {
-      const pendingOptionsFromBrain = brainItems.flatMap((item: any) => Array.isArray(item?.options) ? item.options : []);
-      const pendingOptions = [
-        ...(Array.isArray(draft.pending_product.requested_options) ? draft.pending_product.requested_options : []),
-        ...pendingOptionsFromBrain
-      ];
-      const { selected, missing } = pendingOptions.length > 0
-        ? applyRequestedOptions([...pendingOptions, text], pendingProduct, variationsByProduct)
-        : applyMentionedOptions(`${draft.pending_product.text} ${text}`, pendingProduct, variationsByProduct);
-      if (missing.length === 0) {
-        draft.items = [
-          ...(Array.isArray(draft.items) ? draft.items : []),
-          {
-            product_id: pendingProduct.id,
-            product_name: pendingProduct.name,
-            quantity: Number(draft.pending_product.quantity || 1),
-            price: Number(pendingProduct.price || 0),
-            options: selected,
-            notes: ''
-          }
-        ];
-        draft.pending_product = null;
-      }
-    }
   }
 
   let updatedExistingItem = false;
@@ -1593,7 +1659,12 @@ export async function processRestaurantBotMessage(params: {
 
   if (complementsInfoIntent && !wantsToOrder(text)) {
     const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
-    const product = findBestProduct(text, products);
+    const draft = await loadOrderDraft(supabase, conversationId);
+    const draftItems = Array.isArray(draft?.items) ? draft.items : [];
+    const lastDraftItem = draftItems[draftItems.length - 1];
+    const draftProductId = draft?.pending_product?.product_id || lastDraftItem?.product_id || '';
+    const product = findBestProduct(text, products) ||
+      products.find((item: any) => String(item.id) === String(draftProductId));
     if (product) {
       const replyText = buildProductComplementsReply(product, variationsByProduct);
       const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
