@@ -236,9 +236,9 @@ function findMentionedProducts(text: string, products: any[]) {
       if (!name || !normalizedName) return null;
       const direct = normalizedText.includes(normalizedName);
       const nameTokens = relevantTokens(name);
-      const score = direct
+      const score = (direct
         ? 100
-        : nameTokens.filter((token) => tokens.includes(token)).length;
+        : nameTokens.filter((token) => tokens.includes(token)).length) + productSizeScore(text, product);
       return score > 0 ? { product, score } : null;
     })
     .filter(Boolean)
@@ -275,7 +275,10 @@ function isOrderCancel(text: string) {
 function parseMoneyFromText(text: string) {
   const raw = String(text || '');
   const preferred = raw.match(/(?:r\$\s*|(?:\bde|\bpor|\bvalor(?:\s+de)?|\bcusta|\bcustando)\s+)(\d{1,4})(?:[,.](\d{1,2}))?/i);
-  const match = preferred || raw.match(/(?:r\$\s*)?(\d{1,4})(?:[,.](\d{1,2}))?/i);
+  const sanitized = raw
+    .replace(/\b\d{1,4}\s*(kg|kilo|quilo|g|gramas?|ml|litros?|l)\b/gi, ' ')
+    .replace(/\b\d{1,2}\s*(x|un|unidade|unidades)\b/gi, ' ');
+  const match = preferred || sanitized.match(/(?:r\$\s*)?(\d{1,4})(?:[,.](\d{1,2}))?/i);
   if (!match) return null;
   const amount = Number(`${match[1]}.${(match[2] || '00').padEnd(2, '0')}`);
   return Number.isFinite(amount) && amount > 0 ? amount : null;
@@ -314,6 +317,55 @@ function optionPrice(option: any) {
 
 function normalizeForMatch(value: unknown) {
   return normalizeIntentText(String(value || '')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractSizeHints(text: string) {
+  const normalized = normalizeForMatch(text);
+  const hints = new Set<string>();
+  const addMl = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return;
+    const rounded = Math.round(value);
+    hints.add(`${rounded}ml`);
+    hints.add(`${rounded} ml`);
+    if (rounded >= 1000) {
+      hints.add(`${rounded / 1000}l`);
+      hints.add(`${rounded / 1000} litro`);
+      hints.add(`${rounded / 1000} litros`);
+    }
+  };
+
+  const kgMatches = normalized.matchAll(/\b(\d+(?:[,.]\d+)?)\s*(kg|kilo|quilo)\b/g);
+  for (const match of kgMatches) {
+    const value = Number(String(match[1]).replace(',', '.'));
+    addMl(value * 1000);
+    hints.add(`${value}kg`);
+    hints.add(`${value} kg`);
+  }
+
+  const gramMatches = normalized.matchAll(/\b(\d{2,4})\s*(g|grama|gramas)\b/g);
+  for (const match of gramMatches) {
+    const value = Number(match[1]);
+    addMl(value);
+    hints.add(`${value}g`);
+    hints.add(`${value} g`);
+  }
+
+  const mlMatches = normalized.matchAll(/\b(\d{2,4})\s*(ml|mililitros?)\b/g);
+  for (const match of mlMatches) addMl(Number(match[1]));
+
+  return Array.from(hints).filter(Boolean);
+}
+
+function productSizeScore(text: string, product: any) {
+  const hints = extractSizeHints(text);
+  if (!hints.length) return 0;
+  const haystack = normalizeForMatch(`${product?.name || ''} ${product?.description || ''} ${product?.category || ''}`);
+  let score = 0;
+  for (const hint of hints) {
+    const normalizedHint = normalizeForMatch(hint);
+    if (normalizedHint && haystack.includes(normalizedHint)) score = Math.max(score, 90);
+  }
+  return score;
 }
 
 function expandOptionSynonyms(value: string) {
@@ -357,6 +409,7 @@ function productMatchScore(text: string, product: any, desiredPrice: number | nu
   let score = normalizedText.includes(name) ? 100 : tokenHits * 12;
   if (category && normalizedText.includes(category)) score += 15;
   if (categoryHits > 0) score += categoryHits * 18;
+  score += productSizeScore(text, product);
   if (desiredPrice !== null && Math.abs(Number(product?.price || 0) - desiredPrice) <= 0.01) score += 45;
   if (desiredPrice !== null && categoryHits > 0) score += 25;
   if (String(product?.available) === 'false') score -= 80;
@@ -775,6 +828,51 @@ function buildProductComplementsReply(product: any, variationsByProduct: Map<str
   return `Para ${product.name}, temos estes complementos:\n${lines.join('\n')}\n\nMe diga quais você quer que eu monto o pedido por aqui.`;
 }
 
+function findComplementAvailability(text: string, products: any[], variationsByProduct: Map<string, any[]>) {
+  const requestedTokens = relevantTokens(text);
+  if (!requestedTokens.length) return [];
+  const matches: any[] = [];
+
+  for (const product of products || []) {
+    const variations = variationsByProduct.get(String(product?.id)) || [];
+    for (const variation of variations) {
+      for (const option of parseVariationOptions(variation?.options)) {
+        const optionName = String(option?.name || '').trim();
+        if (!optionName || option?.active === false) continue;
+        const found = requestedTokens.some((token) => optionMatchesText(optionName, token)) || optionMatchesText(optionName, text);
+        if (!found) continue;
+        matches.push({
+          product,
+          variation,
+          option,
+          optionName,
+          price: optionPrice(option)
+        });
+      }
+    }
+  }
+
+  const unique = new Map<string, any>();
+  for (const match of matches) {
+    const key = `${match.product?.id}:${normalizeForMatch(match.optionName)}`;
+    if (!unique.has(key)) unique.set(key, match);
+  }
+  return Array.from(unique.values()).slice(0, 12);
+}
+
+function buildComplementAvailabilityReply(text: string, matches: any[]) {
+  if (!matches.length) {
+    return `Não encontrei esse complemento cadastrado no cardápio ativo. Posso te mostrar os complementos de algum produto específico se você me disser qual item quer pedir.`;
+  }
+
+  const optionNames = Array.from(new Set(matches.map((match) => String(match.optionName || '').trim()).filter(Boolean)));
+  const productLines = matches
+    .slice(0, 8)
+    .map((match) => `- ${match.product.name}${match.price > 0 ? `: ${match.optionName} (+${formatBRL(match.price)})` : `: ${match.optionName}`}`);
+
+  return `Temos sim ${optionNames.join(', ')} em alguns itens.\n${productLines.join('\n')}\n\nSe quiser, eu monto o pedido por aqui.`;
+}
+
 function mergeBrainDetailsIntoDraft(draft: any, brain: any) {
   const next = { ...draft };
   const name = String(brain?.customer_name || '').trim();
@@ -949,6 +1047,11 @@ async function handleWhatsAppOrderFlow(params: {
         .filter((item: any) => String(item?.product || item?.name || '').trim())
         .map((item: any) => ({ ...item, raw_text: item?.raw_text || text, target_price: item?.target_price ?? parseMoneyFromText(text) }))
     : [];
+
+  const messageStartsNewProduct = wantsToOrder(text) && (brainItems.length > 0 || productSizeScore(text, { name: text, description: text, category: text }) > 0 || hasProductClue(text));
+  if (draft.pending_product && messageStartsNewProduct && !/^(tradicional|zero|zero acucar|zero açúcar|sim|ok|isso|esse|essa)$/i.test(normalizeIntentText(text))) {
+    draft.pending_product = null;
+  }
 
   if (draft.pending_product) {
     const resolvedPending = resolvePendingProductDraft(draft, text, brainItems, products, variationsByProduct);
@@ -1677,6 +1780,20 @@ export async function processRestaurantBotMessage(params: {
         delivered: true
       });
       return { ok: true, replyText, conversationId, strategy: 'complements_info' };
+    }
+    const complementMatches = findComplementAvailability(text, products, variationsByProduct);
+    if (complementMatches.length > 0) {
+      const replyText = buildComplementAvailabilityReply(text, complementMatches);
+      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, replyText);
+      if (!sendResult?.ok) return { ok: false, error: 'send_failed', details: sendResult };
+      await supabase.from('whatsapp_messages').insert({
+        conversation_id: conversationId,
+        content: replyText,
+        sender: 'bot',
+        message_type: 'text',
+        delivered: true
+      });
+      return { ok: true, replyText, conversationId, strategy: 'complement_availability' };
     }
   }
 
