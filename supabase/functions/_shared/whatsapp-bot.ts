@@ -122,9 +122,70 @@ function buildOrderStatusLabel(status: string) {
   return labels[String(status || '').trim()] || String(status || 'em andamento');
 }
 
+function formatOpeningHours(openingHours: string) {
+  const raw = String(openingHours || '').trim();
+  if (!raw) return '';
+  const dayLabels: Record<string, string> = {
+    monday: 'segunda-feira',
+    tuesday: 'terça-feira',
+    wednesday: 'quarta-feira',
+    thursday: 'quinta-feira',
+    friday: 'sexta-feira',
+    saturday: 'sábado',
+    sunday: 'domingo',
+    segunda: 'segunda-feira',
+    terca: 'terça-feira',
+    terça: 'terça-feira',
+    quarta: 'quarta-feira',
+    quinta: 'quinta-feira',
+    sexta: 'sexta-feira',
+    sabado: 'sábado',
+    sábado: 'sábado',
+    domingo: 'domingo'
+  };
+
+  try {
+    const parsed = JSON.parse(raw);
+    const rows = Array.isArray(parsed)
+      ? parsed
+      : Object.entries(parsed || {}).map(([day, value]: [string, any]) => ({ day, ...(value || {}) }));
+    const lines = rows
+      .filter((row: any) => row && row.closed !== true)
+      .map((row: any) => {
+        const dayKey = normalizeIntentText(String(row.day || row.weekday || row.name || ''));
+        const day = dayLabels[dayKey] || String(row.day || row.weekday || '').trim();
+        const open = String(row.open || row.opens || row.start || '').trim();
+        const close = String(row.close || row.closes || row.end || '').trim();
+        if (!day || !open || !close) return '';
+        return `${day}: ${open} às ${close}`;
+      })
+      .filter(Boolean);
+    if (lines.length) return lines.join('\n');
+  } catch {
+    // Horário antigo salvo como texto simples.
+  }
+
+  return raw
+    .replace(/"?(monday)"?/gi, 'segunda-feira')
+    .replace(/"?(tuesday)"?/gi, 'terça-feira')
+    .replace(/"?(wednesday)"?/gi, 'quarta-feira')
+    .replace(/"?(thursday)"?/gi, 'quinta-feira')
+    .replace(/"?(friday)"?/gi, 'sexta-feira')
+    .replace(/"?(saturday)"?/gi, 'sábado')
+    .replace(/"?(sunday)"?/gi, 'domingo')
+    .replace(/[{}\[\]"]/g, '')
+    .replace(/\bopen\b/gi, 'abre')
+    .replace(/\bclose\b/gi, 'fecha')
+    .replace(/\bclosed\s*:\s*false\b/gi, '')
+    .replace(/\s*,\s*/g, ' | ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildOpeningHoursReply(restaurantName: string, openingHours: string, restaurantId: string) {
-  return openingHours
-    ? `Olá! O ${restaurantName} funciona neste horário: ${openingHours}.\n\nPosso te ajudar com o cardápio, montar um pedido ou consultar status de um pedido.`
+  const formatted = formatOpeningHours(openingHours);
+  return formatted
+    ? `Olá! O ${restaurantName} funciona nestes horários:\n${formatted}\n\nPosso te ajudar com o cardápio, montar um pedido ou consultar status de um pedido.`
     : `Olá! Ainda não encontrei o horário de funcionamento cadastrado do ${restaurantName}. Posso te ajudar com o cardápio ou montar seu pedido por aqui.`;
 }
 
@@ -251,6 +312,34 @@ function optionPrice(option: any) {
 
 function normalizeForMatch(value: unknown) {
   return normalizeIntentText(String(value || '')).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function expandOptionSynonyms(value: string) {
+  const normalized = normalizeForMatch(value);
+  const extras: string[] = [];
+  if (/\bleite\b/.test(normalized) && /\b(po|ninho|condensado)\b/.test(normalized)) extras.push('leite');
+  if (/\bleite em po\b/.test(normalized)) extras.push('leite ninho', 'leite po', 'ninho');
+  if (/\bleite condensado\b/.test(normalized)) extras.push('condensado');
+  if (/\bbanana\b/.test(normalized)) extras.push('bananas');
+  return Array.from(new Set([normalized, ...extras].filter(Boolean)));
+}
+
+function optionMatchesText(optionName: unknown, text: string) {
+  const option = normalizeForMatch(optionName);
+  const source = normalizeForMatch(text);
+  if (!option || !source) return false;
+  const sourceWordCount = source.split(/\s+/).filter(Boolean).length;
+  if (option.length >= 3 && source.includes(option)) return true;
+  if (sourceWordCount <= 3 && source.length >= 3 && option.includes(source)) return true;
+  const sourceSynonyms = expandOptionSynonyms(source).filter((variant) => variant !== source);
+  const optionSynonyms = expandOptionSynonyms(option).filter((variant) => variant !== option);
+  if (sourceSynonyms.some((variant) => variant.length >= 3 && option.includes(variant))) return true;
+  if (optionSynonyms.some((variant) => variant.length >= 3 && source.includes(variant))) return true;
+  const optionTokens = option.split(/\s+/).filter((token) => token.length >= 3);
+  const sourceTokens = source.split(/\s+/).filter((token) => token.length >= 3);
+  if (optionTokens.length === 0 || sourceTokens.length === 0) return false;
+  const hits = optionTokens.filter((token) => sourceTokens.includes(token)).length;
+  return hits >= Math.min(2, optionTokens.length);
 }
 
 function productMatchScore(text: string, product: any, desiredPrice: number | null) {
@@ -530,8 +619,7 @@ function applyMentionedOptions(text: string, product: any, variationsByProduct: 
     const max = Math.max(1, Number(variation?.max_selections || 1));
     const options = parseVariationOptions(variation?.options);
     const matched = options.filter((option: any) => {
-      const name = normalizeForMatch(option?.name);
-      return name && normalizedText.includes(name);
+      return optionMatchesText(option?.name, normalizedText);
     }).slice(0, max);
 
     if (matched.length) {
@@ -566,8 +654,39 @@ function applyRequestedOptions(requestedOptions: any[], product: any, variations
     .map((option: any) => typeof option === 'string' ? option : String(option?.name || option?.value || ''))
     .map((option: string) => option.trim())
     .filter(Boolean)
-    .filter((requested: string) => !availableOptions.some((option: any) => normalizeForMatch(option.name) === normalizeForMatch(requested) || normalizeForMatch(option.name).includes(normalizeForMatch(requested)) || normalizeForMatch(requested).includes(normalizeForMatch(option.name))));
+    .filter((requested: string) => !availableOptions.some((option: any) => optionMatchesText(option.name, requested)));
   return { ...result, invalid, availableOptions };
+}
+
+function mergeSelectedOptions(currentOptions: any[], selectedOptions: any[]) {
+  const bucket = new Map<string, any>();
+  for (const option of [...(currentOptions || []), ...(selectedOptions || [])]) {
+    const key = `${normalizeForMatch(option?.group)}:${normalizeForMatch(option?.name)}`;
+    if (!key.replace(':', '')) continue;
+    bucket.set(key, option);
+  }
+  return Array.from(bucket.values());
+}
+
+function applyAdditionalOptionsToLastDraftItem(draft: any, text: string, products: any[], variationsByProduct: Map<string, any[]>) {
+  const items = Array.isArray(draft?.items) ? [...draft.items] : [];
+  if (!items.length) return { draft, updated: false };
+  const lastIndex = items.length - 1;
+  const lastItem = items[lastIndex];
+  const product = products.find((item: any) => String(item.id) === String(lastItem?.product_id));
+  if (!product) return { draft, updated: false };
+  const result = applyMentionedOptions(text, product, variationsByProduct);
+  if (!result.selected.length) return { draft, updated: false };
+  items[lastIndex] = {
+    ...lastItem,
+    options: mergeSelectedOptions(Array.isArray(lastItem.options) ? lastItem.options : [], result.selected)
+  };
+  return {
+    draft: recalculateDraft({ ...draft, items }),
+    updated: true,
+    product,
+    selected: result.selected
+  };
 }
 
 function buildProductComplementsReply(product: any, variationsByProduct: Map<string, any[]>) {
@@ -809,7 +928,12 @@ async function handleWhatsAppOrderFlow(params: {
     if (missing.length > 0) {
       const first = missing[0];
       const optionList = first.options.slice(0, 12).map((option: any) => `- ${String(option?.name || '').trim()}${optionPrice(option) > 0 ? ` (+${formatBRL(optionPrice(option))})` : ''}`).join('\n');
-      draft.pending_product = { product_id: matchedProduct.id, text: `${text} ${requestedOptions.join(' ')}`, quantity };
+      draft.pending_product = {
+        product_id: matchedProduct.id,
+        text: `${text} ${requestedOptions.join(' ')}`,
+        requested_options: requestedOptions,
+        quantity
+      };
       await saveOrderDraft(supabase, conversationId, draft);
       return {
         replyText: `Esse item precisa de uma escolha em "${first.variation.name}".\n${optionList}\n\nQual opção você prefere?`,
@@ -834,9 +958,13 @@ async function handleWhatsAppOrderFlow(params: {
   if (itemsToProcess.length === 0 && draft.pending_product) {
     const pendingProduct = products.find((product: any) => String(product.id) === String(draft.pending_product.product_id));
     if (pendingProduct) {
-      const pendingOptions = brainItems.flatMap((item: any) => Array.isArray(item?.options) ? item.options : []);
+      const pendingOptionsFromBrain = brainItems.flatMap((item: any) => Array.isArray(item?.options) ? item.options : []);
+      const pendingOptions = [
+        ...(Array.isArray(draft.pending_product.requested_options) ? draft.pending_product.requested_options : []),
+        ...pendingOptionsFromBrain
+      ];
       const { selected, missing } = pendingOptions.length > 0
-        ? applyRequestedOptions(pendingOptions, pendingProduct, variationsByProduct)
+        ? applyRequestedOptions([...pendingOptions, text], pendingProduct, variationsByProduct)
         : applyMentionedOptions(`${draft.pending_product.text} ${text}`, pendingProduct, variationsByProduct);
       if (missing.length === 0) {
         draft.items = [
@@ -855,9 +983,18 @@ async function handleWhatsAppOrderFlow(params: {
     }
   }
 
+  let updatedExistingItem = false;
+  if (!processedProduct && !draft.pending_product && Array.isArray(draft.items) && draft.items.length > 0 && /(^|\b)com\b|granola|leite|banana|adicional|complemento/i.test(text)) {
+    const result = applyAdditionalOptionsToLastDraftItem(draft, text, products, variationsByProduct);
+    if (result.updated) {
+      draft = result.draft;
+      updatedExistingItem = true;
+    }
+  }
+
   const itemsNow = Array.isArray(draft.items) ? draft.items : [];
   const maybeOnlyName = /^[A-Za-zÀ-ÿ' ]{2,60}$/.test(text) && !processedProduct && !/\b(entrega|retirada|pix|dinheiro|cart[aã]o|rua|avenida|av\.?)\b/i.test(text);
-  if (itemsNow.length > 0 && maybeOnlyName && (!draft.customer_name || /^cliente whatsapp$/i.test(String(draft.customer_name || '')))) {
+  if (itemsNow.length > 0 && maybeOnlyName && !updatedExistingItem && (!draft.customer_name || /^cliente whatsapp$/i.test(String(draft.customer_name || '')))) {
     draft.customer_name = text.trim();
   }
 
@@ -1064,6 +1201,37 @@ async function callOpenAiBot(payload: {
   return message;
 }
 
+async function sendEvolutionTypingPresence(instance: string, number: string, seconds = 2) {
+  const EVOLUTION_BASE_URL = getEnv('EVOLUTION_BASE_URL');
+  const EVOLUTION_API_KEY = getEnv('EVOLUTION_API_KEY');
+  if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY || !instance || !number) return;
+
+  const base = EVOLUTION_BASE_URL.replace(/\/$/, '');
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: EVOLUTION_API_KEY
+  };
+  const payloads = [
+    {
+      url: `${base}/chat/sendPresence/${encodeURIComponent(instance)}`,
+      body: { number, presence: 'composing', delay: seconds * 1000 }
+    },
+    {
+      url: `${base}/message/sendPresence/${encodeURIComponent(instance)}`,
+      body: { number, presence: 'composing', delay: seconds * 1000 }
+    }
+  ];
+
+  for (const payload of payloads) {
+    const response = await fetch(payload.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload.body)
+    }).catch(() => null);
+    if (response?.ok) return;
+  }
+}
+
 export async function sendEvolutionText(restaurantId: string, instanceName: string, phone: string, text: string) {
   const EVOLUTION_BASE_URL = getEnv('EVOLUTION_BASE_URL');
   const EVOLUTION_API_KEY = getEnv('EVOLUTION_API_KEY');
@@ -1078,6 +1246,7 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
   }
 
   if (EVOLUTION_BASE_URL && EVOLUTION_API_KEY && instance) {
+    await sendEvolutionTypingPresence(instance, number, Math.min(5, Math.max(1, Math.ceil(message.length / 80)))).catch(() => null);
     const response = await fetch(`${EVOLUTION_BASE_URL.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
       method: 'POST',
       headers: {
@@ -1087,8 +1256,12 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
       body: JSON.stringify({
         number,
         text: message,
-        delay: 400,
-        linkPreview: true
+        delay: 1200,
+        linkPreview: true,
+        options: {
+          delay: 1200,
+          presence: 'composing'
+        }
       })
     });
 
