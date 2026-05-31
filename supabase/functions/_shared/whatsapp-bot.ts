@@ -266,6 +266,11 @@ function wantsToOrder(text: string) {
   return /(quero|queria|gostaria|vou querer|manda|separa|pode fazer|posso fazer|fazer pedido|pedir|pedido|adiciona|coloca|fechar pedido|finalizar pedido|confirmar pedido|confirmo|pode confirmar|isso mesmo|entrega|retirada|pix|dinheiro|cartao|cartão)/i.test(value);
 }
 
+function wantsWhatsAppOrderFlow(text: string) {
+  const value = normalizeIntentText(text);
+  return /((posso|pode|da|dá|consigo).*(pedir|fazer|montar).*(aqui|por aqui|whats|whatsapp))|((quero|queria|gostaria).*(fazer|montar|finalizar).*(pedido).*(aqui|por aqui|whats|whatsapp))|(fazer pedido pelo whats|fazer pedido pelo whatsapp|pedir pelo whats|pedir pelo whatsapp|pedido por aqui|pedido aqui|pelo whatsapp|por whatsapp)/i.test(value);
+}
+
 function isOrderConfirmation(text: string) {
   const value = normalizeIntentText(text);
   return /^(confirmo|confirmar|pode confirmar|isso|isso mesmo|fechado|fecha|finalizar|sim pode|sim|ok pode|tudo certo)\b/.test(value);
@@ -1756,13 +1761,17 @@ export async function processRestaurantBotMessage(params: {
   const humanIntent = wantsHumanAttendance(text);
   const problemIntent = isComplaintOrProblem(text);
   const customerMessageCount = (history || []).filter((item: any) => item?.sender === 'customer').length;
+  const customerMessagesToday = (history || []).filter((item: any) => item?.sender === 'customer' && isSameLocalDay(item?.sent_at)).length;
   const isFirstConversationTouch = customerMessageCount <= 1 && !lastBotMessage?.id;
   const recentBotReplyMinutes = minutesSince(lastBotMessage?.sent_at);
   const menuWasSentToday = Boolean(lastMenuMessage?.id && isSameLocalDay(lastMenuMessage?.sent_at));
+  const isFirstCustomerTouchToday = customerMessagesToday <= 1;
   const canRepeatMenuReply = explicitMenuIntent
     ? recentBotReplyMinutes > 2
     : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
+  const dailyMenuGreetingText = `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\n${buildMenuOrderCta(restaurantId)}`;
+  const shouldSendDailyMenuGreeting = !menuWasSentToday && (isFirstCustomerTouchToday || greetingIntent || isFirstConversationTouch);
 
   if (complementsInfoIntent && !wantsToOrder(text)) {
     const { products, variationsByProduct } = await loadMenuForOrdering(supabase, restaurantId);
@@ -1801,48 +1810,54 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  try {
-    const orderFlow = await handleWhatsAppOrderFlow({
-      supabase,
-      restaurantId,
-      customerPhone,
-      customerName,
-      conversationId,
-      text,
-      restaurantName: context.restaurantName,
-      history: history || []
-    });
-    if (orderFlow?.replyText) {
-      await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_reply', 'Fluxo de pedido por WhatsApp respondeu', {
+  const existingDraft = await loadOrderDraft(supabase, conversationId);
+  const hasActiveOrderDraft = Boolean(existingDraft && !existingDraft.cleared && Array.isArray(existingDraft.items));
+  const shouldRunWhatsAppOrderFlow = hasActiveOrderDraft || wantsWhatsAppOrderFlow(text);
+
+  if (shouldRunWhatsAppOrderFlow) {
+    try {
+      const orderFlow = await handleWhatsAppOrderFlow({
+        supabase,
+        restaurantId,
+        customerPhone,
+        customerName,
+        conversationId,
+        text,
+        restaurantName: context.restaurantName,
+        history: history || []
+      });
+      if (orderFlow?.replyText) {
+        await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_reply', 'Fluxo de pedido por WhatsApp respondeu', {
+          instanceName,
+          customerPhone,
+          conversationId,
+          strategy: orderFlow.strategy,
+          replyPreview: String(orderFlow.replyText).slice(0, 160)
+        });
+
+        const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, orderFlow.replyText);
+        if (!sendResult?.ok) {
+          return { ok: false, error: 'send_failed', details: sendResult };
+        }
+
+        await supabase.from('whatsapp_messages').insert({
+          conversation_id: conversationId,
+          content: orderFlow.replyText,
+          sender: 'bot',
+          message_type: 'text',
+          delivered: true
+        });
+
+        return { ok: true, replyText: orderFlow.replyText, conversationId, strategy: orderFlow.strategy };
+      }
+    } catch (error: any) {
+      await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_error', 'Fluxo de pedido por WhatsApp falhou', {
         instanceName,
         customerPhone,
         conversationId,
-        strategy: orderFlow.strategy,
-        replyPreview: String(orderFlow.replyText).slice(0, 160)
+        error: String(error?.message || error || 'unknown_error')
       });
-
-      const sendResult = await sendEvolutionText(restaurantId, instanceName, customerPhone, orderFlow.replyText);
-      if (!sendResult?.ok) {
-        return { ok: false, error: 'send_failed', details: sendResult };
-      }
-
-      await supabase.from('whatsapp_messages').insert({
-        conversation_id: conversationId,
-        content: orderFlow.replyText,
-        sender: 'bot',
-        message_type: 'text',
-        delivered: true
-      });
-
-      return { ok: true, replyText: orderFlow.replyText, conversationId, strategy: orderFlow.strategy };
     }
-  } catch (error: any) {
-    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_order_flow_error', 'Fluxo de pedido por WhatsApp falhou', {
-      instanceName,
-      customerPhone,
-      conversationId,
-      error: String(error?.message || error || 'unknown_error')
-    });
   }
 
   if (lowSignalIntent && !explicitMenuIntent && !trackIntent && !openingHoursIntent && !promotionsIntent && !humanIntent && !problemIntent) {
@@ -1955,7 +1970,10 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if (greetingIntent && deterministicReplies.length === 0 && !explicitMenuIntent) {
+  if (shouldSendDailyMenuGreeting && deterministicReplies.length === 0 && !explicitMenuIntent) {
+    deterministicReplies.push(dailyMenuGreetingText);
+    replyStrategy = 'daily_menu_greeting';
+  } else if (greetingIntent && deterministicReplies.length === 0 && !explicitMenuIntent) {
     deterministicReplies.push(`Olá! 👋\n\n${buildMenuOrderCta(restaurantId)}`);
     replyStrategy = 'greeting_help';
   }
