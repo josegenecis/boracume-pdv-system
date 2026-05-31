@@ -56,7 +56,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, '../public/icon-512x512.png'),
+    icon: path.join(__dirname, '../public/LOGOMARCA/ICONE DESKTOP.png'),
     show: false,
     titleBarStyle: 'default'
   });
@@ -109,7 +109,7 @@ function createUpdateWindow() {
       nodeIntegration: false,
       contextIsolation: true
     },
-    icon: path.join(__dirname, '../public/icon-512x512.png'),
+    icon: path.join(__dirname, '../public/LOGOMARCA/ICONE DESKTOP.png'),
     title: 'PopSystem'
   });
 
@@ -256,7 +256,7 @@ async function runAutoUpdateFlow() {
 
 function createTray() {
   try {
-    const iconPath = path.join(__dirname, '../public/icon-512x512.png');
+    const iconPath = path.join(__dirname, '../public/LOGOMARCA/ICONE DESKTOP.png');
     tray = new Tray(iconPath);
     
     const contextMenu = Menu.buildFromTemplate([

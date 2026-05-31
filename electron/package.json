@@ -62,7 +62,7 @@
         }
       ],
       "executableName": "POPSYSTEM",
-      "icon": "../public/icon-512x512.png",
+      "icon": "../public/LOGOMARCA/ICONE DESKTOP.png",
       "requestedExecutionLevel": "asInvoker",
       "verifyUpdateCodeSignature": false
     },

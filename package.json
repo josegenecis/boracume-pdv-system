@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "1.0.141",
+  "version": "1.0.142",
   "description": "PopSystem - Sistema de gestao para estabelecimentos alimenticios",
   "author": "PopSystem Team",
   "type": "module",
@@ -148,7 +148,7 @@
         }
       ],
       "executableName": "POPSYSTEM",
-      "icon": "public/icon-512x512.png",
+      "icon": "public/LOGOMARCA/ICONE DESKTOP.png",
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -159,11 +159,11 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "public/icon-512x512.png"
+      "icon": "public/LOGOMARCA/ICONE DESKTOP.png"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "public/icon-512x512.png"
+      "icon": "public/LOGOMARCA/ICONE DESKTOP.png"
     }
   }
 }

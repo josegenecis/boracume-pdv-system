@@ -10,13 +10,13 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "/LOGOMARCA/FAVICON.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/LOGOMARCA/ICONE%20DESKTOP.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -30,21 +30,21 @@
       "short_name": "Pedidos",
       "description": "Visualizar pedidos",
       "url": "/pedidos",
-      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/LOGOMARCA/FAVICON.png", "sizes": "192x192" }]
     },
     {
       "name": "PDV",
       "short_name": "PDV",
       "description": "Ponto de Venda",
       "url": "/pdv",
-      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/LOGOMARCA/FAVICON.png", "sizes": "192x192" }]
     },
     {
       "name": "Cozinha",
       "short_name": "Cozinha",
       "description": "Kitchen Display System",
       "url": "/cozinha",
-      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/LOGOMARCA/FAVICON.png", "sizes": "192x192" }]
     }
   ]
 }
