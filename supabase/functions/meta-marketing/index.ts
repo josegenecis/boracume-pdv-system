@@ -354,7 +354,6 @@ serve(async (req) => {
         "pages_show_list",
         "pages_read_engagement",
         "pages_manage_ads",
-        ...(loginConfigId ? ["instagram_basic", "whatsapp_business_management"] : []),
       ].join(",");
       const url = new URL("https://www.facebook.com/dialog/oauth");
       url.searchParams.set("client_id", appId);
