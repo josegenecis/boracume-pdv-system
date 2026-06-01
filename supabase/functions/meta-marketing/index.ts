@@ -459,8 +459,28 @@ serve(async (req) => {
         budget: Number(body.dailyBudget || 20),
         status: "draft",
       };
-      await serviceClient.from("marketing_adsets").insert(adsetPayload);
-      await serviceClient.from("marketing_creatives").insert(plan.creatives.map((creative: any) => ({ ...creative, campaign_id: campaign.id })));
+      const { error: adsetError } = await serviceClient.from("marketing_adsets").insert(adsetPayload);
+      if (adsetError) {
+        await serviceClient.from("marketing_campaigns").update({ status: "error", last_error: adsetError.message }).eq("id", campaign.id);
+        throw adsetError;
+      }
+      const creativeRows = plan.creatives.map((creative: any) => ({
+        campaign_id: campaign.id,
+        format: creative.format,
+        type: creative.type,
+        image_url: creative.image_url,
+        video_url: creative.video_url || null,
+        headline: creative.headline,
+        primary_text: creative.primary_text,
+        description: creative.description,
+        cta: creative.cta,
+        status: "draft",
+      }));
+      const { error: creativeError } = await serviceClient.from("marketing_creatives").insert(creativeRows);
+      if (creativeError) {
+        await serviceClient.from("marketing_campaigns").update({ status: "error", last_error: creativeError.message }).eq("id", campaign.id);
+        throw creativeError;
+      }
       await serviceClient.from("marketing_ai_logs").insert({ restaurant_id: user.id, campaign_id: campaign.id, action: "plan_campaign", input: body, output: { strategy: plan.strategy } });
       return json({ campaignId: campaign.id, plan: { campaign, creatives: plan.creatives, copies: plan.copies, strategy: plan.strategy } });
     }

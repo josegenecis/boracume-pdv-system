@@ -239,7 +239,8 @@ export default function PopMarketingAI() {
       .select('*')
       .eq('campaign_id', campaign.id)
       .order('format');
-    setCreatives(data || campaign.review_snapshot?.creatives || []);
+    const snapshotCreatives = campaign.review_snapshot?.creatives || [];
+    setCreatives(Array.isArray(data) && data.length > 0 ? data : snapshotCreatives);
   };
 
   const publishPaused = async () => {
