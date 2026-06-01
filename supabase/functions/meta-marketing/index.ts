@@ -107,20 +107,28 @@ async function graphPost(path: string, token: string, body: Record<string, any>)
 async function discoverAssets(token: string) {
   const businesses = await graphGet("me/businesses", token, { fields: "id,name,verification_status" }).catch(() => ({ data: [] }));
   const adAccounts = await graphGet("me/adaccounts", token, { fields: "id,name,account_status,currency,timezone_name,business" }).catch(() => ({ data: [] }));
-  const pages = await graphGet("me/accounts", token, { fields: "id,name,access_token,instagram_business_account{id,username,name}" }).catch(() => ({ data: [] }));
+  const pages = await graphGet("me/accounts", token, { fields: "id,name,access_token,instagram_business_account{id,username,name},connected_instagram_account{id,username,name}" }).catch(() => ({ data: [] }));
   const permissions = await graphGet("me/permissions", token).catch(() => ({ data: [] }));
   const firstBusiness = businesses?.data?.[0] || null;
   let whatsappAccounts: any[] = [];
   let phoneNumbers: any[] = [];
+  const warnings: string[] = [];
   if (firstBusiness?.id) {
-    const waba = await graphGet(`${firstBusiness.id}/owned_whatsapp_business_accounts`, token, { fields: "id,name,currency,timezone_id" }).catch(() => ({ data: [] }));
+    const waba = await graphGet(`${firstBusiness.id}/owned_whatsapp_business_accounts`, token, { fields: "id,name,currency,timezone_id" }).catch((error) => {
+      warnings.push(`WhatsApp Business não pôde ser consultado: ${String(error?.message || error)}`);
+      return { data: [] };
+    });
     whatsappAccounts = waba?.data || [];
   }
   const firstAd = adAccounts?.data?.[0] || null;
   const firstPage = pages?.data?.[0] || null;
+  const firstInstagram = firstPage?.instagram_business_account || firstPage?.connected_instagram_account || null;
   const firstWaba = whatsappAccounts?.[0] || null;
   if (firstWaba?.id) {
-    const phones = await graphGet(`${firstWaba.id}/phone_numbers`, token, { fields: "id,display_phone_number,verified_name,quality_rating" }).catch(() => ({ data: [] }));
+    const phones = await graphGet(`${firstWaba.id}/phone_numbers`, token, { fields: "id,display_phone_number,verified_name,quality_rating" }).catch((error) => {
+      warnings.push(`Números WABA não puderam ser consultados: ${String(error?.message || error)}`);
+      return { data: [] };
+    });
     phoneNumbers = phones?.data || [];
   }
   return {
@@ -130,11 +138,17 @@ async function discoverAssets(token: string) {
     whatsappAccounts,
     phoneNumbers,
     permissions: permissions?.data || [],
+    warnings,
+    capabilities: {
+      canReadInstagram: Boolean(firstInstagram?.id),
+      canReadWhatsAppBusiness: whatsappAccounts.length > 0,
+      canReadWabaPhone: phoneNumbers.length > 0,
+    },
     selected: {
       business_id: firstBusiness?.id || null,
       ad_account_id: firstAd?.id || null,
       page_id: firstPage?.id || null,
-      instagram_account_id: firstPage?.instagram_business_account?.id || null,
+      instagram_account_id: firstInstagram?.id || null,
       whatsapp_business_account_id: firstWaba?.id || null,
       phone_number_id: phoneNumbers?.[0]?.id || null,
       currency: firstAd?.currency || null,
@@ -184,14 +198,14 @@ async function generateCopyWithAi(input: any, knowledge: any) {
 }
 
 async function buildKnowledge(serviceClient: any, restaurantId: string, input: any) {
-  const { data: restaurant } = await serviceClient.from("profiles").select("restaurant_name,address,phone,opening_hours").eq("id", restaurantId).maybeSingle();
+  const { data: restaurant } = await serviceClient.from("profiles").select("restaurant_name,address,phone,opening_hours,logo_url,banner_url,description").eq("id", restaurantId).maybeSingle();
   let product: any = null;
   if (input.productId) {
-    const { data } = await serviceClient.from("products").select("id,name,price,category,image_url,available").eq("user_id", restaurantId).eq("id", input.productId).maybeSingle();
+    const { data } = await serviceClient.from("products").select("id,name,description,price,category,image_url,available").eq("user_id", restaurantId).eq("id", input.productId).maybeSingle();
     product = data;
   }
   if (!product && input.productFocus) {
-    const { data } = await serviceClient.from("products").select("id,name,price,category,image_url,available").eq("user_id", restaurantId).ilike("name", `%${input.productFocus}%`).eq("available", true).limit(1);
+    const { data } = await serviceClient.from("products").select("id,name,description,price,category,image_url,available").eq("user_id", restaurantId).ilike("name", `%${input.productFocus}%`).eq("available", true).limit(1);
     product = data?.[0] || null;
   }
   const { data: products } = await serviceClient.from("products").select("id,name,price,category,available").eq("user_id", restaurantId).eq("available", true).order("name").limit(80);
@@ -212,6 +226,11 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
   const strategy = {
     objective: input.objective || "vender_mais",
     destination,
+    restaurant: {
+      name: knowledge.restaurant?.restaurant_name || "PopSystem",
+      logo_url: knowledge.restaurant?.logo_url || null,
+      banner_url: knowledge.restaurant?.banner_url || null,
+    },
     audience: {
       city: input.targetCity || "",
       radius_km: Number(input.targetRadiusKm || 5),
@@ -233,6 +252,8 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
     format,
     type: "static",
     image_url: knowledge.product?.image_url || null,
+    logo_url: knowledge.restaurant?.logo_url || null,
+    generated_image_prompt: knowledge.product?.image_url ? null : `Imagem publicitária realista e apetitosa de ${productFocus}, restaurante ${knowledge.restaurant?.restaurant_name || "PopSystem"}, fundo limpo, iluminação profissional, sem texto.`,
     headline: copies[0]?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`,
     primary_text: copies[0]?.primary_text || `Peça ${productFocus} agora.`,
     description: copies[0]?.description || "Campanha criada com IA para revisão.",
@@ -353,7 +374,7 @@ serve(async (req) => {
         product_id: plan.strategy.product?.id || body.productId || null,
         menu_link: plan.knowledge.menuLink,
         ai_strategy: { ...plan.strategy, copies: plan.copies },
-        review_snapshot: { connection, creatives: plan.creatives },
+        review_snapshot: { connection, creatives: plan.creatives, knowledge: plan.knowledge },
       };
       const { data: campaign, error } = await serviceClient.from("marketing_campaigns").insert(campaignPayload).select("*").single();
       if (error) throw error;

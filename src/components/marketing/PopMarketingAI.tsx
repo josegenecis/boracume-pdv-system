@@ -45,10 +45,13 @@ type Creative = {
   id?: string;
   format: 'feed_1080x1080' | 'story_1080x1920' | 'reels_1080x1920' | 'banner_1200x628';
   image_url?: string | null;
+  logo_url?: string | null;
+  generated_image_prompt?: string | null;
   headline?: string | null;
   primary_text?: string | null;
   description?: string | null;
   cta?: string | null;
+  type?: string | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -93,6 +96,28 @@ export default function PopMarketingAI() {
   });
 
   const selectedProduct = useMemo(() => products.find((item) => item.id === form.productId) || null, [form.productId, products]);
+  const selectedCampaignProduct = selectedCampaign?.ai_strategy?.product || null;
+  const permissionNames = useMemo(
+    () => new Set((connection?.assets_json?.permissions || []).filter((item: any) => item?.status === 'granted').map((item: any) => item.permission)),
+    [connection?.assets_json]
+  );
+  const metaAssetStatus = useMemo(() => ({
+    instagram: connection?.instagram_account_id
+      ? connection.instagram_account_id
+      : permissionNames.has('instagram_basic')
+        ? 'não vinculado'
+        : 'permissão pendente',
+    whatsapp: connection?.whatsapp_business_account_id
+      ? connection.whatsapp_business_account_id
+      : permissionNames.has('whatsapp_business_management')
+        ? 'não vinculado'
+        : 'permissão pendente',
+    phone: connection?.phone_number_id
+      ? connection.phone_number_id
+      : permissionNames.has('whatsapp_business_management')
+        ? 'não localizado'
+        : 'permissão pendente',
+  }), [connection, permissionNames]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -341,10 +366,18 @@ export default function PopMarketingAI() {
             </div>
             <div>Conta: <strong>{connection?.ad_account_id || 'não vinculada'}</strong></div>
             <div>Página: <strong>{connection?.page_id || 'não vinculada'}</strong></div>
-            <div>Instagram: <strong>{connection?.instagram_account_id || 'não vinculado'}</strong></div>
-            <div>WhatsApp Ads: <strong>{connection?.whatsapp_business_account_id || 'não vinculado'}</strong></div>
-            <div>Número WABA: <strong>{connection?.phone_number_id || 'não localizado'}</strong></div>
+            <div>Instagram: <strong>{metaAssetStatus.instagram}</strong></div>
+            <div>WhatsApp Ads: <strong>{metaAssetStatus.whatsapp}</strong></div>
+            <div>Número WABA: <strong>{metaAssetStatus.phone}</strong></div>
             <div>Moeda/Fuso: <strong>{connection?.currency || '-'} / {connection?.timezone || '-'}</strong></div>
+            {(connection?.assets_json?.warnings || []).length > 0 && (
+              <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                <AlertTitle>Permissões Meta pendentes</AlertTitle>
+                <AlertDescription>
+                  A conta pode estar vinculada na Meta, mas este app ainda não recebeu permissão para consultar todos os ativos.
+                </AlertDescription>
+              </Alert>
+            )}
             <Alert>
               <ShieldCheck className="h-4 w-4" />
               <AlertTitle>Segurança</AlertTitle>
@@ -421,10 +454,13 @@ export default function PopMarketingAI() {
                     const preview = buildCreativeSvgDataUrl({
                       format: creative.format,
                       restaurantName,
-                      productName: selectedCampaign.product_focus || selectedProduct?.name || 'Oferta especial',
-                      price: selectedProduct ? money(selectedProduct.price) : 'Peça agora',
+                      productName: selectedCampaignProduct?.name || selectedCampaign.product_focus || selectedProduct?.name || 'Oferta especial',
+                      price: selectedCampaignProduct?.price ? money(selectedCampaignProduct.price) : selectedProduct ? money(selectedProduct.price) : 'Peça agora',
                       headline: creative.headline || 'Oferta especial',
                       cta: creative.cta === 'WHATSAPP_MESSAGE' ? 'CHAME NO WHATSAPP' : 'CLIQUE E PEÇA',
+                      imageUrl: creative.image_url || selectedCampaignProduct?.image_url || selectedProduct?.image_url,
+                      logoUrl: creative.logo_url || selectedCampaign?.ai_strategy?.restaurant?.logo_url || (profile as any)?.logo_url,
+                      generatedImagePrompt: creative.generated_image_prompt,
                     });
                     return (
                       <div key={creative.id || creative.format} className="rounded-xl border p-3">
