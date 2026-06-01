@@ -162,24 +162,27 @@ export function AgentDashboard() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Assistente de Comandos</h1>
-          <p className="text-muted-foreground">
-            Controle ingredientes e despesas com comandos em linguagem natural
-          </p>
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-orange-600 p-6 text-white shadow-xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <Badge className="mb-3 border-white/20 bg-white/10 text-lime-100 hover:bg-white/10">POP AI</Badge>
+            <h1 className="text-3xl font-black tracking-tight md:text-4xl">Agente operacional inteligente</h1>
+            <p className="mt-2 max-w-3xl text-white/80">
+              Execute tarefas do sistema por conversa: cardápio, despesas, produtos, imagens, relatórios e ajustes operacionais.
+            </p>
+          </div>
+          <Button onClick={loadDashboardData} variant="secondary" size="sm" className="w-fit bg-white text-emerald-950 hover:bg-white/90">
+            <Activity className="h-4 w-4 mr-2" />
+            Atualizar painel
+          </Button>
         </div>
-        <Button onClick={loadDashboardData} variant="outline" size="sm">
-          <Activity className="h-4 w-4 mr-2" />
-          Atualizar
-        </Button>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Ingredientes</CardTitle>
+            <CardTitle className="text-sm font-medium">Ingredientes</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -205,7 +208,7 @@ export function AgentDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Atividades Recentes</CardTitle>
+            <CardTitle className="text-sm font-medium">Execuções Recentes</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -218,7 +221,7 @@ export function AgentDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status do Agente</CardTitle>
+            <CardTitle className="text-sm font-medium">Status do POP AI</CardTitle>
             <Bot className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -233,7 +236,7 @@ export function AgentDashboard() {
       {/* Main Content */}
       <Tabs defaultValue="console" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="console">Console</TabsTrigger>
+          <TabsTrigger value="console">Chat</TabsTrigger>
           <TabsTrigger value="activities">Atividades</TabsTrigger>
           <TabsTrigger value="quick-actions">Ações Rápidas</TabsTrigger>
           <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configurações</TabsTrigger>
@@ -301,7 +304,7 @@ export function AgentDashboard() {
                   variant="outline"
                   onClick={() => {
                     // This would trigger a command in the console
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Mostrar ingredientes ativos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -314,7 +317,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Desativar carne de sol de todos os produtos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -327,7 +330,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Desativar queijo coalho de todos os produtos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -351,7 +354,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 150,00 para alimentação';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -364,7 +367,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 50,00 para transporte';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -377,7 +380,7 @@ export function AgentDashboard() {
                   className="w-full justify-start" 
                   variant="outline"
                   onClick={() => {
-                    const consoleInput = document.querySelector('input[placeholder="Digite seu comando..."]') as HTMLInputElement;
+                    const consoleInput = document.querySelector('textarea[placeholder="Peça uma ação para o POP AI..."]') as HTMLTextAreaElement;
                     if (consoleInput) {
                       consoleInput.value = 'Lançar despesa de R$ 200,00 para insumos';
                       consoleInput.dispatchEvent(new Event('input', { bubbles: true }));

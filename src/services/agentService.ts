@@ -50,7 +50,12 @@ const EXPENSE_CATEGORIES = [
 /**
  * Process natural language commands and execute deterministic tasks
  */
-export async function processAgentCommand(command: string, userId: string, imageBase64?: string): Promise<AgentCommandResult> {
+export async function processAgentCommand(
+  command: string,
+  userId: string,
+  imageBase64?: string,
+  conversationHistory: SupportChatHistoryMessage[] = []
+): Promise<AgentCommandResult> {
   try {
     if (!String(userId || '').trim()) {
       return { success: false, message: 'Faça login para usar o assistente.' };
@@ -65,7 +70,8 @@ export async function processAgentCommand(command: string, userId: string, image
         console.log('[AgentService] Enviando para Edge Function ai-agent...');
         const payload: any = {
             command: command,
-            userId: userId
+            userId: userId,
+            conversationHistory
         };
         
         if (imageBase64) {

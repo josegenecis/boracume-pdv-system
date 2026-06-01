@@ -66,6 +66,98 @@ async function openAiChatWithTools(params: {
   };
 }
 
+function bytesFromBase64(value: string) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function ensurePublicBucket(supabase: any, bucketName: string) {
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const exists = Array.isArray(buckets) && buckets.some((bucket: any) => bucket?.name === bucketName || bucket?.id === bucketName);
+    if (!exists) {
+      await supabase.storage.createBucket(bucketName, {
+        public: true,
+        fileSizeLimit: 10 * 1024 * 1024,
+        allowedMimeTypes: ["image/png", "image/jpeg", "image/webp"]
+      });
+    }
+  } catch (error) {
+    console.error("ensure_bucket_failed", bucketName, error);
+  }
+}
+
+async function uploadGeneratedProductImage(supabase: any, productId: string, bytes: Uint8Array, contentType = "image/png") {
+  await ensurePublicBucket(supabase, "product-images");
+  const ext = contentType.includes("webp") ? "webp" : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
+  const filePath = `products/ai-${productId}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(filePath, bytes, { contentType, upsert: true } as any);
+  if (error) throw error;
+  const { data } = supabase.storage.from("product-images").getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+async function generateProductImageWithOpenAI(params: {
+  apiKey: string;
+  supabase: any;
+  product: any;
+  restaurantName?: string;
+  customPrompt?: string;
+}) {
+  const productName = String(params.product?.name || "produto do restaurante").trim();
+  const description = String(params.product?.description || "").trim();
+  const restaurantName = String(params.restaurantName || "restaurante brasileiro").trim();
+  const prompt = [
+    `Crie uma foto publicitaria realista e apetitosa para o produto "${productName}" do restaurante "${restaurantName}".`,
+    description ? `Descricao do produto: ${description}.` : "",
+    params.customPrompt ? `Orientacao extra: ${params.customPrompt}.` : "",
+    "Estilo: fotografia profissional de comida, luz natural, fundo limpo, alta nitidez, produto em destaque, sem pessoas.",
+    "Importante: nao coloque texto, preco, logo, marca d'agua, moldura ou letras na imagem."
+  ].filter(Boolean).join(" ");
+
+  const modelCandidates = [...new Set([Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1", "gpt-image-1"])];
+  let lastError: any = null;
+  for (const model of modelCandidates) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${params.apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          prompt,
+          size: "1024x1024",
+          quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
+          n: 1
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error?.message || "Falha ao gerar imagem com OpenAI.");
+      const item = payload?.data?.[0] || {};
+      if (item.b64_json) {
+        const imageUrl = await uploadGeneratedProductImage(params.supabase, String(params.product.id), bytesFromBase64(String(item.b64_json)), "image/png");
+        return { imageUrl, model, prompt };
+      }
+      if (item.url) {
+        const imageResponse = await fetch(String(item.url));
+        if (!imageResponse.ok) throw new Error("Imagem gerada, mas falhou ao baixar o arquivo.");
+        const contentType = imageResponse.headers.get("content-type") || "image/png";
+        const imageUrl = await uploadGeneratedProductImage(params.supabase, String(params.product.id), new Uint8Array(await imageResponse.arrayBuffer()), contentType);
+        return { imageUrl, model, prompt };
+      }
+      throw new Error("OpenAI nao retornou imagem utilizavel.");
+    } catch (error) {
+      lastError = error;
+      console.error("agent_product_image_model_failed", model, error);
+    }
+  }
+  throw lastError || new Error("Falha ao gerar imagem.");
+}
+
 // @ts-ignore
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -641,7 +733,7 @@ Deno.serve(async (req) => {
     const requestedCount = requestedCountMatch ? Number(requestedCountMatch[1]) : 0;
 
     const systemPrompt = supportMode
-      ? `Você é um atendente virtual humano e prestativo do sistema BORACUME PDV.
+      ? `Você é um atendente virtual humano e prestativo do sistema PopSystem PDV.
 Seu objetivo é resolver completamente as solicitações do cliente dentro do sistema, com autonomia, como se fosse um atendente humano.
 
 Regras:
@@ -654,6 +746,8 @@ Regras:
 - Para alterações de cardápio, preserve todos os campos que o usuário não pediu para mudar. Se houver mais de um produto possível, pare e peça uma confirmação objetiva com as opções encontradas.
 - Se o usuário pedir para listar ou alterar preços de grupos de complementos já existentes, use list_variation_group e adjust_variation_group_prices.
 - Se o pedido envolver imagem do produto, use generate_product_image ou generate_missing_product_images.
+- Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
+- Quando o pedido for acionável, execute. Evite apenas sugerir passos.
 - Mantenha respostas curtas e diretas.
 - O ID do usuário (restaurante) é: ${userId}`
       : `Você é um assistente administrativo inteligente para um sistema de PDV de restaurante.
@@ -662,6 +756,7 @@ Seu objetivo é executar ações no banco de dados conforme o pedido do usuário
 Regras:
 - Se o usuário pedir para criar algo, chame a função apropriada.
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
+- Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
 - Se o usuário pedir para alterar produto existente (ex.: mudar preço, nome, categoria, descrição, disponibilidade, destacar, aparecer ou ocultar do delivery/PDV), use update_product e não crie duplicado.
@@ -669,6 +764,7 @@ Regras:
 - Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
 - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
+- Se o usuário pedir imagens para produtos sem imagem, execute generate_missing_product_images imediatamente, em lote seguro, e avise quantas foram geradas e quantas ficaram pendentes.
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
 - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
 - Seja direto e confirme a ação realizada.
@@ -1309,7 +1405,200 @@ Regras:
                 }
 
                 else if (fnName === "generate_product_image" || fnName === "generate_missing_product_images") {
-                    result = { success: false, error: 'Geração de imagem foi desativada: Gemini API Key suporta apenas texto neste projeto.' };
+                    if (!OPENAI_API_KEY) {
+                        result = {
+                            success: false,
+                            error: 'Secret OPENAI_API_KEY não configurado. A geração de imagens por IA precisa da chave OpenAI no Supabase.'
+                        };
+                    } else {
+                        const getRestaurantName = async () => {
+                            try {
+                                const { data } = await supabase
+                                    .from('profiles')
+                                    .select('restaurant_name')
+                                    .eq('id', userId)
+                                    .maybeSingle();
+                                return String(data?.restaurant_name || 'restaurante brasileiro');
+                            } catch {
+                                return 'restaurante brasileiro';
+                            }
+                        };
+
+                        const findProduct = async () => {
+                            const pid = String(args.product_id || '').trim();
+                            const pname = String(args.product_name || '').trim();
+                            if (pid) {
+                                const { data, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .eq('id', pid)
+                                    .maybeSingle();
+                                if (error) throw error;
+                                return data;
+                            }
+                            if (pname) {
+                                const { data, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .ilike('name', `%${pname}%`)
+                                    .order('created_at', { ascending: true })
+                                    .limit(3);
+                                if (error) throw error;
+                                if ((data || []).length > 1) {
+                                    const exact = (data || []).find((p: any) => String(p.name || '').toLowerCase() === pname.toLowerCase());
+                                    if (exact) return exact;
+                                }
+                                return (data || [])[0] || null;
+                            }
+                            return null;
+                        };
+
+                        if (fnName === "generate_product_image") {
+                            const product = await findProduct();
+                            if (!product) {
+                                result = { success: false, error: 'Produto não encontrado. Informe o nome exato ou selecione o produto antes de pedir a imagem.' };
+                            } else {
+                                const restaurantName = await getRestaurantName();
+                                const generated = await generateProductImageWithOpenAI({
+                                    apiKey: OPENAI_API_KEY,
+                                    supabase,
+                                    product,
+                                    restaurantName,
+                                    customPrompt: args.prompt || args.description
+                                });
+                                const { error: updErr } = await supabase
+                                    .from('products')
+                                    .update({ image_url: generated.imageUrl, updated_at: new Date().toISOString() } as any)
+                                    .eq('user_id', userId)
+                                    .eq('id', product.id);
+                                if (updErr) throw updErr;
+                                try {
+                                    await supabase.from('agent_activity_logs').insert({
+                                        user_id: userId,
+                                        action_type: 'product_image_generate',
+                                        description: `Imagem IA gerada para ${product.name}`,
+                                        metadata: { product_id: product.id, image_url: generated.imageUrl, model: generated.model }
+                                    } as any);
+                                } catch {}
+                                result = {
+                                    success: true,
+                                    product_id: product.id,
+                                    product_name: product.name,
+                                    image_url: generated.imageUrl,
+                                    source: { provider: 'openai', model: generated.model }
+                                };
+                            }
+                        } else {
+                            const requested = Number(args.limit || 10) || 10;
+                            const maxPerExecution = 10;
+                            const limit = Math.min(Math.max(requested, 1), maxPerExecution);
+                            const processAll = Boolean(args.process_all);
+                            const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
+                            const startedAt = Date.now();
+                            const timeBudgetMs = 95_000;
+                            const restaurantName = await getRestaurantName();
+                            const failures: any[] = [];
+                            const updatedIds: string[] = [];
+                            let processed = 0;
+                            let updated = 0;
+
+                            try {
+                                const { data: existingJob } = await supabase
+                                    .from('agent_activity_logs')
+                                    .select('id')
+                                    .eq('user_id', userId)
+                                    .eq('id', jobId)
+                                    .maybeSingle();
+                                if (!existingJob) {
+                                    await supabase.from('agent_activity_logs').insert({
+                                        id: jobId,
+                                        user_id: userId,
+                                        action_type: 'ai_image_job',
+                                        description: 'Geração IA de imagens para produtos sem imagem',
+                                        metadata: { status: 'running', updated: 0, failures: 0, started_at: new Date().toISOString() }
+                                    } as any);
+                                }
+                            } catch {}
+
+                            while (updated < limit) {
+                                const { data: products, error } = await supabase
+                                    .from('products')
+                                    .select('id, name, description, image_url')
+                                    .eq('user_id', userId)
+                                    .or('image_url.is.null,image_url.eq.')
+                                    .order('created_at', { ascending: true })
+                                    .limit(Math.min(5, limit - updated));
+                                if (error) throw error;
+                                const list = products || [];
+                                if (list.length === 0) break;
+
+                                for (const product of list) {
+                                    if (updated >= limit) break;
+                                    if (Date.now() - startedAt > timeBudgetMs) break;
+                                    processed++;
+                                    try {
+                                        const generated = await generateProductImageWithOpenAI({
+                                            apiKey: OPENAI_API_KEY,
+                                            supabase,
+                                            product,
+                                            restaurantName
+                                        });
+                                        const { error: updErr } = await supabase
+                                            .from('products')
+                                            .update({ image_url: generated.imageUrl, updated_at: new Date().toISOString() } as any)
+                                            .eq('user_id', userId)
+                                            .eq('id', product.id);
+                                        if (updErr) throw updErr;
+                                        updated++;
+                                        updatedIds.push(String(product.id));
+                                    } catch (error: any) {
+                                        failures.push({ id: product.id, name: product.name, error: String(error?.message || error) });
+                                    }
+                                }
+
+                                if (!processAll) break;
+                                if (Date.now() - startedAt > timeBudgetMs) break;
+                            }
+
+                            const { count: remainingCount } = await supabase
+                                .from('products')
+                                .select('id', { count: 'exact', head: true })
+                                .eq('user_id', userId)
+                                .or('image_url.is.null,image_url.eq.');
+
+                            try {
+                                await supabase
+                                    .from('agent_activity_logs')
+                                    .update({
+                                        metadata: {
+                                            status: typeof remainingCount === 'number' && remainingCount === 0 ? 'done' : 'running',
+                                            provider: 'openai',
+                                            updated,
+                                            processed,
+                                            failures: failures.length,
+                                            remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                                            updated_ids: updatedIds,
+                                            last_update_at: new Date().toISOString()
+                                        }
+                                    } as any)
+                                    .eq('user_id', userId)
+                                    .eq('id', jobId);
+                            } catch {}
+
+                            result = {
+                                success: true,
+                                job_id: jobId,
+                                processed,
+                                updated,
+                                failures,
+                                remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                                updated_ids: updatedIds,
+                                note: `Gerei até ${maxPerExecution} imagens por execução para proteger custo e timeout. Se ainda faltar, peça "continue o job ${jobId}".`
+                            };
+                        }
+                    }
                 }
 
                 else if (fnName === "set_product_image_from_pexels" || fnName === "set_missing_product_images_from_pexels") {

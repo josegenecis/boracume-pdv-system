@@ -1,20 +1,20 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Bot, CheckCircle2, ImageIcon, Loader2, Paperclip, Send, Sparkles, User, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Bot, User, CheckCircle, AlertCircle, Clock, Paperclip, X } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { processAgentCommand } from '@/services/agentService';
+import { processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
 
 interface ConsoleMessage {
   id: string;
-  type: 'user' | 'agent' | 'system';
+  type: 'user' | 'agent';
   content: string;
   timestamp: Date;
-  status?: 'processing' | 'success' | 'error' | 'warning';
+  status?: 'processing' | 'success' | 'error';
   metadata?: any;
   imageUrl?: string;
 }
@@ -23,338 +23,338 @@ interface AgentConsoleProps {
   className?: string;
 }
 
+const quickCommands = [
+  'Gere imagens para produtos sem imagem',
+  'Crie uma promoção para hoje com os produtos mais vendidos',
+  'Liste produtos sem imagem e sem descrição',
+  'Ajuste o cardápio para destacar os produtos ativos',
+  'Lance esta nota fiscal como despesa e organize por categoria'
+];
+
+const thinkingMessages = [
+  'Pensando e consultando o sistema...',
+  'Lendo os dados reais do restaurante...',
+  'Executando com segurança...',
+  'Conferindo o resultado...'
+];
+
 export function AgentConsole({ className }: AgentConsoleProps) {
   const [messages, setMessages] = useState<ConsoleMessage[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [suggestedCommands] = useState([
-    'Desativar carne de sol de todos os produtos',
-    'Lançar despesa de R$ 150,00 para alimentação',
-    'Criar produto Pizza Calabresa com tamanhos P/M/G e adicionais',
-    'Gerar imagens para produtos sem imagem',
-    'Mostrar ingredientes ativos',
-    'Registrar nota fiscal como despesa',
-    'Desativar queijo coalho'
-  ]);
-  
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Scroll to bottom when new messages are added
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-    }
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
   useEffect(() => {
-    // Focus input on component mount
     inputRef.current?.focus();
   }, []);
 
   const addMessage = (message: Omit<ConsoleMessage, 'id' | 'timestamp'>) => {
     const newMessage: ConsoleMessage = {
       ...message,
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       timestamp: new Date()
     };
-    setMessages(prev => [...prev, newMessage]);
+    setMessages((prev) => [...prev, newMessage]);
     return newMessage;
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const buildHistory = (): SupportChatHistoryMessage[] =>
+    messages
+      .filter((message) => message.status !== 'processing')
+      .slice(-30)
+      .map((message) => ({
+        role: message.type === 'user' ? 'user' : 'assistant',
+        content: message.content
+      }));
+
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
       toast({
         title: 'Arquivo inválido',
-        description: 'Por favor, selecione uma imagem.',
+        description: 'Selecione uma imagem.',
         variant: 'destructive'
       });
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setSelectedImage(event.target?.result as string);
-    };
+    reader.onload = (loadEvent) => setSelectedImage(loadEvent.target?.result as string);
     reader.readAsDataURL(file);
-    
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if ((!input.trim() && !selectedImage) || isProcessing) return;
+  const submitCommand = async (command: string) => {
+    const text = command.trim();
+    if ((!text && !selectedImage) || isProcessing) return;
+
     if (!user?.id) {
       toast({
         title: 'Faça login',
-        description: 'Entre no sistema para usar o assistente.',
+        description: 'Entre no sistema para usar o POP AI.',
         variant: 'destructive'
       });
       return;
     }
 
-    // Add user message
+    const history = buildHistory();
+    const uploadedImage = selectedImage;
     addMessage({
       type: 'user',
-      content: input || 'Analise esta imagem.',
+      content: text || 'Analise esta imagem.',
       status: 'success',
-      imageUrl: selectedImage || undefined
+      imageUrl: uploadedImage || undefined
     });
 
-    const userInput = input;
-    const userImage = selectedImage;
     setInput('');
     setSelectedImage(null);
     setIsProcessing(true);
 
-    // Add processing message
     const processingMessage = addMessage({
       type: 'agent',
-      content: 'Conectando ao cérebro...',
+      content: thinkingMessages[0],
       status: 'processing'
     });
-    
-    // Animação de "pensando"
-    const thinkingMessages = ['Conectando ao cérebro...', 'Analisando comando...', 'Consultando banco de dados...', 'Executando ação...'];
-    let msgIndex = 0;
-    const thinkingInterval = setInterval(() => {
-        msgIndex = (msgIndex + 1) % thinkingMessages.length;
-        setMessages(prev => prev.map(msg => 
-            msg.id === processingMessage.id && msg.status === 'processing'
-              ? { ...msg, content: thinkingMessages[msgIndex] }
-              : msg
-        ));
-    }, 2000);
+
+    let messageIndex = 0;
+    const interval = window.setInterval(() => {
+      messageIndex = (messageIndex + 1) % thinkingMessages.length;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === processingMessage.id && message.status === 'processing'
+            ? { ...message, content: thinkingMessages[messageIndex] }
+            : message
+        )
+      );
+    }, 1800);
 
     try {
-      // Process the command through the agent service
-      const result = await processAgentCommand(userInput, user.id, userImage || undefined);
-      
-      clearInterval(thinkingInterval);
-      
-      // Update processing message with result
-      setMessages(prev => prev.map(msg => 
-        msg.id === processingMessage.id 
-          ? { ...msg, content: result.message, status: result.success ? 'success' : 'error', metadata: result.metadata }
-          : msg
-      ));
+      const result = await processAgentCommand(text, user.id, uploadedImage || undefined, history);
+      window.clearInterval(interval);
 
-      if (result.success) {
-        toast({
-          title: 'Comando executado com sucesso',
-          description: result.message,
-        });
-      } else {
-        toast({
-          title: 'Erro ao executar comando',
-          description: result.message,
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      clearInterval(thinkingInterval);
-      
-      // Update processing message with error
-      setMessages(prev => prev.map(msg => 
-        msg.id === processingMessage.id 
-          ? { ...msg, content: 'Erro ao processar comando. Tente novamente.', status: 'error' }
-          : msg
-      ));
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === processingMessage.id
+            ? {
+                ...message,
+                content: result.message,
+                status: result.success ? 'success' : 'error',
+                metadata: result.metadata
+              }
+            : message
+        )
+      );
 
       toast({
-        title: 'Erro',
+        title: result.success ? 'POP AI executou' : 'POP AI encontrou um problema',
+        description: result.message,
+        variant: result.success ? 'default' : 'destructive'
+      });
+    } catch (error) {
+      window.clearInterval(interval);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === processingMessage.id
+            ? { ...message, content: 'Não consegui concluir agora. Tente novamente em instantes.', status: 'error' }
+            : message
+        )
+      );
+      toast({
+        title: 'Erro no POP AI',
         description: 'Não foi possível processar o comando.',
         variant: 'destructive'
       });
     } finally {
       setIsProcessing(false);
+      inputRef.current?.focus();
     }
   };
 
-  const handleSuggestedCommand = (command: string) => {
-    setInput(command);
-    inputRef.current?.focus();
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    submitCommand(input);
   };
 
-  const getStatusIcon = (status?: string) => {
-    switch (status) {
-      case 'processing':
-        return <Loader2 className="h-4 w-4 animate-spin" />;
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'error':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      case 'warning':
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
-      default:
-        return null;
-    }
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
-  };
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-5 w-5" />
-          Assistente de Comandos
-        </CardTitle>
-        <CardDescription>
-          Execute comandos em linguagem natural para controlar ingredientes e despesas
-        </CardDescription>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {/* Suggested Commands */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Comandos sugeridos:</p>
-          <div className="flex flex-wrap gap-2">
-            {suggestedCommands.map((command, index) => (
-              <Badge
-                key={index}
-                variant="secondary"
-                className="cursor-pointer hover:bg-secondary/80 transition-colors"
-                onClick={() => handleSuggestedCommand(command)}
-              >
-                {command}
+    <Card className={`overflow-hidden border-0 bg-[#f7f8f3] shadow-xl ${className || ''}`}>
+      <div className="border-b bg-gradient-to-br from-emerald-950 via-emerald-900 to-[#ff5b05] p-5 text-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-lime-200">
+              <Sparkles className="h-3.5 w-3.5" />
+              POP AI
+            </div>
+            <div>
+              <h2 className="text-2xl font-black leading-tight md:text-3xl">Agente inteligente do sistema</h2>
+              <p className="max-w-3xl text-sm text-white/80 md:text-base">
+                Peça em linguagem natural. Ele consulta dados reais, executa ações, gera imagens de produto e continua o contexto da conversa.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+            {['Cardápio', 'Financeiro', 'Imagens', 'Operação'].map((label) => (
+              <Badge key={label} className="justify-center border-white/20 bg-white/10 px-3 py-2 text-white hover:bg-white/15">
+                {label}
               </Badge>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Messages */}
-        <ScrollArea className="h-[300px] border rounded-lg p-4" ref={scrollAreaRef}>
-          <div className="space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <Bot className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>Envie um comando para começar</p>
-                <p className="text-xs mt-1">Ex: "Desativar carne de sol de todos os produtos"</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  {message.type === 'agent' && (
-                    <div className="flex-shrink-0">
-                      <Bot className="h-6 w-6 text-blue-500" />
-                    </div>
-                  )}
-                  
-                  <div className={`max-w-[80%] space-y-1 ${
-                    message.type === 'user' ? 'order-1' : ''
-                  }`}>
-                    <div
-                      className={`rounded-lg px-4 py-2 ${
-                        message.type === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : message.status === 'error'
-                          ? 'bg-destructive/10 text-destructive'
-                          : message.status === 'warning'
-                          ? 'bg-yellow-500/10 text-yellow-700'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <div className="flex flex-col gap-2">
-                        {message.imageUrl && (
-                          <img 
-                            src={message.imageUrl} 
-                            alt="Upload" 
-                            className="max-w-[200px] rounded-md object-contain"
-                          />
-                        )}
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(message.status)}
-                          <span className="text-sm">{message.content}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatTime(message.timestamp)}
-                    </div>
-                  </div>
-
-                  {message.type === 'user' && (
-                    <div className="flex-shrink-0 order-2">
-                      <User className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
+      <div className="grid min-h-[620px] grid-rows-[1fr_auto]">
+        <ScrollArea ref={scrollRef} className="h-[520px] px-4 py-5 md:h-[600px] md:px-6">
+          {messages.length === 0 ? (
+            <div className="mx-auto flex h-full max-w-4xl flex-col justify-center gap-6 py-10">
+              <div className="rounded-2xl border bg-white p-6 shadow-sm">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-950 text-white">
+                  <Bot className="h-6 w-6" />
                 </div>
-              ))
-            )}
-          </div>
-        </ScrollArea>
+                <h3 className="text-2xl font-black text-emerald-950">O que vamos resolver agora?</h3>
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                  Diga o resultado que você quer. Exemplo: “gere imagens para produtos sem imagem”, “suba o preço dos adicionais em 10%” ou “crie um combo novo com bebida”.
+                </p>
+              </div>
 
-        {/* Input Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-          {selectedImage && (
-            <div className="relative inline-block w-max">
-              <img src={selectedImage} alt="Selected" className="h-20 rounded-md object-contain border" />
-              <button 
-                type="button" 
-                onClick={() => setSelectedImage(null)}
-                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
-              >
-                <X className="h-3 w-3" />
-              </button>
+              <div className="grid gap-3 md:grid-cols-2">
+                {quickCommands.map((command) => (
+                  <button
+                    key={command}
+                    type="button"
+                    onClick={() => submitCommand(command)}
+                    className="rounded-2xl border bg-white p-4 text-left text-sm font-semibold text-emerald-950 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md"
+                    disabled={isProcessing}
+                  >
+                    <Wand2 className="mb-3 h-5 w-5 text-orange-600" />
+                    {command}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto flex max-w-5xl flex-col gap-5">
+              {messages.map((message) => {
+                const isUser = message.type === 'user';
+                return (
+                  <div key={message.id} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    {!isUser && (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-950 text-white shadow-sm">
+                        {message.status === 'processing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                      </div>
+                    )}
+
+                    <div className={`max-w-[88%] md:max-w-[72%] ${isUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                      <div
+                        className={`rounded-3xl px-4 py-3 text-sm leading-relaxed shadow-sm md:text-[15px] ${
+                          isUser
+                            ? 'rounded-br-md bg-emerald-950 text-white'
+                            : message.status === 'error'
+                              ? 'rounded-bl-md bg-red-50 text-red-800 ring-1 ring-red-100'
+                              : 'rounded-bl-md bg-white text-slate-800 ring-1 ring-slate-100'
+                        }`}
+                      >
+                        {message.imageUrl && (
+                          <img src={message.imageUrl} alt="Imagem enviada" className="mb-3 max-h-56 rounded-2xl border object-contain" />
+                        )}
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                        {message.status === 'success' && !isUser && (
+                          <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            concluído
+                          </div>
+                        )}
+                      </div>
+                      <span className="px-2 text-xs text-slate-500">{formatTime(message.timestamp)}</span>
+                    </div>
+
+                    {isUser && (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-emerald-950 shadow-sm ring-1 ring-slate-200">
+                        <User className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-          <div className="flex gap-2">
-            <input 
-              type="file" 
-              accept="image/*" 
-              className="hidden" 
-              ref={fileInputRef} 
-              onChange={handleImageUpload}
-            />
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="icon" 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessing}
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Digite seu comando..."
-              disabled={isProcessing}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isProcessing || (!input.trim() && !selectedImage)}>
-              {isProcessing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
+        </ScrollArea>
+
+        <form onSubmit={handleSubmit} className="border-t bg-white/90 p-4 backdrop-blur md:p-5">
+          <div className="mx-auto max-w-5xl space-y-3">
+            {selectedImage && (
+              <div className="relative inline-flex rounded-2xl border bg-white p-2 shadow-sm">
+                <img src={selectedImage} alt="Imagem selecionada" className="h-20 w-20 rounded-xl object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute -right-2 -top-2 rounded-full bg-red-600 p-1 text-white shadow"
+                  aria-label="Remover imagem"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 rounded-3xl border bg-white p-2 shadow-lg shadow-emerald-950/5 focus-within:border-orange-300">
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 rounded-2xl text-slate-600"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                title="Anexar imagem"
+              >
+                <Paperclip className="h-5 w-5" />
+              </Button>
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    submitCommand(input);
+                  }
+                }}
+                placeholder="Peça uma ação para o POP AI..."
+                disabled={isProcessing}
+                className="max-h-40 min-h-[48px] flex-1 resize-none border-0 bg-transparent px-1 py-3 text-base shadow-none focus-visible:ring-0"
+              />
+              <Button
+                type="submit"
+                disabled={isProcessing || (!input.trim() && !selectedImage)}
+                className="h-11 rounded-2xl bg-orange-600 px-5 font-bold hover:bg-orange-700"
+              >
+                {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <ImageIcon className="h-4 w-4" />
+              Agora a geração por IA usa OpenAI e salva a imagem direto no produto.
+            </div>
           </div>
         </form>
-      </CardContent>
+      </div>
     </Card>
   );
 }
