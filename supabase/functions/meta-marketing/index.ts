@@ -122,6 +122,33 @@ async function uploadMarketingImage(serviceClient: any, restaurantId: string, by
   return data.publicUrl;
 }
 
+function publicProductImageUrl(serviceClient: any, value?: string | null) {
+  let raw = String(value || "").trim().replace(/^['"]+|['"]+$/g, "");
+  if (!raw) return null;
+  if (raw.startsWith("//")) raw = `https:${raw}`;
+  if (raw.startsWith("http://")) raw = `https://${raw.slice("http://".length)}`;
+  raw = raw.replace(/^https:\/\/https:\/\//, "https://");
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  const path = raw.replace(/^\/+/, "").replace(/^product-images\//, "");
+  const { data } = serviceClient.storage.from("product-images").getPublicUrl(path);
+  return data?.publicUrl || raw;
+}
+
+async function isUsablePublicImage(url?: string | null) {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return false;
+  try {
+    const head = await fetch(raw, { method: "HEAD" });
+    const headType = head.headers.get("content-type") || "";
+    if (head.ok && headType.toLowerCase().startsWith("image/")) return true;
+    const get = await fetch(raw, { headers: { Range: "bytes=0-2047" } });
+    const getType = get.headers.get("content-type") || "";
+    return get.ok && getType.toLowerCase().startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
 function bytesFromBase64(value: string) {
   const binary = atob(value);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -130,30 +157,65 @@ function bytesFromBase64(value: string) {
 async function generateStaticProductImage(serviceClient: any, restaurantId: string, prompt: string) {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) return null;
-  const res = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1-mini",
-      prompt,
-      size: "1024x1024",
-      quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
-      n: 1,
-    }),
-  });
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error?.message || "Falha ao gerar imagem IA.");
-  const item = payload?.data?.[0] || {};
-  if (item.b64_json) {
-    return uploadMarketingImage(serviceClient, restaurantId, bytesFromBase64(String(item.b64_json)), "image/png");
+  const modelCandidates = [...new Set([Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1", "gpt-image-1"])];
+  let lastError: any = null;
+  for (const model of modelCandidates) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          prompt,
+          size: "1024x1024",
+          quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
+          n: 1,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error?.message || "Falha ao gerar imagem IA.");
+      const item = payload?.data?.[0] || {};
+      if (item.b64_json) {
+        return uploadMarketingImage(serviceClient, restaurantId, bytesFromBase64(String(item.b64_json)), "image/png");
+      }
+      if (item.url) {
+        const imageRes = await fetch(String(item.url));
+        if (!imageRes.ok) throw new Error("Falha ao baixar imagem IA.");
+        const contentType = imageRes.headers.get("content-type") || "image/png";
+        return uploadMarketingImage(serviceClient, restaurantId, new Uint8Array(await imageRes.arrayBuffer()), contentType);
+      }
+    } catch (error) {
+      lastError = error;
+      console.error("marketing_image_model_failed", model, error);
+    }
   }
-  if (item.url) {
-    const imageRes = await fetch(String(item.url));
-    if (!imageRes.ok) throw new Error("Falha ao baixar imagem IA.");
-    const contentType = imageRes.headers.get("content-type") || "image/png";
-    return uploadMarketingImage(serviceClient, restaurantId, new Uint8Array(await imageRes.arrayBuffer()), contentType);
-  }
+  if (lastError) throw lastError;
   return null;
+}
+
+async function geocodeRestaurantAddress(address?: string | null, city?: string | null) {
+  const apiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  const query = [address, city, "Brasil"].filter(Boolean).join(", ");
+  if (!apiKey || !query.trim()) return null;
+  try {
+    const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+    url.searchParams.set("address", query);
+    url.searchParams.set("key", apiKey);
+    url.searchParams.set("language", "pt-BR");
+    url.searchParams.set("region", "br");
+    const res = await fetch(url);
+    const payload = await res.json().catch(() => ({}));
+    const location = payload?.results?.[0]?.geometry?.location;
+    if (!res.ok || payload?.status !== "OK" || !location) return null;
+    return {
+      lat: Number(location.lat),
+      lng: Number(location.lng),
+      formatted_address: String(payload?.results?.[0]?.formatted_address || query),
+    };
+  } catch (error) {
+    console.error("marketing_geocode_failed", error);
+    return null;
+  }
 }
 
 async function discoverAssets(token: string) {
@@ -259,6 +321,10 @@ async function generateCopyWithAi(input: any, knowledge: any) {
 
 async function buildKnowledge(serviceClient: any, restaurantId: string, input: any) {
   const { data: restaurant } = await serviceClient.from("profiles").select("restaurant_name,address,phone,opening_hours,logo_url,banner_url,description").eq("id", restaurantId).maybeSingle();
+  if (restaurant) {
+    restaurant.logo_url = publicProductImageUrl(serviceClient, restaurant.logo_url);
+    restaurant.banner_url = publicProductImageUrl(serviceClient, restaurant.banner_url);
+  }
   let product: any = null;
   if (input.productId) {
     const { data } = await serviceClient.from("products").select("id,name,description,price,category,image_url,available").eq("user_id", restaurantId).eq("id", input.productId).maybeSingle();
@@ -267,6 +333,13 @@ async function buildKnowledge(serviceClient: any, restaurantId: string, input: a
   if (!product && input.productFocus) {
     const { data } = await serviceClient.from("products").select("id,name,description,price,category,image_url,available").eq("user_id", restaurantId).ilike("name", `%${input.productFocus}%`).eq("available", true).limit(1);
     product = data?.[0] || null;
+  }
+  if (product) {
+    const rawImageUrl = product.image_url;
+    const normalizedImageUrl = publicProductImageUrl(serviceClient, rawImageUrl);
+    product.original_image_url = rawImageUrl || null;
+    product.image_url = await isUsablePublicImage(normalizedImageUrl) ? normalizedImageUrl : null;
+    product.image_status = product.image_url ? "valid" : normalizedImageUrl ? "broken" : "missing";
   }
   const { data: products } = await serviceClient.from("products").select("id,name,price,category,available").eq("user_id", restaurantId).eq("available", true).order("name").limit(80);
   return {
@@ -289,12 +362,14 @@ Descrição: ${knowledge.product?.description || input.notes || "produto do card
 Restaurante: ${knowledge.restaurant?.restaurant_name || "PopSystem"}.
 Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitidez, sem texto, sem logo, sem pessoas.`;
   let aiImageUrl: string | null = null;
-  if (!knowledge.product?.image_url) {
+  const needsAiImage = !knowledge.product?.image_url;
+  if (needsAiImage) {
     aiImageUrl = await generateStaticProductImage(serviceClient, restaurantId, generatedImagePrompt).catch((error) => {
       console.error("marketing_ai_image_generation_failed", error);
       return null;
     });
   }
+  const restaurantLocation = await geocodeRestaurantAddress(knowledge.restaurant?.address, input.targetCity);
   const strategy = {
     objective: input.objective || "vender_mais",
     destination,
@@ -306,6 +381,7 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
     audience: {
       city: input.targetCity || "",
       radius_km: Number(input.targetRadiusKm || 5),
+      origin: restaurantLocation,
       age_min: 18,
       age_max: 55,
       interests: ["delivery", "restaurantes", "comida", productFocus],
@@ -318,6 +394,13 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
       "Preço e disponibilidade validados pelo cardápio.",
     ],
     product: knowledge.product,
+    media: {
+      product_image_url: knowledge.product?.image_url || null,
+      product_image_status: knowledge.product?.image_status || "not_selected",
+      generated_image_url: aiImageUrl,
+      generated_image_prompt: needsAiImage ? generatedImagePrompt : null,
+      final_image_source: knowledge.product?.image_url ? "product_photo" : aiImageUrl ? "ai_generated" : "static_fallback",
+    },
     menu_link: knowledge.menuLink,
   };
   const creatives = ["feed_1080x1080", "story_1080x1920", "reels_1080x1920", "banner_1200x628"].map((format) => ({
@@ -436,7 +519,7 @@ serve(async (req) => {
         restaurant_id: user.id,
         connection_id: connection?.id || null,
         name: body.name || `PopMarketing AI - ${plan.strategy.product?.name || body.productFocus || "Campanha"}`,
-        objective: body.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "OUTCOME_TRAFFIC",
+        objective: "OUTCOME_TRAFFIC",
         destination: body.destination || "whatsapp",
         daily_budget: Number(body.dailyBudget || 20),
         status: "review",
@@ -487,15 +570,20 @@ serve(async (req) => {
 
     if (action === "publish_paused") {
       const campaignId = String(body.campaignId || "");
+      const copyIndex = Math.max(0, Number(body.copyIndex || 0));
       const { data: campaign } = await serviceClient.from("marketing_campaigns").select("*, meta_connections(*)").eq("restaurant_id", user.id).eq("id", campaignId).single();
       if (!campaign?.id) return json({ error: "Campanha não encontrada." }, 404);
       const conn = campaign.meta_connections;
       if (!conn?.access_token_encrypted || !conn?.ad_account_id || !conn?.page_id) return json({ error: "Conecte uma conta Meta com conta de anúncio e página antes de publicar." }, 400);
-      if (campaign.destination === "whatsapp" && !conn.whatsapp_business_account_id) {
-        return json({ error: "Seu WhatsApp ainda não está vinculado à conta de anúncios." }, 400);
-      }
       const token = await decryptToken(conn.access_token_encrypted);
       const adAccountId = normalizeAdAccountId(conn.ad_account_id);
+      const radiusKm = Math.max(1, Number(campaign.target_radius_km || campaign.ai_strategy?.audience?.radius_km || 5));
+      const origin = campaign.ai_strategy?.audience?.origin;
+      const geoLocations = origin?.lat && origin?.lng
+        ? { custom_locations: [{ latitude: Number(origin.lat), longitude: Number(origin.lng), radius: radiusKm, distance_unit: "kilometer" }] }
+        : { countries: ["BR"] };
+      const copies = Array.isArray(campaign.ai_strategy?.copies) ? campaign.ai_strategy.copies : [];
+      const selectedCopy = copies[copyIndex] || copies[0] || {};
       const metaCampaign = await graphPost(`${adAccountId}/campaigns`, token, {
         name: campaign.name,
         objective: campaign.objective || "OUTCOME_TRAFFIC",
@@ -507,24 +595,25 @@ serve(async (req) => {
         campaign_id: metaCampaign.id,
         daily_budget: moneyToCents(campaign.daily_budget),
         billing_event: "IMPRESSIONS",
-        optimization_goal: campaign.destination === "whatsapp" ? "CONVERSATIONS" : "LINK_CLICKS",
+        optimization_goal: "LINK_CLICKS",
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-        targeting: { geo_locations: { countries: ["BR"] }, age_min: 18, age_max: 55 },
+        targeting: { geo_locations: geoLocations, age_min: 18, age_max: 55 },
         status: "PAUSED",
       });
       const link = campaign.menu_link || `${baseUrl()}/share/menu/${user.id}`;
       const { data: creativeRow } = await serviceClient.from("marketing_creatives").select("*").eq("campaign_id", campaign.id).limit(1).maybeSingle();
+      const pictureUrl = await isUsablePublicImage(creativeRow?.image_url) ? creativeRow?.image_url : undefined;
       const metaCreative = await graphPost(`${adAccountId}/adcreatives`, token, {
         name: `${campaign.name} - Criativo IA`,
         object_story_spec: {
           page_id: conn.page_id,
           link_data: {
             link,
-            message: creativeRow?.primary_text || "Clique e faça seu pedido.",
-            name: creativeRow?.headline || campaign.name,
-            description: creativeRow?.description || "Campanha PopMarketing AI",
-            picture: creativeRow?.image_url || undefined,
-            call_to_action: { type: campaign.destination === "whatsapp" ? "CONTACT_US" : "LEARN_MORE", value: { link } },
+            message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
+            name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
+            description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
+            picture: pictureUrl,
+            call_to_action: { type: "LEARN_MORE", value: { link } },
           },
         },
       });
@@ -565,6 +654,6 @@ serve(async (req) => {
     return json({ error: "Ação inválida." }, 400);
   } catch (error: any) {
     console.error("[meta-marketing]", error);
-    return json({ error: error?.message || "Erro inesperado no PopMarketing AI." }, 500);
+    return json({ error: error?.message || "Erro inesperado no PopMarketing AI." }, 200);
   }
 });

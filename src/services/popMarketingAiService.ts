@@ -7,7 +7,18 @@ export async function callPopMarketingAI<T = any>(payload: MetaActionPayload): P
     body: payload,
   });
 
-  if (error) throw error;
+  if (error) {
+    const context = (error as any)?.context;
+    if (context?.json) {
+      try {
+        const json = await context.json();
+        if (json?.error) throw new Error(String(json.error));
+      } catch (parseError: any) {
+        if (parseError?.message) throw parseError;
+      }
+    }
+    throw error;
+  }
   if ((data as any)?.error) throw new Error(String((data as any).error));
   return data as T;
 }

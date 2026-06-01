@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, Facebook, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, Facebook, MapPin, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { buildCreativeSvgDataUrl, callPopMarketingAI } from '@/services/popMarketingAiService';
+import { callPopMarketingAI } from '@/services/popMarketingAiService';
+import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 
 type Product = { id: string; name: string; price: number; image_url?: string | null; category?: string | null };
 type MetaConnection = {
@@ -36,6 +37,7 @@ type Campaign = {
   daily_budget: number;
   product_focus?: string | null;
   target_city?: string | null;
+  target_radius_km?: number | null;
   created_at: string;
   ai_strategy?: any;
   review_snapshot?: any;
@@ -81,6 +83,7 @@ export default function PopMarketingAI() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [creatives, setCreatives] = useState<Creative[]>([]);
+  const [selectedCopyIndex, setSelectedCopyIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     objective: 'vender_mais',
@@ -234,6 +237,7 @@ export default function PopMarketingAI() {
 
   const openCampaign = async (campaign: Campaign) => {
     setSelectedCampaign(campaign);
+    setSelectedCopyIndex(0);
     const { data } = await (supabase as any)
       .from('marketing_creatives')
       .select('*')
@@ -247,7 +251,7 @@ export default function PopMarketingAI() {
     if (!selectedCampaign?.id) return;
     setLoading(true);
     try {
-      await callPopMarketingAI({ action: 'publish_paused', campaignId: selectedCampaign.id });
+      await callPopMarketingAI({ action: 'publish_paused', campaignId: selectedCampaign.id, copyIndex: selectedCopyIndex });
       toast({ title: 'Campanha enviada pausada', description: 'Ela foi criada na Meta como PAUSED para revisão final.' });
       await loadCampaigns();
     } catch (error: any) {
@@ -258,6 +262,7 @@ export default function PopMarketingAI() {
   };
 
   const restaurantName = (profile as any)?.restaurant_name || 'PopSystem';
+  const selectedCopy = selectedCampaign?.ai_strategy?.copies?.[selectedCopyIndex] || selectedCampaign?.ai_strategy?.copies?.[0] || null;
 
   return (
     <div className="space-y-6">
@@ -333,8 +338,9 @@ export default function PopMarketingAI() {
               <Input type="number" min={5} value={form.dailyBudget} onChange={(e) => setForm((p) => ({ ...p, dailyBudget: Number(e.target.value || 0) }))} />
             </div>
             <div className="space-y-2">
-              <Label>Raio de entrega em km</Label>
+              <Label>Raio do anúncio em km</Label>
               <Input type="number" min={1} value={form.targetRadiusKm} onChange={(e) => setForm((p) => ({ ...p, targetRadiusKm: Number(e.target.value || 0) }))} />
+              <p className="text-xs text-muted-foreground">A Meta usa esse raio a partir do endereço do restaurante. Se não houver coordenada, o sistema usa a cidade/BR como fallback.</p>
             </div>
             <div className="space-y-2">
               <Label>Cidade alvo</Label>
@@ -438,38 +444,81 @@ export default function PopMarketingAI() {
                     <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Destino</div><div className="font-black">{selectedCampaign.destination}</div></div>
                     <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Criada</div><div className="font-black">{dateLabel(selectedCampaign.created_at)}</div></div>
                   </div>
+                  <div className="rounded-xl border bg-emerald-50 p-4 text-sm text-emerald-950">
+                    <div className="flex items-center gap-2 font-bold">
+                      <MapPin className="h-4 w-4" /> Raio de cobertura
+                    </div>
+                    <p className="mt-1">
+                      {selectedCampaign.ai_strategy?.audience?.origin?.formatted_address
+                        ? `Anúncio configurado para ${selectedCampaign.ai_strategy?.audience?.radius_km || selectedCampaign.target_radius_km || 5} km a partir de ${selectedCampaign.ai_strategy.audience.origin.formatted_address}.`
+                        : `Sem coordenada automática no momento. Ao publicar, o fallback usa segmentação ampla no Brasil até o endereço do restaurante ser geocodificado.`}
+                    </p>
+                  </div>
                   <pre className="max-h-80 overflow-auto rounded-xl bg-[#062f23] p-4 text-xs text-white">{JSON.stringify(selectedCampaign.ai_strategy || {}, null, 2)}</pre>
                 </TabsContent>
                 <TabsContent value="copy" className="grid gap-3 md:grid-cols-2">
                   {(selectedCampaign.ai_strategy?.copies || []).map((copy: any, index: number) => (
-                    <div key={index} className="rounded-xl border p-4">
-                      <Badge className="mb-2 bg-[#ff5a00] text-white">{copy.style || `Variação ${index + 1}`}</Badge>
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setSelectedCopyIndex(index)}
+                      className={`rounded-xl border p-4 text-left transition hover:border-[#ff5a00] ${selectedCopyIndex === index ? 'border-[#8CC850] bg-[#f7fff0] ring-2 ring-[#8CC850]/40' : 'bg-white'}`}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <Badge className="bg-[#ff5a00] text-white">{copy.style || `Variação ${index + 1}`}</Badge>
+                        {selectedCopyIndex === index && <Badge className="bg-[#8CC850] text-[#003223]">Selecionada</Badge>}
+                      </div>
                       <div className="font-bold">{copy.headline}</div>
                       <p className="mt-2 text-sm text-muted-foreground">{copy.primary_text}</p>
                       <p className="mt-2 text-xs">{copy.description}</p>
-                    </div>
+                    </button>
                   ))}
+                  <div className="md:col-span-2 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+                    A copy marcada como selecionada será usada na publicação pausada da Meta.
+                  </div>
                 </TabsContent>
                 <TabsContent value="creative" className="grid gap-4 md:grid-cols-2">
                   {creatives.map((creative) => {
-                    const preview = buildCreativeSvgDataUrl({
-                      format: creative.format,
-                      restaurantName,
-                      productName: selectedCampaignProduct?.name || selectedCampaign.product_focus || selectedProduct?.name || 'Oferta especial',
-                      price: selectedCampaignProduct?.price ? money(selectedCampaignProduct.price) : selectedProduct ? money(selectedProduct.price) : 'Peça agora',
-                      headline: creative.headline || 'Oferta especial',
-                      cta: creative.cta === 'WHATSAPP_MESSAGE' ? 'CHAME NO WHATSAPP' : 'CLIQUE E PEÇA',
-                      imageUrl: creative.image_url || selectedCampaignProduct?.image_url || selectedProduct?.image_url,
-                      logoUrl: creative.logo_url || selectedCampaign?.ai_strategy?.restaurant?.logo_url || (profile as any)?.logo_url,
-                      generatedImagePrompt: creative.generated_image_prompt,
-                    });
+                    const productName = selectedCampaignProduct?.name || selectedCampaign.product_focus || selectedProduct?.name || 'Oferta especial';
+                    const productPrice = selectedCampaignProduct?.price ? money(selectedCampaignProduct.price) : selectedProduct ? money(selectedProduct.price) : 'Peça agora';
+                    const imageUrl = normalizeImageUrlForDisplay(creative.image_url || selectedCampaignProduct?.image_url || selectedProduct?.image_url);
+                    const logoUrl = normalizeImageUrlForDisplay(creative.logo_url || selectedCampaign?.ai_strategy?.restaurant?.logo_url || (profile as any)?.logo_url);
+                    const isTall = creative.format.includes('1080x1920');
                     return (
                       <div key={creative.id || creative.format} className="rounded-xl border p-3">
                         <div className="mb-2 flex items-center justify-between">
                           <strong>{creative.format}</strong>
                           <Badge variant="outline">{creative.type}</Badge>
                         </div>
-                        <img src={preview} alt={creative.format} className="max-h-[420px] w-full rounded-lg object-contain bg-muted" />
+                        <div className={`relative mx-auto overflow-hidden rounded-lg bg-gradient-to-br from-[#003223] via-[#065f46] to-[#ff5a00] text-white shadow-inner ${isTall ? 'aspect-[9/16] max-h-[520px]' : creative.format.includes('1200x628') ? 'aspect-[1200/628]' : 'aspect-square'}`}>
+                          <div className="absolute inset-0 opacity-15">
+                            <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white" />
+                            <div className="absolute -bottom-20 left-8 h-56 w-56 rounded-full bg-white" />
+                          </div>
+                          <div className={`relative z-10 flex h-full gap-4 p-8 ${isTall ? 'flex-col justify-between' : 'items-center justify-between'}`}>
+                            <div className={isTall ? 'space-y-5' : 'max-w-[54%] space-y-4'}>
+                              {logoUrl ? (
+                                <img src={logoUrl} alt={restaurantName} className="h-12 max-w-[180px] object-contain object-left" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+                              ) : (
+                                <div className="text-lg font-black">{restaurantName}</div>
+                              )}
+                              <div className="text-sm font-bold uppercase tracking-[0.16em] text-[#d9ff99]">{selectedCopy?.headline || creative.headline || `${productName} em oferta`}</div>
+                              <div className={isTall ? 'text-4xl font-black leading-tight' : 'text-3xl font-black leading-tight'}>{productName}</div>
+                              <div className={isTall ? 'text-5xl font-black' : 'text-4xl font-black'}>{productPrice}</div>
+                              <div className="inline-flex rounded-2xl bg-[#ff5a00] px-5 py-3 text-sm font-black uppercase shadow-lg">{creative.cta === 'WHATSAPP_MESSAGE' ? 'Chame no WhatsApp' : 'Clique e peça'}</div>
+                            </div>
+                            <div className={`relative flex items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-xl ${isTall ? 'h-[42%] w-full' : 'h-[76%] w-[38%]'}`}>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-50 p-4 text-center text-[#003223]">
+                                <Sparkles className="mb-3 h-10 w-10 text-[#ff5a00]" />
+                                <span className="text-lg font-black">{productName}</span>
+                                <span className="mt-2 text-xs font-semibold text-muted-foreground">Imagem do produto</span>
+                              </div>
+                              {imageUrl ? (
+                                <img src={imageUrl} alt={productName} className="relative z-10 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
