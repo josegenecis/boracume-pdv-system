@@ -11,11 +11,23 @@ export async function callPopMarketingAI<T = any>(payload: MetaActionPayload): P
     const context = (error as any)?.context;
     if (context?.json) {
       try {
-        const json = await context.json();
+        const json = await context.clone?.().json?.() || await context.json();
         if (json?.error) throw new Error(String(json.error));
       } catch (parseError: any) {
         if (parseError?.message) throw parseError;
       }
+    }
+    if (context instanceof Response && !context.bodyUsed) {
+      try {
+        const json = await context.clone().json();
+        if (json?.error) throw new Error(String(json.error));
+      } catch {
+        const text = await context.clone().text().catch(() => '');
+        if (text) throw new Error(text);
+      }
+    }
+    if (String(error.message || '').includes('Failed to send a request')) {
+      throw new Error('A geração demorou ou a Edge Function não respondeu. Tente gerar novamente com menos formatos ou confira os logs da função meta-marketing.');
     }
     throw error;
   }

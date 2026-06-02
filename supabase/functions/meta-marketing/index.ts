@@ -171,30 +171,42 @@ function bytesFromBase64(value: string) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-const creativeFormatConfig: Record<string, { label: string; size: string; aspect: string; placement: string[] }> = {
+const creativeFormatConfig: Record<string, { label: string; size: string; width: number; height: number; aspect: string; placement: string[]; preset: string }> = {
   feed_1080x1080: {
     label: "Feed quadrado 1080x1080",
     size: "1024x1024",
+    width: 1080,
+    height: 1080,
     aspect: "quadrado 1:1",
     placement: ["facebook_feed", "instagram_feed"],
+    preset: "feed_square",
   },
   story_1080x1920: {
     label: "Stories 1080x1920",
     size: "1024x1536",
+    width: 1080,
+    height: 1920,
     aspect: "vertical 9:16",
     placement: ["instagram_stories", "facebook_stories"],
+    preset: "story_vertical",
   },
   reels_1080x1920: {
     label: "Reels 1080x1920",
     size: "1024x1536",
+    width: 1080,
+    height: 1920,
     aspect: "vertical 9:16",
     placement: ["instagram_reels"],
+    preset: "reels_vertical",
   },
   banner_1200x628: {
     label: "Horizontal 1200x628",
     size: "1536x1024",
+    width: 1200,
+    height: 628,
     aspect: "horizontal",
     placement: ["facebook_feed"],
+    preset: "facebook_horizontal",
   },
 };
 
@@ -232,6 +244,91 @@ function compactCreativeText(value: string, max = 34) {
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
 }
 
+function objectiveLabel(value?: string | null) {
+  const labels: Record<string, string> = {
+    vender_mais: "vender mais pelo delivery",
+    divulgar_promocao: "divulgar uma promocao",
+    aumentar_pedidos: "aumentar pedidos no horario de movimento",
+    recuperar_clientes: "recuperar clientes inativos",
+  };
+  return labels[String(value || "")] || "gerar pedidos";
+}
+
+function buildCreativePrompt(input: {
+  restaurant_name: string;
+  product_name: string;
+  product_description?: string | null;
+  price?: string | null;
+  promotion?: string | null;
+  cta?: string | null;
+  brand_colors?: string | null;
+  format: string;
+  width: number;
+  height: number;
+  objective?: string | null;
+  placement?: string | null;
+  product_image_url?: string | null;
+  logo_url?: string | null;
+  headline?: string | null;
+  notes?: string | null;
+}) {
+  const config = creativeFormatConfig[input.format] || creativeFormatConfig.feed_1080x1080;
+  const isVertical = input.height > input.width;
+  const hasProductImage = Boolean(input.product_image_url);
+  const hasLogo = Boolean(input.logo_url);
+  const priceLine = input.price ? `Preco/oferta: ${input.price}.` : "Sem preco informado: nao invente preco, use chamada de pedido.";
+  const promotionLine = input.promotion ? `Promocao: ${input.promotion}.` : "Sem promocao informada: nao invente promocao.";
+  const imageRule = hasProductImage
+    ? "Imagem do produto: use obrigatoriamente a imagem real enviada como protagonista. Nao substitua por outro produto. Apenas melhore apresentacao, fundo, iluminacao, recorte, profundidade e acabamento comercial."
+    : "Imagem do produto: nao ha foto real. Gere uma imagem comercial realista e apetitosa baseada no nome e descricao do produto, sem parecer banco de imagem generico.";
+  const logoRule = hasLogo
+    ? "Logo: use obrigatoriamente a logo enviada, sem distorcer, em tamanho discreto e limpo."
+    : "Logo: nao invente logomarca. Use apenas o nome do restaurante em tipografia profissional.";
+  const layoutRule = isVertical
+    ? "Layout Story/Reels: produto grande no centro, chamada curta no topo, preco grande no meio ou abaixo do produto, CTA forte proximo ao rodape, margens seguras no topo e rodape para nao cortar texto no celular."
+    : config.preset === "facebook_horizontal"
+      ? "Layout horizontal: produto grande em um lado, chamada e preco do outro lado, CTA visivel, logo no canto, composicao equilibrada para Facebook Ads."
+      : "Layout Feed: produto grande centralizado ou lateral, chamada principal no topo, preco em destaque, CTA na parte inferior, logo no canto superior.";
+
+  return [
+    "Crie uma arte publicitaria profissional para restaurante/delivery, pronta para Meta Ads.",
+    `Preset: ${config.preset}.`,
+    `Formato: ${config.label}.`,
+    `Dimensao final: ${input.width}x${input.height}.`,
+    `Posicionamento: ${input.placement || config.placement.join(", ")}.`,
+    `Objetivo da campanha: ${objectiveLabel(input.objective)}.`,
+    "",
+    `Restaurante: ${input.restaurant_name}.`,
+    `Produto principal: ${input.product_name}.`,
+    input.product_description ? `Descricao do produto: ${input.product_description}.` : "Descricao do produto: nao informada.",
+    priceLine,
+    promotionLine,
+    `CTA: ${input.cta || "Clique e faca seu pedido"}.`,
+    `Cores da marca: ${input.brand_colors || "verde escuro, laranja vibrante, branco e tons apetitosos do produto"}.`,
+    input.headline ? `Chamada principal curta: ${input.headline}.` : "",
+    input.notes ? `Direcao extra do dono: ${input.notes}.` : "",
+    "",
+    logoRule,
+    imageRule,
+    layoutRule,
+    "",
+    "Regras de qualidade obrigatorias:",
+    "- Nunca gerar imagem generica.",
+    "- Produto como protagonista, grande e apetitoso.",
+    "- Hierarquia visual clara: chamada principal, produto, preco/oferta, CTA, logo.",
+    "- No maximo 3 blocos de texto na arte.",
+    "- Texto grande, legivel no celular, sem corte e sem letras pequenas.",
+    "- Area segura para texto, principalmente em Story/Reels.",
+    "- Visual moderno, limpo, alto contraste, premium mas popular.",
+    "- Fundo com textura leve, cenario ou degradê sofisticado; nunca template chapado verde padrao.",
+    "- Sombras suaves e composicao equilibrada.",
+    "- Nao poluir a peca, nao distorcer logo, nao distorcer produto.",
+    "- Nao inventar preco, promocao ou promessa de resultado.",
+    "",
+    "Resultado esperado: imagem final de anuncio pago com aparencia de designer profissional de social media para restaurantes, pronta para conversao.",
+  ].filter(Boolean).join("\n");
+}
+
 async function generateAiAdCreativeImage(params: {
   serviceClient: any;
   restaurantId: string;
@@ -245,6 +342,10 @@ async function generateAiAdCreativeImage(params: {
   productImageUrl?: string | null;
   logoUrl?: string | null;
   notes?: string | null;
+  objective?: string | null;
+  placement?: string | null;
+  promotion?: string | null;
+  brandColors?: string | null;
 }) {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada para gerar criativos.");
@@ -252,19 +353,24 @@ async function generateAiAdCreativeImage(params: {
   const headline = compactCreativeText(params.headline || `${params.productName} em oferta`, 32);
   const price = compactCreativeText(params.priceLabel || "Peça agora", 18);
   const cta = compactCreativeText(params.cta || "PEÇA AGORA", 22);
-  const prompt = [
-    `Crie uma arte final de anúncio profissional para Meta Ads no formato ${config.label}, proporção ${config.aspect}.`,
-    `Restaurante: ${params.restaurantName}.`,
-    `Produto em destaque: ${params.productName}.`,
-    params.productDescription ? `Descrição do produto: ${params.productDescription}.` : "",
-    `Texto principal da arte, legível e sem erros: "${headline}".`,
-    `Preço/chamada em destaque, legível: "${price}".`,
-    `Botão/chamada para ação: "${cta}".`,
-    params.productImageUrl ? "Use a imagem do produto enviada como referência principal e mantenha o produto apetitoso e bem visível." : "Crie uma imagem apetitosa e realista do produto com base no nome e descrição.",
-    params.logoUrl ? "Use a logomarca enviada discretamente no topo ou canto da arte." : "Reserve um espaço limpo para a marca, sem inventar logotipo.",
-    params.notes ? `Direção extra do dono: ${params.notes}.` : "",
-    "Design brasileiro moderno para restaurante/delivery, cores comerciais, alto contraste, composição pronta para anúncio. Não use fundo genérico verde sólido; crie cenário, profundidade, comida realista e acabamento premium.",
-  ].filter(Boolean).join(" ");
+  const prompt = buildCreativePrompt({
+    restaurant_name: params.restaurantName,
+    product_name: params.productName,
+    product_description: params.productDescription,
+    price,
+    promotion: params.promotion,
+    cta,
+    brand_colors: params.brandColors,
+    format: params.format,
+    width: config.width,
+    height: config.height,
+    objective: params.objective,
+    placement: params.placement,
+    product_image_url: params.productImageUrl,
+    logo_url: params.logoUrl,
+    headline,
+    notes: params.notes,
+  });
 
   const productBlob = await fetchImageBlob(params.productImageUrl);
   const logoBlob = await fetchImageBlob(params.logoUrl);
@@ -283,6 +389,7 @@ async function generateAiAdCreativeImage(params: {
         form.set("quality", Deno.env.get("OPENAI_IMAGE_QUALITY") || "medium");
         form.set("background", "opaque");
         form.set("output_format", "png");
+        if (productBlob && model === "gpt-image-1") form.set("input_fidelity", "high");
         if (productBlob) form.append("image[]", productBlob, imageFilename("produto", productBlob));
         if (logoBlob) form.append("image[]", logoBlob, imageFilename("logo", logoBlob));
         res = await fetch("https://api.openai.com/v1/images/edits", {
@@ -542,12 +649,12 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
     },
     menu_link: knowledge.menuLink,
   };
-  const creatives = [];
-  for (const format of selectedFormats) {
+  const creatives = await Promise.all(selectedFormats.map(async (format) => {
     const headline = copies[0]?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`;
     const primaryText = copies[0]?.primary_text || `Peça ${productFocus} agora.`;
     const description = copies[0]?.description || "Campanha criada com IA para revisão.";
     const price = knowledge.product?.price ? `R$ ${Number(knowledge.product.price).toFixed(2).replace(".", ",")}` : "";
+    const placement = (creativeFormatConfig[format]?.placement || []).filter((item) => selectedPlacements.includes(item)).join(", ");
     const finalImageUrl = await generateAiAdCreativeImage({
       serviceClient,
       restaurantId,
@@ -561,9 +668,13 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
       notes: input.notes || "",
       productImageUrl: knowledge.product?.image_url || null,
       logoUrl: knowledge.restaurant?.logo_url || null,
+      objective: input.objective || "vender_mais",
+      placement,
+      promotion: input.promotion || input.notes || null,
+      brandColors: input.brandColors || "verde escuro, laranja PopSystem, branco, cores naturais do produto",
     });
     if (!finalImageUrl) throw new Error(`A IA não retornou imagem final para o formato ${creativeFormatConfig[format]?.label || format}.`);
-    creatives.push({
+    return {
       format,
       type: "ai_ad_creative",
       image_url: finalImageUrl,
@@ -574,8 +685,8 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
       primary_text: primaryText,
       description,
       cta: destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
-    });
-  }
+    };
+  }));
   if (creatives.length !== selectedFormats.length || creatives.some((creative) => !creative.image_url)) {
     throw new Error("Não foi possível gerar todos os criativos finais por IA. Tente novamente ou confira a chave OPENAI_API_KEY.");
   }
