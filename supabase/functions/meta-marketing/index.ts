@@ -210,9 +210,31 @@ const creativeFormatConfig: Record<string, { label: string; size: string; width:
   },
 };
 
+const creativeVariationConfig: Record<string, { label: string; style: string; composition: string }> = {
+  A: {
+    label: "Criativo A",
+    style: "premium comercial, limpo, produto dominante, preço forte e CTA claro",
+    composition: "produto em destaque lateral ou central, logo discreta no topo, preço grande e CTA no rodape",
+  },
+  B: {
+    label: "Criativo B",
+    style: "promoção forte para delivery, alto contraste, leitura imediata no celular",
+    composition: "produto maior, oferta em destaque, preço com maximo impacto e CTA em botao visivel",
+  },
+  C: {
+    label: "Criativo C",
+    style: "visual social media brasileiro, apetitoso, moderno, com profundidade e cenário premium",
+    composition: "produto protagonista sobre cenario realista, textos em blocos curtos e logo integrada sem poluir",
+  },
+};
+
+function normalizeFormatKey(value: string) {
+  return value === "facebook_1200x628" ? "banner_1200x628" : value;
+}
+
 function normalizeSelectedFormats(value: unknown) {
   const allowed = new Set(Object.keys(creativeFormatConfig));
-  const list = Array.isArray(value) ? value.map(String).filter((item) => allowed.has(item)) : [];
+  const list = Array.isArray(value) ? value.map((item) => normalizeFormatKey(String(item))).filter((item) => allowed.has(item)) : [];
   return list.length ? [...new Set(list)] : ["feed_1080x1080", "story_1080x1920", "reels_1080x1920"];
 }
 
@@ -254,6 +276,33 @@ function objectiveLabel(value?: string | null) {
   return labels[String(value || "")] || "gerar pedidos";
 }
 
+function normalizeCreativeFlags(input: any) {
+  return {
+    useRealProductPhoto: input.useRealProductPhoto !== false,
+    removeBackground: input.removeBackground !== false,
+    enhanceProductImage: input.enhanceProductImage !== false,
+    applyBrandIdentity: input.applyBrandIdentity !== false,
+    generateThreeVersions: input.generateThreeVersions !== false,
+  };
+}
+
+function scenarioForProduct(productName?: string | null, category?: string | null) {
+  const text = `${productName || ""} ${category || ""}`.toLowerCase();
+  if (text.includes("aça") || text.includes("acai")) {
+    return "Açaí: ambiente tropical premium, frutas frescas discretas, madeira clara ou pedra fria, luz natural apetitosa, sensação de delivery profissional.";
+  }
+  if (text.includes("pizza")) {
+    return "Pizza: mesa rustica elegante, forno ou cozinha desfocados ao fundo, luz quente, textura artesanal e sensação de produto recém-preparado.";
+  }
+  if (text.includes("hamb") || text.includes("burger") || text.includes("burguer")) {
+    return "Hambúrguer: madeira premium, luz quente, sombra suave, vapor/fumaça muito leve, clima de hamburgueria moderna.";
+  }
+  if (text.includes("sorvete") || text.includes("gelato") || text.includes("milk")) {
+    return "Sorvete/gelato: fundo limpo e colorido suave, luz fria premium, aspecto fresco, cremoso e moderno.";
+  }
+  return "Restaurante/delivery: cenário comercial brasileiro, fundo sofisticado, limpo, apetitoso, com foco total no produto e conversão.";
+}
+
 function buildCreativePrompt(input: {
   restaurant_name: string;
   product_name: string;
@@ -271,32 +320,57 @@ function buildCreativePrompt(input: {
   logo_url?: string | null;
   headline?: string | null;
   notes?: string | null;
+  mode?: "professional" | "full_ai";
+  variation?: string | null;
+  category?: string | null;
+  remove_background?: boolean;
+  enhance_product_image?: boolean;
+  apply_brand_identity?: boolean;
 }) {
   const config = creativeFormatConfig[input.format] || creativeFormatConfig.feed_1080x1080;
   const isVertical = input.height > input.width;
   const hasProductImage = Boolean(input.product_image_url);
   const hasLogo = Boolean(input.logo_url);
+  const mode = input.mode || (hasProductImage ? "professional" : "full_ai");
+  const variation = creativeVariationConfig[String(input.variation || "A")] || creativeVariationConfig.A;
   const priceLine = input.price ? `Preco/oferta: ${input.price}.` : "Sem preco informado: nao invente preco, use chamada de pedido.";
   const promotionLine = input.promotion ? `Promocao: ${input.promotion}.` : "Sem promocao informada: nao invente promocao.";
-  const imageRule = hasProductImage
-    ? "Imagem do produto: use obrigatoriamente a imagem real enviada como protagonista. Nao substitua por outro produto. Apenas melhore apresentacao, fundo, iluminacao, recorte, profundidade e acabamento comercial."
-    : "Imagem do produto: nao ha foto real. Gere uma imagem comercial realista e apetitosa baseada no nome e descricao do produto, sem parecer banco de imagem generico.";
+  const imageRule = mode === "professional" && hasProductImage
+    ? [
+      "MODO PROFISSIONAL COM FOTO REAL:",
+      "Utilize a foto enviada como produto principal da peca publicitaria.",
+      "NAO recrie o produto. NAO substitua por outro produto. NAO altere embalagem, formato, cor, recheio, toppings, logo impresso ou aparencia real.",
+      "Faça apenas direção de arte: recorte visual, remoção de fundo quando necessario, melhoria de nitidez/contraste/brilho/saturação, iluminação, cenário, composição, sombras, oferta, CTA e elementos gráficos.",
+      input.remove_background ? "Remova o fundo da foto real e use o produto recortado como protagonista com borda limpa." : "Preserve a foto real em uma composição elegante se o recorte não for natural.",
+      input.enhance_product_image ? "Melhore a qualidade da foto sem mudar a identidade do produto." : "Nao aplicar alterações fortes no produto.",
+      "O produto deve ocupar 40% a 60% da arte no Feed/Horizontal e 50% a 70% em Story/Reels.",
+    ].join("\n")
+    : [
+      "MODO IA COMPLETA SEM FOTO REAL:",
+      "Não existe foto real utilizável do produto. Gere uma imagem comercial realista baseada no nome e descrição.",
+      "O resultado pode não representar fielmente o produto, portanto evite detalhes específicos não informados.",
+      "O produto deve parecer fotografia profissional de restaurante/delivery, nunca ilustração genérica.",
+    ].join("\n");
   const logoRule = hasLogo
     ? "Logo: use obrigatoriamente a logo enviada, sem distorcer, em tamanho discreto e limpo."
     : "Logo: nao invente logomarca. Use apenas o nome do restaurante em tipografia profissional.";
   const layoutRule = isVertical
-    ? "Layout Story/Reels: produto grande no centro, chamada curta no topo, preco grande no meio ou abaixo do produto, CTA forte proximo ao rodape, margens seguras no topo e rodape para nao cortar texto no celular."
+    ? "Layout Story/Reels: produto grande no centro, chamada curta no topo, preco grande abaixo ou sobreposto em area segura, CTA grande proximo ao rodape, margens seguras superior e inferior para nao cortar texto no celular."
     : config.preset === "facebook_horizontal"
       ? "Layout horizontal: produto grande em um lado, chamada e preco do outro lado, CTA visivel, logo no canto, composicao equilibrada para Facebook Ads."
       : "Layout Feed: produto grande centralizado ou lateral, chamada principal no topo, preco em destaque, CTA na parte inferior, logo no canto superior.";
+  const scenario = scenarioForProduct(input.product_name, input.category);
 
   return [
-    "Crie uma arte publicitaria profissional para restaurante/delivery, pronta para Meta Ads.",
+    "Crie uma arte publicitaria profissional para restaurante/delivery, pronta para Meta Ads, com qualidade de designer especialista em tráfego pago.",
     `Preset: ${config.preset}.`,
     `Formato: ${config.label}.`,
     `Dimensao final: ${input.width}x${input.height}.`,
     `Posicionamento: ${input.placement || config.placement.join(", ")}.`,
     `Objetivo da campanha: ${objectiveLabel(input.objective)}.`,
+    `Variacao: ${variation.label}.`,
+    `Estilo da variacao: ${variation.style}.`,
+    `Composicao da variacao: ${variation.composition}.`,
     "",
     `Restaurante: ${input.restaurant_name}.`,
     `Produto principal: ${input.product_name}.`,
@@ -310,20 +384,28 @@ function buildCreativePrompt(input: {
     "",
     logoRule,
     imageRule,
+    `Cenario recomendado: ${scenario}`,
     layoutRule,
     "",
+    "Etapas que a arte deve simular em uma unica imagem final:",
+    "1. Recortar/valorizar o produto real quando a foto existir.",
+    "2. Melhorar iluminação, nitidez e acabamento sem alterar a aparência.",
+    "3. Criar cenário profissional coerente com o tipo do produto.",
+    "4. Montar layout com hierarquia: Produto > Oferta > Preço > CTA > Logo.",
+    "",
     "Regras de qualidade obrigatorias:",
-    "- Nunca gerar imagem generica.",
+    "- Nunca gerar imagem generica ou com cara de IA.",
     "- Produto como protagonista, grande e apetitoso.",
-    "- Hierarquia visual clara: chamada principal, produto, preco/oferta, CTA, logo.",
-    "- No maximo 3 blocos de texto na arte.",
+    "- Hierarquia visual clara: produto, oferta, preço, CTA e logo.",
+    "- No maximo 3 blocos de texto na arte. Exemplos: nome do produto, preço, CTA.",
     "- Texto grande, legivel no celular, sem corte e sem letras pequenas.",
     "- Area segura para texto, principalmente em Story/Reels.",
     "- Visual moderno, limpo, alto contraste, premium mas popular.",
-    "- Fundo com textura leve, cenario ou degradê sofisticado; nunca template chapado verde padrao.",
+    "- Fundo com textura leve ou cenário sofisticado; nunca template chapado verde padrao.",
     "- Sombras suaves e composicao equilibrada.",
     "- Nao poluir a peca, nao distorcer logo, nao distorcer produto.",
     "- Nao inventar preco, promocao ou promessa de resultado.",
+    "- Evitar aparência de panfleto amador.",
     "",
     "Resultado esperado: imagem final de anuncio pago com aparencia de designer profissional de social media para restaurantes, pronta para conversao.",
   ].filter(Boolean).join("\n");
@@ -346,6 +428,12 @@ async function generateAiAdCreativeImage(params: {
   placement?: string | null;
   promotion?: string | null;
   brandColors?: string | null;
+  mode?: "professional" | "full_ai";
+  variation?: string | null;
+  category?: string | null;
+  removeBackground?: boolean;
+  enhanceProductImage?: boolean;
+  applyBrandIdentity?: boolean;
 }) {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("OPENAI_API_KEY não configurada para gerar criativos.");
@@ -370,6 +458,12 @@ async function generateAiAdCreativeImage(params: {
     logo_url: params.logoUrl,
     headline,
     notes: params.notes,
+    mode: params.mode,
+    variation: params.variation,
+    category: params.category,
+    remove_background: params.removeBackground,
+    enhance_product_image: params.enhanceProductImage,
+    apply_brand_identity: params.applyBrandIdentity,
   });
 
   const productBlob = await fetchImageBlob(params.productImageUrl);
@@ -609,11 +703,13 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
   const dailyBudget = Math.max(5, Number(input.dailyBudget || 20));
   const selectedFormats = normalizeSelectedFormats(input.selectedFormats);
   const selectedPlacements = normalizeSelectedPlacements(selectedFormats, input.selectedPlacements);
-  const generatedImagePrompt = `Crie uma arte final publicitária completa e pronta para Meta Ads.
-Produto: ${productFocus}.
-Descrição: ${knowledge.product?.description || input.notes || "produto do cardápio"}.
-Restaurante: ${knowledge.restaurant?.restaurant_name || "PopSystem"}.
-A arte deve conter produto, copy curta, preço quando disponível, CTA e identidade visual profissional.`;
+  const creativeFlags = normalizeCreativeFlags(input);
+  const variations = creativeFlags.generateThreeVersions ? ["A", "B", "C"] : ["A"];
+  const hasRealProductPhoto = Boolean(knowledge.product?.image_url) && creativeFlags.useRealProductPhoto;
+  const creativeMode: "professional" | "full_ai" = hasRealProductPhoto ? "professional" : "full_ai";
+  const generatedImagePrompt = creativeMode === "professional"
+    ? `Modo profissional: usar foto real do produto ${productFocus}, preservar aparência, criar cenário, layout, preço e CTA.`
+    : `Modo IA completa: sem foto real utilizável para ${productFocus}; gerar produto comercial realista com aviso de fidelidade.`;
   const restaurantLocation = await geocodeRestaurantAddress(knowledge.restaurant?.address, input.targetCity);
   const strategy = {
     objective: input.objective || "vender_mais",
@@ -646,13 +742,18 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
       generated_image_url: null,
       generated_image_prompt: generatedImagePrompt,
       final_image_source: "ai_ad_creative",
+      creative_mode: creativeMode,
+      creative_flags: creativeFlags,
+      warning: creativeMode === "full_ai" ? "Resultado pode não representar fielmente o produto." : null,
     },
     menu_link: knowledge.menuLink,
   };
-  const creatives = await Promise.all(selectedFormats.map(async (format) => {
-    const headline = copies[0]?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`;
-    const primaryText = copies[0]?.primary_text || `Peça ${productFocus} agora.`;
-    const description = copies[0]?.description || "Campanha criada com IA para revisão.";
+  const creativeJobs = selectedFormats.flatMap((format) => variations.map((variation) => ({ format, variation })));
+  const creatives = await Promise.all(creativeJobs.map(async ({ format, variation }, index) => {
+    const copy = copies[index % Math.max(copies.length, 1)] || copies[0] || {};
+    const headline = copy?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`;
+    const primaryText = copy?.primary_text || `Peça ${productFocus} agora.`;
+    const description = copy?.description || "Campanha criada com IA para revisão.";
     const price = knowledge.product?.price ? `R$ ${Number(knowledge.product.price).toFixed(2).replace(".", ",")}` : "";
     const placement = (creativeFormatConfig[format]?.placement || []).filter((item) => selectedPlacements.includes(item)).join(", ");
     const finalImageUrl = await generateAiAdCreativeImage({
@@ -666,20 +767,54 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
       headline,
       cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
       notes: input.notes || "",
-      productImageUrl: knowledge.product?.image_url || null,
+      productImageUrl: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
       logoUrl: knowledge.restaurant?.logo_url || null,
       objective: input.objective || "vender_mais",
       placement,
       promotion: input.promotion || input.notes || null,
       brandColors: input.brandColors || "verde escuro, laranja PopSystem, branco, cores naturais do produto",
+      mode: creativeMode,
+      variation,
+      category: knowledge.product?.category || null,
+      removeBackground: creativeFlags.removeBackground,
+      enhanceProductImage: creativeFlags.enhanceProductImage,
+      applyBrandIdentity: creativeFlags.applyBrandIdentity,
     });
     if (!finalImageUrl) throw new Error(`A IA não retornou imagem final para o formato ${creativeFormatConfig[format]?.label || format}.`);
+    const prompt = buildCreativePrompt({
+      restaurant_name: knowledge.restaurant?.restaurant_name || "PopSystem",
+      product_name: productFocus,
+      product_description: knowledge.product?.description || input.notes || "",
+      price,
+      promotion: input.promotion || input.notes || null,
+      cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
+      brand_colors: input.brandColors || "verde escuro, laranja PopSystem, branco, cores naturais do produto",
+      format,
+      width: creativeFormatConfig[format]?.width || 1080,
+      height: creativeFormatConfig[format]?.height || 1080,
+      objective: input.objective || "vender_mais",
+      placement,
+      product_image_url: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
+      logo_url: knowledge.restaurant?.logo_url || null,
+      headline,
+      notes: input.notes || "",
+      mode: creativeMode,
+      variation,
+      category: knowledge.product?.category || null,
+      remove_background: creativeFlags.removeBackground,
+      enhance_product_image: creativeFlags.enhanceProductImage,
+      apply_brand_identity: creativeFlags.applyBrandIdentity,
+    });
     return {
       format,
       type: "ai_ad_creative",
       image_url: finalImageUrl,
       logo_url: knowledge.restaurant?.logo_url || null,
-      generated_image_prompt: `${generatedImagePrompt}\nFormato: ${creativeFormatConfig[format]?.label || format}.`,
+      generated_image_prompt: prompt,
+      source_product_image_url: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
+      variation,
+      mode: creativeMode,
+      warning: creativeMode === "full_ai" ? "Resultado pode não representar fielmente o produto." : null,
       image_error: null,
       headline,
       primary_text: primaryText,
@@ -687,7 +822,7 @@ A arte deve conter produto, copy curta, preço quando disponível, CTA e identid
       cta: destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
     };
   }));
-  if (creatives.length !== selectedFormats.length || creatives.some((creative) => !creative.image_url)) {
+  if (creatives.length !== creativeJobs.length || creatives.some((creative) => !creative.image_url)) {
     throw new Error("Não foi possível gerar todos os criativos finais por IA. Tente novamente ou confira a chave OPENAI_API_KEY.");
   }
   return { knowledge, strategy, copies, creatives };
@@ -829,6 +964,8 @@ serve(async (req) => {
         type: creative.type,
         image_url: creative.image_url,
         video_url: creative.video_url || null,
+        logo_url: creative.logo_url || null,
+        generated_image_prompt: creative.generated_image_prompt || null,
         headline: creative.headline,
         primary_text: creative.primary_text,
         description: creative.description,
@@ -846,6 +983,7 @@ serve(async (req) => {
 
     if (action === "publish_paused") {
       const campaignId = String(body.campaignId || "");
+      const creativeId = String(body.creativeId || "");
       const copyIndex = Math.max(0, Number(body.copyIndex || 0));
       const { data: campaign } = await serviceClient.from("marketing_campaigns").select("*, meta_connections(*)").eq("restaurant_id", user.id).eq("id", campaignId).single();
       if (!campaign?.id) return json({ error: "Campanha não encontrada." }, 404);
@@ -864,7 +1002,9 @@ serve(async (req) => {
         .from("marketing_creatives")
         .select("*")
         .eq("campaign_id", campaign.id);
-      const creativeRow = (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.image_url)
+      const creativeRow = (creativeRows || []).find((item: any) => creativeId && item.id === creativeId && item.image_url)
+        || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.variation === "A" && item.image_url)
+        || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.image_url)
         || (creativeRows || []).find((item: any) => item.image_url);
       if (!creativeRow?.image_url) {
         return json({ error: "Gere um criativo final com imagem antes de publicar." }, 400);

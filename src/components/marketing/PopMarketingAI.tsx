@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,6 +50,10 @@ type Creative = {
   image_url?: string | null;
   logo_url?: string | null;
   generated_image_prompt?: string | null;
+  source_product_image_url?: string | null;
+  variation?: string | null;
+  mode?: 'professional' | 'full_ai' | string | null;
+  warning?: string | null;
   headline?: string | null;
   primary_text?: string | null;
   description?: string | null;
@@ -106,6 +111,7 @@ export default function PopMarketingAI() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [selectedCopyIndex, setSelectedCopyIndex] = useState(0);
+  const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     objective: 'vender_mais',
@@ -118,6 +124,11 @@ export default function PopMarketingAI() {
     startDate: '',
     endDate: '',
     notes: '',
+    useRealProductPhoto: true,
+    removeBackground: true,
+    enhanceProductImage: true,
+    applyBrandIdentity: true,
+    generateThreeVersions: true,
     selectedFormats: ['feed_1080x1080', 'story_1080x1920', 'reels_1080x1920'],
     selectedPlacements: ['facebook_feed', 'instagram_feed', 'instagram_stories', 'instagram_reels'],
   });
@@ -132,6 +143,9 @@ export default function PopMarketingAI() {
       if (key === 'selectedFormats' && current.size === 0) current.add('feed_1080x1080');
       return { ...prev, [key]: [...current] };
     });
+  };
+  const toggleFormBoolean = (key: 'useRealProductPhoto' | 'removeBackground' | 'enhanceProductImage' | 'applyBrandIdentity' | 'generateThreeVersions') => {
+    setForm((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   const permissionNames = useMemo(
     () => new Set((connection?.assets_json?.permissions || []).filter((item: any) => item?.status === 'granted').map((item: any) => item.permission)),
@@ -277,14 +291,21 @@ export default function PopMarketingAI() {
       .eq('campaign_id', campaign.id)
       .order('format');
     const snapshotCreatives = campaign.review_snapshot?.creatives || [];
-    setCreatives(Array.isArray(data) && data.length > 0 ? data : snapshotCreatives);
+    const list = Array.isArray(data) && data.length > 0
+      ? data.map((row: Creative) => {
+        const snapshot = snapshotCreatives.find((item: Creative) => item.image_url && item.image_url === row.image_url);
+        return snapshot ? { ...snapshot, ...row } : row;
+      })
+      : snapshotCreatives;
+    setCreatives(list);
+    setSelectedCreativeId(list?.[0]?.id || null);
   };
 
   const publishPaused = async () => {
     if (!selectedCampaign?.id) return;
     setLoading(true);
     try {
-      await callPopMarketingAI({ action: 'publish_paused', campaignId: selectedCampaign.id, copyIndex: selectedCopyIndex });
+      await callPopMarketingAI({ action: 'publish_paused', campaignId: selectedCampaign.id, copyIndex: selectedCopyIndex, creativeId: selectedCreativeId });
       toast({ title: 'Campanha enviada pausada', description: 'Ela foi criada na Meta como PAUSED para revisão final.' });
       await loadCampaigns();
     } catch (error: any) {
@@ -382,10 +403,40 @@ export default function PopMarketingAI() {
             </div>
             <div className="space-y-3 md:col-span-2">
               <div>
-                <Label>Formatos dos criativos</Label>
-                <p className="text-xs text-muted-foreground">A IA gera uma imagem final independente para cada formato selecionado.</p>
+                <Label>Direção de arte dos criativos</Label>
+                <p className="text-xs text-muted-foreground">
+                  Modo profissional usa a foto real do produto como protagonista. Se não houver foto, a IA cria o produto do zero e o painel mostra o aviso.
+                </p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 rounded-2xl border bg-[#fbfaf6] p-4 sm:grid-cols-2">
+                {[
+                  ['useRealProductPhoto', 'Usar foto real do produto', selectedProduct?.image_url ? 'A IA preserva o produto e cria cenário/layout.' : 'Sem foto no produto selecionado: entra no modo IA completa.'],
+                  ['removeBackground', 'Remover fundo automaticamente', 'Recorte limpo para o produto virar protagonista.'],
+                  ['enhanceProductImage', 'Melhorar imagem automaticamente', 'Nitidez, luz e contraste sem mudar a aparência.'],
+                  ['applyBrandIdentity', 'Aplicar identidade visual', 'Usa logo e cores da marca no layout.'],
+                  ['generateThreeVersions', 'Gerar 3 versões', 'Cria A/B/C para testar qual converte melhor.'],
+                ].map(([key, title, description]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleFormBoolean(key as any)}
+                    className="flex items-start gap-3 rounded-xl border bg-white p-3 text-left transition hover:border-[#8CC850]"
+                  >
+                    <Checkbox checked={(form as any)[key]} className="mt-1" />
+                    <span>
+                      <span className="block font-bold text-[#003223]">{title}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3 md:col-span-2">
+              <div>
+                <Label>Formatos dos criativos</Label>
+                <p className="text-xs text-muted-foreground">Escolha os tamanhos que serão gerados com arte final independente.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
                 {creativeFormatOptions.map((option) => {
                   const active = form.selectedFormats.includes(option.id);
                   return (
@@ -393,13 +444,16 @@ export default function PopMarketingAI() {
                       key={option.id}
                       type="button"
                       onClick={() => toggleFormArray('selectedFormats', option.id)}
-                      className={`rounded-xl border p-3 text-left transition ${active ? 'border-[#ff5a00] bg-orange-50 ring-2 ring-[#ff5a00]/15' : 'border-border bg-white hover:border-[#ff5a00]'}`}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${active ? 'border-[#8CC850] bg-[#f2ffe8] ring-2 ring-[#8CC850]/20' : 'border-border bg-white hover:border-[#8CC850]'}`}
                     >
-                      <div className="flex items-center gap-2 font-bold">
-                        <ImageIcon className="h-4 w-4 text-[#ff5a00]" />
-                        {option.label}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">{option.description}</div>
+                      <Checkbox checked={active} className="mt-1" />
+                      <span>
+                        <span className="flex items-center gap-2 font-bold">
+                          <ImageIcon className="h-4 w-4 text-[#ff5a00]" />
+                          Gerar {option.label}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{option.description}</span>
+                      </span>
                     </button>
                   );
                 })}
@@ -554,17 +608,24 @@ export default function PopMarketingAI() {
                   </div>
                 </TabsContent>
                 <TabsContent value="creative" className="grid gap-4 md:grid-cols-2">
-                  {creatives.map((creative) => {
+                  {creatives.map((creative, index) => {
                     const productName = selectedCampaignProduct?.name || selectedCampaign.product_focus || 'Oferta especial';
                     const imageUrl = normalizeImageUrlForDisplay(creative.image_url);
+                    const key = creative.id || `${creative.format}-${creative.variation || index}`;
+                    const selected = selectedCreativeId === key || selectedCreativeId === creative.id;
                     return (
-                      <div key={creative.id || creative.format} className="rounded-xl border bg-white p-3">
+                      <div key={key} className={`rounded-xl border bg-white p-3 transition ${selected ? 'border-[#8CC850] ring-2 ring-[#8CC850]/35' : 'border-border'}`}>
                         <div className="mb-3 flex items-center justify-between gap-2">
                           <div>
-                            <strong>{creative.format}</strong>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <strong>{creative.format}</strong>
+                              {creative.variation && <Badge className="bg-[#ff5a00] text-white">Versão {creative.variation}</Badge>}
+                            </div>
                             <div className="text-xs text-muted-foreground">{creativeFormatOptions.find((item) => item.id === creative.format)?.description || 'Criativo final'}</div>
                           </div>
-                          <Badge className="bg-[#f2ffe8] text-[#003223]">{creative.type === 'ai_ad_creative' ? 'Criativo final IA' : creative.type || 'criativo'}</Badge>
+                          <Badge className={creative.mode === 'professional' ? 'bg-[#f2ffe8] text-[#003223]' : 'bg-amber-50 text-amber-800'}>
+                            {creative.mode === 'professional' ? 'Foto real preservada' : 'IA completa'}
+                          </Badge>
                         </div>
                         <div className={`mx-auto overflow-hidden rounded-lg border bg-[#f8f6ef] ${formatAspectClass[creative.format] || 'aspect-square'}`}>
                           {imageUrl ? (
@@ -584,7 +645,16 @@ export default function PopMarketingAI() {
                         </div>
                         <div className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
                           Essa é a imagem final que será enviada para a Meta no modo pausado. A copy selecionada na aba Copys será usada junto com este criativo.
+                          {creative.warning && <strong className="mt-2 block text-amber-700">{creative.warning}</strong>}
                         </div>
+                        <Button
+                          type="button"
+                          variant={selected ? 'default' : 'outline'}
+                          onClick={() => setSelectedCreativeId(key)}
+                          className={`mt-3 w-full ${selected ? 'bg-[#8CC850] text-[#003223] hover:bg-[#7bbb42]' : ''}`}
+                        >
+                          {selected ? 'Criativo selecionado' : 'Selecionar este criativo'}
+                        </Button>
                       </div>
                     );
                   })}
