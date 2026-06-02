@@ -104,6 +104,17 @@ async function graphPost(path: string, token: string, body: Record<string, any>)
   return payload;
 }
 
+async function graphPostMultipart(path: string, token: string, form: FormData) {
+  form.set("access_token", token);
+  const res = await fetch(`${GRAPH_BASE}/${path.replace(/^\/+/, "")}`, {
+    method: "POST",
+    body: form,
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error?.message || "Falha ao enviar arquivo para Meta.");
+  return payload;
+}
+
 async function ensurePublicBucket(serviceClient: any, bucket: string) {
   const { data: buckets } = await serviceClient.storage.listBuckets();
   const exists = Array.isArray(buckets) && buckets.some((item: any) => item.name === bucket || item.id === bucket);
@@ -191,6 +202,161 @@ async function generateStaticProductImage(serviceClient: any, restaurantId: stri
   }
   if (lastError) throw lastError;
   return null;
+}
+
+const creativeFormatConfig: Record<string, { label: string; size: string; aspect: string; placement: string[] }> = {
+  feed_1080x1080: {
+    label: "Feed quadrado 1080x1080",
+    size: "1024x1024",
+    aspect: "quadrado 1:1",
+    placement: ["facebook_feed", "instagram_feed"],
+  },
+  story_1080x1920: {
+    label: "Stories 1080x1920",
+    size: "1024x1536",
+    aspect: "vertical 9:16",
+    placement: ["instagram_stories", "facebook_stories"],
+  },
+  reels_1080x1920: {
+    label: "Reels 1080x1920",
+    size: "1024x1536",
+    aspect: "vertical 9:16",
+    placement: ["instagram_reels"],
+  },
+  banner_1200x628: {
+    label: "Horizontal 1200x628",
+    size: "1536x1024",
+    aspect: "horizontal",
+    placement: ["facebook_feed"],
+  },
+};
+
+function normalizeSelectedFormats(value: unknown) {
+  const allowed = new Set(Object.keys(creativeFormatConfig));
+  const list = Array.isArray(value) ? value.map(String).filter((item) => allowed.has(item)) : [];
+  return list.length ? [...new Set(list)] : ["feed_1080x1080", "story_1080x1920", "reels_1080x1920"];
+}
+
+function normalizeSelectedPlacements(formats: string[], value: unknown) {
+  const allowed = new Set(["facebook_feed", "instagram_feed", "instagram_stories", "instagram_reels", "facebook_stories"]);
+  const selected = Array.isArray(value) ? value.map(String).filter((item) => allowed.has(item)) : [];
+  const fromFormats = formats.flatMap((format) => creativeFormatConfig[format]?.placement || []);
+  return [...new Set(selected.length ? selected : fromFormats)];
+}
+
+async function fetchImageBlob(url?: string | null) {
+  const raw = String(url || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  const res = await fetch(raw);
+  if (!res.ok) return null;
+  const contentType = res.headers.get("content-type") || "image/png";
+  if (!contentType.toLowerCase().startsWith("image/")) return null;
+  return new Blob([await res.arrayBuffer()], { type: contentType });
+}
+
+function compactCreativeText(value: string, max = 34) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
+}
+
+async function generateAiAdCreativeImage(params: {
+  serviceClient: any;
+  restaurantId: string;
+  format: string;
+  restaurantName: string;
+  productName: string;
+  productDescription?: string | null;
+  priceLabel?: string | null;
+  headline?: string | null;
+  cta?: string | null;
+  productImageUrl?: string | null;
+  logoUrl?: string | null;
+  notes?: string | null;
+}) {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) return null;
+  const config = creativeFormatConfig[params.format] || creativeFormatConfig.feed_1080x1080;
+  const headline = compactCreativeText(params.headline || `${params.productName} em oferta`, 32);
+  const price = compactCreativeText(params.priceLabel || "Peça agora", 18);
+  const cta = compactCreativeText(params.cta || "PEÇA AGORA", 22);
+  const prompt = [
+    `Crie uma arte final de anúncio profissional para Meta Ads no formato ${config.label}, proporção ${config.aspect}.`,
+    `Restaurante: ${params.restaurantName}.`,
+    `Produto em destaque: ${params.productName}.`,
+    params.productDescription ? `Descrição do produto: ${params.productDescription}.` : "",
+    `Texto principal da arte, legível e sem erros: "${headline}".`,
+    `Preço/chamada em destaque, legível: "${price}".`,
+    `Botão/chamada para ação: "${cta}".`,
+    params.productImageUrl ? "Use a imagem do produto enviada como referência principal e mantenha o produto apetitoso e bem visível." : "Crie uma imagem apetitosa e realista do produto com base no nome e descrição.",
+    params.logoUrl ? "Use a logomarca enviada discretamente no topo ou canto da arte." : "Reserve um espaço limpo para a marca, sem inventar logotipo.",
+    params.notes ? `Direção extra do dono: ${params.notes}.` : "",
+    "Design brasileiro moderno para restaurante/delivery, cores comerciais, alto contraste, composição pronta para anúncio. Não use fundo genérico verde sólido; crie cenário, profundidade, comida realista e acabamento premium.",
+  ].filter(Boolean).join(" ");
+
+  const productBlob = await fetchImageBlob(params.productImageUrl);
+  const logoBlob = await fetchImageBlob(params.logoUrl);
+  const modelCandidates = [...new Set([Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1", "gpt-image-1"])];
+  let lastError: any = null;
+
+  for (const model of modelCandidates) {
+    try {
+      let res: Response;
+      if (productBlob || logoBlob) {
+        const form = new FormData();
+        form.set("model", model);
+        form.set("prompt", prompt);
+        form.set("size", config.size);
+        form.set("quality", Deno.env.get("OPENAI_IMAGE_QUALITY") || "low");
+        if (productBlob) form.append("image", productBlob, "produto.png");
+        if (logoBlob) form.append("image", logoBlob, "logo.png");
+        res = await fetch("https://api.openai.com/v1/images/edits", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: form,
+        });
+      } else {
+        res = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            prompt,
+            size: config.size,
+            quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
+            n: 1,
+          }),
+        });
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error?.message || "Falha ao gerar criativo IA.");
+      const item = payload?.data?.[0] || {};
+      if (item.b64_json) {
+        return uploadMarketingImage(params.serviceClient, params.restaurantId, bytesFromBase64(String(item.b64_json)), "image/png");
+      }
+      if (item.url) {
+        const imageRes = await fetch(String(item.url));
+        if (!imageRes.ok) throw new Error("Falha ao baixar criativo IA.");
+        const contentType = imageRes.headers.get("content-type") || "image/png";
+        return uploadMarketingImage(params.serviceClient, params.restaurantId, new Uint8Array(await imageRes.arrayBuffer()), contentType);
+      }
+      throw new Error("OpenAI não retornou uma imagem utilizável.");
+    } catch (error) {
+      lastError = error;
+      console.error("marketing_ai_ad_creative_failed", model, params.format, error);
+    }
+  }
+  throw lastError || new Error("Falha ao gerar criativo IA.");
+}
+
+async function uploadMetaAdImage(adAccountId: string, token: string, imageUrl?: string | null) {
+  const blob = await fetchImageBlob(imageUrl);
+  if (!blob) return null;
+  const form = new FormData();
+  form.append("filename", blob, "popmarketing-ai.png");
+  const payload = await graphPostMultipart(`${adAccountId}/adimages`, token, form);
+  const images = payload?.images || {};
+  const first = Object.values(images)[0] as any;
+  return first?.hash || null;
 }
 
 async function geocodeRestaurantAddress(address?: string | null, city?: string | null) {
@@ -356,6 +522,8 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
   const destination = String(input.destination || "whatsapp");
   const productFocus = knowledge.product?.name || input.productFocus || input.categoryFocus || "Produto em destaque";
   const dailyBudget = Math.max(5, Number(input.dailyBudget || 20));
+  const selectedFormats = normalizeSelectedFormats(input.selectedFormats);
+  const selectedPlacements = normalizeSelectedPlacements(selectedFormats, input.selectedPlacements);
   const generatedImagePrompt = `Crie uma foto publicitária realista e apetitosa para anúncio de restaurante brasileiro.
 Produto: ${productFocus}.
 Descrição: ${knowledge.product?.description || input.notes || "produto do cardápio"}.
@@ -386,7 +554,8 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
       age_max: 55,
       interests: ["delivery", "restaurantes", "comida", productFocus],
     },
-    placements: ["facebook_feed", "instagram_feed", "instagram_stories", "instagram_reels", "facebook_stories"],
+    placements: selectedPlacements,
+    formats: selectedFormats,
     budget: { daily: dailyBudget, recommended_daily: Math.max(dailyBudget, 20) },
     safety: [
       "Campanha será criada pausada para revisão.",
@@ -403,17 +572,49 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
     },
     menu_link: knowledge.menuLink,
   };
-  const creatives = ["feed_1080x1080", "story_1080x1920", "reels_1080x1920", "banner_1200x628"].map((format) => ({
-    format,
-    type: knowledge.product?.image_url ? "product_photo" : aiImageUrl ? "ai_generated" : "static",
-    image_url: knowledge.product?.image_url || aiImageUrl || null,
-    logo_url: knowledge.restaurant?.logo_url || null,
-    generated_image_prompt: knowledge.product?.image_url ? null : generatedImagePrompt,
-    headline: copies[0]?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`,
-    primary_text: copies[0]?.primary_text || `Peça ${productFocus} agora.`,
-    description: copies[0]?.description || "Campanha criada com IA para revisão.",
-    cta: destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
-  }));
+  const creatives = [];
+  for (const format of selectedFormats) {
+    const headline = copies[0]?.headline || `${productFocus} no ${knowledge.restaurant?.restaurant_name || "PopSystem"}`;
+    const primaryText = copies[0]?.primary_text || `Peça ${productFocus} agora.`;
+    const description = copies[0]?.description || "Campanha criada com IA para revisão.";
+    const price = knowledge.product?.price ? `R$ ${Number(knowledge.product.price).toFixed(2).replace(".", ",")}` : "";
+    let finalImageUrl: string | null = null;
+    let type = "ai_ad_creative";
+    let imageError: string | null = null;
+    try {
+      finalImageUrl = await generateAiAdCreativeImage({
+        serviceClient,
+        restaurantId,
+        format,
+        restaurantName: knowledge.restaurant?.restaurant_name || "PopSystem",
+        productName: productFocus,
+        productDescription: knowledge.product?.description || input.notes || "",
+        priceLabel: price,
+        headline,
+        cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
+        notes: input.notes || "",
+        productImageUrl: knowledge.product?.image_url || aiImageUrl || null,
+        logoUrl: knowledge.restaurant?.logo_url || null,
+      });
+    } catch (error) {
+      imageError = String((error as any)?.message || error);
+      type = knowledge.product?.image_url ? "product_photo_fallback" : aiImageUrl ? "ai_product_photo_fallback" : "static_fallback";
+      finalImageUrl = knowledge.product?.image_url || aiImageUrl || null;
+      console.error("marketing_full_creative_failed", format, error);
+    }
+    creatives.push({
+      format,
+      type,
+      image_url: finalImageUrl,
+      logo_url: knowledge.restaurant?.logo_url || null,
+      generated_image_prompt: `${generatedImagePrompt}\nFormato: ${creativeFormatConfig[format]?.label || format}.`,
+      image_error: imageError,
+      headline,
+      primary_text: primaryText,
+      description,
+      cta: destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
+    });
+  }
   return { knowledge, strategy, copies, creatives };
 }
 
@@ -602,19 +803,23 @@ serve(async (req) => {
       });
       const link = campaign.menu_link || `${baseUrl()}/share/menu/${user.id}`;
       const { data: creativeRow } = await serviceClient.from("marketing_creatives").select("*").eq("campaign_id", campaign.id).limit(1).maybeSingle();
-      const pictureUrl = await isUsablePublicImage(creativeRow?.image_url) ? creativeRow?.image_url : undefined;
+      const imageHash = await uploadMetaAdImage(adAccountId, token, creativeRow?.image_url).catch((error) => {
+        console.error("marketing_meta_image_upload_failed", error);
+        return null;
+      });
+      const linkData: Record<string, any> = {
+        link,
+        message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
+        name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
+        description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
+        call_to_action: { type: "LEARN_MORE", value: { link } },
+      };
+      if (imageHash) linkData.image_hash = imageHash;
       const metaCreative = await graphPost(`${adAccountId}/adcreatives`, token, {
         name: `${campaign.name} - Criativo IA`,
         object_story_spec: {
           page_id: conn.page_id,
-          link_data: {
-            link,
-            message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
-            name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
-            description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
-            picture: pictureUrl,
-            call_to_action: { type: "LEARN_MORE", value: { link } },
-          },
+          link_data: linkData,
         },
       });
       const metaAd = await graphPost(`${adAccountId}/ads`, token, {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, Facebook, MapPin, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, Facebook, Image as ImageIcon, MapPin, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,8 +75,30 @@ function dateLabel(value?: string) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
+const creativeFormatOptions = [
+  { id: 'feed_1080x1080', label: 'Feed', description: 'Quadrado 1:1' },
+  { id: 'story_1080x1920', label: 'Stories', description: 'Vertical 9:16' },
+  { id: 'reels_1080x1920', label: 'Reels', description: 'Vertical 9:16' },
+  { id: 'banner_1200x628', label: 'Horizontal', description: 'Facebook 1.91:1' },
+] as const;
+
+const placementOptions = [
+  { id: 'facebook_feed', label: 'Facebook Feed' },
+  { id: 'instagram_feed', label: 'Instagram Feed' },
+  { id: 'instagram_stories', label: 'Stories' },
+  { id: 'instagram_reels', label: 'Reels' },
+  { id: 'facebook_stories', label: 'Facebook Stories' },
+] as const;
+
+const formatAspectClass: Record<Creative['format'], string> = {
+  feed_1080x1080: 'aspect-square',
+  story_1080x1920: 'aspect-[9/16] max-h-[680px]',
+  reels_1080x1920: 'aspect-[9/16] max-h-[680px]',
+  banner_1200x628: 'aspect-[1200/628]',
+};
+
 export default function PopMarketingAI() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [connection, setConnection] = useState<MetaConnection | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -96,10 +118,21 @@ export default function PopMarketingAI() {
     startDate: '',
     endDate: '',
     notes: '',
+    selectedFormats: ['feed_1080x1080', 'story_1080x1920', 'reels_1080x1920'],
+    selectedPlacements: ['facebook_feed', 'instagram_feed', 'instagram_stories', 'instagram_reels'],
   });
 
   const selectedProduct = useMemo(() => products.find((item) => item.id === form.productId) || null, [form.productId, products]);
   const selectedCampaignProduct = selectedCampaign?.ai_strategy?.product || null;
+  const toggleFormArray = (key: 'selectedFormats' | 'selectedPlacements', value: string) => {
+    setForm((prev) => {
+      const current = new Set(prev[key]);
+      if (current.has(value)) current.delete(value);
+      else current.add(value);
+      if (key === 'selectedFormats' && current.size === 0) current.add('feed_1080x1080');
+      return { ...prev, [key]: [...current] };
+    });
+  };
   const permissionNames = useMemo(
     () => new Set((connection?.assets_json?.permissions || []).filter((item: any) => item?.status === 'granted').map((item: any) => item.permission)),
     [connection?.assets_json]
@@ -261,9 +294,6 @@ export default function PopMarketingAI() {
     }
   };
 
-  const restaurantName = (profile as any)?.restaurant_name || 'PopSystem';
-  const selectedCopy = selectedCampaign?.ai_strategy?.copies?.[selectedCopyIndex] || selectedCampaign?.ai_strategy?.copies?.[0] || null;
-
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden border-0 bg-[#062f23] text-white shadow-xl">
@@ -349,6 +379,52 @@ export default function PopMarketingAI() {
             <div className="space-y-2">
               <Label>Data final</Label>
               <Input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} />
+            </div>
+            <div className="space-y-3 md:col-span-2">
+              <div>
+                <Label>Formatos dos criativos</Label>
+                <p className="text-xs text-muted-foreground">A IA gera uma imagem final independente para cada formato selecionado.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {creativeFormatOptions.map((option) => {
+                  const active = form.selectedFormats.includes(option.id);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => toggleFormArray('selectedFormats', option.id)}
+                      className={`rounded-xl border p-3 text-left transition ${active ? 'border-[#ff5a00] bg-orange-50 ring-2 ring-[#ff5a00]/15' : 'border-border bg-white hover:border-[#ff5a00]'}`}
+                    >
+                      <div className="flex items-center gap-2 font-bold">
+                        <ImageIcon className="h-4 w-4 text-[#ff5a00]" />
+                        {option.label}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{option.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-3 md:col-span-2">
+              <div>
+                <Label>Posicionamentos</Label>
+                <p className="text-xs text-muted-foreground">Use os canais onde essa campanha deve rodar. A Meta receberá a campanha pausada para revisão.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {placementOptions.map((option) => {
+                  const active = form.selectedPlacements.includes(option.id);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => toggleFormArray('selectedPlacements', option.id)}
+                      className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${active ? 'border-[#8CC850] bg-[#f2ffe8] text-[#003223]' : 'border-border bg-white text-muted-foreground hover:border-[#8CC850]'}`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Observações para IA</Label>
@@ -479,45 +555,35 @@ export default function PopMarketingAI() {
                 </TabsContent>
                 <TabsContent value="creative" className="grid gap-4 md:grid-cols-2">
                   {creatives.map((creative) => {
-                    const productName = selectedCampaignProduct?.name || selectedCampaign.product_focus || selectedProduct?.name || 'Oferta especial';
-                    const productPrice = selectedCampaignProduct?.price ? money(selectedCampaignProduct.price) : selectedProduct ? money(selectedProduct.price) : 'Peça agora';
-                    const imageUrl = normalizeImageUrlForDisplay(creative.image_url || selectedCampaignProduct?.image_url || selectedProduct?.image_url);
-                    const logoUrl = normalizeImageUrlForDisplay(creative.logo_url || selectedCampaign?.ai_strategy?.restaurant?.logo_url || (profile as any)?.logo_url);
-                    const isTall = creative.format.includes('1080x1920');
+                    const productName = selectedCampaignProduct?.name || selectedCampaign.product_focus || 'Oferta especial';
+                    const imageUrl = normalizeImageUrlForDisplay(creative.image_url);
                     return (
-                      <div key={creative.id || creative.format} className="rounded-xl border p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <strong>{creative.format}</strong>
-                          <Badge variant="outline">{creative.type}</Badge>
+                      <div key={creative.id || creative.format} className="rounded-xl border bg-white p-3">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <div>
+                            <strong>{creative.format}</strong>
+                            <div className="text-xs text-muted-foreground">{creativeFormatOptions.find((item) => item.id === creative.format)?.description || 'Criativo final'}</div>
+                          </div>
+                          <Badge className="bg-[#f2ffe8] text-[#003223]">{creative.type === 'ai_ad_creative' ? 'Criativo final IA' : creative.type || 'criativo'}</Badge>
                         </div>
-                        <div className={`relative mx-auto overflow-hidden rounded-lg bg-gradient-to-br from-[#003223] via-[#065f46] to-[#ff5a00] text-white shadow-inner ${isTall ? 'aspect-[9/16] max-h-[520px]' : creative.format.includes('1200x628') ? 'aspect-[1200/628]' : 'aspect-square'}`}>
-                          <div className="absolute inset-0 opacity-15">
-                            <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white" />
-                            <div className="absolute -bottom-20 left-8 h-56 w-56 rounded-full bg-white" />
-                          </div>
-                          <div className={`relative z-10 flex h-full gap-4 p-8 ${isTall ? 'flex-col justify-between' : 'items-center justify-between'}`}>
-                            <div className={isTall ? 'space-y-5' : 'max-w-[54%] space-y-4'}>
-                              {logoUrl ? (
-                                <img src={logoUrl} alt={restaurantName} className="h-12 max-w-[180px] object-contain object-left" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-                              ) : (
-                                <div className="text-lg font-black">{restaurantName}</div>
-                              )}
-                              <div className="text-sm font-bold uppercase tracking-[0.16em] text-[#d9ff99]">{selectedCopy?.headline || creative.headline || `${productName} em oferta`}</div>
-                              <div className={isTall ? 'text-4xl font-black leading-tight' : 'text-3xl font-black leading-tight'}>{productName}</div>
-                              <div className={isTall ? 'text-5xl font-black' : 'text-4xl font-black'}>{productPrice}</div>
-                              <div className="inline-flex rounded-2xl bg-[#ff5a00] px-5 py-3 text-sm font-black uppercase shadow-lg">{creative.cta === 'WHATSAPP_MESSAGE' ? 'Chame no WhatsApp' : 'Clique e peça'}</div>
+                        <div className={`mx-auto overflow-hidden rounded-lg border bg-[#f8f6ef] ${formatAspectClass[creative.format] || 'aspect-square'}`}>
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={`${productName} - ${creative.format}`}
+                              className="h-full w-full object-contain"
+                              onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                              <Sparkles className="mb-3 h-10 w-10 text-[#ff5a00]" />
+                              <strong className="text-[#003223]">Criativo aguardando imagem</strong>
+                              <span className="mt-2 text-sm">Gere a campanha novamente para criar a peça completa por IA.</span>
                             </div>
-                            <div className={`relative flex items-center justify-center overflow-hidden rounded-3xl bg-white/95 shadow-xl ${isTall ? 'h-[42%] w-full' : 'h-[76%] w-[38%]'}`}>
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-orange-50 p-4 text-center text-[#003223]">
-                                <Sparkles className="mb-3 h-10 w-10 text-[#ff5a00]" />
-                                <span className="text-lg font-black">{productName}</span>
-                                <span className="mt-2 text-xs font-semibold text-muted-foreground">Imagem do produto</span>
-                              </div>
-                              {imageUrl ? (
-                                <img src={imageUrl} alt={productName} className="relative z-10 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-                              ) : null}
-                            </div>
-                          </div>
+                          )}
+                        </div>
+                        <div className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                          Essa é a imagem final que será enviada para a Meta no modo pausado. A copy selecionada na aba Copys será usada junto com este criativo.
                         </div>
                       </div>
                     );
