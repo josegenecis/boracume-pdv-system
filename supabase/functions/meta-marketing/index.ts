@@ -100,7 +100,10 @@ async function graphPost(path: string, token: string, body: Record<string, any>)
     body: params,
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error?.message || "Falha ao enviar para Meta.");
+  if (!res.ok) {
+    const metaError = payload?.error || {};
+    throw new Error(`${metaError?.message || "Falha ao enviar para Meta."} (${path.replace(/^\/+/, "")}${metaError?.code ? `, code ${metaError.code}` : ""}${metaError?.error_subcode ? `, subcode ${metaError.error_subcode}` : ""})`);
+  }
   return payload;
 }
 
@@ -111,7 +114,10 @@ async function graphPostMultipart(path: string, token: string, form: FormData) {
     body: form,
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error?.message || "Falha ao enviar arquivo para Meta.");
+  if (!res.ok) {
+    const metaError = payload?.error || {};
+    throw new Error(`${metaError?.message || "Falha ao enviar arquivo para Meta."} (${path.replace(/^\/+/, "")}${metaError?.code ? `, code ${metaError.code}` : ""}${metaError?.error_subcode ? `, subcode ${metaError.error_subcode}` : ""})`);
+  }
   return payload;
 }
 
@@ -165,45 +171,6 @@ function bytesFromBase64(value: string) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-async function generateStaticProductImage(serviceClient: any, restaurantId: string, prompt: string) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) return null;
-  const modelCandidates = [...new Set([Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1", "gpt-image-1"])];
-  let lastError: any = null;
-  for (const model of modelCandidates) {
-    try {
-      const res = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          prompt,
-          size: "1024x1024",
-          quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
-          n: 1,
-        }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error?.message || "Falha ao gerar imagem IA.");
-      const item = payload?.data?.[0] || {};
-      if (item.b64_json) {
-        return uploadMarketingImage(serviceClient, restaurantId, bytesFromBase64(String(item.b64_json)), "image/png");
-      }
-      if (item.url) {
-        const imageRes = await fetch(String(item.url));
-        if (!imageRes.ok) throw new Error("Falha ao baixar imagem IA.");
-        const contentType = imageRes.headers.get("content-type") || "image/png";
-        return uploadMarketingImage(serviceClient, restaurantId, new Uint8Array(await imageRes.arrayBuffer()), contentType);
-      }
-    } catch (error) {
-      lastError = error;
-      console.error("marketing_image_model_failed", model, error);
-    }
-  }
-  if (lastError) throw lastError;
-  return null;
-}
-
 const creativeFormatConfig: Record<string, { label: string; size: string; aspect: string; placement: string[] }> = {
   feed_1080x1080: {
     label: "Feed quadrado 1080x1080",
@@ -254,6 +221,12 @@ async function fetchImageBlob(url?: string | null) {
   return new Blob([await res.arrayBuffer()], { type: contentType });
 }
 
+function imageFilename(name: string, blob: Blob) {
+  const type = blob.type.toLowerCase();
+  const ext = type.includes("webp") ? "webp" : type.includes("jpeg") || type.includes("jpg") ? "jpg" : "png";
+  return `${name}.${ext}`;
+}
+
 function compactCreativeText(value: string, max = 34) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
@@ -274,7 +247,7 @@ async function generateAiAdCreativeImage(params: {
   notes?: string | null;
 }) {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) return null;
+  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada para gerar criativos.");
   const config = creativeFormatConfig[params.format] || creativeFormatConfig.feed_1080x1080;
   const headline = compactCreativeText(params.headline || `${params.productName} em oferta`, 32);
   const price = compactCreativeText(params.priceLabel || "Peça agora", 18);
@@ -295,7 +268,8 @@ async function generateAiAdCreativeImage(params: {
 
   const productBlob = await fetchImageBlob(params.productImageUrl);
   const logoBlob = await fetchImageBlob(params.logoUrl);
-  const modelCandidates = [...new Set([Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-1", "gpt-image-1"])];
+  const envModel = Deno.env.get("OPENAI_IMAGE_MODEL");
+  const modelCandidates = [...new Set([envModel || "gpt-image-1", "gpt-image-1-mini"])];
   let lastError: any = null;
 
   for (const model of modelCandidates) {
@@ -306,9 +280,11 @@ async function generateAiAdCreativeImage(params: {
         form.set("model", model);
         form.set("prompt", prompt);
         form.set("size", config.size);
-        form.set("quality", Deno.env.get("OPENAI_IMAGE_QUALITY") || "low");
-        if (productBlob) form.append("image", productBlob, "produto.png");
-        if (logoBlob) form.append("image", logoBlob, "logo.png");
+        form.set("quality", Deno.env.get("OPENAI_IMAGE_QUALITY") || "medium");
+        form.set("background", "opaque");
+        form.set("output_format", "png");
+        if (productBlob) form.append("image[]", productBlob, imageFilename("produto", productBlob));
+        if (logoBlob) form.append("image[]", logoBlob, imageFilename("logo", logoBlob));
         res = await fetch("https://api.openai.com/v1/images/edits", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
@@ -322,7 +298,9 @@ async function generateAiAdCreativeImage(params: {
             model,
             prompt,
             size: config.size,
-            quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "low",
+            quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "medium",
+            background: "opaque",
+            output_format: "png",
             n: 1,
           }),
         });
@@ -352,7 +330,7 @@ async function uploadMetaAdImage(adAccountId: string, token: string, imageUrl?: 
   const blob = await fetchImageBlob(imageUrl);
   if (!blob) return null;
   const form = new FormData();
-  form.append("filename", blob, "popmarketing-ai.png");
+  form.append("filename", blob, imageFilename("popmarketing-ai", blob));
   const payload = await graphPostMultipart(`${adAccountId}/adimages`, token, form);
   const images = payload?.images || {};
   const first = Object.values(images)[0] as any;
@@ -524,19 +502,11 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
   const dailyBudget = Math.max(5, Number(input.dailyBudget || 20));
   const selectedFormats = normalizeSelectedFormats(input.selectedFormats);
   const selectedPlacements = normalizeSelectedPlacements(selectedFormats, input.selectedPlacements);
-  const generatedImagePrompt = `Crie uma foto publicitária realista e apetitosa para anúncio de restaurante brasileiro.
+  const generatedImagePrompt = `Crie uma arte final publicitária completa e pronta para Meta Ads.
 Produto: ${productFocus}.
 Descrição: ${knowledge.product?.description || input.notes || "produto do cardápio"}.
 Restaurante: ${knowledge.restaurant?.restaurant_name || "PopSystem"}.
-Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitidez, sem texto, sem logo, sem pessoas.`;
-  let aiImageUrl: string | null = null;
-  const needsAiImage = !knowledge.product?.image_url;
-  if (needsAiImage) {
-    aiImageUrl = await generateStaticProductImage(serviceClient, restaurantId, generatedImagePrompt).catch((error) => {
-      console.error("marketing_ai_image_generation_failed", error);
-      return null;
-    });
-  }
+A arte deve conter produto, copy curta, preço quando disponível, CTA e identidade visual profissional.`;
   const restaurantLocation = await geocodeRestaurantAddress(knowledge.restaurant?.address, input.targetCity);
   const strategy = {
     objective: input.objective || "vender_mais",
@@ -566,9 +536,9 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
     media: {
       product_image_url: knowledge.product?.image_url || null,
       product_image_status: knowledge.product?.image_status || "not_selected",
-      generated_image_url: aiImageUrl,
-      generated_image_prompt: needsAiImage ? generatedImagePrompt : null,
-      final_image_source: knowledge.product?.image_url ? "product_photo" : aiImageUrl ? "ai_generated" : "static_fallback",
+      generated_image_url: null,
+      generated_image_prompt: generatedImagePrompt,
+      final_image_source: "ai_ad_creative",
     },
     menu_link: knowledge.menuLink,
   };
@@ -578,42 +548,36 @@ Estilo: fotografia de comida, iluminação profissional, fundo limpo, alta nitid
     const primaryText = copies[0]?.primary_text || `Peça ${productFocus} agora.`;
     const description = copies[0]?.description || "Campanha criada com IA para revisão.";
     const price = knowledge.product?.price ? `R$ ${Number(knowledge.product.price).toFixed(2).replace(".", ",")}` : "";
-    let finalImageUrl: string | null = null;
-    let type = "ai_ad_creative";
-    let imageError: string | null = null;
-    try {
-      finalImageUrl = await generateAiAdCreativeImage({
-        serviceClient,
-        restaurantId,
-        format,
-        restaurantName: knowledge.restaurant?.restaurant_name || "PopSystem",
-        productName: productFocus,
-        productDescription: knowledge.product?.description || input.notes || "",
-        priceLabel: price,
-        headline,
-        cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
-        notes: input.notes || "",
-        productImageUrl: knowledge.product?.image_url || aiImageUrl || null,
-        logoUrl: knowledge.restaurant?.logo_url || null,
-      });
-    } catch (error) {
-      imageError = String((error as any)?.message || error);
-      type = knowledge.product?.image_url ? "product_photo_fallback" : aiImageUrl ? "ai_product_photo_fallback" : "static_fallback";
-      finalImageUrl = knowledge.product?.image_url || aiImageUrl || null;
-      console.error("marketing_full_creative_failed", format, error);
-    }
+    const finalImageUrl = await generateAiAdCreativeImage({
+      serviceClient,
+      restaurantId,
+      format,
+      restaurantName: knowledge.restaurant?.restaurant_name || "PopSystem",
+      productName: productFocus,
+      productDescription: knowledge.product?.description || input.notes || "",
+      priceLabel: price,
+      headline,
+      cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
+      notes: input.notes || "",
+      productImageUrl: knowledge.product?.image_url || null,
+      logoUrl: knowledge.restaurant?.logo_url || null,
+    });
+    if (!finalImageUrl) throw new Error(`A IA não retornou imagem final para o formato ${creativeFormatConfig[format]?.label || format}.`);
     creatives.push({
       format,
-      type,
+      type: "ai_ad_creative",
       image_url: finalImageUrl,
       logo_url: knowledge.restaurant?.logo_url || null,
       generated_image_prompt: `${generatedImagePrompt}\nFormato: ${creativeFormatConfig[format]?.label || format}.`,
-      image_error: imageError,
+      image_error: null,
       headline,
       primary_text: primaryText,
       description,
       cta: destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
     });
+  }
+  if (creatives.length !== selectedFormats.length || creatives.some((creative) => !creative.image_url)) {
+    throw new Error("Não foi possível gerar todos os criativos finais por IA. Tente novamente ou confira a chave OPENAI_API_KEY.");
   }
   return { knowledge, strategy, copies, creatives };
 }
@@ -785,6 +749,19 @@ serve(async (req) => {
         : { countries: ["BR"] };
       const copies = Array.isArray(campaign.ai_strategy?.copies) ? campaign.ai_strategy.copies : [];
       const selectedCopy = copies[copyIndex] || copies[0] || {};
+      const { data: creativeRows } = await serviceClient
+        .from("marketing_creatives")
+        .select("*")
+        .eq("campaign_id", campaign.id);
+      const creativeRow = (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.image_url)
+        || (creativeRows || []).find((item: any) => item.image_url);
+      if (!creativeRow?.image_url) {
+        return json({ error: "Gere um criativo final com imagem antes de publicar." }, 400);
+      }
+      const imageHash = await uploadMetaAdImage(adAccountId, token, creativeRow.image_url);
+      if (!imageHash) {
+        return json({ error: "A Meta não retornou o hash da imagem. Gere o criativo novamente e tente publicar." }, 400);
+      }
       const metaCampaign = await graphPost(`${adAccountId}/campaigns`, token, {
         name: campaign.name,
         objective: campaign.objective || "OUTCOME_TRAFFIC",
@@ -798,23 +775,19 @@ serve(async (req) => {
         billing_event: "IMPRESSIONS",
         optimization_goal: "LINK_CLICKS",
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+        destination_type: "WEBSITE",
         targeting: { geo_locations: geoLocations, age_min: 18, age_max: 55 },
         status: "PAUSED",
       });
       const link = campaign.menu_link || `${baseUrl()}/share/menu/${user.id}`;
-      const { data: creativeRow } = await serviceClient.from("marketing_creatives").select("*").eq("campaign_id", campaign.id).limit(1).maybeSingle();
-      const imageHash = await uploadMetaAdImage(adAccountId, token, creativeRow?.image_url).catch((error) => {
-        console.error("marketing_meta_image_upload_failed", error);
-        return null;
-      });
       const linkData: Record<string, any> = {
         link,
         message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
         name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
         description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
         call_to_action: { type: "LEARN_MORE", value: { link } },
+        image_hash: imageHash,
       };
-      if (imageHash) linkData.image_hash = imageHash;
       const metaCreative = await graphPost(`${adAccountId}/adcreatives`, token, {
         name: `${campaign.name} - Criativo IA`,
         object_story_spec: {
