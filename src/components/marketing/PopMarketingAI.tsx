@@ -128,7 +128,7 @@ export default function PopMarketingAI() {
     removeBackground: true,
     enhanceProductImage: true,
     applyBrandIdentity: true,
-    generateThreeVersions: true,
+    generateThreeVersions: false,
     selectedFormats: ['feed_1080x1080', 'story_1080x1920', 'reels_1080x1920'],
     selectedPlacements: ['facebook_feed', 'instagram_feed', 'instagram_stories', 'instagram_reels'],
   });
@@ -414,7 +414,7 @@ export default function PopMarketingAI() {
                   ['removeBackground', 'Remover fundo automaticamente', 'Recorte limpo para o produto virar protagonista.'],
                   ['enhanceProductImage', 'Melhorar imagem automaticamente', 'Nitidez, luz e contraste sem mudar a aparência.'],
                   ['applyBrandIdentity', 'Aplicar identidade visual', 'Usa logo e cores da marca no layout.'],
-                  ['generateThreeVersions', 'Gerar 3 versões', 'Cria A/B/C para testar qual converte melhor.'],
+                  ['generateThreeVersions', 'Gerar 3 versões', 'Modo avançado: cria A/B/C. Use com menos formatos se a geração ficar pesada.'],
                 ].map(([key, title, description]) => (
                   <button
                     key={key}

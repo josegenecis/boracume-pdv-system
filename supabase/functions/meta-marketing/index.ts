@@ -282,7 +282,7 @@ function normalizeCreativeFlags(input: any) {
     removeBackground: input.removeBackground !== false,
     enhanceProductImage: input.enhanceProductImage !== false,
     applyBrandIdentity: input.applyBrandIdentity !== false,
-    generateThreeVersions: input.generateThreeVersions !== false,
+    generateThreeVersions: input.generateThreeVersions === true,
   };
 }
 
@@ -470,6 +470,7 @@ async function generateAiAdCreativeImage(params: {
   const logoBlob = await fetchImageBlob(params.logoUrl);
   const envModel = Deno.env.get("OPENAI_IMAGE_MODEL");
   const modelCandidates = [...new Set([envModel || "gpt-image-1", "gpt-image-1-mini"])];
+  const imageQuality = Deno.env.get("OPENAI_IMAGE_QUALITY") || (params.mode === "professional" ? "high" : "medium");
   let lastError: any = null;
 
   for (const model of modelCandidates) {
@@ -480,7 +481,7 @@ async function generateAiAdCreativeImage(params: {
         form.set("model", model);
         form.set("prompt", prompt);
         form.set("size", config.size);
-        form.set("quality", Deno.env.get("OPENAI_IMAGE_QUALITY") || "medium");
+        form.set("quality", imageQuality);
         form.set("background", "opaque");
         form.set("output_format", "png");
         if (productBlob && model === "gpt-image-1") form.set("input_fidelity", "high");
@@ -499,7 +500,7 @@ async function generateAiAdCreativeImage(params: {
             model,
             prompt,
             size: config.size,
-            quality: Deno.env.get("OPENAI_IMAGE_QUALITY") || "medium",
+            quality: imageQuality,
             background: "opaque",
             output_format: "png",
             n: 1,
@@ -536,6 +537,27 @@ async function uploadMetaAdImage(adAccountId: string, token: string, imageUrl?: 
   const images = payload?.images || {};
   const first = Object.values(images)[0] as any;
   return first?.hash || null;
+}
+
+async function createPausedMetaCampaign(adAccountId: string, token: string, name: string, objective?: string | null) {
+  const payload = {
+    name,
+    buying_type: "AUCTION",
+    objective: objective || "OUTCOME_TRAFFIC",
+    status: "PAUSED",
+    special_ad_categories: [],
+  };
+
+  try {
+    return await graphPost(`${adAccountId}/campaigns`, token, payload);
+  } catch (error: any) {
+    const message = String(error?.message || "");
+    if (!message.includes("code 100")) throw error;
+    return await graphPost(`${adAccountId}/campaigns`, token, {
+      ...payload,
+      objective: "LINK_CLICKS",
+    });
+  }
 }
 
 async function geocodeRestaurantAddress(address?: string | null, city?: string | null) {
@@ -1013,12 +1035,7 @@ serve(async (req) => {
       if (!imageHash) {
         return json({ error: "A Meta não retornou o hash da imagem. Gere o criativo novamente e tente publicar." }, 400);
       }
-      const metaCampaign = await graphPost(`${adAccountId}/campaigns`, token, {
-        name: campaign.name,
-        objective: campaign.objective || "OUTCOME_TRAFFIC",
-        status: "PAUSED",
-        special_ad_categories: [],
-      });
+      const metaCampaign = await createPausedMetaCampaign(adAccountId, token, campaign.name, campaign.objective);
       const metaAdset = await graphPost(`${adAccountId}/adsets`, token, {
         name: `${campaign.name} - Público IA`,
         campaign_id: metaCampaign.id,
