@@ -25,6 +25,7 @@ import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 interface ProductItem {
   id: string;
   name: string;
+  barcode?: string | null;
   description?: string;
   price: number;
   category: string;
@@ -302,6 +303,7 @@ const Products = () => {
     if (searchQuery) {
       filtered = filtered.filter(product =>
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.barcode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }

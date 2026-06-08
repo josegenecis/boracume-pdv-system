@@ -155,11 +155,20 @@ function createUpdateWindow() {
 
 async function runAutoUpdateFlow() {
   if (isDev) return true;
-  if (!autoUpdater) return true;
+  if (!autoUpdater) {
+    console.warn('Auto-update indisponível: electron-updater não foi carregado.');
+    return true;
+  }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
+  autoUpdater.logger = {
+    info: (...args) => console.log('[auto-update]', ...args),
+    warn: (...args) => console.warn('[auto-update]', ...args),
+    error: (...args) => console.error('[auto-update]', ...args),
+    debug: (...args) => console.log('[auto-update]', ...args),
+  };
   const showUi = !isAgentMode;
 
   return await new Promise((resolve) => {
@@ -207,13 +216,13 @@ async function runAutoUpdateFlow() {
       setStatus('Verificando atualizações...');
       setProgress(15);
     });
-    autoUpdater.on('update-available', () => {
+    autoUpdater.on('update-available', (info) => {
       updateInProgress = true;
       if (checkTimeout) {
         clearTimeout(checkTimeout);
         checkTimeout = null;
       }
-      setStatus('Baixando atualização...');
+      setStatus(`Baixando atualização ${info?.version || ''}...`.trim());
       setProgress(20);
     });
     autoUpdater.on('update-not-available', () => {
@@ -227,9 +236,10 @@ async function runAutoUpdateFlow() {
       setStatus(`Baixando atualização... ${Math.round(percent)}%`);
       setProgress(20 + (percent * 0.8));
     });
-    autoUpdater.on('update-downloaded', () => {
+    autoUpdater.on('update-downloaded', (info) => {
       setStatus('Instalando atualização...');
       setProgress(100);
+      console.log('[auto-update] Atualização baixada', info?.version || '');
       setTimeout(() => {
         try {
           autoUpdater.quitAndInstall(true, true);

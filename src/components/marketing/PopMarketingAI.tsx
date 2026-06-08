@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, Facebook, Image as ImageIcon, MapPin, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, Facebook, Image as ImageIcon, Loader2, MapPin, Megaphone, RefreshCw, Send, ShieldCheck, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { callPopMarketingAI } from '@/services/popMarketingAiService';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
+import { ensureStorageSetup } from '@/utils/storageSetup';
+import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 
 type Product = { id: string; name: string; price: number; image_url?: string | null; category?: string | null };
 type MetaConnection = {
@@ -113,6 +115,7 @@ export default function PopMarketingAI() {
   const [selectedCopyIndex, setSelectedCopyIndex] = useState(0);
   const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingCreativeKey, setUploadingCreativeKey] = useState<string | null>(null);
   const [form, setForm] = useState({
     objective: 'vender_mais',
     destination: 'whatsapp',
@@ -124,11 +127,6 @@ export default function PopMarketingAI() {
     startDate: '',
     endDate: '',
     notes: '',
-    useRealProductPhoto: true,
-    removeBackground: true,
-    enhanceProductImage: true,
-    applyBrandIdentity: true,
-    generateThreeVersions: false,
     selectedFormats: ['feed_1080x1080', 'story_1080x1920', 'reels_1080x1920'],
     selectedPlacements: ['facebook_feed', 'instagram_feed', 'instagram_stories', 'instagram_reels'],
   });
@@ -143,9 +141,6 @@ export default function PopMarketingAI() {
       if (key === 'selectedFormats' && current.size === 0) current.add('feed_1080x1080');
       return { ...prev, [key]: [...current] };
     });
-  };
-  const toggleFormBoolean = (key: 'useRealProductPhoto' | 'removeBackground' | 'enhanceProductImage' | 'applyBrandIdentity' | 'generateThreeVersions') => {
-    setForm((prev) => ({ ...prev, [key]: !prev[key] }));
   };
   const permissionNames = useMemo(
     () => new Set((connection?.assets_json?.permissions || []).filter((item: any) => item?.status === 'granted').map((item: any) => item.permission)),
@@ -282,6 +277,61 @@ export default function PopMarketingAI() {
     }
   };
 
+  const replaceCreativeImage = async (creative: Creative, key: string, file?: File | null) => {
+    if (!user?.id || !selectedCampaign?.id || !file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: 'Tipo de arquivo inválido', description: 'Use JPEG, PNG, WebP ou GIF.', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      toast({ title: 'Arquivo muito grande', description: 'Tente uma imagem menor para processar no navegador.', variant: 'destructive' });
+      return;
+    }
+
+    setUploadingCreativeKey(key);
+    try {
+      const setup = await ensureStorageSetup();
+      if (!setup.success) throw new Error(setup.message || 'Storage não configurado.');
+
+      const prepared = file.size > 100 * 1024
+        ? await compressImageFileToMaxBytes(file, { maxBytes: 100 * 1024, maxDimension: 1800, preferMimeType: 'image/webp' })
+        : file;
+      const ext = String(prepared.name.split('.').pop() || 'webp').toLowerCase();
+      const path = `marketing-ai/source-photos/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(path, prepared, { contentType: prepared.type, upsert: true } as any);
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      const sourceImageUrl = data.publicUrl;
+      const result = await callPopMarketingAI<{ creative: Creative }>({
+        action: 'rerender_creative',
+        campaignId: selectedCampaign.id,
+        creativeId: creative.id || null,
+        format: creative.format,
+        variation: creative.variation || null,
+        sourceImageUrl,
+        copyIndex: selectedCopyIndex,
+      });
+
+      const updated = result.creative;
+      setCreatives((prev) => prev.map((item, index) => {
+        const itemKey = item.id || `${item.format}-${item.variation || index}`;
+        const matches = itemKey === key || (updated?.id && item.id === updated.id);
+        return matches ? { ...item, ...updated } : item;
+      }));
+      if (updated?.id) setSelectedCreativeId(updated.id);
+      toast({ title: 'Imagem trocada', description: 'Esse criativo foi refeito com a nova foto.' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao trocar imagem', description: error?.message || 'Não foi possível refazer o criativo.', variant: 'destructive' });
+    } finally {
+      setUploadingCreativeKey(null);
+    }
+  };
+
   const openCampaign = async (campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setSelectedCopyIndex(0);
@@ -325,7 +375,7 @@ export default function PopMarketingAI() {
             </div>
             <h2 className="text-3xl font-black">Tráfego pago com IA para restaurantes</h2>
             <p className="mt-2 max-w-3xl text-white/78">
-              Conecte Meta Ads, gere estratégia, copys e criativos, revise tudo e publique campanhas pausadas com segurança.
+              Conecte Meta Ads, gere estratégia e copys com IA, monte criativos profissionais com foto real e publique campanhas pausadas com segurança.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -405,30 +455,22 @@ export default function PopMarketingAI() {
               <div>
                 <Label>Direção de arte dos criativos</Label>
                 <p className="text-xs text-muted-foreground">
-                  Modo profissional usa a foto real do produto como protagonista. Se não houver foto, a IA cria o produto do zero e o painel mostra o aviso.
+                  O PopMarketing usa templates profissionais com foto real do produto. Não há geração de imagem por IA no fluxo principal.
                 </p>
               </div>
               <div className="grid gap-3 rounded-2xl border bg-[#fbfaf6] p-4 sm:grid-cols-2">
-                {[
-                  ['useRealProductPhoto', 'Usar foto real do produto', selectedProduct?.image_url ? 'A IA preserva o produto e cria cenário/layout.' : 'Sem foto no produto selecionado: entra no modo IA completa.'],
-                  ['removeBackground', 'Remover fundo automaticamente', 'Recorte limpo para o produto virar protagonista.'],
-                  ['enhanceProductImage', 'Melhorar imagem automaticamente', 'Nitidez, luz e contraste sem mudar a aparência.'],
-                  ['applyBrandIdentity', 'Aplicar identidade visual', 'Usa logo e cores da marca no layout.'],
-                  ['generateThreeVersions', 'Gerar 3 versões', 'Modo avançado: cria A/B/C. Use com menos formatos se a geração ficar pesada.'],
-                ].map(([key, title, description]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => toggleFormBoolean(key as any)}
-                    className="flex items-start gap-3 rounded-xl border bg-white p-3 text-left transition hover:border-[#8CC850]"
-                  >
-                    <Checkbox checked={(form as any)[key]} className="mt-1" />
-                    <span>
-                      <span className="block font-bold text-[#003223]">{title}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
-                    </span>
-                  </button>
-                ))}
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="font-bold text-[#003223]">Foto real obrigatória</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {selectedProduct?.image_url ? 'O produto selecionado tem imagem cadastrada.' : 'Selecione um produto com foto cadastrada para montar os criativos.'}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-white p-3">
+                  <div className="font-bold text-[#003223]">Templates automáticos</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Feed, Stories, Reels e Horizontal são renderizados em PNG com logo, foto, headline, preço e CTA.
+                  </div>
+                </div>
               </div>
             </div>
             <div className="space-y-3 md:col-span-2">
@@ -450,7 +492,7 @@ export default function PopMarketingAI() {
                       <span>
                         <span className="flex items-center gap-2 font-bold">
                           <ImageIcon className="h-4 w-4 text-[#ff5a00]" />
-                          Gerar {option.label}
+                          Montar {option.label}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">{option.description}</span>
                       </span>
@@ -613,6 +655,8 @@ export default function PopMarketingAI() {
                     const imageUrl = normalizeImageUrlForDisplay(creative.image_url);
                     const key = creative.id || `${creative.format}-${creative.variation || index}`;
                     const selected = selectedCreativeId === key || selectedCreativeId === creative.id;
+                    const uploadInputId = `creative-image-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                    const uploadingThis = uploadingCreativeKey === key;
                     return (
                       <div key={key} className={`rounded-xl border bg-white p-3 transition ${selected ? 'border-[#8CC850] ring-2 ring-[#8CC850]/35' : 'border-border'}`}>
                         <div className="mb-3 flex items-center justify-between gap-2">
@@ -624,7 +668,7 @@ export default function PopMarketingAI() {
                             <div className="text-xs text-muted-foreground">{creativeFormatOptions.find((item) => item.id === creative.format)?.description || 'Criativo final'}</div>
                           </div>
                           <Badge className={creative.mode === 'professional' ? 'bg-[#f2ffe8] text-[#003223]' : 'bg-amber-50 text-amber-800'}>
-                            {creative.mode === 'professional' ? 'Foto real preservada' : 'IA completa'}
+                            {creative.mode === 'template_real_photo' ? 'Template com foto real' : 'Foto real preservada'}
                           </Badge>
                         </div>
                         <div className={`mx-auto overflow-hidden rounded-lg border bg-[#f8f6ef] ${formatAspectClass[creative.format] || 'aspect-square'}`}>
@@ -639,7 +683,7 @@ export default function PopMarketingAI() {
                             <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
                               <Sparkles className="mb-3 h-10 w-10 text-[#ff5a00]" />
                               <strong className="text-[#003223]">Criativo aguardando imagem</strong>
-                              <span className="mt-2 text-sm">Gere a campanha novamente para criar a peça completa por IA.</span>
+                              <span className="mt-2 text-sm">Cadastre uma foto real do produto e gere a campanha novamente.</span>
                             </div>
                           )}
                         </div>
@@ -647,6 +691,34 @@ export default function PopMarketingAI() {
                           Essa é a imagem final que será enviada para a Meta no modo pausado. A copy selecionada na aba Copys será usada junto com este criativo.
                           {creative.warning && <strong className="mt-2 block text-amber-700">{creative.warning}</strong>}
                         </div>
+                        <input
+                          id={uploadInputId}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] || null;
+                            event.currentTarget.value = '';
+                            void replaceCreativeImage(creative, key, file);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={loading || uploadingThis}
+                          onClick={() => document.getElementById(uploadInputId)?.click()}
+                          className="mt-3 w-full"
+                        >
+                          {uploadingThis ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refazendo criativo...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="mr-2 h-4 w-4" /> Trocar imagem deste criativo
+                            </>
+                          )}
+                        </Button>
                         <Button
                           type="button"
                           variant={selected ? 'default' : 'outline'}
@@ -669,7 +741,7 @@ export default function PopMarketingAI() {
         <CheckCircle2 className="h-4 w-4" />
         <AlertTitle>MVP entregue com trava de segurança</AlertTitle>
         <AlertDescription>
-          Campanhas são planejadas por IA e enviadas à Meta em modo pausado. Otimização automática, Reels dinâmico e campanhas por clima/estoque entram na próxima etapa.
+          Campanhas são planejadas por IA e os criativos são montados por templates com foto real, sem custo de API de imagem. Tudo é enviado à Meta em modo pausado para revisão.
         </AlertDescription>
       </Alert>
     </div>

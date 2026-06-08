@@ -6,18 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_URL = "https://api.boracume.com";
-const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
+const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
+const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
 
 const extractQrCode = (payload: any) => (
   payload?.data?.Qrcode ||
   payload?.data?.qrcode ||
   payload?.data?.base64 ||
+  payload?.data?.code ||
   payload?.Qrcode ||
   payload?.qrcode ||
   payload?.base64 ||
+  payload?.code ||
   null
 );
 
@@ -70,16 +72,30 @@ serve(async (req) => {
     const instanceSuffix = restaurant_id.replace(/-/g, '');
     const instanceName = `rest_${instanceSuffix}`;
     const instanceToken = `token_${instanceSuffix}`;
+    const baseUrl = evolutionBaseUrl();
+    const globalApiKey = evolutionApiKey();
+    if (!globalApiKey) {
+      return new Response(JSON.stringify({ error: true, message: 'EVOLUTION_API_KEY não configurada.' }), { status: 200, headers: jsonHeaders });
+    }
 
     let lastQrError: any = null;
 
     for (let attempt = 0; attempt < 8; attempt++) {
-      const qrResult = await safeFetchJson(`${EVOLUTION_URL}/instance/qr`, {
+      let qrResult = await safeFetchJson(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+        method: 'GET',
+        headers: {
+          'apikey': globalApiKey
+        }
+      });
+
+      if (!qrResult.response?.ok || !extractQrCode(qrResult.data)) {
+        qrResult = await safeFetchJson(`${baseUrl}/instance/qr`, {
         method: 'GET',
         headers: {
           'apikey': instanceToken
         }
-      });
+        });
+      }
 
       const evoData = qrResult.data;
 
@@ -93,10 +109,10 @@ serve(async (req) => {
 
       lastQrError = { status: qrResult.response?.status ?? 500, details: evoData };
 
-      const statusResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
+      const statusResult = await safeFetchJson(`${baseUrl}/instance/all`, {
         method: 'GET',
         headers: {
-          'apikey': EVOLUTION_API_KEY
+          'apikey': globalApiKey
         }
       });
 
@@ -105,10 +121,12 @@ serve(async (req) => {
       const currentInstance = getInstancesFromPayload(statusData).find((instance: any) => (
         instance?.token === instanceToken ||
         instance?.instanceName === instanceName ||
-        instance?.name === instanceName
+        instance?.name === instanceName ||
+        instance?.instance === instanceName
       ));
 
-      if (currentInstance?.connected) {
+      const state = String(currentInstance?.connectionStatus || currentInstance?.state || currentInstance?.status || currentInstance?.connection || '').toLowerCase();
+      if (currentInstance?.connected || ['open', 'connected', 'online'].includes(state)) {
         return new Response(JSON.stringify({ connected: true }), {
           status: 200,
           headers: jsonHeaders,
@@ -134,7 +152,7 @@ serve(async (req) => {
       headers: jsonHeaders,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Internal Error:", error);
     return new Response(JSON.stringify({ error: true, message: error.message || 'Erro interno ao gerar QR Code' }), { status: 200, headers: jsonHeaders });
   }

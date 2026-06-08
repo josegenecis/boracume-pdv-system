@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+import { ChefHat, Mail, MapPin, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const Footer = () => {
@@ -13,17 +13,16 @@ const Footer = () => {
       <div className="border-b border-slate-900">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
           <h2 className="text-3xl md:text-5xl font-extrabold mb-8 max-w-4xl mx-auto leading-tight">
-            Falta apenas 1 minuto para o seu restaurante <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-boracume-orange to-red-500">mudar de patamar</span>.
+            Pronto para modernizar seu restaurante?
           </h2>
           <Link to="/signup">
             <Button className="bg-white text-slate-950 hover:bg-gray-100 font-bold px-10 py-8 text-xl rounded-2xl shadow-[0_0_50px_-15px_rgba(255,255,255,0.3)] transition-all transform hover:scale-105">
-              Criar Minha Conta e Testar 30 Dias
+              Agendar demonstração
               <ArrowRight className="ml-2 w-6 h-6" />
             </Button>
           </Link>
           <p className="mt-6 text-slate-500">
-            Junte-se a mais de 1.000 donos de restaurantes felizes.
+            Conheça uma plataforma completa para gestão, operação, atendimento e marketing.
           </p>
         </div>
       </div>
@@ -39,7 +38,7 @@ const Footer = () => {
               <span className="text-xl font-bold">PopSystem</span>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed">
-              O sistema operacional completo para restaurantes que querem vender mais e ter menos dor de cabeça.
+              O Sistema Operacional do Restaurante Moderno: PDV, delivery, cardápio digital, WhatsApp, marketing, financeiro, estoque e equipe em uma única plataforma.
             </p>
           </div>
 
@@ -48,8 +47,9 @@ const Footer = () => {
             <h3 className="text-lg font-bold text-white">Plataforma</h3>
             <ul className="space-y-2 text-sm">
               <li><a href="#funcionalidades" className="text-slate-400 hover:text-boracume-orange transition-colors">Funcionalidades</a></li>
-              <li><a href="#como-funciona" className="text-slate-400 hover:text-boracume-orange transition-colors">Como Funciona</a></li>
-              <li><a href="#precos" className="text-slate-400 hover:text-boracume-orange transition-colors">Preços</a></li>
+              <li><a href="#ia" className="text-slate-400 hover:text-boracume-orange transition-colors">Inteligência Artificial</a></li>
+              <li><a href="#marketing" className="text-slate-400 hover:text-boracume-orange transition-colors">Marketing</a></li>
+              <li><a href="#precos" className="text-slate-400 hover:text-boracume-orange transition-colors">Planos</a></li>
               <li><Link to="/login" className="text-slate-400 hover:text-boracume-orange transition-colors">Login</Link></li>
             </ul>
           </div>

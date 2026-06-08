@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { canAccessOperatorArea, getLocalOperatorSession, OperatorArea } from '@/services/operatorAuth';
+import { Navigate, useLocation } from 'react-router-dom';
+import { canAccessOperatorArea, getDefaultOperatorPath, getLocalOperatorSession, OperatorArea } from '@/services/operatorAuth';
 
 type OperatorRouteProps = {
   area: OperatorArea;
@@ -8,9 +9,15 @@ type OperatorRouteProps = {
 };
 
 export const OperatorRoute: React.FC<OperatorRouteProps> = ({ area, children }) => {
+  const location = useLocation();
   const session = getLocalOperatorSession();
 
   if (!canAccessOperatorArea(session, area)) {
+    const fallbackPath = getDefaultOperatorPath(session);
+    if (fallbackPath !== '/operator-login' && fallbackPath !== location.pathname) {
+      return <Navigate to={fallbackPath} replace />;
+    }
+
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
         <div className="max-w-md rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">

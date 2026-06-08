@@ -1,0 +1,82 @@
+name: Desktop App Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão desktop opcional. Ex: 1.0.155"
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "electron/**"
+      - "src/**"
+      - "public/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.*"
+      - ".github/workflows/desktop-release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    concurrency:
+      group: desktop-release-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Set desktop release version
+        shell: pwsh
+        run: |
+          $manualVersion = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($manualVersion)) {
+            $baseVersion = node -p "require('./package.json').version"
+            $parts = $baseVersion.Split('.')
+            $basePatch = [int]$parts[2]
+            $runPatch = [int]"${{ github.run_number }}"
+            $patch = [Math]::Max($basePatch + 1, $runPatch)
+            $version = "$($parts[0]).$($parts[1]).$patch"
+          } else {
+            $version = $manualVersion.Trim()
+          }
+          node scripts/set-release-version.cjs $version
+
+      - name: Build web app for desktop
+        run: npm run build:desktop
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Publish Windows installer
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build-win:publish
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: popsystem-desktop-windows
+          path: |
+            electron/dist-electron/*.exe
+            electron/dist-electron/*.blockmap
+            electron/dist-electron/latest.yml

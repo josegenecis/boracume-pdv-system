@@ -6,10 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_URL = "https://api.boracume.com";
-const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
+
+const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
+const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
 
 const getInstancesFromPayload = (payload: any) => {
   if (Array.isArray(payload?.data)) return payload.data;
@@ -22,15 +23,30 @@ const findCurrentInstance = (payload: any, instanceName: string, instanceToken: 
   return instances.find((instance: any) => (
     instance?.token === instanceToken ||
     instance?.instanceName === instanceName ||
-    instance?.name === instanceName
+    instance?.name === instanceName ||
+    instance?.instance === instanceName
   ));
 };
 
 const extractPhoneFromInstance = (instance: any) => {
-  const jid = instance?.jid || instance?.ownerJid || instance?.number;
+  const jid = instance?.jid || instance?.ownerJid || instance?.owner || instance?.number || instance?.phone;
   if (!jid) return null;
   return String(jid).split('@')[0] || null;
 };
+
+const isInstanceConnected = (instance: any) => {
+  const state = String(instance?.connectionStatus || instance?.state || instance?.status || instance?.connection || '').toLowerCase();
+  return Boolean(instance?.connected) || ['open', 'connected', 'online'].includes(state);
+};
+
+const hasInstanceQr = (instance: any) => Boolean(
+  instance?.qrcode ||
+  instance?.Qrcode ||
+  instance?.qr ||
+  instance?.QrCode ||
+  instance?.base64 ||
+  instance?.code
+);
 
 const safeFetchJson = async (url: string, init: RequestInit) => {
   try {
@@ -85,6 +101,11 @@ serve(async (req) => {
     const instanceSuffix = restaurant_id.replace(/-/g, '');
     const instanceName = `rest_${instanceSuffix}`;
     const instanceToken = `token_${instanceSuffix}`;
+    const baseUrl = evolutionBaseUrl();
+    const globalApiKey = evolutionApiKey();
+    if (!globalApiKey) {
+      return new Response(JSON.stringify({ error: true, message: 'EVOLUTION_API_KEY não configurada.' }), { status: 200, headers: jsonHeaders });
+    }
     const { data: profileData } = await supabaseClient
       .from('profiles')
       .select('restaurant_name')
@@ -92,21 +113,21 @@ serve(async (req) => {
       .maybeSingle();
     const restaurantName = profileData?.restaurant_name?.trim() || 'Restaurante';
 
-    const allInstancesResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
+    const allInstancesResult = await safeFetchJson(`${baseUrl}/instance/all`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY
+        'apikey': globalApiKey
       }
     });
 
     let currentInstance = findCurrentInstance(allInstancesResult.data, instanceName, instanceToken);
 
     if (!currentInstance) {
-      const createResult = await safeFetchJson(`${EVOLUTION_URL}/instance/create`, {
+      const createResult = await safeFetchJson(`${baseUrl}/instance/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': EVOLUTION_API_KEY
+          'apikey': globalApiKey
         },
         body: JSON.stringify({
           name: restaurantName,
@@ -132,17 +153,26 @@ serve(async (req) => {
 
       await sleep(1500);
 
-      const refreshedInstancesResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
+      const refreshedInstancesResult = await safeFetchJson(`${baseUrl}/instance/all`, {
         method: 'GET',
         headers: {
-          'apikey': EVOLUTION_API_KEY
+          'apikey': globalApiKey
         }
       });
 
       currentInstance = findCurrentInstance(refreshedInstancesResult.data, instanceName, instanceToken);
     }
 
-    const connectResult = await safeFetchJson(`${EVOLUTION_URL}/instance/connect`, {
+    let connectResult = await safeFetchJson(`${baseUrl}/instance/connect/${encodeURIComponent(instanceName)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': globalApiKey
+      }
+    });
+
+    if (!connectResult.response?.ok) {
+      connectResult = await safeFetchJson(`${baseUrl}/instance/connect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -157,7 +187,8 @@ serve(async (req) => {
         websocketEnable: "",
         natsEnable: ""
       })
-    });
+      });
+    }
 
     const connectData = connectResult.data;
 
@@ -172,21 +203,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectResult.response?.status ?? 500 }), { status: 200, headers: jsonHeaders });
     }
 
-    const refreshedStatusResult = await safeFetchJson(`${EVOLUTION_URL}/instance/all`, {
+    const refreshedStatusResult = await safeFetchJson(`${baseUrl}/instance/all`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY
+        'apikey': globalApiKey
       }
     });
 
     const connectedInstance = findCurrentInstance(refreshedStatusResult.data, instanceName, instanceToken) || currentInstance;
-    const isConnected = Boolean(connectedInstance?.connected);
-    const hasQr = Boolean(
-      connectedInstance?.qrcode ||
-      connectedInstance?.Qrcode ||
-      connectedInstance?.qr ||
-      connectedInstance?.QrCode
-    );
+    const isConnected = isInstanceConnected(connectedInstance);
+    const hasQr = hasInstanceQr(connectedInstance);
     const phone = extractPhoneFromInstance(connectedInstance);
     const instanceStatus = isConnected ? 'connected' : hasQr ? 'connecting' : 'disconnected';
 
@@ -214,7 +240,7 @@ serve(async (req) => {
       headers: jsonHeaders,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Internal Error:", error);
     return new Response(JSON.stringify({ error: true, message: error.message || 'Erro interno na conexão WhatsApp' }), {
       status: 200,

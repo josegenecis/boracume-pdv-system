@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { logSecurityEvent } from '@/utils/securityLogger';
 import { handleOAuthError, extractOAuthErrorFromUrl } from '@/utils/oauth-errors';
 import { logOAuthCallbackReceived, logOAuthCallbackError, logOAuthLoginSuccess } from '../utils/oauth-security-logger';
+import { getLocalOperatorSession, getOperatorPathForRequestedPath } from '@/services/operatorAuth';
 
 const AuthCallback = () => {
   const { syncGoogleUserData } = useAuth();
@@ -73,7 +74,7 @@ const AuthCallback = () => {
             await logSecurityEvent('oauth_success', `User ${session.user.email} authenticated via OAuth`, 'low');
             
             toast.success('Login realizado com sucesso!');
-            navigate('/dashboard');
+            navigate(getOperatorPathForRequestedPath(getLocalOperatorSession(), '/dashboard'));
           } catch (syncError: any) {
             console.error('❌ Erro na sincronização:', syncError);
             
@@ -88,7 +89,7 @@ const AuthCallback = () => {
             
             // Mesmo com erro de sincronização, permitir login
             toast.warning('Login realizado, mas alguns dados podem não estar atualizados.');
-            navigate('/dashboard');
+            navigate(getOperatorPathForRequestedPath(getLocalOperatorSession(), '/dashboard'));
           }
         } else {
           console.warn('⚠️ Nenhuma sessão encontrada no callback');

@@ -175,6 +175,7 @@ class PrinterService extends EventEmitter {
 
       // Limpar buffer da impressora
       printer.clear();
+      this.applyStrongPrintMode(printer);
       
       // Aplicar template
       await this.applyTemplate(printer, template, orderData);
@@ -201,6 +202,13 @@ class PrinterService extends EventEmitter {
       this.emit('printError', { deviceId, error: error.message });
       return { success: false, message: error.message };
     }
+  }
+
+  applyStrongPrintMode(printer) {
+    try {
+      // ESC E = bold, ESC G = double-strike. Mantem compatibilidade ESC/POS.
+      printer.raw(Buffer.from([0x1b, 0x45, 0x01, 0x1b, 0x47, 0x01]));
+    } catch {}
   }
 
   async applyTemplate(printer, template, data) {
@@ -352,14 +360,12 @@ class PrinterService extends EventEmitter {
     printer.println(storeName);
     
     if (data.store?.description) {
-      printer.bold(false);
-      printer.setTextNormal();
+      printer.bold(true);
       printer.println(String(data.store.description));
     }
     
     if (data.store?.address) {
-      printer.bold(false);
-      printer.setTextNormal();
+      printer.bold(true);
       printer.println(data.store.address);
     }
     
@@ -373,15 +379,14 @@ class PrinterService extends EventEmitter {
     
     printer.bold(true);
     printer.println(new Date(data.created_at || data.date || Date.now()).toLocaleString('pt-BR'));
-    printer.bold(false);
     printer.drawLine();
     printer.newLine();
   }
 
   async printOrderInfo(printer, data, section) {
     printer.alignLeft();
-    printer.bold(false);
     printer.setTextNormal();
+    printer.bold(true);
     
     if (data.order_number) {
       printer.println(`Pedido: #${data.order_number}`);
@@ -427,8 +432,8 @@ class PrinterService extends EventEmitter {
 
   async printItems(printer, data, section) {
     printer.alignLeft();
-    printer.bold(false);
     printer.setTextNormal();
+    printer.bold(true);
     const width = this.getSectionWidth(section);
     
     if (!data.items || data.items.length === 0) {
@@ -488,6 +493,8 @@ class PrinterService extends EventEmitter {
     printer.drawLine();
     printer.alignLeft();
     const width = this.getSectionWidth(section);
+    printer.setTextNormal();
+    printer.bold(true);
     
     // Subtotal
     if (data.subtotal && data.subtotal !== data.total) {
@@ -516,13 +523,13 @@ class PrinterService extends EventEmitter {
     this.formatColumns('TOTAL', this.formatCurrency(data.total), width).forEach((line) => {
       printer.println(line);
     });
-    printer.bold(false);
     printer.setTextNormal();
   }
 
   async printFooter(printer, data, section) {
     printer.alignCenter();
     printer.drawLine();
+    printer.bold(true);
     
     if (data.payment_method) {
       printer.println(`Pagamento: ${data.payment_method}`);
@@ -545,8 +552,8 @@ class PrinterService extends EventEmitter {
     printer.bold(true);
     printer.setTextSize(1, 1);
     printer.println('COMANDA DA COZINHA');
-    printer.bold(false);
     printer.setTextNormal();
+    printer.bold(true);
     printer.println(new Date(data.created_at || data.date || Date.now()).toLocaleString('pt-BR'));
     printer.drawLine();
     printer.newLine();
@@ -559,8 +566,8 @@ class PrinterService extends EventEmitter {
     if (this.shouldPrintTicketCode(data)) {
       printer.println(`SENHA: ${String(data.order_number || '----').slice(-4) || '----'}`);
     }
-    printer.bold(false);
     printer.setTextNormal();
+    printer.bold(true);
     if (data.order_number) {
       printer.println(`Pedido: #${data.order_number}`);
     }
@@ -571,8 +578,8 @@ class PrinterService extends EventEmitter {
 
   async printKitchenItems(printer, data, section) {
     printer.alignLeft();
-    printer.bold(false);
     printer.setTextNormal();
+    printer.bold(true);
     const width = this.getSectionWidth(section);
 
     if (!data.items || data.items.length === 0) {
@@ -826,8 +833,8 @@ $printerName = $env:RAW_PRINTER_NAME
 $rawText = $env:RAW_PRINTER_TEXT
 $encoding = [System.Text.Encoding]::GetEncoding(850)
 $payload = $encoding.GetBytes($rawText)
-$prefix = [byte[]](27,64,27,116,2)
-$suffix = [byte[]](10,10,10,29,86,65,0)
+$prefix = [byte[]](27,64,27,116,2,27,69,1,27,71,1)
+$suffix = [byte[]](27,71,0,27,69,0,10,10,10,29,86,65,0)
 $bytes = New-Object byte[] ($prefix.Length + $payload.Length + $suffix.Length)
 [Array]::Copy($prefix, 0, $bytes, 0, $prefix.Length)
 [Array]::Copy($payload, 0, $bytes, $prefix.Length, $payload.Length)

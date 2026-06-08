@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { getDefaultOperatorPath, getLocalOperatorSession } from '@/services/operatorAuth';
+import { clearLocalOperatorSession, getLocalOperatorSession, getOperatorPathForRequestedPath } from '@/services/operatorAuth';
 
 type WaiterOperator = {
   id: string;
@@ -93,8 +93,10 @@ const OperatorLogin = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (activeSession && fromPath && fromPath !== '/operator-login') {
-    return <Navigate to={fromPath} replace />;
+  if (activeSession?.user_id && user?.id && activeSession.user_id !== user.id) {
+    clearLocalOperatorSession();
+  } else if (activeSession) {
+    return <Navigate to={getOperatorPathForRequestedPath(activeSession, fromPath)} replace />;
   }
 
   const finishLogin = (operator: WaiterOperator) => {
@@ -104,7 +106,7 @@ const OperatorLogin = () => {
     localStorage.removeItem('waiter_session');
     window.dispatchEvent(new Event('operator-session-changed'));
 
-    const nextPath = fromPath && fromPath !== '/operator-login' ? fromPath : getDefaultOperatorPath(payload);
+    const nextPath = getOperatorPathForRequestedPath(payload, fromPath);
     navigate(nextPath, { replace: true });
   };
 

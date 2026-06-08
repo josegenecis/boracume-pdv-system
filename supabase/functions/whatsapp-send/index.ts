@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_URL = "https://api.boracume.com";
-const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
+const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
+const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
 
 function normalizePhone(value: string | null | undefined) {
   const digits = String(value || "").replace(/\D/g, "");
@@ -23,10 +23,6 @@ function buildPhoneCandidates(value: string | null | undefined) {
     .filter(Boolean);
 
   return Array.from(new Set(candidates));
-}
-
-function buildTemporaryPauseStatus(minutes = 5) {
-  return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
 }
 
 serve(async (req) => {
@@ -50,7 +46,11 @@ serve(async (req) => {
     }
 
     const restaurant_id = user.id;
-    const instanceToken = `token_${restaurant_id.replace(/-/g, '')}`;
+    const instanceSuffix = restaurant_id.replace(/-/g, '');
+    const instanceName = `rest_${instanceSuffix}`;
+    const instanceToken = `token_${instanceSuffix}`;
+    const baseUrl = evolutionBaseUrl();
+    const globalApiKey = evolutionApiKey();
 
     const { number, message } = await req.json();
 
@@ -58,15 +58,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Missing number or message' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const evoRes = await fetch(`${EVOLUTION_URL}/send/text`, {
+    let evoRes = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instanceName)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': instanceToken
+        'apikey': globalApiKey
       },
       body: JSON.stringify({
-        number: number,
-        text: message
+        number: normalizePhone(number),
+        text: message,
+        delay: 500
       })
     });
 
@@ -78,12 +79,32 @@ serve(async (req) => {
     }
 
     if (!evoRes.ok) {
+      evoRes = await fetch(`${baseUrl}/send/text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': instanceToken
+        },
+        body: JSON.stringify({
+          number: number,
+          text: message
+        })
+      });
+
+      try {
+        evoData = await evoRes.json();
+      } catch(e) {
+        evoData = {};
+      }
+    }
+
+    if (!evoRes.ok) {
       console.error("Evolution API Error (Send Message):", evoData);
       return new Response(JSON.stringify({ error: true, message: 'Failed to send message', details: evoData, status: evoRes.status }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const pausePayload = {
-      status: buildTemporaryPauseStatus(5),
+      status: 'bot_paused',
       bot_paused: true,
       bot_paused_at: new Date().toISOString(),
       bot_paused_by: user.id,
@@ -100,7 +121,7 @@ serve(async (req) => {
       pauseResult = await supabaseClient
         .from('whatsapp_conversations')
         .update({
-          status: buildTemporaryPauseStatus(5),
+          status: 'bot_paused',
           updated_at: new Date().toISOString()
         })
         .eq('user_id', restaurant_id)
@@ -112,7 +133,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Internal Error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

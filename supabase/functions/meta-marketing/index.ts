@@ -102,7 +102,12 @@ async function graphPost(path: string, token: string, body: Record<string, any>)
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
     const metaError = payload?.error || {};
-    throw new Error(`${metaError?.message || "Falha ao enviar para Meta."} (${path.replace(/^\/+/, "")}${metaError?.code ? `, code ${metaError.code}` : ""}${metaError?.error_subcode ? `, subcode ${metaError.error_subcode}` : ""})`);
+    const details = [
+      metaError?.error_user_title,
+      metaError?.error_user_msg,
+      metaError?.error_data ? JSON.stringify(metaError.error_data) : "",
+    ].filter(Boolean).join(" - ");
+    throw new Error(`${metaError?.message || "Falha ao enviar para Meta."}${details ? `: ${details}` : ""} (${path.replace(/^\/+/, "")}${metaError?.code ? `, code ${metaError.code}` : ""}${metaError?.error_subcode ? `, subcode ${metaError.error_subcode}` : ""})`);
   }
   return payload;
 }
@@ -119,6 +124,17 @@ async function graphPostMultipart(path: string, token: string, form: FormData) {
     throw new Error(`${metaError?.message || "Falha ao enviar arquivo para Meta."} (${path.replace(/^\/+/, "")}${metaError?.code ? `, code ${metaError.code}` : ""}${metaError?.error_subcode ? `, subcode ${metaError.error_subcode}` : ""})`);
   }
   return payload;
+}
+
+function normalizeMetaPublishError(error: any) {
+  const message = String(error?.message || error || "").trim();
+  if (/development mode|modo de desenvolvimento|1885183/i.test(message)) {
+    return [
+      "O app Meta conectado está em modo de desenvolvimento. Para criar criativos de anúncio para clientes reais, coloque o app em modo Live/Público no Meta Developers e garanta acesso avançado às permissões de anúncios.",
+      "Depois disso, clique em Atualizar ativos e tente publicar novamente.",
+    ].join(" ");
+  }
+  return message || "Falha ao publicar campanha na Meta.";
 }
 
 async function ensurePublicBucket(serviceClient: any, bucket: string) {
@@ -164,11 +180,6 @@ async function isUsablePublicImage(url?: string | null) {
   } catch {
     return false;
   }
-}
-
-function bytesFromBase64(value: string) {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
 const creativeFormatConfig: Record<string, { label: string; size: string; width: number; height: number; aspect: string; placement: string[]; preset: string }> = {
@@ -261,271 +272,163 @@ function imageFilename(name: string, blob: Blob) {
   return `${name}.${ext}`;
 }
 
-function compactCreativeText(value: string, max = 34) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
-  return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
+function escXml(value: unknown) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-function objectiveLabel(value?: string | null) {
-  const labels: Record<string, string> = {
-    vender_mais: "vender mais pelo delivery",
-    divulgar_promocao: "divulgar uma promocao",
-    aumentar_pedidos: "aumentar pedidos no horario de movimento",
-    recuperar_clientes: "recuperar clientes inativos",
+function textLines(value: unknown, maxChars: number, maxLines: number) {
+  const words = String(value || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+    if (lines.length >= maxLines) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  return lines.length ? lines : [""];
+}
+
+function templateKind(productName?: string | null, category?: string | null, objective?: string | null) {
+  const text = `${productName || ""} ${category || ""} ${objective || ""}`.toLowerCase();
+  if (text.includes("aça") || text.includes("acai")) return "açai";
+  if (text.includes("pizza")) return "pizza";
+  if (text.includes("hamb") || text.includes("burger") || text.includes("burguer")) return "hamburguer";
+  if (text.includes("marmita")) return "marmita";
+  if (text.includes("sorvete") || text.includes("gelato")) return "sorveteria";
+  if (text.includes("combo")) return "combo";
+  if (text.includes("desconto") || text.includes("promo")) return "promoção";
+  return "restaurante";
+}
+
+function templatePalette(kind: string) {
+  const palettes: Record<string, { bg1: string; bg2: string; accent: string; dark: string; light: string }> = {
+    açai: { bg1: "#3b0764", bg2: "#f59e0b", accent: "#22c55e", dark: "#2e063f", light: "#fff7ed" },
+    pizza: { bg1: "#7f1d1d", bg2: "#f97316", accent: "#fde047", dark: "#3a160b", light: "#fff7ed" },
+    hamburguer: { bg1: "#111827", bg2: "#b45309", accent: "#facc15", dark: "#0f172a", light: "#fff7ed" },
+    marmita: { bg1: "#064e3b", bg2: "#84cc16", accent: "#f97316", dark: "#052e16", light: "#f7fee7" },
+    sorveteria: { bg1: "#0e7490", bg2: "#f472b6", accent: "#fde68a", dark: "#164e63", light: "#fdf2f8" },
+    combo: { bg1: "#14532d", bg2: "#f97316", accent: "#bef264", dark: "#052e16", light: "#f7fee7" },
+    promoção: { bg1: "#7c2d12", bg2: "#f97316", accent: "#fef08a", dark: "#431407", light: "#fff7ed" },
+    restaurante: { bg1: "#003223", bg2: "#ff5a00", accent: "#8cc850", dark: "#062f23", light: "#f8f6ef" },
   };
-  return labels[String(value || "")] || "gerar pedidos";
+  return palettes[kind] || palettes.restaurante;
 }
 
-function normalizeCreativeFlags(input: any) {
-  return {
-    useRealProductPhoto: input.useRealProductPhoto !== false,
-    removeBackground: input.removeBackground !== false,
-    enhanceProductImage: input.enhanceProductImage !== false,
-    applyBrandIdentity: input.applyBrandIdentity !== false,
-    generateThreeVersions: input.generateThreeVersions === true,
-  };
-}
-
-function scenarioForProduct(productName?: string | null, category?: string | null) {
-  const text = `${productName || ""} ${category || ""}`.toLowerCase();
-  if (text.includes("aça") || text.includes("acai")) {
-    return "Açaí: ambiente tropical premium, frutas frescas discretas, madeira clara ou pedra fria, luz natural apetitosa, sensação de delivery profissional.";
-  }
-  if (text.includes("pizza")) {
-    return "Pizza: mesa rustica elegante, forno ou cozinha desfocados ao fundo, luz quente, textura artesanal e sensação de produto recém-preparado.";
-  }
-  if (text.includes("hamb") || text.includes("burger") || text.includes("burguer")) {
-    return "Hambúrguer: madeira premium, luz quente, sombra suave, vapor/fumaça muito leve, clima de hamburgueria moderna.";
-  }
-  if (text.includes("sorvete") || text.includes("gelato") || text.includes("milk")) {
-    return "Sorvete/gelato: fundo limpo e colorido suave, luz fria premium, aspecto fresco, cremoso e moderno.";
-  }
-  return "Restaurante/delivery: cenário comercial brasileiro, fundo sofisticado, limpo, apetitoso, com foco total no produto e conversão.";
-}
-
-function buildCreativePrompt(input: {
-  restaurant_name: string;
-  product_name: string;
-  product_description?: string | null;
-  price?: string | null;
-  promotion?: string | null;
-  cta?: string | null;
-  brand_colors?: string | null;
+function buildTemplateCreativeSvg(input: {
   format: string;
-  width: number;
-  height: number;
-  objective?: string | null;
-  placement?: string | null;
-  product_image_url?: string | null;
-  logo_url?: string | null;
+  restaurantName: string;
+  productName: string;
+  productImageUrl: string;
+  logoUrl?: string | null;
   headline?: string | null;
-  notes?: string | null;
-  mode?: "professional" | "full_ai";
-  variation?: string | null;
+  priceLabel?: string | null;
+  cta?: string | null;
   category?: string | null;
-  remove_background?: boolean;
-  enhance_product_image?: boolean;
-  apply_brand_identity?: boolean;
+  objective?: string | null;
 }) {
   const config = creativeFormatConfig[input.format] || creativeFormatConfig.feed_1080x1080;
-  const isVertical = input.height > input.width;
-  const hasProductImage = Boolean(input.product_image_url);
-  const hasLogo = Boolean(input.logo_url);
-  const mode = input.mode || (hasProductImage ? "professional" : "full_ai");
-  const variation = creativeVariationConfig[String(input.variation || "A")] || creativeVariationConfig.A;
-  const priceLine = input.price ? `Preco/oferta: ${input.price}.` : "Sem preco informado: nao invente preco, use chamada de pedido.";
-  const promotionLine = input.promotion ? `Promocao: ${input.promotion}.` : "Sem promocao informada: nao invente promocao.";
-  const imageRule = mode === "professional" && hasProductImage
-    ? [
-      "MODO PROFISSIONAL COM FOTO REAL:",
-      "Utilize a foto enviada como produto principal da peca publicitaria.",
-      "NAO recrie o produto. NAO substitua por outro produto. NAO altere embalagem, formato, cor, recheio, toppings, logo impresso ou aparencia real.",
-      "Faça apenas direção de arte: recorte visual, remoção de fundo quando necessario, melhoria de nitidez/contraste/brilho/saturação, iluminação, cenário, composição, sombras, oferta, CTA e elementos gráficos.",
-      input.remove_background ? "Remova o fundo da foto real e use o produto recortado como protagonista com borda limpa." : "Preserve a foto real em uma composição elegante se o recorte não for natural.",
-      input.enhance_product_image ? "Melhore a qualidade da foto sem mudar a identidade do produto." : "Nao aplicar alterações fortes no produto.",
-      "O produto deve ocupar 40% a 60% da arte no Feed/Horizontal e 50% a 70% em Story/Reels.",
-    ].join("\n")
-    : [
-      "MODO IA COMPLETA SEM FOTO REAL:",
-      "Não existe foto real utilizável do produto. Gere uma imagem comercial realista baseada no nome e descrição.",
-      "O resultado pode não representar fielmente o produto, portanto evite detalhes específicos não informados.",
-      "O produto deve parecer fotografia profissional de restaurante/delivery, nunca ilustração genérica.",
-    ].join("\n");
-  const logoRule = hasLogo
-    ? "Logo: use obrigatoriamente a logo enviada, sem distorcer, em tamanho discreto e limpo."
-    : "Logo: nao invente logomarca. Use apenas o nome do restaurante em tipografia profissional.";
-  const layoutRule = isVertical
-    ? "Layout Story/Reels: produto grande no centro, chamada curta no topo, preco grande abaixo ou sobreposto em area segura, CTA grande proximo ao rodape, margens seguras superior e inferior para nao cortar texto no celular."
-    : config.preset === "facebook_horizontal"
-      ? "Layout horizontal: produto grande em um lado, chamada e preco do outro lado, CTA visivel, logo no canto, composicao equilibrada para Facebook Ads."
-      : "Layout Feed: produto grande centralizado ou lateral, chamada principal no topo, preco em destaque, CTA na parte inferior, logo no canto superior.";
-  const scenario = scenarioForProduct(input.product_name, input.category);
+  const width = config.width;
+  const height = config.height;
+  const isVertical = height > width;
+  const isHorizontal = width > height;
+  const kind = templateKind(input.productName, input.category, input.objective);
+  const palette = templatePalette(kind);
+  const headlineLines = textLines(String(input.headline || `${input.productName} em oferta`).toUpperCase(), isVertical ? 13 : isHorizontal ? 18 : 16, 3);
+  const productLines = textLines(String(input.productName || "Oferta especial").toUpperCase(), isVertical ? 14 : 18, 2);
+  const price = String(input.priceLabel || "").trim();
+  const cta = String(input.cta || "PEÇA AGORA").toUpperCase();
+  const logoBlock = input.logoUrl
+    ? `<circle cx="${isVertical ? 880 : 170}" cy="${isVertical ? 150 : 145}" r="${isVertical ? 92 : 82}" fill="#fff" opacity=".96"/>
+       <image href="${escXml(input.logoUrl)}" x="${isVertical ? 800 : 94}" y="${isVertical ? 72 : 72}" width="${isVertical ? 160 : 152}" height="${isVertical ? 160 : 152}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${isVertical ? 86 : 72}" y="${isVertical ? 150 : 110}" fill="#fff" font-size="${isVertical ? 46 : 38}" font-family="Arial, Helvetica, sans-serif" font-weight="800">${escXml(input.restaurantName)}</text>`;
 
-  return [
-    "Crie uma arte publicitaria profissional para restaurante/delivery, pronta para Meta Ads, com qualidade de designer especialista em tráfego pago.",
-    `Preset: ${config.preset}.`,
-    `Formato: ${config.label}.`,
-    `Dimensao final: ${input.width}x${input.height}.`,
-    `Posicionamento: ${input.placement || config.placement.join(", ")}.`,
-    `Objetivo da campanha: ${objectiveLabel(input.objective)}.`,
-    `Variacao: ${variation.label}.`,
-    `Estilo da variacao: ${variation.style}.`,
-    `Composicao da variacao: ${variation.composition}.`,
-    "",
-    `Restaurante: ${input.restaurant_name}.`,
-    `Produto principal: ${input.product_name}.`,
-    input.product_description ? `Descricao do produto: ${input.product_description}.` : "Descricao do produto: nao informada.",
-    priceLine,
-    promotionLine,
-    `CTA: ${input.cta || "Clique e faca seu pedido"}.`,
-    `Cores da marca: ${input.brand_colors || "verde escuro, laranja vibrante, branco e tons apetitosos do produto"}.`,
-    input.headline ? `Chamada principal curta: ${input.headline}.` : "",
-    input.notes ? `Direcao extra do dono: ${input.notes}.` : "",
-    "",
-    logoRule,
-    imageRule,
-    `Cenario recomendado: ${scenario}`,
-    layoutRule,
-    "",
-    "Etapas que a arte deve simular em uma unica imagem final:",
-    "1. Recortar/valorizar o produto real quando a foto existir.",
-    "2. Melhorar iluminação, nitidez e acabamento sem alterar a aparência.",
-    "3. Criar cenário profissional coerente com o tipo do produto.",
-    "4. Montar layout com hierarquia: Produto > Oferta > Preço > CTA > Logo.",
-    "",
-    "Regras de qualidade obrigatorias:",
-    "- Nunca gerar imagem generica ou com cara de IA.",
-    "- Produto como protagonista, grande e apetitoso.",
-    "- Hierarquia visual clara: produto, oferta, preço, CTA e logo.",
-    "- No maximo 3 blocos de texto na arte. Exemplos: nome do produto, preço, CTA.",
-    "- Texto grande, legivel no celular, sem corte e sem letras pequenas.",
-    "- Area segura para texto, principalmente em Story/Reels.",
-    "- Visual moderno, limpo, alto contraste, premium mas popular.",
-    "- Fundo com textura leve ou cenário sofisticado; nunca template chapado verde padrao.",
-    "- Sombras suaves e composicao equilibrada.",
-    "- Nao poluir a peca, nao distorcer logo, nao distorcer produto.",
-    "- Nao inventar preco, promocao ou promessa de resultado.",
-    "- Evitar aparência de panfleto amador.",
-    "",
-    "Resultado esperado: imagem final de anuncio pago com aparencia de designer profissional de social media para restaurantes, pronta para conversao.",
-  ].filter(Boolean).join("\n");
+  if (isHorizontal) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${palette.bg1}"/><stop offset="1" stop-color="${palette.bg2}"/></linearGradient>
+        <clipPath id="photo"><rect x="650" y="54" width="500" height="520" rx="34"/></clipPath>
+        <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".32"/></filter>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <circle cx="1060" cy="50" r="210" fill="${palette.accent}" opacity=".20"/>
+      <rect x="650" y="54" width="500" height="520" rx="34" fill="#fff" opacity=".95" filter="url(#shadow)"/>
+      <image href="${escXml(input.productImageUrl)}" x="650" y="54" width="500" height="520" preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)"/>
+      ${logoBlock}
+      ${headlineLines.map((line, i) => `<text x="72" y="${214 + i * 76}" fill="#fff" font-size="70" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(line)}</text>`).join("")}
+      ${productLines.map((line, i) => `<text x="72" y="${430 + i * 56}" fill="${palette.light}" font-size="50" font-family="Arial, Helvetica, sans-serif" font-weight="800">${escXml(line)}</text>`).join("")}
+      ${price ? `<rect x="72" y="510" width="260" height="82" rx="34" fill="${palette.accent}" filter="url(#shadow)"/><text x="102" y="567" fill="${palette.dark}" font-size="52" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(price)}</text>` : ""}
+      <rect x="${price ? 352 : 72}" y="510" width="330" height="82" rx="34" fill="#fff" opacity=".94"/>
+      <text x="${price ? 388 : 108}" y="563" fill="${palette.dark}" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(cta)}</text>
+    </svg>`;
+  }
+
+  const photoX = isVertical ? 94 : 86;
+  const photoY = isVertical ? 620 : 330;
+  const photoW = isVertical ? 892 : 908;
+  const photoH = isVertical ? 760 : 650;
+  const priceY = isVertical ? 1620 : 940;
+  const headlineY = isVertical ? 280 : 210;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${palette.bg1}"/><stop offset=".58" stop-color="${palette.dark}"/><stop offset="1" stop-color="${palette.bg2}"/></linearGradient>
+      <clipPath id="photo"><rect x="${photoX}" y="${photoY}" width="${photoW}" height="${photoH}" rx="${isVertical ? 58 : 44}"/></clipPath>
+      <filter id="shadow"><feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#000" flood-opacity=".34"/></filter>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#bg)"/>
+    <circle cx="${isVertical ? 100 : 920}" cy="${isVertical ? 1740 : 130}" r="${isVertical ? 330 : 230}" fill="${palette.accent}" opacity=".18"/>
+    <circle cx="${isVertical ? 960 : 90}" cy="${isVertical ? 240 : 940}" r="${isVertical ? 240 : 180}" fill="#fff" opacity=".10"/>
+    ${logoBlock}
+    ${headlineLines.map((line, i) => `<text x="${isVertical ? 82 : 82}" y="${headlineY + i * (isVertical ? 92 : 82)}" fill="#fff" font-size="${isVertical ? 86 : 76}" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(line)}</text>`).join("")}
+    ${productLines.map((line, i) => `<text x="${isVertical ? 82 : 86}" y="${isVertical ? 520 + i * 64 : 285 + i * 52}" fill="${palette.accent}" font-size="${isVertical ? 58 : 46}" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(line)}</text>`).join("")}
+    <rect x="${photoX}" y="${photoY}" width="${photoW}" height="${photoH}" rx="${isVertical ? 58 : 44}" fill="#fff" opacity=".96" filter="url(#shadow)"/>
+    <image href="${escXml(input.productImageUrl)}" x="${photoX}" y="${photoY}" width="${photoW}" height="${photoH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)"/>
+    ${price ? `<rect x="${isVertical ? 82 : 86}" y="${priceY}" width="${isVertical ? 410 : 320}" height="${isVertical ? 140 : 92}" rx="${isVertical ? 52 : 34}" fill="${palette.accent}" filter="url(#shadow)"/><text x="${isVertical ? 126 : 116}" y="${priceY + (isVertical ? 94 : 63)}" fill="${palette.dark}" font-size="${isVertical ? 80 : 56}" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(price)}</text>` : ""}
+    <rect x="${price ? (isVertical ? 520 : 420) : (isVertical ? 82 : 86)}" y="${priceY}" width="${isVertical ? 440 : 410}" height="${isVertical ? 140 : 92}" rx="${isVertical ? 52 : 34}" fill="#fff" opacity=".96" filter="url(#shadow)"/>
+    <text x="${price ? (isVertical ? 570 : 458) : (isVertical ? 132 : 126)}" y="${priceY + (isVertical ? 88 : 59)}" fill="${palette.dark}" font-size="${isVertical ? 45 : 36}" font-family="Arial, Helvetica, sans-serif" font-weight="900">${escXml(cta)}</text>
+  </svg>`;
 }
 
-async function generateAiAdCreativeImage(params: {
+async function renderTemplateCreativeImage(params: {
   serviceClient: any;
   restaurantId: string;
   format: string;
   restaurantName: string;
   productName: string;
-  productDescription?: string | null;
-  priceLabel?: string | null;
-  headline?: string | null;
-  cta?: string | null;
-  productImageUrl?: string | null;
+  productImageUrl: string;
   logoUrl?: string | null;
-  notes?: string | null;
-  objective?: string | null;
-  placement?: string | null;
-  promotion?: string | null;
-  brandColors?: string | null;
-  mode?: "professional" | "full_ai";
-  variation?: string | null;
+  headline?: string | null;
+  priceLabel?: string | null;
+  cta?: string | null;
   category?: string | null;
-  removeBackground?: boolean;
-  enhanceProductImage?: boolean;
-  applyBrandIdentity?: boolean;
+  objective?: string | null;
 }) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("OPENAI_API_KEY não configurada para gerar criativos.");
   const config = creativeFormatConfig[params.format] || creativeFormatConfig.feed_1080x1080;
-  const headline = compactCreativeText(params.headline || `${params.productName} em oferta`, 32);
-  const price = compactCreativeText(params.priceLabel || "Peça agora", 18);
-  const cta = compactCreativeText(params.cta || "PEÇA AGORA", 22);
-  const prompt = buildCreativePrompt({
-    restaurant_name: params.restaurantName,
-    product_name: params.productName,
-    product_description: params.productDescription,
-    price,
-    promotion: params.promotion,
-    cta,
-    brand_colors: params.brandColors,
-    format: params.format,
-    width: config.width,
-    height: config.height,
-    objective: params.objective,
-    placement: params.placement,
-    product_image_url: params.productImageUrl,
-    logo_url: params.logoUrl,
-    headline,
-    notes: params.notes,
-    mode: params.mode,
-    variation: params.variation,
-    category: params.category,
-    remove_background: params.removeBackground,
-    enhance_product_image: params.enhanceProductImage,
-    apply_brand_identity: params.applyBrandIdentity,
+  const svg = buildTemplateCreativeSvg(params);
+  const renderUrl = `${baseUrl()}/api/marketing/render-creative`;
+  const response = await fetch(renderUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-boracume-key": Deno.env.get("BORACUME_INTERNAL_KEY") || Deno.env.get("RENDER_CREATIVE_SECRET") || "",
+    },
+    body: JSON.stringify({ svg, width: config.width, height: config.height }),
   });
-
-  const productBlob = await fetchImageBlob(params.productImageUrl);
-  const logoBlob = await fetchImageBlob(params.logoUrl);
-  const envModel = Deno.env.get("OPENAI_IMAGE_MODEL");
-  const modelCandidates = [...new Set([envModel || "gpt-image-1", "gpt-image-1-mini"])];
-  const imageQuality = Deno.env.get("OPENAI_IMAGE_QUALITY") || (params.mode === "professional" ? "high" : "medium");
-  let lastError: any = null;
-
-  for (const model of modelCandidates) {
-    try {
-      let res: Response;
-      if (productBlob || logoBlob) {
-        const form = new FormData();
-        form.set("model", model);
-        form.set("prompt", prompt);
-        form.set("size", config.size);
-        form.set("quality", imageQuality);
-        form.set("background", "opaque");
-        form.set("output_format", "png");
-        if (productBlob && model === "gpt-image-1") form.set("input_fidelity", "high");
-        if (productBlob) form.append("image[]", productBlob, imageFilename("produto", productBlob));
-        if (logoBlob) form.append("image[]", logoBlob, imageFilename("logo", logoBlob));
-        res = await fetch("https://api.openai.com/v1/images/edits", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` },
-          body: form,
-        });
-      } else {
-        res = await fetch("https://api.openai.com/v1/images/generations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model,
-            prompt,
-            size: config.size,
-            quality: imageQuality,
-            background: "opaque",
-            output_format: "png",
-            n: 1,
-          }),
-        });
-      }
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error?.message || "Falha ao gerar criativo IA.");
-      const item = payload?.data?.[0] || {};
-      if (item.b64_json) {
-        return uploadMarketingImage(params.serviceClient, params.restaurantId, bytesFromBase64(String(item.b64_json)), "image/png");
-      }
-      if (item.url) {
-        const imageRes = await fetch(String(item.url));
-        if (!imageRes.ok) throw new Error("Falha ao baixar criativo IA.");
-        const contentType = imageRes.headers.get("content-type") || "image/png";
-        return uploadMarketingImage(params.serviceClient, params.restaurantId, new Uint8Array(await imageRes.arrayBuffer()), contentType);
-      }
-      throw new Error("OpenAI não retornou uma imagem utilizável.");
-    } catch (error) {
-      lastError = error;
-      console.error("marketing_ai_ad_creative_failed", model, params.format, error);
-    }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.error || `Falha ao renderizar criativo por template (${response.status}).`);
   }
-  throw lastError || new Error("Falha ao gerar criativo IA.");
+  return uploadMarketingImage(params.serviceClient, params.restaurantId, new Uint8Array(await response.arrayBuffer()), "image/png");
 }
 
 async function uploadMetaAdImage(adAccountId: string, token: string, imageUrl?: string | null) {
@@ -539,25 +442,41 @@ async function uploadMetaAdImage(adAccountId: string, token: string, imageUrl?: 
   return first?.hash || null;
 }
 
+function normalizeMetaObjective(value?: string | null) {
+  const raw = String(value || "").trim().toUpperCase();
+  const aliases: Record<string, string> = {
+    LINK_CLICKS: "OUTCOME_TRAFFIC",
+    TRAFFIC: "OUTCOME_TRAFFIC",
+    CONVERSIONS: "OUTCOME_SALES",
+    SALES: "OUTCOME_SALES",
+    LEADS: "OUTCOME_LEADS",
+    ENGAGEMENT: "OUTCOME_ENGAGEMENT",
+    REACH: "OUTCOME_AWARENESS",
+    AWARENESS: "OUTCOME_AWARENESS",
+  };
+  const normalized = aliases[raw] || raw || "OUTCOME_TRAFFIC";
+  const allowed = new Set([
+    "OUTCOME_LEADS",
+    "OUTCOME_SALES",
+    "OUTCOME_ENGAGEMENT",
+    "OUTCOME_AWARENESS",
+    "OUTCOME_TRAFFIC",
+    "OUTCOME_APP_PROMOTION",
+  ]);
+  return allowed.has(normalized) ? normalized : "OUTCOME_TRAFFIC";
+}
+
 async function createPausedMetaCampaign(adAccountId: string, token: string, name: string, objective?: string | null) {
   const payload = {
     name,
     buying_type: "AUCTION",
-    objective: objective || "OUTCOME_TRAFFIC",
+    objective: normalizeMetaObjective(objective),
     status: "PAUSED",
-    special_ad_categories: [],
+    special_ad_categories: ["NONE"],
+    is_adset_budget_sharing_enabled: false,
   };
 
-  try {
-    return await graphPost(`${adAccountId}/campaigns`, token, payload);
-  } catch (error: any) {
-    const message = String(error?.message || "");
-    if (!message.includes("code 100")) throw error;
-    return await graphPost(`${adAccountId}/campaigns`, token, {
-      ...payload,
-      objective: "LINK_CLICKS",
-    });
-  }
+  return await graphPost(`${adAccountId}/campaigns`, token, payload);
 }
 
 async function geocodeRestaurantAddress(address?: string | null, city?: string | null) {
@@ -725,13 +644,11 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
   const dailyBudget = Math.max(5, Number(input.dailyBudget || 20));
   const selectedFormats = normalizeSelectedFormats(input.selectedFormats);
   const selectedPlacements = normalizeSelectedPlacements(selectedFormats, input.selectedPlacements);
-  const creativeFlags = normalizeCreativeFlags(input);
-  const variations = creativeFlags.generateThreeVersions ? ["A", "B", "C"] : ["A"];
-  const hasRealProductPhoto = Boolean(knowledge.product?.image_url) && creativeFlags.useRealProductPhoto;
-  const creativeMode: "professional" | "full_ai" = hasRealProductPhoto ? "professional" : "full_ai";
-  const generatedImagePrompt = creativeMode === "professional"
-    ? `Modo profissional: usar foto real do produto ${productFocus}, preservar aparência, criar cenário, layout, preço e CTA.`
-    : `Modo IA completa: sem foto real utilizável para ${productFocus}; gerar produto comercial realista com aviso de fidelidade.`;
+  const variations = ["A"];
+  const productImageUrl = String(knowledge.product?.image_url || "").trim();
+  if (!productImageUrl) {
+    throw new Error("Cadastre uma foto real pública do produto antes de gerar a campanha. O PopMarketing AI agora usa templates com fotos reais e não gera imagens por IA.");
+  }
   const restaurantLocation = await geocodeRestaurantAddress(knowledge.restaurant?.address, input.targetCity);
   const strategy = {
     objective: input.objective || "vender_mais",
@@ -762,11 +679,15 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
       product_image_url: knowledge.product?.image_url || null,
       product_image_status: knowledge.product?.image_status || "not_selected",
       generated_image_url: null,
-      generated_image_prompt: generatedImagePrompt,
-      final_image_source: "ai_ad_creative",
-      creative_mode: creativeMode,
-      creative_flags: creativeFlags,
-      warning: creativeMode === "full_ai" ? "Resultado pode não representar fielmente o produto." : null,
+      generated_image_prompt: null,
+      final_image_source: "template_real_photo",
+      creative_mode: "template_real_photo",
+      creative_flags: {
+        usesRealProductPhoto: true,
+        usesAiImageGeneration: false,
+        renderer: "html_svg_template_png",
+      },
+      warning: null,
     },
     menu_link: knowledge.menuLink,
   };
@@ -778,65 +699,31 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
     const description = copy?.description || "Campanha criada com IA para revisão.";
     const price = knowledge.product?.price ? `R$ ${Number(knowledge.product.price).toFixed(2).replace(".", ",")}` : "";
     const placement = (creativeFormatConfig[format]?.placement || []).filter((item) => selectedPlacements.includes(item)).join(", ");
-    const finalImageUrl = await generateAiAdCreativeImage({
+    const finalImageUrl = await renderTemplateCreativeImage({
       serviceClient,
       restaurantId,
       format,
       restaurantName: knowledge.restaurant?.restaurant_name || "PopSystem",
       productName: productFocus,
-      productDescription: knowledge.product?.description || input.notes || "",
+      productImageUrl,
       priceLabel: price,
       headline,
       cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
-      notes: input.notes || "",
-      productImageUrl: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
       logoUrl: knowledge.restaurant?.logo_url || null,
       objective: input.objective || "vender_mais",
-      placement,
-      promotion: input.promotion || input.notes || null,
-      brandColors: input.brandColors || "verde escuro, laranja PopSystem, branco, cores naturais do produto",
-      mode: creativeMode,
-      variation,
       category: knowledge.product?.category || null,
-      removeBackground: creativeFlags.removeBackground,
-      enhanceProductImage: creativeFlags.enhanceProductImage,
-      applyBrandIdentity: creativeFlags.applyBrandIdentity,
     });
-    if (!finalImageUrl) throw new Error(`A IA não retornou imagem final para o formato ${creativeFormatConfig[format]?.label || format}.`);
-    const prompt = buildCreativePrompt({
-      restaurant_name: knowledge.restaurant?.restaurant_name || "PopSystem",
-      product_name: productFocus,
-      product_description: knowledge.product?.description || input.notes || "",
-      price,
-      promotion: input.promotion || input.notes || null,
-      cta: destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
-      brand_colors: input.brandColors || "verde escuro, laranja PopSystem, branco, cores naturais do produto",
-      format,
-      width: creativeFormatConfig[format]?.width || 1080,
-      height: creativeFormatConfig[format]?.height || 1080,
-      objective: input.objective || "vender_mais",
-      placement,
-      product_image_url: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
-      logo_url: knowledge.restaurant?.logo_url || null,
-      headline,
-      notes: input.notes || "",
-      mode: creativeMode,
-      variation,
-      category: knowledge.product?.category || null,
-      remove_background: creativeFlags.removeBackground,
-      enhance_product_image: creativeFlags.enhanceProductImage,
-      apply_brand_identity: creativeFlags.applyBrandIdentity,
-    });
+    if (!finalImageUrl) throw new Error(`O template não retornou imagem final para o formato ${creativeFormatConfig[format]?.label || format}.`);
     return {
       format,
-      type: "ai_ad_creative",
+      type: "template_static",
       image_url: finalImageUrl,
       logo_url: knowledge.restaurant?.logo_url || null,
-      generated_image_prompt: prompt,
-      source_product_image_url: hasRealProductPhoto ? knowledge.product?.image_url || null : null,
+      generated_image_prompt: `Template ${templateKind(productFocus, knowledge.product?.category, input.objective)} renderizado em PNG com foto real do produto. Posicionamentos: ${placement || "auto"}.`,
+      source_product_image_url: productImageUrl,
       variation,
-      mode: creativeMode,
-      warning: creativeMode === "full_ai" ? "Resultado pode não representar fielmente o produto." : null,
+      mode: "template_real_photo",
+      warning: null,
       image_error: null,
       headline,
       primary_text: primaryText,
@@ -845,9 +732,151 @@ async function planCampaign(serviceClient: any, restaurantId: string, input: any
     };
   }));
   if (creatives.length !== creativeJobs.length || creatives.some((creative) => !creative.image_url)) {
-    throw new Error("Não foi possível gerar todos os criativos finais por IA. Tente novamente ou confira a chave OPENAI_API_KEY.");
+    throw new Error("Não foi possível renderizar todos os criativos por template. Confira se a foto do produto e a logo estão públicas.");
   }
   return { knowledge, strategy, copies, creatives };
+}
+
+function creativeToRow(campaignId: string, creative: any) {
+  return {
+    campaign_id: campaignId,
+    format: creative.format,
+    type: creative.type || "ai_ad_creative",
+    image_url: creative.image_url || null,
+    video_url: creative.video_url || null,
+    logo_url: creative.logo_url || null,
+    generated_image_prompt: creative.generated_image_prompt || null,
+    source_product_image_url: creative.source_product_image_url || null,
+    variation: creative.variation || null,
+    mode: creative.mode || null,
+    warning: creative.warning || null,
+    image_error: creative.image_error || null,
+    headline: creative.headline || null,
+    primary_text: creative.primary_text || null,
+    description: creative.description || null,
+    cta: creative.cta || "ORDER_NOW",
+    status: creative.status || "draft",
+  };
+}
+
+function compactCreativeRow(row: any) {
+  return {
+    campaign_id: row.campaign_id,
+    format: row.format,
+    type: row.type || "ai_ad_creative",
+    image_url: row.image_url || null,
+    video_url: row.video_url || null,
+    logo_url: row.logo_url || null,
+    generated_image_prompt: row.generated_image_prompt || null,
+    headline: row.headline || null,
+    primary_text: row.primary_text || null,
+    description: row.description || null,
+    cta: row.cta || "ORDER_NOW",
+    status: row.status || "draft",
+  };
+}
+
+function baseCreativeRow(row: any) {
+  return {
+    campaign_id: row.campaign_id,
+    format: row.format,
+    type: row.type || "ai_ad_creative",
+    image_url: row.image_url || null,
+    video_url: row.video_url || null,
+    headline: row.headline || null,
+    primary_text: row.primary_text || null,
+    description: row.description || null,
+    cta: row.cta || "ORDER_NOW",
+    status: row.status || "draft",
+  };
+}
+
+async function insertMarketingCreatives(serviceClient: any, campaignId: string, creatives: any[]) {
+  const rows = creatives.map((creative) => creativeToRow(campaignId, creative));
+  let result = await serviceClient.from("marketing_creatives").insert(rows);
+  if (result.error && /source_product_image_url|variation|mode|warning|image_error|schema cache/i.test(String(result.error.message || ""))) {
+    result = await serviceClient.from("marketing_creatives").insert(rows.map(compactCreativeRow));
+  }
+  if (result.error && /logo_url|generated_image_prompt|schema cache/i.test(String(result.error.message || ""))) {
+    result = await serviceClient.from("marketing_creatives").insert(rows.map(baseCreativeRow));
+  }
+  return result;
+}
+
+async function loadOrRepairCreativeRows(serviceClient: any, campaign: any) {
+  const { data: existingRows, error } = await serviceClient
+    .from("marketing_creatives")
+    .select("*")
+    .eq("campaign_id", campaign.id);
+  if (error) throw error;
+  const rowsWithImage = (existingRows || []).filter((item: any) => item?.image_url);
+  if (rowsWithImage.length > 0) return existingRows || [];
+
+  const snapshotCreatives = Array.isArray(campaign.review_snapshot?.creatives)
+    ? campaign.review_snapshot.creatives.filter((item: any) => item?.image_url)
+    : [];
+  if (snapshotCreatives.length === 0) return existingRows || [];
+
+  const result = await insertMarketingCreatives(serviceClient, campaign.id, snapshotCreatives);
+  if (result.error) throw result.error;
+
+  const { data: repairedRows, error: repairedError } = await serviceClient
+    .from("marketing_creatives")
+    .select("*")
+    .eq("campaign_id", campaign.id);
+  if (repairedError) throw repairedError;
+  return repairedRows || [];
+}
+
+async function updateMarketingCreative(serviceClient: any, creativeId: string, creative: any) {
+  const fullRow = creativeToRow("", creative);
+  delete (fullRow as any).campaign_id;
+
+  let result = await serviceClient
+    .from("marketing_creatives")
+    .update(fullRow)
+    .eq("id", creativeId)
+    .select("*")
+    .single();
+
+  if (result.error && /source_product_image_url|variation|mode|warning|image_error|schema cache/i.test(String(result.error.message || ""))) {
+    const row = compactCreativeRow({ ...fullRow, campaign_id: "" });
+    delete (row as any).campaign_id;
+    result = await serviceClient
+      .from("marketing_creatives")
+      .update(row)
+      .eq("id", creativeId)
+      .select("*")
+      .single();
+  }
+
+  if (result.error && /logo_url|generated_image_prompt|schema cache/i.test(String(result.error.message || ""))) {
+    const row = baseCreativeRow({ ...fullRow, campaign_id: "" });
+    delete (row as any).campaign_id;
+    result = await serviceClient
+      .from("marketing_creatives")
+      .update(row)
+      .eq("id", creativeId)
+      .select("*")
+      .single();
+  }
+
+  return result;
+}
+
+function replaceSnapshotCreative(snapshot: any, creative: any) {
+  const current = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const list = Array.isArray(current.creatives) ? current.creatives : [];
+  let replaced = false;
+  const creatives = list.map((item: any) => {
+    const matches = (creative.id && item.id === creative.id)
+      || (item.format === creative.format && String(item.variation || "") === String(creative.variation || ""));
+    if (!matches) return item;
+    replaced = true;
+    return { ...item, ...creative };
+  });
+  if (!replaced) creatives.push(creative);
+  return { ...current, creatives };
 }
 
 serve(async (req) => {
@@ -980,27 +1009,113 @@ serve(async (req) => {
         await serviceClient.from("marketing_campaigns").update({ status: "error", last_error: adsetError.message }).eq("id", campaign.id);
         throw adsetError;
       }
-      const creativeRows = plan.creatives.map((creative: any) => ({
-        campaign_id: campaign.id,
-        format: creative.format,
-        type: creative.type,
-        image_url: creative.image_url,
-        video_url: creative.video_url || null,
-        logo_url: creative.logo_url || null,
-        generated_image_prompt: creative.generated_image_prompt || null,
-        headline: creative.headline,
-        primary_text: creative.primary_text,
-        description: creative.description,
-        cta: creative.cta,
-        status: "draft",
-      }));
-      const { error: creativeError } = await serviceClient.from("marketing_creatives").insert(creativeRows);
+      const { error: creativeError } = await insertMarketingCreatives(serviceClient, campaign.id, plan.creatives);
       if (creativeError) {
         await serviceClient.from("marketing_campaigns").update({ status: "error", last_error: creativeError.message }).eq("id", campaign.id);
         throw creativeError;
       }
       await serviceClient.from("marketing_ai_logs").insert({ restaurant_id: user.id, campaign_id: campaign.id, action: "plan_campaign", input: body, output: { strategy: plan.strategy } });
       return json({ campaignId: campaign.id, plan: { campaign, creatives: plan.creatives, copies: plan.copies, strategy: plan.strategy } });
+    }
+
+    if (action === "rerender_creative") {
+      const campaignId = String(body.campaignId || "");
+      const creativeId = String(body.creativeId || "");
+      const format = normalizeFormatKey(String(body.format || "feed_1080x1080"));
+      const variation = String(body.variation || "A");
+      const copyIndex = Math.max(0, Number(body.copyIndex || 0));
+      const sourceImageUrl = publicProductImageUrl(serviceClient, String(body.sourceImageUrl || ""));
+
+      if (!campaignId) return json({ error: "Campanha não informada." }, 400);
+      if (!creativeFormatConfig[format]) return json({ error: "Formato de criativo inválido." }, 400);
+      if (!await isUsablePublicImage(sourceImageUrl)) return json({ error: "A imagem enviada não está pública ou não pôde ser lida." }, 400);
+
+      const { data: campaign } = await serviceClient
+        .from("marketing_campaigns")
+        .select("*")
+        .eq("restaurant_id", user.id)
+        .eq("id", campaignId)
+        .single();
+      if (!campaign?.id) return json({ error: "Campanha não encontrada." }, 404);
+
+      const creativeRows = await loadOrRepairCreativeRows(serviceClient, campaign);
+      const existing = (creativeRows || []).find((item: any) => creativeId && item.id === creativeId)
+        || (creativeRows || []).find((item: any) => item.format === format && String(item.variation || "A") === variation)
+        || null;
+
+      const copies = Array.isArray(campaign.ai_strategy?.copies) ? campaign.ai_strategy.copies : [];
+      const copy = copies[copyIndex] || copies[0] || {};
+      const product = campaign.ai_strategy?.product || {};
+      const restaurant = campaign.ai_strategy?.restaurant || {};
+      const productName = product?.name || campaign.product_focus || "Oferta especial";
+      const headline = copy?.headline || existing?.headline || `${productName} em oferta`;
+      const primaryText = copy?.primary_text || existing?.primary_text || `Peça ${productName} agora.`;
+      const description = copy?.description || existing?.description || "Campanha criada com IA para revisão.";
+      const price = product?.price ? `R$ ${Number(product.price).toFixed(2).replace(".", ",")}` : "";
+      const finalImageUrl = await renderTemplateCreativeImage({
+        serviceClient,
+        restaurantId: user.id,
+        format,
+        restaurantName: restaurant?.name || "PopSystem",
+        productName,
+        productImageUrl: sourceImageUrl,
+        priceLabel: price,
+        headline,
+        cta: campaign.destination === "whatsapp" ? "Chame no WhatsApp" : "Peça agora",
+        logoUrl: restaurant?.logo_url || null,
+        objective: campaign.objective || "vender_mais",
+        category: product?.category || null,
+      });
+
+      const updatedCreative = {
+        ...(existing || {}),
+        id: existing?.id || undefined,
+        format,
+        type: "template_static",
+        image_url: finalImageUrl,
+        logo_url: restaurant?.logo_url || existing?.logo_url || null,
+        generated_image_prompt: `Template ${templateKind(productName, product?.category, campaign.objective)} refeito com foto escolhida manualmente para ${format}.`,
+        source_product_image_url: sourceImageUrl,
+        variation,
+        mode: "template_real_photo",
+        warning: null,
+        image_error: null,
+        headline,
+        primary_text: primaryText,
+        description,
+        cta: campaign.destination === "whatsapp" ? "WHATSAPP_MESSAGE" : "ORDER_NOW",
+        status: "draft",
+      };
+
+      let savedCreative = updatedCreative;
+      if (existing?.id) {
+        const result = await updateMarketingCreative(serviceClient, existing.id, updatedCreative);
+        if (result.error) throw result.error;
+        savedCreative = { ...updatedCreative, ...(result.data || {}) };
+      } else {
+        const result = await insertMarketingCreatives(serviceClient, campaign.id, [updatedCreative]);
+        if (result.error) throw result.error;
+        const { data } = await serviceClient
+          .from("marketing_creatives")
+          .select("*")
+          .eq("campaign_id", campaign.id)
+          .eq("format", format)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        savedCreative = { ...updatedCreative, ...(data || {}) };
+      }
+
+      await serviceClient
+        .from("marketing_campaigns")
+        .update({
+          status: campaign.status === "error" ? "review" : campaign.status,
+          last_error: null,
+          review_snapshot: replaceSnapshotCreative(campaign.review_snapshot, savedCreative),
+        })
+        .eq("id", campaign.id);
+
+      return json({ creative: savedCreative });
     }
 
     if (action === "publish_paused") {
@@ -1013,67 +1128,84 @@ serve(async (req) => {
       if (!conn?.access_token_encrypted || !conn?.ad_account_id || !conn?.page_id) return json({ error: "Conecte uma conta Meta com conta de anúncio e página antes de publicar." }, 400);
       const token = await decryptToken(conn.access_token_encrypted);
       const adAccountId = normalizeAdAccountId(conn.ad_account_id);
-      const radiusKm = Math.max(1, Number(campaign.target_radius_km || campaign.ai_strategy?.audience?.radius_km || 5));
-      const origin = campaign.ai_strategy?.audience?.origin;
-      const geoLocations = origin?.lat && origin?.lng
-        ? { custom_locations: [{ latitude: Number(origin.lat), longitude: Number(origin.lng), radius: radiusKm, distance_unit: "kilometer" }] }
-        : { countries: ["BR"] };
-      const copies = Array.isArray(campaign.ai_strategy?.copies) ? campaign.ai_strategy.copies : [];
-      const selectedCopy = copies[copyIndex] || copies[0] || {};
-      const { data: creativeRows } = await serviceClient
-        .from("marketing_creatives")
-        .select("*")
-        .eq("campaign_id", campaign.id);
-      const creativeRow = (creativeRows || []).find((item: any) => creativeId && item.id === creativeId && item.image_url)
-        || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.variation === "A" && item.image_url)
-        || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.image_url)
-        || (creativeRows || []).find((item: any) => item.image_url);
-      if (!creativeRow?.image_url) {
-        return json({ error: "Gere um criativo final com imagem antes de publicar." }, 400);
+      await serviceClient.from("marketing_campaigns").update({ status: "publishing", last_error: null }).eq("id", campaign.id);
+
+      try {
+        const radiusKm = Math.max(1, Number(campaign.target_radius_km || campaign.ai_strategy?.audience?.radius_km || 5));
+        const origin = campaign.ai_strategy?.audience?.origin;
+        const geoLocations = origin?.lat && origin?.lng
+          ? { custom_locations: [{ latitude: Number(origin.lat), longitude: Number(origin.lng), radius: radiusKm, distance_unit: "kilometer" }] }
+          : { countries: ["BR"] };
+        const copies = Array.isArray(campaign.ai_strategy?.copies) ? campaign.ai_strategy.copies : [];
+        const selectedCopy = copies[copyIndex] || copies[0] || {};
+        const creativeRows = await loadOrRepairCreativeRows(serviceClient, campaign);
+        const creativeRow = (creativeRows || []).find((item: any) => creativeId && item.id === creativeId && item.image_url)
+          || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.variation === "A" && item.image_url)
+          || (creativeRows || []).find((item: any) => item.format === "feed_1080x1080" && item.image_url)
+          || (creativeRows || []).find((item: any) => item.image_url);
+        if (!creativeRow?.image_url) {
+          throw new Error("Gere um criativo final com imagem antes de publicar.");
+        }
+        const imageHash = await uploadMetaAdImage(adAccountId, token, creativeRow.image_url);
+        if (!imageHash) {
+          throw new Error("A Meta não retornou o hash da imagem. Gere o criativo novamente e tente publicar.");
+        }
+        const link = campaign.menu_link || `${baseUrl()}/share/menu/${user.id}`;
+        const linkData: Record<string, any> = {
+          link,
+          message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
+          name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
+          description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
+          call_to_action: { type: "LEARN_MORE", value: { link } },
+          image_hash: imageHash,
+        };
+        const metaCreative = await graphPost(`${adAccountId}/adcreatives`, token, {
+          name: `${campaign.name} - Criativo IA`,
+          object_story_spec: {
+            page_id: conn.page_id,
+            link_data: linkData,
+          },
+        });
+        const metaCampaign = await createPausedMetaCampaign(adAccountId, token, campaign.name, campaign.objective);
+        const metaAdset = await graphPost(`${adAccountId}/adsets`, token, {
+          name: `${campaign.name} - Público IA`,
+          campaign_id: metaCampaign.id,
+          daily_budget: moneyToCents(campaign.daily_budget),
+          billing_event: "IMPRESSIONS",
+          optimization_goal: "LINK_CLICKS",
+          bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+          destination_type: "WEBSITE",
+          targeting: {
+            geo_locations: geoLocations,
+            age_min: 18,
+            age_max: 55,
+            targeting_automation: { advantage_audience: 0 },
+          },
+          status: "PAUSED",
+        });
+        const metaAd = await graphPost(`${adAccountId}/ads`, token, {
+          name: `${campaign.name} - Anúncio IA`,
+          adset_id: metaAdset.id,
+          creative: { creative_id: metaCreative.id },
+          status: "PAUSED",
+        });
+        const { data: localAdset } = await serviceClient
+          .from("marketing_adsets")
+          .select("id")
+          .eq("campaign_id", campaign.id)
+          .limit(1)
+          .maybeSingle();
+        await serviceClient.from("marketing_campaigns").update({ meta_campaign_id: metaCampaign.id, status: "paused", last_error: null }).eq("id", campaign.id);
+        await serviceClient.from("marketing_adsets").update({ meta_adset_id: metaAdset.id, status: "paused" }).eq("campaign_id", campaign.id);
+        if (creativeRow?.id) await serviceClient.from("marketing_creatives").update({ meta_creative_id: metaCreative.id, status: "paused" }).eq("id", creativeRow.id);
+        await serviceClient.from("marketing_ads").insert({ campaign_id: campaign.id, adset_id: localAdset?.id || null, creative_id: creativeRow?.id || null, meta_ad_id: metaAd.id, status: "paused", performance_json: {} });
+        return json({ ok: true, meta: { campaign: metaCampaign, adset: metaAdset, creative: metaCreative, ad: metaAd } });
+      } catch (publishError: any) {
+        const errorMessage = normalizeMetaPublishError(publishError);
+        await serviceClient.from("marketing_campaigns").update({ status: "error", last_error: errorMessage }).eq("id", campaign.id);
+        await serviceClient.from("marketing_ai_logs").insert({ restaurant_id: user.id, campaign_id: campaign.id, action: "publish_paused", input: body, output: {}, error: errorMessage });
+        return json({ error: errorMessage }, 400);
       }
-      const imageHash = await uploadMetaAdImage(adAccountId, token, creativeRow.image_url);
-      if (!imageHash) {
-        return json({ error: "A Meta não retornou o hash da imagem. Gere o criativo novamente e tente publicar." }, 400);
-      }
-      const metaCampaign = await createPausedMetaCampaign(adAccountId, token, campaign.name, campaign.objective);
-      const metaAdset = await graphPost(`${adAccountId}/adsets`, token, {
-        name: `${campaign.name} - Público IA`,
-        campaign_id: metaCampaign.id,
-        daily_budget: moneyToCents(campaign.daily_budget),
-        billing_event: "IMPRESSIONS",
-        optimization_goal: "LINK_CLICKS",
-        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-        destination_type: "WEBSITE",
-        targeting: { geo_locations: geoLocations, age_min: 18, age_max: 55 },
-        status: "PAUSED",
-      });
-      const link = campaign.menu_link || `${baseUrl()}/share/menu/${user.id}`;
-      const linkData: Record<string, any> = {
-        link,
-        message: selectedCopy?.primary_text || creativeRow?.primary_text || "Clique e faça seu pedido.",
-        name: selectedCopy?.headline || creativeRow?.headline || campaign.name,
-        description: selectedCopy?.description || creativeRow?.description || "Campanha PopMarketing AI",
-        call_to_action: { type: "LEARN_MORE", value: { link } },
-        image_hash: imageHash,
-      };
-      const metaCreative = await graphPost(`${adAccountId}/adcreatives`, token, {
-        name: `${campaign.name} - Criativo IA`,
-        object_story_spec: {
-          page_id: conn.page_id,
-          link_data: linkData,
-        },
-      });
-      const metaAd = await graphPost(`${adAccountId}/ads`, token, {
-        name: `${campaign.name} - Anúncio IA`,
-        adset_id: metaAdset.id,
-        creative: { creative_id: metaCreative.id },
-        status: "PAUSED",
-      });
-      await serviceClient.from("marketing_campaigns").update({ meta_campaign_id: metaCampaign.id, status: "paused" }).eq("id", campaign.id);
-      await serviceClient.from("marketing_adsets").update({ meta_adset_id: metaAdset.id, status: "paused" }).eq("campaign_id", campaign.id);
-      if (creativeRow?.id) await serviceClient.from("marketing_creatives").update({ meta_creative_id: metaCreative.id, status: "paused" }).eq("id", creativeRow.id);
-      await serviceClient.from("marketing_ads").insert({ campaign_id: campaign.id, adset_id: null, creative_id: creativeRow?.id || null, meta_ad_id: metaAd.id, status: "paused", performance_json: {} });
-      return json({ ok: true, meta: { campaign: metaCampaign, adset: metaAdset, creative: metaCreative, ad: metaAd } });
     }
 
     if (action === "metrics") {

@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AuthForm from '@/components/auth/AuthForm';
 import { Loader2 } from 'lucide-react';
 import { debugLogger } from '@/utils/debugLogger';
+import { getLocalOperatorSession, getOperatorPathForRequestedPath } from '@/services/operatorAuth';
 
 const Login = () => {
   const { user, isLoading } = useAuth();
@@ -31,7 +32,8 @@ const Login = () => {
   }, [location.search, navigate]);
 
   // Obter destino do redirecionamento
-  const from = location.state?.from?.pathname || '/dashboard';
+  const requestedFrom = location.state?.from?.pathname || '/dashboard';
+  const from = getOperatorPathForRequestedPath(getLocalOperatorSession(), requestedFrom);
 
   useEffect(() => {
     isMountedRef.current = true;

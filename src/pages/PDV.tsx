@@ -39,6 +39,7 @@ import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
 interface Product {
   id: string;
   name: string;
+  barcode?: string | null;
   price: number;
   image_url?: string;
   available: boolean;
@@ -107,6 +108,9 @@ const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
 const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
   return PDV_PAYMENT_METHODS.find((option) => option.value === method)?.label || String(method || '-');
 };
+
+const normalizeProductLookupCode = (value: unknown) =>
+  String(value || '').trim().replace(/\s+/g, '').toLowerCase();
 
 interface CashSession {
   id: string;
@@ -213,6 +217,10 @@ const PDV = () => {
   const categoryScrollerRef = useRef<HTMLDivElement>(null);
   const hasLoadedDataRef = useRef(false);
   const draftRestoredUserIdRef = useRef<string | null>(null);
+  const scannerBufferRef = useRef('');
+  const scannerLastKeyAtRef = useRef(0);
+  const scannerClearTimerRef = useRef<number | null>(null);
+  const scannerInputTargetRef = useRef<{ element: HTMLInputElement | HTMLTextAreaElement; value: string } | null>(null);
 
   const getPdvDraftKey = () => `boracume_pdv_draft_v1:${user?.id || 'anonymous'}`;
 
@@ -995,8 +1003,11 @@ const PDV = () => {
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const codeQuery = normalizeProductLookupCode(searchQuery);
     return products.filter((product) => {
-      const matchesSearch = !query || product.name.toLowerCase().includes(query);
+      const matchesSearch = !query ||
+        product.name.toLowerCase().includes(query) ||
+        normalizeProductLookupCode(product.barcode).includes(codeQuery);
       const matchesCategory =
         activeCategoryId === 'all' ||
         (activeCategoryId === 'uncategorized' && (!product.category_id || !categoryById.has(product.category_id))) ||
@@ -1204,6 +1215,108 @@ const PDV = () => {
       addToCart(product, 1);
     }
   };
+
+  const restoreScannerInputTarget = () => {
+    const target = scannerInputTargetRef.current;
+    scannerInputTargetRef.current = null;
+    if (!target?.element) return;
+
+    const element = target.element;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    valueSetter?.call(element, target.value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  const addProductByScannedCode = async (scannedCode: string) => {
+    const rawCode = scannedCode.trim();
+    const code = normalizeProductLookupCode(rawCode);
+    if (!code) return false;
+
+    const product = products.find((item) =>
+      normalizeProductLookupCode(item.barcode) === code ||
+      normalizeProductLookupCode(item.id) === code
+    );
+
+    if (!product) {
+      toast({
+        title: 'Produto não encontrado',
+        description: `Nenhum produto cadastrado com o código ${rawCode}.`,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    restoreScannerInputTarget();
+    await handleProductClick(product);
+    return true;
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'products') return;
+
+    const minScanLength = 4;
+    const scanKeyGapMs = 95;
+    const scanEnterWindowMs = 300;
+
+    const clearScannerBuffer = () => {
+      scannerBufferRef.current = '';
+      scannerInputTargetRef.current = null;
+      if (scannerClearTimerRef.current) {
+        window.clearTimeout(scannerClearTimerRef.current);
+        scannerClearTimerRef.current = null;
+      }
+    };
+
+    const captureInputTarget = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        scannerInputTargetRef.current = { element: active, value: active.value };
+      } else {
+        scannerInputTargetRef.current = null;
+      }
+    };
+
+    const handleScannerKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (showVariationModal || weightDialogOpen || cashDialogOpen || adminPinOpen || tefOpen || tableLaunchOpen) return;
+
+      const now = Date.now();
+
+      if (event.key === 'Enter') {
+        const rawCode = scannerBufferRef.current;
+        const isLikelyScan = rawCode.length >= minScanLength && now - scannerLastKeyAtRef.current <= scanEnterWindowMs;
+        clearScannerBuffer();
+        if (isLikelyScan) {
+          event.preventDefault();
+          event.stopPropagation();
+          void addProductByScannedCode(rawCode);
+        }
+        return;
+      }
+
+      if (event.key.length !== 1) return;
+
+      if (now - scannerLastKeyAtRef.current > scanKeyGapMs) {
+        scannerBufferRef.current = '';
+        captureInputTarget();
+      }
+
+      scannerBufferRef.current += event.key;
+      scannerLastKeyAtRef.current = now;
+
+      if (scannerClearTimerRef.current) window.clearTimeout(scannerClearTimerRef.current);
+      scannerClearTimerRef.current = window.setTimeout(clearScannerBuffer, scanEnterWindowMs);
+    };
+
+    window.addEventListener('keydown', handleScannerKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleScannerKeyDown, true);
+      clearScannerBuffer();
+    };
+  }, [activeTab, adminPinOpen, cashDialogOpen, products, showVariationModal, tableLaunchOpen, tefOpen, weightDialogOpen]);
 
   const makeCartItemId = () => {
     try {

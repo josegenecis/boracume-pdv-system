@@ -64,9 +64,6 @@ const defaultAiSettings: AiSettings = {
   specific_rules: ''
 };
 
-const buildTemporaryPauseStatus = (minutes = 5) =>
-  `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
-
 const isBotPaused = (conversation: { status?: string | null; bot_paused?: boolean | null }) => {
   const status = String(conversation.status || '').trim().toLowerCase();
   if (status === 'bot_paused') return true;
@@ -188,7 +185,7 @@ const WhatsAppChatbot = () => {
 
     try {
       const pausePayload = {
-        status: buildTemporaryPauseStatus(5),
+        status: 'bot_paused',
         bot_paused: true,
         bot_paused_at: new Date().toISOString(),
         bot_paused_by: user?.id || null,
@@ -203,7 +200,7 @@ const WhatsAppChatbot = () => {
 
       if (pauseError && String(pauseError.message || '').includes('bot_paused')) {
         const fallbackPausePayload = {
-          status: buildTemporaryPauseStatus(5),
+          status: 'bot_paused',
           updated_at: new Date().toISOString()
         };
         const fallbackResult = await supabase
@@ -246,7 +243,7 @@ const WhatsAppChatbot = () => {
       
       toast({
         title: "Mensagem enviada",
-        description: "O robô foi pausado por 5 minutos nesta conversa."
+        description: "O robô foi pausado nesta conversa até ser reativado manualmente."
       });
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);

@@ -10,6 +10,8 @@ const CUT_PARTIAL = GS + 'V' + '\x41' + '\x00';
 const CUT_FULL = GS + 'V' + '\x00';
 const BOLD_ON = ESC + 'E' + '\x01';
 const BOLD_OFF = ESC + 'E' + '\x00';
+const DOUBLE_STRIKE_ON = ESC + 'G' + '\x01';
+const DOUBLE_STRIKE_OFF = ESC + 'G' + '\x00';
 const ALIGN_CENTER = ESC + 'a' + '\x01';
 const ALIGN_LEFT = ESC + 'a' + '\x00';
 const ALIGN_RIGHT = ESC + 'a' + '\x02';
@@ -559,7 +561,7 @@ function resolveElectronTarget(): ElectronTarget | null {
 function buildOrderHtml(order: any, config: any, store?: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
   const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
-  const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
+  const fontSize = config.font_size === 'small' ? '11px' : config.font_size === 'large' ? '15px' : '13px';
   const storeName = escapeHtml(store?.restaurant_name || store?.name || config.print_header || 'RESTAURANTE');
   const storeDesc = escapeHtml(store?.description || '');
   const storeLogo = resolveReceiptLogoUrl(store, config);
@@ -585,6 +587,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
+            font-weight: 700;
             line-height: 1.28;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -599,8 +602,8 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             overflow: hidden;
           }
           .center { text-align: center; }
-          .bold { font-weight: 700; }
-          .divider { border-top: 1px dashed #000; margin: 9px 0; }
+          .bold { font-weight: 800; }
+          .divider { border-top: 2px dashed #000; margin: 9px 0; }
           .flex { display: flex; justify-content: space-between; gap: 8px; }
           .item-row { margin-bottom: 8px; }
           .brand-block { padding-bottom: 2px; }
@@ -610,7 +613,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
-            font-weight: 700;
+            font-weight: 800;
           }
           .item-meta,
           .total-line {
@@ -642,7 +645,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
             overflow-wrap: anywhere;
           }
           .total-row { font-size: 1.2em; margin-top: 10px; }
-          .muted { color: #111; font-size: 0.95em; }
+          .muted { color: #000; font-size: 0.95em; font-weight: 700; }
         </style>
       </head>
       <body>
@@ -750,7 +753,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
 function buildKitchenTicketHtml(order: any, config: any) {
   const width = config.paper_width === '58mm' ? '58mm' : '80mm';
   const bodyWidth = config.paper_width === '58mm' ? '46mm' : '68mm';
-  const fontSize = config.font_size === 'small' ? '10px' : config.font_size === 'large' ? '14px' : '12px';
+  const fontSize = config.font_size === 'small' ? '11px' : config.font_size === 'large' ? '15px' : '13px';
   const customerName = escapeHtml(getKitchenCustomerLabel(order));
   const orderTypeLabel = escapeHtml(getOrderTypeLabel(order));
   const orderNumber = escapeHtml(order?.order_number || '----');
@@ -772,6 +775,7 @@ function buildKitchenTicketHtml(order: any, config: any) {
             padding: 2mm 1mm 3mm 1mm;
             font-size: ${fontSize};
             color: #000;
+            font-weight: 700;
             line-height: 1.28;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -783,8 +787,8 @@ function buildKitchenTicketHtml(order: any, config: any) {
             overflow: hidden;
           }
           .center { text-align: center; }
-          .bold { font-weight: 700; }
-          .divider { border-top: 1px dashed #000; margin: 9px 0; }
+          .bold { font-weight: 800; }
+          .divider { border-top: 2px dashed #000; margin: 9px 0; }
           .title { font-size: 1.15em; letter-spacing: 0.06em; }
           .ticket-code { font-size: 1.52em; letter-spacing: 0.08em; }
           .section-title { font-weight: 700; letter-spacing: 0.06em; }
@@ -793,7 +797,7 @@ function buildKitchenTicketHtml(order: any, config: any) {
             white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
-            font-weight: 700;
+            font-weight: 800;
           }
           .notes {
             font-size: 0.92em;
@@ -802,7 +806,7 @@ function buildKitchenTicketHtml(order: any, config: any) {
             word-break: break-word;
             overflow-wrap: anywhere;
           }
-          .muted { color: #111; font-size: 0.95em; }
+          .muted { color: #000; font-size: 0.95em; font-weight: 700; }
         </style>
       </head>
       <body>
@@ -885,16 +889,17 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
   const line = () => { commands += `${'-'.repeat(lineWidth)}\n`; };
 
   commands += INIT;
+  commands += BOLD_ON + DOUBLE_STRIKE_ON;
   center();
   bold(true);
   commands += text('COMANDA DA COZINHA');
-  bold(false);
+  bold(true);
   commands += text(new Date(order.created_at || Date.now()).toLocaleString('pt-BR'));
   line();
 
   bold(true);
   if (shouldPrintTicketCode(order)) commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
-  bold(false);
+  bold(true);
   commands += text(`Pedido #${order.order_number || '----'}`);
   commands += text(`Tipo: ${getOrderTypeLabel(order)}`);
   line();
@@ -902,13 +907,13 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
   left();
   bold(true);
   commands += text('CLIENTE:');
-  bold(false);
+  bold(true);
   commands += text(getKitchenCustomerLabel(order));
   line();
 
   bold(true);
   commands += text('ITENS:');
-  bold(false);
+  bold(true);
 
   for (const item of Array.isArray(order.items) ? order.items : []) {
     const quantity = Number(item.quantity || 1);
@@ -942,6 +947,7 @@ function buildKitchenEscPosCommands(order: any, lineWidth: number) {
 
   line();
   commands += '\n\n\n\n';
+  commands += DOUBLE_STRIKE_OFF + BOLD_OFF;
   commands += CUT_PARTIAL;
 
   return commands;
@@ -956,7 +962,7 @@ function buildReportHtml(
   const escapeHtml = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const paperWidth = options?.paperWidth === '80mm' ? '80mm' : '58mm';
   const bodyWidth = paperWidth === '58mm' ? '54mm' : '76mm';
-  const fontSize = options?.fontSize === 'small' ? '9px' : options?.fontSize === 'large' ? '12px' : paperWidth === '58mm' ? '10px' : '11px';
+  const fontSize = options?.fontSize === 'small' ? '10px' : options?.fontSize === 'large' ? '13px' : paperWidth === '58mm' ? '11px' : '12px';
   const storeLogoHtml = store?.logo_url ? `<img src="${escapeHtml(store.logo_url)}" alt="Logo" style="max-width: 160px; max-height: 60px; object-fit: contain; margin: 0 auto 6px auto; display:block;" />` : '';
   const storeHeader = store && !options?.hideStoreHeader ? `
     ${storeLogoHtml}
@@ -992,13 +998,14 @@ function buildReportHtml(
             max-width: ${bodyWidth};
             font-size: ${fontSize};
             color: #000;
+            font-weight: 700;
             line-height: 1.18;
             page-break-inside: avoid;
             break-inside: avoid;
           }
           .center { text-align: center; }
-          .bold { font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .bold { font-weight: 800; }
+          .divider { border-top: 2px dashed #000; margin: 8px 0; }
           .line { white-space: pre; overflow: visible; max-width: none; page-break-inside: avoid; break-inside: avoid; }
         </style>
       </head>
@@ -1434,13 +1441,14 @@ export const PrinterService = {
     
     // Init
     commands += INIT;
+    commands += BOLD_ON + DOUBLE_STRIKE_ON;
     
     // Cabeçalho
     center();
     bold(true);
     const storeName = String(order?.store?.restaurant_name || order?.store?.name || config.print_header || 'RESTAURANTE').trim();
     commands += text(storeName || (config.print_header || 'RESTAURANTE'));
-    bold(false);
+    bold(true);
     const storeDesc = String(order?.store?.description || '').trim();
     if (storeDesc) commands += text(storeDesc);
     const storeAddress = String(order?.store?.address || '').trim();
@@ -1455,7 +1463,7 @@ export const PrinterService = {
     // Senha/Pedido
     bold(true);
     if (shouldPrintTicketCode(order)) commands += text(`SENHA: ${order.order_number?.slice(-4) || '----'}`);
-    bold(false);
+    bold(true);
     commands += text(`Pedido #${order.order_number}`);
     line();
 
@@ -1463,7 +1471,7 @@ export const PrinterService = {
     left();
     bold(true);
     commands += text('CLIENTE:');
-    bold(false);
+    bold(true);
     commands += text(order.customer_name || 'Balcão');
     if (order.customer_phone) commands += text(`Tel: ${order.customer_phone}`);
     const customerAddressLine = resolveCustomerAddressLine(order);
@@ -1474,7 +1482,7 @@ export const PrinterService = {
     // Itens
     bold(true);
     commands += text('ITENS:');
-    bold(false);
+    bold(true);
     order.items.forEach((item: any) => {
       const quantity = Number(item.quantity || 1);
       const productName = item.product_name || item.name || 'Produto';
@@ -1540,7 +1548,7 @@ export const PrinterService = {
     formatColumns('TOTAL', formatCurrencyValue(Number(order.total || 0)), lineWidth).forEach((value) => {
       commands += text(value);
     });
-    bold(false);
+    bold(true);
     
     const splitLines = getPaymentSplitLines(order);
     if (splitLines.length > 0) {
@@ -1566,6 +1574,7 @@ export const PrinterService = {
     
     // Feed e Corte
     commands += '\n\n\n\n'; // Feed
+    commands += DOUBLE_STRIKE_OFF + BOLD_OFF;
     commands += CUT_PARTIAL;
 
     if (config.print_kitchen_ticket) {

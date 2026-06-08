@@ -6,8 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EVOLUTION_URL = "https://api.boracume.com";
-const EVOLUTION_API_KEY = "TroqueEssaChaveAgora_2026_Forte";
+const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
+const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
+
+const getInstancesFromPayload = (payload: any) => {
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload)) return payload;
+  return [];
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,10 +21,16 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
+      supabaseUrl,
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    );
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '',
+      { auth: { persistSession: false, autoRefreshToken: false } }
     );
 
     const {
@@ -33,11 +45,19 @@ serve(async (req) => {
     const instanceSuffix = restaurant_id.replace(/-/g, '');
     const instanceName = `rest_${instanceSuffix}`;
     const instanceToken = `token_${instanceSuffix}`;
+    const baseUrl = evolutionBaseUrl();
+    const globalApiKey = evolutionApiKey();
+    if (!globalApiKey) {
+      return new Response(JSON.stringify({ status: 'disconnected', error: 'EVOLUTION_API_KEY não configurada.' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    const evoRes = await fetch(`${EVOLUTION_URL}/instance/all`, {
+    const evoRes = await fetch(`${baseUrl}/instance/all`, {
       method: 'GET',
       headers: {
-        'apikey': EVOLUTION_API_KEY
+        'apikey': globalApiKey
       }
     });
 
@@ -57,43 +77,55 @@ serve(async (req) => {
         });
     }
 
-    const instances = Array.isArray(evoData?.data) ? evoData.data : [];
-    const currentInstance = instances.find((instance: any) => instance?.token === instanceToken || instance?.name === instanceName);
+    const instances = getInstancesFromPayload(evoData);
+    const currentInstance = instances.find((instance: any) => (
+      instance?.token === instanceToken ||
+      instance?.instanceName === instanceName ||
+      instance?.name === instanceName ||
+      instance?.instance === instanceName
+    ));
 
     let newStatus = 'disconnected';
     let phone = null;
+    const state = String(currentInstance?.connectionStatus || currentInstance?.state || currentInstance?.status || currentInstance?.connection || '').toLowerCase();
     const hasQr = Boolean(
       currentInstance?.qrcode ||
       currentInstance?.Qrcode ||
       currentInstance?.qr ||
-      currentInstance?.QrCode
+      currentInstance?.QrCode ||
+      currentInstance?.base64 ||
+      currentInstance?.code
     );
 
-    if (currentInstance?.connected) {
+    if (currentInstance?.connected || ['open', 'connected', 'online'].includes(state)) {
       newStatus = 'connected';
     } else if (hasQr) {
       newStatus = 'connecting';
     }
 
-    if (currentInstance?.jid) {
-      phone = String(currentInstance.jid).split('@')[0] || null;
+    const jid = currentInstance?.jid || currentInstance?.ownerJid || currentInstance?.owner || currentInstance?.number || currentInstance?.phone;
+    if (jid) {
+      phone = String(jid).split('@')[0] || null;
     }
 
     // Update database
     const updateData: any = { status: newStatus };
     if (phone) updateData.phone = phone;
 
-    await supabaseClient
+    await supabaseAdmin
       .from('whatsapp_instances')
-      .update(updateData)
-      .eq('restaurant_id', restaurant_id);
+      .upsert({
+        restaurant_id,
+        instance_name: instanceName,
+        ...updateData
+      }, { onConflict: 'instance_name' });
 
     return new Response(JSON.stringify({ status: newStatus, phone }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Internal Error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

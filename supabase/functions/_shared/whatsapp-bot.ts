@@ -1215,10 +1215,6 @@ function minutesSince(dateString?: string | null) {
   return (Date.now() - time) / 60000;
 }
 
-function buildTemporaryPauseStatus(minutes = 60) {
-  return `bot_paused_until:${new Date(Date.now() + minutes * 60000).toISOString()}`;
-}
-
 function getPauseState(status: unknown) {
   const value = String(status || '').trim().toLowerCase();
   if (value === 'bot_paused') return { paused: true, expired: false, reason: 'manual' };
@@ -1234,6 +1230,14 @@ function getPauseState(status: unknown) {
     reason: 'temporary',
     until: new Date(until).toISOString()
   };
+}
+
+function getConversationPauseState(conversation: any) {
+  if (conversation?.bot_paused === true) {
+    return { paused: true, expired: false, reason: 'manual' };
+  }
+
+  return getPauseState(conversation?.status);
 }
 
 function isActionableCustomerIntent(text: string) {
@@ -1279,7 +1283,7 @@ export async function pauseRestaurantBotForConversation(params: {
         user_id: restaurantId,
         customer_phone: customerPhone,
         customer_name: customerName,
-        status: buildTemporaryPauseStatus(60)
+        status: 'bot_paused'
       })
       .select('id')
       .single();
@@ -1289,7 +1293,7 @@ export async function pauseRestaurantBotForConversation(params: {
   }
 
   const fullPausePayload = {
-    status: buildTemporaryPauseStatus(60),
+    status: 'bot_paused',
     bot_paused: true,
     bot_paused_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -1305,7 +1309,7 @@ export async function pauseRestaurantBotForConversation(params: {
     const fallbackResult = await supabase
       .from('whatsapp_conversations')
       .update({
-        status: buildTemporaryPauseStatus(60),
+        status: 'bot_paused',
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
@@ -1556,7 +1560,7 @@ export async function processRestaurantBotMessage(params: {
 
   const { data: existingConversation } = await supabase
     .from('whatsapp_conversations')
-    .select('id, status, bot_paused_at, bot_paused_by')
+    .select('id, status, bot_paused, bot_paused_at, bot_paused_by')
     .eq('user_id', restaurantId)
     .eq('customer_phone', customerPhone)
     .maybeSingle();
@@ -1649,7 +1653,7 @@ export async function processRestaurantBotMessage(params: {
     return { ok: true, skipped: true, reason: 'marketing_optout', conversationId };
   }
 
-  const pauseState = getPauseState(existingConversation?.status);
+  const pauseState = getConversationPauseState(existingConversation);
   const shouldResumeExpiredPause = pauseState.expired;
   const shouldResumeTemporaryPauseForCustomer =
     pauseState.paused &&
@@ -1871,9 +1875,8 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (humanIntent || problemIntent) {
-    const pauseUntil = new Date(Date.now() + 60 * 60000).toISOString();
     const pausePayload = {
-      status: `bot_paused_until:${pauseUntil}`,
+      status: 'bot_paused',
       bot_paused: true,
       bot_paused_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -1886,7 +1889,7 @@ export async function processRestaurantBotMessage(params: {
     if (pauseUpdate.error && String(pauseUpdate.error.message || '').includes('bot_paused')) {
       await supabase
         .from('whatsapp_conversations')
-        .update({ status: `bot_paused_until:${pauseUntil}`, updated_at: new Date().toISOString() })
+        .update({ status: 'bot_paused', updated_at: new Date().toISOString() })
         .eq('id', conversationId);
     }
 
@@ -1911,7 +1914,6 @@ export async function processRestaurantBotMessage(params: {
       conversationId,
       humanIntent,
       problemIntent,
-      pauseUntil,
       sendOk: Boolean(sendResult?.ok)
     });
 

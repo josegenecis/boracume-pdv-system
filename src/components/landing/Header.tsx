@@ -12,8 +12,9 @@ const Header = () => {
 
   const menuItems = [
     { href: '#funcionalidades', label: 'Funcionalidades' },
-    { href: '#como-funciona', label: 'Como Funciona' },
-    { href: '#precos', label: 'Preços' },
+    { href: '#ia', label: 'IA' },
+    { href: '#marketing', label: 'Marketing' },
+    { href: '#precos', label: 'Planos' },
   ];
 
   return (
@@ -47,7 +48,7 @@ const Header = () => {
             </Link>
             <Link to="/signup">
               <Button className="bg-boracume-orange hover:bg-boracume-orange/90 text-white shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 transition-all duration-300 transform hover:-translate-y-0.5 font-bold px-6">
-                Testar 30 Dias Grátis
+                Ver demonstração
               </Button>
             </Link>
           </div>
@@ -94,7 +95,7 @@ const Header = () => {
                   </Link>
                   <Link to="/signup" className="block">
                     <Button className="w-full bg-boracume-orange hover:bg-boracume-orange/90 text-white font-bold shadow-lg shadow-orange-500/20">
-                      Testar 30 Dias Grátis
+                      Ver demonstração
                     </Button>
                   </Link>
                 </div>

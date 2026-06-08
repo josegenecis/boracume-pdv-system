@@ -15,7 +15,7 @@ import { formatBRL } from '@/lib/currency';
 import { normalizeComplementOptionName } from '@/lib/text';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, Eye, EyeOff } from 'lucide-react';
+import { Barcode, GripVertical, MoreVertical, Pencil, Plus, Sparkles, Star, Trash2, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invokeEdgeFunction } from '@/utils/invokeEdgeFunction';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
@@ -32,6 +32,7 @@ import { invalidateSimpleVariationCaches } from '@/hooks/useSimpleVariations';
 interface ProductItem {
   id?: string;
   name: string;
+  barcode?: string;
   description?: string; 
   price: number;
   category: string;
@@ -115,6 +116,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const { user } = useAuth();
   const [formData, setFormData] = useState<ProductItem>({
     name: '',
+    barcode: '',
     description: '',
     price: 0,
     category: '',
@@ -165,6 +167,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [enhanceLoading, setEnhanceLoading] = useState(false);
   const [enhancedPreview, setEnhancedPreview] = useState<string>('');
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false);
+  const [barcodeLookupStatus, setBarcodeLookupStatus] = useState<string>('');
   const [priceMode, setPriceMode] = useState<'simple' | 'variants'>('simple');
   const [variationsDialogOpen, setVariationsDialogOpen] = useState(false);
   const [applyVariationDialogOpen, setApplyVariationDialogOpen] = useState(false);
@@ -172,6 +176,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
   const [applyTargetProductIds, setApplyTargetProductIds] = useState<string[]>([]);
   const [applyingVariation, setApplyingVariation] = useState(false);
   const variationSaveTimerRef = useRef<number | null>(null);
+  const lastBarcodeLookupRef = useRef<string>('');
 
   const isUnsupported = (column: string) => unsupportedColumns.includes(column);
   const markUnsupported = (column: string) => {
@@ -786,6 +791,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       image_url: formData.image_url || null,
     };
 
+    if (!isUnsupported('barcode')) baseData.barcode = formData.barcode?.trim() || null;
     if (!isUnsupported('is_highlight')) baseData.is_highlight = formData.is_highlight;
     if (!isUnsupported('original_price')) baseData.original_price = formData.original_price;
     if (!isUnsupported('discount_percentage')) baseData.discount_percentage = formData.discount_percentage;
@@ -958,6 +964,113 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
       setCreatingCategory(false);
     }
   };
+
+  const ensureIndustrializedCategory = async () => {
+    const existing = (categories as any[]).find((cat: any) => String(cat?.name || '').trim().toLowerCase() === 'industrializados');
+    if (existing?.id) return existing;
+
+    if (!user?.id) throw new Error('Usuário não autenticado');
+
+    const { data, error } = await supabase
+      .from('product_categories')
+      .insert([{
+        name: 'Industrializados',
+        user_id: user.id,
+        description: buildCategoryDescriptionWithMetadata('Produtos cadastrados automaticamente por código de barras.', {
+          is_pizza: false,
+          pizza_half_price_mode: 'highest'
+        })
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    const enriched = enrichCategoryWithMetadata(data as any);
+    setCategories(prev => [...prev, enriched]);
+    return enriched;
+  };
+
+  const lookupProductByBarcode = async (rawBarcode?: string, options?: { silent?: boolean }) => {
+    const barcode = String(rawBarcode ?? formData.barcode ?? '').replace(/\D/g, '').trim();
+    if (!barcode || barcode.length < 8 || barcode.length > 14 || !user?.id) return;
+    if (barcodeLookupLoading) return;
+
+    lastBarcodeLookupRef.current = barcode;
+    setBarcodeLookupLoading(true);
+    setBarcodeLookupStatus(options?.silent ? 'Buscando produto pelo código...' : '');
+
+    try {
+      const { data, status } = await invokeEdgeFunction('product-barcode-lookup', { barcode }, { timeoutMs: 20000 });
+      if (status >= 400 || data?.error) {
+        throw new Error(data?.error || 'Não foi possível consultar esse código.');
+      }
+
+      if (!data?.found || !data?.product?.name) {
+        setBarcodeLookupStatus('Produto não encontrado na base pública. Você pode preencher manualmente.');
+        if (!options?.silent) {
+          toast({
+            title: 'Produto não encontrado',
+            description: 'Preencha os dados manualmente e salve com esse código.',
+          });
+        }
+        return;
+      }
+
+      const productInfo = data.product;
+      const category = formData.category_id ? null : await ensureIndustrializedCategory();
+      const nextStock = Math.max(1, Number(formData.stock_quantity || 0) || 0);
+
+      setStockQuantityRaw(String(nextStock));
+      setLowStockThresholdRaw(String(formData.low_stock_threshold || 5));
+      setFormData(prev => ({
+        ...prev,
+        barcode,
+        name: prev.name?.trim() ? prev.name : String(productInfo.name || '').trim(),
+        description: prev.description?.trim() ? prev.description : String(productInfo.description || '').trim(),
+        image_url: prev.image_url?.trim() ? prev.image_url : String(productInfo.image_url || '').trim(),
+        category: prev.category || category?.name || prev.category,
+        category_id: prev.category_id || category?.id || prev.category_id,
+        track_stock: true,
+        stock_quantity: nextStock,
+        low_stock_threshold: Math.max(1, Number(prev.low_stock_threshold || 5) || 5),
+        show_in_pdv: true,
+        available: true
+      }));
+
+      setBarcodeLookupStatus(`Produto encontrado: ${productInfo.name}`);
+      toast({
+        title: 'Produto encontrado pelo código',
+        description: 'Dados preenchidos e estoque ativado. Confira o preço antes de salvar.',
+      });
+    } catch (error: any) {
+      console.error('Erro ao consultar código de barras:', error);
+      setBarcodeLookupStatus('Falha ao consultar o código. Você pode preencher manualmente.');
+      if (!options?.silent) {
+        toast({
+          title: 'Erro ao buscar produto',
+          description: error?.message || 'Não foi possível consultar esse código.',
+          variant: 'destructive'
+        });
+      }
+    } finally {
+      setBarcodeLookupLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const barcode = String(formData.barcode || '').replace(/\D/g, '').trim();
+    if (!barcode || barcode.length < 8 || barcode.length > 14) {
+      setBarcodeLookupStatus('');
+      return;
+    }
+    if (product?.id || formData.name?.trim() || lastBarcodeLookupRef.current === barcode) return;
+
+    const timer = window.setTimeout(() => {
+      void lookupProductByBarcode(barcode, { silent: true });
+    }, 650);
+
+    return () => window.clearTimeout(timer);
+  }, [formData.barcode, formData.name, product?.id, user?.id, categories.length]);
 
 
   useEffect(() => {
@@ -1404,7 +1517,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
     }, 800);
     setAutoSaveTimer(timer);
     return () => clearTimeout(timer);
-  }, [user?.id, loading, createdProductId, formData.name, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
+  }, [user?.id, loading, createdProductId, formData.name, formData.barcode, formData.price, formData.category_id, formData.category, formData.description, formData.image_url, formData.available, formData.show_in_delivery, formData.receipt_ingredients_enabled, formData.receipt_ingredients, formData.is_highlight, formData.original_price, formData.track_stock, formData.stock_quantity, formData.low_stock_threshold, stockSchemaSupported]);
 
 
   const onDragEnd = (result: DropResult) => {
@@ -2057,10 +2170,63 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           )}
         </div>
 
+        <div className="rounded-2xl border border-[#FF6400]/15 bg-white p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F5EBE1] text-[#003223]">
+              <Barcode className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div>
+                <Label htmlFor="barcode" className="text-boracume-dark-green font-semibold">
+                  Código de barras / QR / SKU
+                </Label>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Bipe o produto ou digite o código que será usado no PDV para adicionar automaticamente.
+                </p>
+              </div>
+              <Input
+                id="barcode"
+                value={formData.barcode || ''}
+                onChange={(e) => {
+                  const barcode = e.target.value.replace(/\s+/g, '');
+                  setFormData(prev => ({ ...prev, barcode }));
+                  setBarcodeLookupStatus('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void lookupProductByBarcode();
+                  }
+                }}
+                placeholder="Ex: 7891234567890"
+                inputMode="text"
+                autoComplete="off"
+                className="h-11 rounded-xl bg-[#FFFDF9] font-semibold tracking-wide text-[#003223]"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl border-[#8CC850] bg-white text-[#003223] hover:bg-[#F5EBE1]"
+                  onClick={() => lookupProductByBarcode()}
+                  disabled={barcodeLookupLoading || !String(formData.barcode || '').replace(/\D/g, '').trim()}
+                >
+                  <Barcode className="mr-2 h-4 w-4" />
+                  {barcodeLookupLoading ? 'Buscando...' : 'Buscar e preencher pelo código'}
+                </Button>
+                {barcodeLookupStatus ? (
+                  <div className="text-xs font-medium text-[#003223]/70">
+                    {barcodeLookupStatus}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-2 flex-wrap">
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Desconto</Button>
           <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ Embalagem</Button>
-          <Button type="button" variant="outline" size="sm" className="rounded-xl border-dashed bg-white" onClick={() => toast({ title: 'Em breve' })}>+ SKU</Button>
         </div>
 
         {/* Ficha Técnica (Receita) */}

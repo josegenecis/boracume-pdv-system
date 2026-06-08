@@ -141,8 +141,47 @@ const defaultOperatorRoutes: Array<{ area: OperatorArea; path: string }> = [
   { area: 'team', path: '/garcons' },
 ]
 
+const pathOperatorAreas: Array<{ area: OperatorArea; paths: string[] }> = [
+  { area: 'dashboard', paths: ['/dashboard'] },
+  { area: 'pdv', paths: ['/pdv'] },
+  { area: 'tables', paths: ['/mesas'] },
+  { area: 'orders', paths: ['/pedidos', '/orders'] },
+  { area: 'kds', paths: ['/cozinha'] },
+  { area: 'products', paths: ['/produtos', '/cardapio'] },
+  { area: 'stock', paths: ['/estoque', '/inteligencia/cmv', '/inteligencia/curva-abc'] },
+  { area: 'finance', paths: ['/financeiro', '/caixa', '/despesas'] },
+  { area: 'reports', paths: ['/relatorios'] },
+  { area: 'marketing', paths: ['/marketing', '/whatsapp-bot', '/loyalty'] },
+  { area: 'settings', paths: ['/configuracoes'] },
+  { area: 'team', paths: ['/garcons', '/ponto'] },
+  { area: 'delivery', paths: ['/bairros-entrega', '/entregadores', '/motoboys'] },
+  { area: 'desktop', paths: ['/desktop', '/downloads'] },
+  { area: 'agent', paths: ['/agente'] },
+  { area: 'security', paths: ['/security'] },
+  { area: 'nfce', paths: ['/nfce'] },
+  { area: 'pix', paths: ['/pix'] },
+]
+
+export const getOperatorAreaForPath = (pathname?: string): OperatorArea | null => {
+  const path = String(pathname || '').split('?')[0]
+  if (!path) return null
+  return pathOperatorAreas.find((item) =>
+    item.paths.some((candidate) => path === candidate || path.startsWith(`${candidate}/`))
+  )?.area || null
+}
+
 export const getDefaultOperatorPath = (session: OperatorSession | null): string => {
   if (!session) return '/operator-login'
   if (isAdminOperator(session)) return '/dashboard'
-  return defaultOperatorRoutes.find((route) => canAccessOperatorArea(session, route.area))?.path || '/dashboard'
+  return defaultOperatorRoutes.find((route) => canAccessOperatorArea(session, route.area))?.path || '/operator-login'
+}
+
+export const getOperatorPathForRequestedPath = (session: OperatorSession | null, requestedPath?: string): string => {
+  if (!session) return '/operator-login'
+  const requested = String(requestedPath || '').trim()
+  const requestedArea = getOperatorAreaForPath(requested)
+  if (requested && requested !== '/operator-login' && (!requestedArea || canAccessOperatorArea(session, requestedArea))) {
+    return requested
+  }
+  return getDefaultOperatorPath(session)
 }
