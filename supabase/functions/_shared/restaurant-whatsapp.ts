@@ -456,7 +456,7 @@ export async function loadRestaurantContext(supabase: any, restaurantId: string)
     supabase.from("whatsapp_settings").select("enabled, auto_responses").eq("user_id", restaurantId).maybeSingle()
   ]);
 
-  const restaurantName = profileResult?.data?.restaurant_name?.trim() || "BoraCumê";
+  const restaurantName = profileResult?.data?.restaurant_name?.trim() || "PopSystem";
   const enabled = settingsResult?.data?.enabled !== false;
   const autoResponses = {
     ...defaultResponses,

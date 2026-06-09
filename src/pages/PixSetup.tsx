@@ -209,7 +209,7 @@ export default function PixSetup() {
                 {mpConnected ? 'Reconectar Mercado Pago' : 'Conectar com Mercado Pago'}
               </Button>
               <p className="text-xs text-blue-500 mt-2">
-                Você será redirecionado para autorizar o BoraCumê.
+                Você será redirecionado para autorizar o PopSystem.
               </p>
               {mpConnected ? (
                 <p className="text-xs text-blue-700 mt-2">

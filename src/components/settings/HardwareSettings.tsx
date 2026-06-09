@@ -211,7 +211,7 @@ const HardwareSettings = () => {
         toast({ title: 'Cupom impresso', description: 'Teste enviado para a térmica.' });
       } else {
         if (!reportPrinterName) throw new Error('Selecione a impressora de cupons do Windows');
-        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cupom</title><style>body{font-family:Arial,sans-serif;font-size:12px}h1{font-size:14px;margin:0 0 8px}hr{border:none;border-top:1px solid #000;margin:8px 0}</style></head><body><h1>BoraCumê</h1><div>Cupom de teste</div><hr/><div>Total: R$ 20,00</div></body></html>`;
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cupom</title><style>body{font-family:Arial,sans-serif;font-size:12px}h1{font-size:14px;margin:0 0 8px}hr{border:none;border-top:1px solid #000;margin:8px 0}</style></head><body><h1>PopSystem</h1><div>Cupom de teste</div><hr/><div>Total: R$ 20,00</div></body></html>`;
         const resp = await window.electronAPI.printSystem(reportPrinterName, html, true);
         if (!resp?.success) throw new Error(resp?.error || resp?.message || 'Falha ao imprimir');
         toast({ title: 'Cupom impresso', description: reportPrinterName });
@@ -311,7 +311,7 @@ const HardwareSettings = () => {
     }
     try {
       setLoading(true);
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório</title><style>body{font-family:Arial,sans-serif}h1{font-size:18px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px}th{background:#f5f5f5}</style></head><body><h1>Relatório de Teste - BoraCumê</h1><p>Impressão A4 via spooler do Windows.</p><table><thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead><tbody><tr><td>Pedido #1</td><td>1</td><td>R$ 100,00</td></tr><tr><td>Pedido #2</td><td>1</td><td>R$ 50,00</td></tr></tbody></table></body></html>`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório</title><style>body{font-family:Arial,sans-serif}h1{font-size:18px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px}th{background:#f5f5f5}</style></head><body><h1>Relatório de Teste - PopSystem</h1><p>Impressão A4 via spooler do Windows.</p><table><thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead><tbody><tr><td>Pedido #1</td><td>1</td><td>R$ 100,00</td></tr><tr><td>Pedido #2</td><td>1</td><td>R$ 50,00</td></tr></tbody></table></body></html>`;
       const resp = await window.electronAPI.printSystem(reportPrinterName, html, true);
       if (!resp?.success) throw new Error(resp?.error || resp?.message || 'Falha ao imprimir');
       toast({ title: 'Relatório enviado', description: reportPrinterName });

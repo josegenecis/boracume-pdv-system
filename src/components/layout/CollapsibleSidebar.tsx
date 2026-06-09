@@ -161,6 +161,7 @@ const CollapsibleSidebar = () => {
         { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products', area: 'products' },
         { to: '/produtos?tab=global-variations', label: 'Variações', feature: 'products', area: 'products' },
         { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu', area: 'products' },
+        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu', area: 'products' },
       ]
     },
     {
@@ -182,6 +183,7 @@ const CollapsibleSidebar = () => {
         { to: '/marketing?tab=upsells', label: 'Upsells', feature: 'marketing', area: 'marketing' },
         { to: '/marketing?tab=loyalty', label: 'Fidelidade', feature: 'marketing', area: 'marketing' },
         { to: '/marketing?tab=pixels', label: 'Pixels', feature: 'marketing', area: 'marketing' },
+        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp', area: 'marketing' },
         { to: '/whatsapp-bot', label: 'WhatsApp Bot', feature: 'whatsapp', area: 'marketing' },
       ]
     },
@@ -192,14 +194,12 @@ const CollapsibleSidebar = () => {
       items: [
         { to: '/configuracoes?tab=general', label: 'Geral', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=hardware', label: 'Impressão / Balanças', feature: 'hardware', area: 'settings' },
-        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu', area: 'products' },
         { to: '/configuracoes?tab=devices', label: 'Sessões ativas', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=profile', label: 'Perfil', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=notifications', label: 'Notificações', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=appearance', label: 'Aparência', feature: 'settings', area: 'settings' },
         { to: '/configuracoes?tab=delivery', label: 'Delivery', feature: 'delivery', area: 'delivery' },
         { to: '/entregadores', label: 'Motoboys & Entregas', feature: 'deliveryTeam', area: 'delivery' },
-        { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp', area: 'marketing' },
         { to: '/configuracoes?tab=fiscal', label: 'Fiscal / NFC-e', feature: 'fiscal', area: 'nfce' },
         { to: '/configuracoes?tab=payment-methods', label: 'Pagamentos', feature: 'pix', area: 'pix' },
         { to: '/configuracoes?tab=ifood', label: <div className="flex items-center"><IfoodLogo className="h-4 w-auto" /></div>, title: 'iFood', feature: 'ifood', area: 'settings' },

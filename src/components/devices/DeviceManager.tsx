@@ -298,7 +298,7 @@ const DeviceManager = () => {
               <div className="p-3 border rounded-lg">
                 <div className="text-sm font-medium mb-2">Cloud Relay (sem configurar IP no PWA)</div>
                 <div className="text-sm text-muted-foreground mb-3">
-                  Instale o BoraCumê Bridge no computador/mini-pc, gere um código e vincule aqui.
+                  Instale o PopSystem Bridge no computador/mini-pc, gere um código e vincule aqui.
                 </div>
                 <div className="flex justify-end mb-3">
                   <Button

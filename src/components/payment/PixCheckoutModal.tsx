@@ -166,7 +166,7 @@ export default function PixCheckoutModal(props: PixCheckoutModalProps) {
             <div className="mt-6 pt-4 border-t border-gray-100 w-full flex flex-col items-center justify-center opacity-80">
               <img
                 src={BORACUME_LOGO_SRC}
-                alt="BoraCume"
+                alt="PopSystem"
                 className="h-3 sm:h-4 object-contain"
                 loading="eager"
               />

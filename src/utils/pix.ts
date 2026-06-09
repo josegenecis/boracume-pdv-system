@@ -16,7 +16,7 @@ const crc16Ccitt = (payload: string) => {
 
 const normalizeText = (input: string, max: number) => {
   const value = (input || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return value.replace(/[^A-Za-z0-9 .,&-]/g, '').trim().slice(0, max) || 'BoraCume';
+  return value.replace(/[^A-Za-z0-9 .,&-]/g, '').trim().slice(0, max) || 'PopSystem';
 };
 
 export function buildPixPayload(params: {
@@ -30,7 +30,7 @@ export function buildPixPayload(params: {
   const key = (params.pixKey || '').trim();
   if (!key) throw new Error('Chave Pix não configurada');
 
-  const merchantName = normalizeText(params.merchantName || 'BoraCume', 25);
+  const merchantName = normalizeText(params.merchantName || 'PopSystem', 25);
   const merchantCity = normalizeText(params.merchantCity || 'BRASIL', 15);
   const txid = normalizeText(params.txid || '***', 25);
   const amount = Number(params.amount || 0);

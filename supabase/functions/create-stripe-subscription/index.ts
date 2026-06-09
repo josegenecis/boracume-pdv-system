@@ -94,7 +94,7 @@ serve(async (req) => {
       sessionConfig.line_items[0].price_data = {
         currency: "brl",
         product_data: { 
-          name: `BoraCumê ${plan.name}`,
+          name: `PopSystem ${plan.name}`,
           description: plan.description
         },
         unit_amount: Math.round(plan.price * 100),

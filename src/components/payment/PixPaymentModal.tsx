@@ -96,7 +96,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
             const code = buildPixPayload({
                 pixKey: settings.pix_key,
                 amount,
-                merchantName: settings.merchant_name || 'BoraCume',
+                merchantName: settings.merchant_name || 'PopSystem',
                 merchantCity: settings.merchant_city || 'BRASIL',
                 txid: order.order_number || order.id,
                 description: `Pedido ${order.order_number || ''}`.trim()

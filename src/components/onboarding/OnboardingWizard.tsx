@@ -299,7 +299,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
           <div className="flex items-center justify-center mb-4">
             <ChefHat className="w-12 h-12 text-boracume-orange" />
           </div>
-          <CardTitle className="text-2xl">Bem-vindo ao BoraCumê!</CardTitle>
+          <CardTitle className="text-2xl">Bem-vindo ao PopSystem!</CardTitle>
           <CardDescription>
             {step === 1 ? 'Vamos configurar seu restaurante em alguns passos simples' : 'Como você deseja montar seu cardápio?'}
           </CardDescription>

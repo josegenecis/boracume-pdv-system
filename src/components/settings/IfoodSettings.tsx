@@ -144,7 +144,7 @@ const IfoodSettings = () => {
 
       toast({
         title: 'Loja vinculada',
-        description: 'Merchant iFood vinculado ao BoraCumê.',
+        description: 'Merchant iFood vinculado ao PopSystem.',
       });
       await loadOverview();
     } catch (error: any) {
@@ -177,8 +177,8 @@ const IfoodSettings = () => {
       toast({
         title: checked ? 'Integração ativada' : 'Integração pausada',
         description: checked
-          ? 'O BoraCumê está pronto para receber pedidos do iFood.'
-          : 'O BoraCumê parou de processar pedidos do iFood.',
+          ? 'O PopSystem está pronto para receber pedidos do iFood.'
+          : 'O PopSystem parou de processar pedidos do iFood.',
       });
     } catch (error: any) {
       toast({
@@ -241,7 +241,7 @@ const IfoodSettings = () => {
             <span>Integração iFood</span>
           </CardTitle>
           <CardDescription>
-            Conecte o aplicativo oficial, vincule a loja e deixe o BoraCumê pronto para homologação do módulo de pedidos.
+            Conecte o aplicativo oficial, vincule a loja e deixe o PopSystem pronto para homologação do módulo de pedidos.
           </CardDescription>
         </CardHeader>
 
@@ -330,7 +330,7 @@ const IfoodSettings = () => {
               Webhook homologável
             </div>
             <p className="mt-1 text-sm text-slate-600">
-              Configure esta URL no Developer Portal. O BoraCumê valida a assinatura <code className="rounded bg-white px-1 py-0.5 text-xs">X-IFood-Signature</code> com HMAC SHA-256 usando o mesmo client secret do app.
+              Configure esta URL no Developer Portal. O PopSystem valida a assinatura <code className="rounded bg-white px-1 py-0.5 text-xs">X-IFood-Signature</code> com HMAC SHA-256 usando o mesmo client secret do app.
             </p>
             <div className="mt-3 flex flex-col gap-2 rounded-lg bg-white p-3 text-sm">
               <span className="break-all font-mono text-xs text-slate-700">

@@ -23,7 +23,7 @@ const Downloads = () => {
     if (detectedOS !== 'Windows') {
       toast({
         title: 'Download disponível apenas no Windows',
-        description: 'Abra esta página em um computador Windows para instalar o BoraCume Desktop.',
+        description: 'Abra esta página em um computador Windows para instalar o PopSystem Desktop.',
         variant: 'destructive'
       });
       return;
@@ -37,7 +37,7 @@ const Downloads = () => {
         <div>
           <h1 className="text-3xl font-bold">App Desktop</h1>
           <p className="text-muted-foreground mt-2">
-            Baixe o instalador mais recente do BoraCumê Desktop.
+            Baixe o instalador mais recente do PopSystem Desktop.
           </p>
         </div>
         <Badge variant={detectedOS === 'Unknown' ? 'secondary' : 'default'}>
@@ -49,7 +49,7 @@ const Downloads = () => {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Monitor className="w-5 h-5 text-orange-600" />
-            <CardTitle>BoraCume Desktop (Windows)</CardTitle>
+            <CardTitle>PopSystem Desktop (Windows)</CardTitle>
           </div>
           <CardDescription>
             Instalador oficial com atualização automática ao abrir.

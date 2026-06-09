@@ -241,7 +241,7 @@ const Subscription = () => {
       <div className="mx-auto max-w-6xl">
         <div className="mb-10 overflow-hidden rounded-[32px] border border-[#FF6400]/10 bg-white shadow-[0_35px_90px_-55px_rgba(0,50,35,0.35)]">
           <div className="px-6 py-8 md:px-10 md:py-10">
-            <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos BoraCumê</Badge>
+            <Badge className="mb-4 bg-[#FFF1E8] text-[#C14E00] hover:bg-[#FFF1E8]">Planos PopSystem</Badge>
             <div className="max-w-3xl">
               <h1 className="text-3xl font-bold tracking-tight text-[#003223] md:text-5xl">
                 Escolha o plano certo para o seu restaurante crescer sem complicação.

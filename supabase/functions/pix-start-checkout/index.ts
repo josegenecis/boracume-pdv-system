@@ -338,7 +338,7 @@ Deno.serve(async (req: Request) => {
             payer: {
               email: payerEmail,
               first_name: customerName.split(' ')[0] || 'Cliente',
-              last_name: customerName.split(' ').slice(1).join(' ') || 'BoraCume',
+              last_name: customerName.split(' ').slice(1).join(' ') || 'PopSystem',
               phone: customerPhone ? { area_code: "11", number: customerPhone.replace(/\D/g, '') } : undefined
             }
           })

@@ -72,7 +72,7 @@ const BenefitsSection = () => {
                 </div>
 
                 <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-1">A Solução BoraCumê</p>
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-1">A Solução PopSystem</p>
                   <p className="text-slate-800 font-semibold leading-relaxed">{item.solution}</p>
                 </div>
               </div>

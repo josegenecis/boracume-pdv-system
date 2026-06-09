@@ -418,12 +418,12 @@ const Dashboard = () => {
         <section className="rounded-[28px] border border-white/70 bg-white/90 p-4 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.28)]">
           <div className="space-y-3">
             <div className="inline-flex items-center rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#FF6400]">
-              Central BoraCumê
+              Central PopSystem
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">{greeting}, bora operar</h1>
               <p className="mt-1 text-sm text-slate-500">
-                O BoraCumê mobile agora prioriza as ações do dia: aceitar pedido, vender rápido e cuidar do caixa.
+                O PopSystem mobile agora prioriza as ações do dia: aceitar pedido, vender rápido e cuidar do caixa.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -538,7 +538,7 @@ const Dashboard = () => {
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/15 bg-[#FFF1E6] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#FF6400] dark:border-[#FF6400]/25 dark:bg-[#FF6400]/10">
                     <Sparkles className="h-3.5 w-3.5" />
-                    Central BoraCumê
+                    Central PopSystem
                   </div>
                   <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{greeting}, bora operar melhor hoje</h1>
                   <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-400">
@@ -716,7 +716,7 @@ const Dashboard = () => {
                   <div className="text-xs text-slate-500 dark:text-slate-400">Leitura compacta da força comercial nos últimos dias</div>
                 </div>
                 <div className="rounded-full bg-[#F5EBE1] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#003223] dark:bg-[#1b1510] dark:text-slate-300">
-                  BoraCumê Analytics
+                  PopSystem Analytics
                 </div>
               </div>
               <div className="h-[240px]">

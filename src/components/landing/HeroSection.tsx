@@ -114,7 +114,7 @@ const HeroSection = () => {
                         <Smartphone className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <div className="text-white text-sm font-bold">BoraCumê Bot</div>
+                        <div className="text-white text-sm font-bold">PopSystem Bot</div>
                         <div className="text-green-100 text-xs">Online</div>
                       </div>
                     </div>

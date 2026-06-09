@@ -164,7 +164,7 @@ export const PrinterConfig = () => {
           <Input 
             value={settings.print_header || ''} 
             onChange={e => setSettings({...settings, print_header: e.target.value})}
-            placeholder="Ex: BoraCumê Lanches"
+            placeholder="Ex: PopSystem Lanches"
           />
         </div>
 

@@ -103,7 +103,7 @@ export const FeatureGateProvider: React.FC<{ children: React.ReactNode }> = ({ c
               </DialogTitle>
               <DialogDescription className="text-sm leading-6 text-white/82">
                 {isComingSoon
-                  ? 'Essa funcionalidade já está no roadmap do BoraCumê, mas ainda não está liberada para uso em produção.'
+                  ? 'Essa funcionalidade já está no roadmap do PopSystem, mas ainda não está liberada para uso em produção.'
                   : `Para usar ${activeDefinition?.name}, seu restaurante precisa estar no plano ${requiredPlan?.name} ou superior.`}
               </DialogDescription>
             </DialogHeader>

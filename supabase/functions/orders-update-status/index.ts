@@ -224,7 +224,7 @@ const callIfoodForStatus = async (supabase: any, order: any, newStatus: string, 
       ifoodOrderId,
       'requestCancellation',
       {
-        reason: cancellationReason || 'Cancelamento solicitado no BoraCumê',
+        reason: cancellationReason || 'Cancelamento solicitado no PopSystem',
         cancellationCode,
       },
     )

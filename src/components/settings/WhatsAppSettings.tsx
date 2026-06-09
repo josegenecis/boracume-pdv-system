@@ -212,7 +212,7 @@ const WhatsAppSettings = () => {
             <Input
               id="evolution-apikey"
               type="password"
-              placeholder="BoraCumeMasterKey2024!"
+              placeholder="PopSystemMasterKey2024!"
               value={settings.evolutionApiKey}
               onChange={(e) => handleInputChange('evolutionApiKey', e.target.value)}
             />

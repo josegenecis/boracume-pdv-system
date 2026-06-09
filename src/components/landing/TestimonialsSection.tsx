@@ -25,7 +25,7 @@ const TestimonialsSection = () => {
       location: 'Belo Horizonte, MG',
       avatar: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20restaurant%20owner%20middle%20aged%20man%20smiling%20portrait&image_size=square',
       rating: 5,
-      quote: 'O BoraCumê transformou completamente nosso restaurante. Em 3 meses, nossas vendas aumentaram 45% e conseguimos reduzir os custos operacionais significativamente. A equipe se adaptou rapidamente e os clientes adoraram o novo sistema.',
+      quote: 'O PopSystem transformou completamente nosso restaurante. Em 3 meses, nossas vendas aumentaram 45% e conseguimos reduzir os custos operacionais significativamente. A equipe se adaptou rapidamente e os clientes adoraram o novo sistema.',
       metrics: {
         salesIncrease: 45,
         costReduction: 30,
@@ -57,7 +57,7 @@ const TestimonialsSection = () => {
       location: 'Rio de Janeiro, RJ',
       avatar: 'https://trae-api-us.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20chef%20restaurant%20owner%20mature%20man%20confident%20portrait&image_size=square',
       rating: 5,
-      quote: 'Como chef, sempre me preocupei mais com a cozinha do que com a gestão. O BoraCumê me deu controle total do negócio sem complicar minha rotina. Agora sei exatamente quais pratos vendem mais e posso otimizar meu cardápio.',
+      quote: 'Como chef, sempre me preocupei mais com a cozinha do que com a gestão. O PopSystem me deu controle total do negócio sem complicar minha rotina. Agora sei exatamente quais pratos vendem mais e posso otimizar meu cardápio.',
       metrics: {
         salesIncrease: 52,
         costReduction: 35,
@@ -153,7 +153,7 @@ const TestimonialsSection = () => {
             <span className="text-blue-600">sucesso</span> reais
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Veja como restaurantes como o seu estão transformando seus negócios com o BoraCumê
+            Veja como restaurantes como o seu estão transformando seus negócios com o PopSystem
           </p>
         </motion.div>
 
@@ -387,7 +387,7 @@ const TestimonialsSection = () => {
               Seja o próximo caso de sucesso
             </h3>
             <p className="text-blue-100 mb-8 max-w-2xl mx-auto">
-              Junte-se a mais de 1.000 restaurantes que já transformaram seus negócios com o BoraCumê
+              Junte-se a mais de 1.000 restaurantes que já transformaram seus negócios com o PopSystem
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button className="bg-white text-blue-600 px-8 py-4 rounded-xl font-semibold hover:bg-gray-50 transition-colors">

@@ -43,7 +43,7 @@ const PWAInstallButton: React.FC = () => {
       setDeferredPrompt(null);
       toast({
         title: "App Instalado!",
-        description: "BoraCumê foi instalado com sucesso no seu dispositivo.",
+        description: "PopSystem foi instalado com sucesso no seu dispositivo.",
       });
     };
 
@@ -145,7 +145,7 @@ const PWAInstallButton: React.FC = () => {
               <strong>Chrome (Windows/macOS):</strong>
               <ol className="list-decimal list-inside mt-1">
                 <li>Clique no ícone de instalação na barra de endereços</li>
-                <li>Ou Menu ⋮ → Instalar BoraCumê</li>
+                <li>Ou Menu ⋮ → Instalar PopSystem</li>
               </ol>
             </div>
             <div>

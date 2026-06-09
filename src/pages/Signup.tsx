@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, User, Phone, Store, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
+import Logo from '@/components/Logo';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -48,11 +49,7 @@ const Signup = () => {
         {/* Header */}
         <div className="text-center">
           <Link to="/" className="inline-flex items-center space-x-2 group mb-8">
-            <div className="text-3xl animate-bounce">🍽️</div>
-            <div className="text-3xl font-bold">
-              <span className="text-boracume-orange bg-gradient-to-r from-boracume-orange to-orange-600 bg-clip-text text-transparent">Bora</span>
-              <span className="text-boracume-green bg-gradient-to-r from-boracume-green to-green-600 bg-clip-text text-transparent">Cumê</span>
-            </div>
+            <Logo />
           </Link>
           
           <h2 className="text-3xl font-bold text-gray-900 mb-2">

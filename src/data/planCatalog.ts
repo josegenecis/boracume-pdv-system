@@ -83,7 +83,7 @@ export const PLAN_CATALOG: PlanCatalogItem[] = [
     monthlyPrice: 189,
     annualPrice: 1890,
     accent: 'purple',
-    audience: 'Ideal para quem quer usar todo o potencial do BoraCumê com automação e recursos avançados.',
+    audience: 'Ideal para quem quer usar todo o potencial do PopSystem com automação e recursos avançados.',
     features: [
       'Tudo do Profissional',
       'Importação de cardápio com IA',

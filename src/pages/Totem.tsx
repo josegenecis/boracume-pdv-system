@@ -199,7 +199,7 @@ export default function Totem() {
             <div className="space-y-8">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white">
                 <Utensils className="h-4 w-4" />
-                Autoatendimento BoraCume
+                Autoatendimento PopSystem
               </div>
               <div className="space-y-5">
                 <h1 className="max-w-4xl text-5xl font-black leading-[1.02] tracking-normal sm:text-6xl lg:text-7xl">

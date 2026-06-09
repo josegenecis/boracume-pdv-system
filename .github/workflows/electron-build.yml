@@ -42,7 +42,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          name: BoraCume Desktop ${{ github.ref_name }}
+          name: PopSystem Desktop ${{ github.ref_name }}
           allowUpdates: true
           artifacts: "electron/dist-electron/*.exe,electron/dist-electron/*.blockmap,electron/dist-electron/latest.yml"
           makeLatest: true

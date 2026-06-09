@@ -124,7 +124,7 @@ const CustomerView = () => {
       </div>
       
       <footer className="p-4 text-center text-gray-400 text-sm bg-gray-50 border-t border-gray-200">
-        Atualizado em tempo real • BoraCumê
+        Atualizado em tempo real • PopSystem
       </footer>
     </div>
   );

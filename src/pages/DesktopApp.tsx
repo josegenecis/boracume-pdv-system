@@ -74,7 +74,7 @@ const DesktopApp: React.FC = () => {
             <Monitor className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">Aplicativo Desktop</h2>
             <p className="text-muted-foreground mb-4">
-              Esta página está disponível apenas no aplicativo desktop do Bora Cume Hub.
+              Esta página está disponível apenas no aplicativo desktop do PopSystem Hub.
             </p>
             <p className="text-sm text-muted-foreground">
               Baixe e instale o aplicativo desktop para acessar as funcionalidades de PDV, 
@@ -95,7 +95,7 @@ const DesktopApp: React.FC = () => {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <Monitor className="h-5 w-5 text-primary" />
-                <h1 className="text-lg font-bold">Bora Cume Hub Desktop</h1>
+                <h1 className="text-lg font-bold">PopSystem Hub Desktop</h1>
               </div>
               <DesktopIndicator />
             </div>

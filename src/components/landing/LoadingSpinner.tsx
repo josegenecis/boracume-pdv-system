@@ -45,7 +45,7 @@ export const PageLoader = () => {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          Carregando BoraCumê...
+          Carregando PopSystem...
         </motion.p>
       </div>
     </motion.div>
