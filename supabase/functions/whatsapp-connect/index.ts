@@ -11,6 +11,7 @@ const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
 const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
 const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
+const buildWebhookUrl = () => `${String(Deno.env.get('SUPABASE_URL') || '').replace(/\/+$/, '')}/functions/v1/evogo-webhook`;
 
 const getInstancesFromPayload = (payload: any) => {
   if (Array.isArray(payload?.data)) return payload.data;
@@ -65,6 +66,57 @@ const safeFetchJson = async (url: string, init: RequestInit) => {
       data: { message: error?.message || 'Network request failed' }
     };
   }
+};
+
+const configureEvolutionWebhook = async (baseUrl: string, globalApiKey: string, instanceName: string, instanceToken: string) => {
+  const webhookUrl = buildWebhookUrl();
+  const events = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE', 'CONNECTION_UPDATE'];
+  const attempts = [
+    {
+      label: 'webhook-set-standard',
+      url: `${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: globalApiKey },
+        body: JSON.stringify({
+          webhook: { enabled: true, url: webhookUrl, byEvents: false, base64: true, events }
+        })
+      }
+    },
+    {
+      label: 'webhook-set-flat',
+      url: `${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: globalApiKey },
+        body: JSON.stringify({ enabled: true, url: webhookUrl, webhookUrl, byEvents: false, base64: true, events })
+      }
+    },
+    {
+      label: 'instance-connect-legacy',
+      url: `${baseUrl}/instance/connect`,
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: instanceToken },
+        body: JSON.stringify({
+          webhookUrl,
+          subscribe: ['ALL'],
+          rabbitmqEnable: '',
+          websocketEnable: '',
+          natsEnable: ''
+        })
+      }
+    }
+  ];
+
+  const results = [];
+  for (const attempt of attempts) {
+    const result = await safeFetchJson(attempt.url, attempt.init);
+    const ok = Boolean(result.response?.ok);
+    results.push({ label: attempt.label, ok, status: result.response?.status || null, data: result.data });
+    if (ok) return { ok: true, webhookUrl, results };
+  }
+  return { ok: false, webhookUrl, results };
 };
 
 serve(async (req) => {
@@ -179,7 +231,7 @@ serve(async (req) => {
         'apikey': instanceToken
       },
       body: JSON.stringify({
-        webhookUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/evogo-webhook`,
+        webhookUrl: buildWebhookUrl(),
         subscribe: [
           "ALL"
         ],
@@ -201,6 +253,11 @@ serve(async (req) => {
     if ((!connectResult.ok || !connectResult.response?.ok) && !connectAlreadyExists) {
       console.error("Evolution API Connect Error:", connectData);
       return new Response(JSON.stringify({ error: true, message: 'Falha ao configurar instância na EvoGo', details: connectData, status: connectResult.response?.status ?? 500 }), { status: 200, headers: jsonHeaders });
+    }
+
+    const webhookResult = await configureEvolutionWebhook(baseUrl, globalApiKey, instanceName, instanceToken);
+    if (!webhookResult.ok) {
+      console.warn('Evolution webhook configuration failed', webhookResult);
     }
 
     const refreshedStatusResult = await safeFetchJson(`${baseUrl}/instance/all`, {
@@ -235,7 +292,7 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone }), {
+    return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone, webhook: webhookResult }), {
       status: 200,
       headers: jsonHeaders,
     });
