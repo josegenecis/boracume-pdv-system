@@ -187,15 +187,24 @@ serve(async (req) => {
     const updateData: any = { status: newStatus };
     if (phone) updateData.phone = phone;
 
-    await supabaseAdmin
-      .from('whatsapp_instances')
-      .upsert({
-        restaurant_id,
-        instance_name: instanceName,
-        ...updateData
-      }, { onConflict: 'instance_name' });
+    const providerNames = Array.from(new Set([
+      instanceName,
+      currentInstance?.name,
+      currentInstance?.instanceName,
+      currentInstance?.instance
+    ].filter(Boolean).map((item) => String(item).trim()).filter(Boolean)));
 
-    return new Response(JSON.stringify({ status: newStatus, phone, webhook: webhookResult }), {
+    for (const name of providerNames) {
+      await supabaseAdmin
+        .from('whatsapp_instances')
+        .upsert({
+          restaurant_id,
+          instance_name: name,
+          ...updateData
+        }, { onConflict: 'instance_name' });
+    }
+
+    return new Response(JSON.stringify({ status: newStatus, phone, webhook: webhookResult, instanceNames: providerNames }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

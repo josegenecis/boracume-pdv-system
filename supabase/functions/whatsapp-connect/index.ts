@@ -273,16 +273,30 @@ serve(async (req) => {
     const phone = extractPhoneFromInstance(connectedInstance);
     const instanceStatus = isConnected ? 'connected' : hasQr ? 'connecting' : 'disconnected';
 
-    const { error: dbError } = await supabaseAdmin
-      .from('whatsapp_instances')
-      .upsert({
-        restaurant_id,
-        instance_name: instanceName,
-        status: instanceStatus,
-        phone
-      }, {
-        onConflict: 'instance_name'
-      });
+    const providerNames = Array.from(new Set([
+      instanceName,
+      connectedInstance?.name,
+      connectedInstance?.instanceName,
+      connectedInstance?.instance
+    ].filter(Boolean).map((item) => String(item).trim()).filter(Boolean)));
+
+    let dbError: any = null;
+    for (const name of providerNames) {
+      const result = await supabaseAdmin
+        .from('whatsapp_instances')
+        .upsert({
+          restaurant_id,
+          instance_name: name,
+          status: instanceStatus,
+          phone
+        }, {
+          onConflict: 'instance_name'
+        });
+      if (result.error) {
+        dbError = result.error;
+        break;
+      }
+    }
 
     if (dbError) {
       console.error("Database Error:", dbError);
@@ -292,7 +306,7 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, instanceName, status: instanceStatus, connected: isConnected, phone, webhook: webhookResult }), {
+    return new Response(JSON.stringify({ success: true, instanceName, instanceNames: providerNames, status: instanceStatus, connected: isConnected, phone, webhook: webhookResult }), {
       status: 200,
       headers: jsonHeaders,
     });

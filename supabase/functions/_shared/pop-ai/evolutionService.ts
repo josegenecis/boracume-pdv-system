@@ -23,11 +23,40 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
     })
   });
 
+  let primaryError: any = null;
   if (!response.ok) {
-    return { ok: false, error: await response.text().catch(() => response.statusText), status: response.status };
+    primaryError = { error: await response.text().catch(() => response.statusText), status: response.status };
+    const instanceToken = restaurantId ? `token_${String(restaurantId).replace(/-/g, '')}` : '';
+    if (instanceToken) {
+      const fallback = await fetch(`${baseUrl.replace(/\/+$/, '')}/send/text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: instanceToken
+        },
+        body: JSON.stringify({ number: phone, text })
+      }).catch(() => null);
+
+      if (fallback?.ok) {
+        return {
+          ok: true,
+          data: await fallback.json().catch(() => null),
+          transport: 'legacy-send-text',
+          fallbackFrom: 'evolution-sendText'
+        };
+      }
+
+      return {
+        ok: false,
+        error: await fallback?.text().catch(() => fallback?.statusText) || primaryError.error,
+        status: fallback?.status || primaryError.status,
+        primaryError
+      };
+    }
+    return { ok: false, ...primaryError };
   }
 
-  return { ok: true, data: await response.json().catch(() => null) };
+  return { ok: true, data: await response.json().catch(() => null), transport: 'evolution-sendText' };
 }
 
 export async function sendEvolutionTyping(instanceName: string, phone: string, ms = 1200) {
