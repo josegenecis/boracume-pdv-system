@@ -1,6 +1,6 @@
 {
   "name": "bora-cume-hub-desktop",
-  "version": "1.0.156",
+  "version": "1.0.157",
   "author": "PopSystem Team",
   "description": "Desktop application for PopSystem",
   "main": "main.js",
@@ -79,7 +79,8 @@
       {
         "provider": "github",
         "owner": "josegenecis",
-        "repo": "boracume-pdv-system"
+        "repo": "boracume-pdv-system",
+        "releaseType": "release"
       }
     ],
     "nodeGypRebuild": false,
