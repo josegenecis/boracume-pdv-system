@@ -62,6 +62,12 @@ jobs:
       - name: Build web app for desktop
         run: npm run build:desktop
 
+      - name: Sync web dist into Electron package
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force electron/dist -ErrorAction SilentlyContinue
+          Copy-Item -Recurse -Force dist electron/dist
+
       - name: Install Electron dependencies
         working-directory: electron
         run: npm ci
