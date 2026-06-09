@@ -99,6 +99,85 @@ const applyStockForOrder = async (supabase: any, order: any) => {
   return { updated: updatedCount, disabled: disabledCount }
 }
 
+const restoreStockForCancelledOrder = async (supabase: any, order: any) => {
+  const { data: saleMovements, error } = await supabase
+    .from('inventory_movements')
+    .select('product_id, quantity')
+    .eq('user_id', order.user_id)
+    .eq('order_id', order.id)
+    .eq('type', 'sale')
+
+  if (error || !Array.isArray(saleMovements) || saleMovements.length === 0) {
+    return { restored: 0, skipped: true }
+  }
+
+  const { data: returnMovements } = await supabase
+    .from('inventory_movements')
+    .select('product_id, quantity')
+    .eq('user_id', order.user_id)
+    .eq('order_id', order.id)
+    .eq('type', 'return')
+
+  const returnedByProduct = new Map<string, number>()
+  for (const movement of returnMovements || []) {
+    const productId = String(movement?.product_id || '')
+    const qty = Math.max(0, Number(movement?.quantity || 0))
+    if (!productId || qty <= 0) continue
+    returnedByProduct.set(productId, (returnedByProduct.get(productId) || 0) + qty)
+  }
+
+  const soldByProduct = new Map<string, number>()
+  for (const movement of saleMovements) {
+    const productId = String(movement?.product_id || '')
+    const qty = Math.abs(Number(movement?.quantity || 0))
+    if (!productId || qty <= 0) continue
+    soldByProduct.set(productId, (soldByProduct.get(productId) || 0) + qty)
+  }
+
+  let restored = 0
+  for (const [productId, soldQty] of soldByProduct.entries()) {
+    const pendingQty = Math.max(0, soldQty - (returnedByProduct.get(productId) || 0))
+    if (pendingQty <= 0) continue
+
+    const { data: product } = await supabase
+      .from('products')
+      .select('id, stock_quantity, track_stock')
+      .eq('id', productId)
+      .eq('user_id', order.user_id)
+      .maybeSingle()
+
+    if (!product?.track_stock) continue
+
+    const nextQty = Math.max(0, Number(product.stock_quantity || 0)) + pendingQty
+    const { error: updateError } = await supabase
+      .from('products')
+      .update({
+        stock_quantity: nextQty,
+        available: true,
+        is_available: true,
+        show_in_delivery: true
+      })
+      .eq('id', productId)
+      .eq('user_id', order.user_id)
+
+    if (updateError) continue
+
+    await supabase
+      .from('inventory_movements')
+      .insert({
+        user_id: order.user_id,
+        product_id: productId,
+        order_id: order.id,
+        type: 'return',
+        quantity: pendingQty
+      })
+
+    restored += 1
+  }
+
+  return { restored, skipped: false }
+}
+
 const callIfoodForStatus = async (supabase: any, order: any, newStatus: string, payload: any) => {
   const variations = order?.variations && typeof order.variations === 'object'
     ? order.variations
@@ -259,6 +338,12 @@ Deno.serve(async (req: Request) => {
       try {
         stockResult = await applyStockForOrder(supabase, updated)
       } catch {}
+    } else if (newStatus === 'cancelled' && String(order.status || '') !== 'cancelled') {
+      try {
+        stockResult = await restoreStockForCancelledOrder(supabase, updated)
+      } catch (e: any) {
+        stockResult = { ok: false, error: String(e?.message || e) }
+      }
     }
 
     let whatsappResult: any = null

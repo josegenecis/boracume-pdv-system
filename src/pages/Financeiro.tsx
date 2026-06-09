@@ -37,7 +37,8 @@ import {
   Unlock,
   RefreshCw,
   ReceiptText,
-  ChevronRight
+  ChevronRight,
+  XCircle
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -45,7 +46,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PrinterService } from '@/utils/printerService';
-import { getLocalOperatorSession } from '@/services/operatorAuth';
+import { getLocalOperatorSession, canCancelOrder } from '@/services/operatorAuth';
+import { updateOrderStatus } from '@/utils/updateOrderStatus';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -111,6 +113,7 @@ const Financeiro = () => {
   const [sessionMovements, setSessionMovements] = useState<any[]>([]);
   const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
   const [reprintingCashReport, setReprintingCashReport] = useState(false);
+  const [cancellingOrderIds, setCancellingOrderIds] = useState<Set<string>>(new Set());
   
   // States for new expense
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Geral' });
@@ -288,6 +291,51 @@ const Financeiro = () => {
       setSessionMovements([]);
     } finally {
       setLoadingSessionDetails(false);
+    }
+  };
+
+  const handleCancelSessionOrder = async (order: any) => {
+    if (!order?.id || String(order?.status || '') === 'cancelled') return;
+
+    const operatorSession = getLocalOperatorSession();
+    if (operatorSession && !canCancelOrder(operatorSession)) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Este operador não tem permissão para cancelar vendas.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const orderLabel = order.order_number ? `#${order.order_number}` : String(order.id).slice(0, 8);
+    const confirmed = window.confirm(
+      `Cancelar a venda ${orderLabel}?\n\nEla sairá dos totais do caixa/financeiro. Se houve baixa de estoque registrada, o estoque será devolvido.`
+    );
+    if (!confirmed) return;
+
+    setCancellingOrderIds((prev) => new Set(prev).add(String(order.id)));
+    try {
+      await updateOrderStatus(String(order.id), 'cancelled');
+      setSessionOrders((prev) => prev.map((item) => (
+        item.id === order.id ? { ...item, status: 'cancelled' } : item
+      )));
+      await refreshFinanceData();
+      toast({
+        title: 'Venda cancelada',
+        description: `A venda ${orderLabel} foi marcada como cancelada.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Não foi possível cancelar',
+        description: error?.message || 'Tente novamente em alguns instantes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCancellingOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(String(order.id));
+        return next;
+      });
     }
   };
 
@@ -1930,11 +1978,12 @@ const Financeiro = () => {
                           <TableHead>Pagamento</TableHead>
                           <TableHead>Valor</TableHead>
                           <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {loadingSessionDetails ? (
-                          <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>
                         ) : sessionOrders.length > 0 ? (
                           sessionOrders.map((o) => (
                             <TableRow key={o.id}>
@@ -1946,10 +1995,27 @@ const Financeiro = () => {
                               <TableCell><Badge variant="outline">{getPaymentMethodLabel(o.payment_method)}</Badge></TableCell>
                               <TableCell className="font-medium">{formatCurrency(Number(o.total || 0))}</TableCell>
                               <TableCell><Badge variant={o.status === 'cancelled' ? 'destructive' : 'outline'}>{String(o.status || '').toUpperCase()}</Badge></TableCell>
+                              <TableCell className="text-right">
+                                {o.status === 'cancelled' ? (
+                                  <span className="text-xs text-muted-foreground">Cancelada</span>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                    disabled={cancellingOrderIds.has(String(o.id))}
+                                    onClick={() => { void handleCancelSessionOrder(o); }}
+                                  >
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                    {cancellingOrderIds.has(String(o.id)) ? 'Cancelando...' : 'Cancelar venda'}
+                                  </Button>
+                                )}
+                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
-                          <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Sem vendas nessa sessão</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Sem vendas nessa sessão</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
