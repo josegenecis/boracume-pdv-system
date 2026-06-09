@@ -17,6 +17,16 @@ function getEnv(name: string, fallback = '') {
   return String(Deno.env.get(name) || fallback).trim();
 }
 
+function publicBaseUrl() {
+  return getEnv('PUBLIC_WEB_BASE_URL', getEnv('SITE_URL', 'https://popsystem.com.br')).replace(/\/+$/g, '') || 'https://popsystem.com.br';
+}
+
+function formatBRL(value: unknown) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return 'R$ 0,00';
+  return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 function userMessage(message: string, status = 200) {
   return new Response(JSON.stringify({ message }), { status, headers: corsHeaders });
 }
@@ -143,6 +153,7 @@ function buildSystemPrompt(context: {
   restaurantName: string;
   customerName: string;
   customerPhone: string;
+  menuLink: string;
   latestOrders: any[];
   menuHighlights: any[];
   whatsappEnabled: boolean;
@@ -157,7 +168,14 @@ function buildSystemPrompt(context: {
 
   const menuText = context.menuHighlights.length
     ? context.menuHighlights
-        .map((product) => `- ${product.name} | ${product.category || 'Sem categoria'} | R$ ${Number(product.price || 0).toFixed(2)}`)
+        .map((product) => {
+          const price = formatBRL(product.price);
+          const originalPrice = Number(product.original_price || 0);
+          const promo = originalPrice > Number(product.price || 0) ? ` | promocao: de ${formatBRL(originalPrice)} por ${price}` : '';
+          const highlight = product.is_highlight ? ' | destaque' : '';
+          const description = product.description ? ` | ${String(product.description).slice(0, 120)}` : '';
+          return `- ${product.name} | ${product.category || 'Sem categoria'} | ${price}${promo}${highlight}${description}`;
+        })
         .join('\n')
     : '- Cardápio não carregado';
 
@@ -166,8 +184,15 @@ function buildSystemPrompt(context: {
   return [
     'Você é o assistente oficial do BoraCumê para atendimento de restaurante no WhatsApp.',
     'Responda em português do Brasil, de forma humana, objetiva, cordial e natural.',
-    'Priorize ajudar o cliente com cardápio, pedido, acompanhamento, dúvidas e orientação de compra.',
+    'Atue como um atendente vendedor: entenda a intenção, recomende boas opções do cardápio real e facilite o pedido.',
+    'Priorize ajudar o cliente com cardápio, pedido, acompanhamento, dúvidas, promoções e orientação de compra.',
     'Nunca invente pedidos, produtos, preços ou políticas que não estejam no contexto.',
+    'Quando o cliente demonstrar intenção de comprar, confirme o produto desejado e peça apenas o próximo dado essencial que faltar.',
+    'Se o pedido estiver claro, responda com uma confirmação curta e oriente que o atendimento automatico vai coletar os dados finais.',
+    'Use o link do cardápio quando o cliente pedir menu, quiser escolher sabores/opções ou quando não houver produto suficiente no contexto.',
+    'Se houver reclamação, problema no pedido, cobrança, cancelamento sensível ou pedido para falar com pessoa, diga que vai chamar um atendente.',
+    'Não prometa prazo, desconto, frete grátis ou disponibilidade se isso não estiver no contexto.',
+    'Não envie textos longos. Use no máximo 5 linhas na maioria das respostas.',
     'Se faltar dado essencial, responda de forma útil e honesta, sem mencionar detalhes técnicos.',
     'Não mencione OpenAI, modelo, prompt, JSON, contexto interno ou Supabase.',
     'Retorne somente o texto final que deve ser enviado ao WhatsApp.',
@@ -175,6 +200,7 @@ function buildSystemPrompt(context: {
     `Restaurante: ${context.restaurantName}`,
     `Cliente: ${context.customerName}`,
     `Telefone do cliente: ${context.customerPhone}`,
+    `Link do cardápio para pedido: ${context.menuLink}`,
     `WhatsApp habilitado: ${context.whatsappEnabled ? 'sim' : 'não'}`,
     `Mensagem padrão do restaurante: ${context.defaultMessage || 'não definida'}`,
     `Auto responses configuradas: ${autoResponsesText}`,
@@ -309,7 +335,7 @@ Deno.serve(async (req: Request) => {
       supabase.from('whatsapp_settings').select('enabled, default_message, auto_responses').eq('user_id', restaurantId).maybeSingle(),
       supabase.from('customers').select('name').eq('user_id', restaurantId).in('phone', phoneCandidates).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('orders').select('order_number,status,created_at,customer_name').eq('user_id', restaurantId).in('customer_phone', phoneCandidates).order('created_at', { ascending: false }).limit(5),
-      supabase.from('products').select('name,category,price,description,available').eq('user_id', restaurantId).eq('available', true).order('updated_at', { ascending: false }).limit(80)
+      supabase.from('products').select('name,category,price,original_price,discount_percentage,is_highlight,description,available').eq('user_id', restaurantId).eq('available', true).order('updated_at', { ascending: false }).limit(160)
     ]);
 
     const restaurantName = String(profileResult?.data?.restaurant_name || 'restaurante').trim();
@@ -324,12 +350,13 @@ Deno.serve(async (req: Request) => {
       restaurantName,
       customerName,
       customerPhone,
+      menuLink: `${publicBaseUrl()}/share/menu/${restaurantId}`,
       latestOrders: Array.isArray(ordersResult?.data) ? ordersResult.data : [],
       menuHighlights: Array.isArray(productsResult?.data) ? productsResult.data : [],
       whatsappEnabled: settingsResult?.data?.enabled !== false,
       defaultMessage: String(settingsResult?.data?.default_message || ''),
       autoResponses: settingsResult?.data?.auto_responses || {}
-    }) + '\n\nSe a mensagem indicar pedido complexo, ajude a coletar dados sem inventar itens. Seja curto e profissional.';
+    }) + '\n\nSe a mensagem indicar pedido complexo, ajude a coletar dados sem inventar itens. Seja curto, vendedor e profissional.';
 
     const reply = await openAiAssistantReply({
       apiKey: openAiKey,

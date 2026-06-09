@@ -268,7 +268,16 @@ function wantsToOrder(text: string) {
 
 function wantsWhatsAppOrderFlow(text: string) {
   const value = normalizeIntentText(text);
-  return /((posso|pode|da|dá|consigo).*(pedir|fazer|montar).*(aqui|por aqui|whats|whatsapp))|((quero|queria|gostaria).*(fazer|montar|finalizar).*(pedido).*(aqui|por aqui|whats|whatsapp))|(fazer pedido pelo whats|fazer pedido pelo whatsapp|pedir pelo whats|pedir pelo whatsapp|pedido por aqui|pedido aqui|pelo whatsapp|por whatsapp)/i.test(value);
+  if (/((posso|pode|da|consigo).*(pedir|fazer|montar).*(aqui|por aqui|whats|whatsapp))|((quero|queria|gostaria).*(fazer|montar|finalizar).*(pedido).*(aqui|por aqui|whats|whatsapp))|(fazer pedido pelo whats|fazer pedido pelo whatsapp|pedir pelo whats|pedir pelo whatsapp|pedido por aqui|pedido aqui|pelo whatsapp|por whatsapp)/i.test(value)) {
+    return true;
+  }
+
+  const hasOrderVerb = /\b(quero|queria|gostaria|vou querer|manda|mande|me manda|separa|separe|coloca|bota|adiciona|faz|fazer|pode fazer|me ve|me vê)\b/i.test(value);
+  const startsWithQuantity = /^(\d{1,2}|um|uma|dois|duas|tres|três)\b/i.test(value);
+  const asksForPreparation = /\b(tem como|pode ser|sai|faz pra mim|prepara)\b/i.test(value);
+  const productClue = hasProductClue(text);
+
+  return productClue && (hasOrderVerb || startsWithQuantity || asksForPreparation);
 }
 
 function isOrderConfirmation(text: string) {
@@ -1240,6 +1249,38 @@ function getConversationPauseState(conversation: any) {
   return getPauseState(conversation?.status);
 }
 
+async function loadExistingWhatsAppConversation(supabase: any, restaurantId: string, customerPhone: string) {
+  const fullResult = await supabase
+    .from('whatsapp_conversations')
+    .select('id, status, bot_paused, bot_paused_at, bot_paused_by')
+    .eq('user_id', restaurantId)
+    .eq('customer_phone', customerPhone)
+    .maybeSingle();
+
+  if (!fullResult.error) return fullResult.data || null;
+
+  const message = String(fullResult.error?.message || '').toLowerCase();
+  const canFallback = message.includes('bot_paused') || message.includes('schema cache') || message.includes('column');
+  if (!canFallback) return null;
+
+  const fallbackResult = await supabase
+    .from('whatsapp_conversations')
+    .select('id, status')
+    .eq('user_id', restaurantId)
+    .eq('customer_phone', customerPhone)
+    .maybeSingle();
+
+  if (fallbackResult.error) return null;
+  return fallbackResult.data
+    ? {
+        ...fallbackResult.data,
+        bot_paused: false,
+        bot_paused_at: null,
+        bot_paused_by: null
+      }
+    : null;
+}
+
 function isActionableCustomerIntent(text: string) {
   return wantsOpeningHours(text) ||
     wantsMenuLink(text) ||
@@ -1558,12 +1599,7 @@ export async function processRestaurantBotMessage(params: {
     });
   }
 
-  const { data: existingConversation } = await supabase
-    .from('whatsapp_conversations')
-    .select('id, status, bot_paused, bot_paused_at, bot_paused_by')
-    .eq('user_id', restaurantId)
-    .eq('customer_phone', customerPhone)
-    .maybeSingle();
+  const existingConversation = await loadExistingWhatsAppConversation(supabase, restaurantId, customerPhone);
 
   let conversationId = String(existingConversation?.id || '');
   if (!conversationId) {
@@ -1816,7 +1852,7 @@ export async function processRestaurantBotMessage(params: {
 
   const existingDraft = await loadOrderDraft(supabase, conversationId);
   const hasActiveOrderDraft = Boolean(existingDraft && !existingDraft.cleared && Array.isArray(existingDraft.items));
-  const shouldRunWhatsAppOrderFlow = hasActiveOrderDraft || wantsWhatsAppOrderFlow(text);
+  const shouldRunWhatsAppOrderFlow = hasActiveOrderDraft || wantsWhatsAppOrderFlow(text) || (wantsToOrder(text) && hasProductClue(text));
 
   if (shouldRunWhatsAppOrderFlow) {
     try {
