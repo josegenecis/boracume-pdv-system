@@ -112,6 +112,21 @@ function attributesToText(attributes: forge.pki.CertificateField[]): string {
   return attributes.map((attr: any) => `${attr.shortName || attr.name}=${attr.value}`).join(', ');
 }
 
+function getAttributeValue(certificate: forge.pki.Certificate, names: string[]): string {
+  for (const attr of certificate.subject.attributes as any[]) {
+    const key = String(attr.shortName || attr.name || '').toLowerCase();
+    if (names.some((name) => key === name.toLowerCase())) {
+      return String(attr.value || '').trim();
+    }
+  }
+  return '';
+}
+
+function extractCnpjFromText(value?: string): string | undefined {
+  const match = String(value || '').match(/(?:CNPJ[:=\s]*)?(\d{14})\b/);
+  return match?.[1];
+}
+
 function onlyDigits(value?: string): string {
   return String(value || '').replace(/\D/g, '');
 }
@@ -137,9 +152,12 @@ function isCertificateAuthority(certificate: forge.pki.Certificate): boolean {
 }
 
 function extractCnpjFromSubject(certificate: forge.pki.Certificate): string | undefined {
+  const commonName = getAttributeValue(certificate, ['CN', 'commonName']);
+  const commonNameCnpj = extractCnpjFromText(commonName);
+  if (commonNameCnpj) return commonNameCnpj;
+
   const subjectText = certificate.subject.attributes.map((attr: any) => String(attr.value || '')).join(' ');
-  const subjectMatch = subjectText.match(/(?:CNPJ[:=\s]*)?(\d{14})\b/);
-  return subjectMatch?.[1];
+  return extractCnpjFromText(subjectText);
 }
 
 function extractCnpjFromCertificate(certificate: forge.pki.Certificate): string | undefined {

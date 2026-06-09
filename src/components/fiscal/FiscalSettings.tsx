@@ -90,11 +90,19 @@ const getAttributeValue = (certificate: forge.pki.Certificate, names: string[]) 
   return '';
 };
 
+const extractCnpjFromText = (value?: string): string => {
+  const match = String(value || '').match(/(?:CNPJ[:=\s]*)?(\d{14})\b/);
+  return match?.[1] || '';
+};
+
 const extractCnpjFromSubject = (certificate: forge.pki.Certificate): string => {
+  const commonName = getAttributeValue(certificate, ['CN', 'commonName']);
+  const commonNameCnpj = extractCnpjFromText(commonName);
+  if (commonNameCnpj) return commonNameCnpj;
+
   const subjectValues = (certificate.subject.attributes as any[]).map((attr) => String(attr.value || ''));
   const subjectText = subjectValues.join(' ');
-  const cnpjMatch = subjectText.match(/(?:CNPJ[:=\s]*)?(\d{14})\b/);
-  return cnpjMatch?.[1] || '';
+  return extractCnpjFromText(subjectText);
 };
 
 const isCertificateAuthority = (certificate: forge.pki.Certificate): boolean => {
@@ -104,7 +112,7 @@ const isCertificateAuthority = (certificate: forge.pki.Certificate): boolean => 
 };
 
 const looksLikeIssuerName = (value?: string) => {
-  return /\b(autoridade|certificadora|ac\s|icp-brasil|serasa|certisign|valid|soluti|safeweb|caixa|receita federal)\b/i.test(String(value || ''));
+  return /\b(autoridade|certificadora|certificacao digital|certificação digital|ac\s|icp-brasil|serasa|certisign|valid|soluti|safeweb|caixa|receita federal)\b/i.test(String(value || ''));
 };
 
 const getBagLocalKeyId = (bag: any): string => {
@@ -141,6 +149,7 @@ const cleanCompanyNameFromCertificate = (value?: string, cnpj?: string) => {
     cleanValue = cleanValue.replace(new RegExp(`[:\\s-]*${cnpjDigits}\\b`), '');
   }
   return cleanValue
+    .replace(/[:\s-]*\d{14}\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 };
@@ -202,8 +211,10 @@ const parseCertificateBase64 = (base64Data: string, password: string): ParsedCer
   const commonName = getAttributeValue(certificate, ['CN', 'commonName']);
   const organization = getAttributeValue(certificate, ['O', 'organizationName']);
   const organizationalUnit = getAttributeValue(certificate, ['OU', 'organizationalUnitName']);
+  const commonNameCnpj = extractCnpjFromText(commonName);
+  const titularName = cleanCompanyNameFromCertificate(commonName, commonNameCnpj || cnpj);
   const razaoSocial = cleanCompanyNameFromCertificate(
-    !looksLikeIssuerName(commonName) ? commonName : organization,
+    titularName && !looksLikeIssuerName(titularName) ? titularName : organization,
     cnpj
   );
 
@@ -246,6 +257,21 @@ const fetchCnpjRegistrationData = async (cnpj: string): Promise<CnpjRegistration
     codigo_municipio: data?.codigo_municipio || data?.municipio_codigo,
     inscricao_estadual: activeIe?.inscricao_estadual || activeIe?.ie,
   };
+};
+
+const isRegistrationCompatibleWithCertificate = (
+  registration: CnpjRegistrationData | null | undefined,
+  info: ParsedCertificateInfo
+) => {
+  if (!registration) return false;
+
+  const registrationName = String(registration.razao_social || registration.nome_fantasia || '').trim();
+  if (!registrationName) return true;
+  if (looksLikeIssuerName(registrationName) && info.razaoSocial && !looksLikeIssuerName(info.razaoSocial)) {
+    return false;
+  }
+
+  return true;
 };
 
 const FiscalSettings: React.FC = () => {
@@ -375,21 +401,22 @@ const FiscalSettings: React.FC = () => {
   };
 
   const applyCertificateInfo = (info: ParsedCertificateInfo, registration?: CnpjRegistrationData | null) => {
+    const safeRegistration = isRegistrationCompatibleWithCertificate(registration, info) ? registration : null;
     setCertificateInfo(info);
     setSettings(prev => ({
       ...prev,
       cnpj: info.cnpj ? formatCnpj(info.cnpj) : prev.cnpj,
-      inscricao_estadual: registration?.inscricao_estadual || prev.inscricao_estadual,
-      razao_social: registration?.razao_social || info.razaoSocial || prev.razao_social,
-      nome_fantasia: registration?.nome_fantasia || info.nomeFantasia || prev.nome_fantasia || info.razaoSocial || '',
-      endereco_logradouro: registration?.logradouro || prev.endereco_logradouro,
-      endereco_numero: registration?.numero || prev.endereco_numero,
-      endereco_complemento: registration?.complemento || prev.endereco_complemento,
-      endereco_bairro: registration?.bairro || prev.endereco_bairro,
-      endereco_municipio: registration?.municipio || prev.endereco_municipio,
-      endereco_uf: registration?.uf || prev.endereco_uf,
-      endereco_cep: registration?.cep || prev.endereco_cep,
-      codigo_municipio: registration?.codigo_municipio ? String(registration.codigo_municipio) : prev.codigo_municipio,
+      inscricao_estadual: safeRegistration?.inscricao_estadual || prev.inscricao_estadual,
+      razao_social: info.razaoSocial || safeRegistration?.razao_social || prev.razao_social,
+      nome_fantasia: info.nomeFantasia || safeRegistration?.nome_fantasia || prev.nome_fantasia || info.razaoSocial || '',
+      endereco_logradouro: safeRegistration?.logradouro || prev.endereco_logradouro,
+      endereco_numero: safeRegistration?.numero || prev.endereco_numero,
+      endereco_complemento: safeRegistration?.complemento || prev.endereco_complemento,
+      endereco_bairro: safeRegistration?.bairro || prev.endereco_bairro,
+      endereco_municipio: safeRegistration?.municipio || prev.endereco_municipio,
+      endereco_uf: safeRegistration?.uf || prev.endereco_uf,
+      endereco_cep: safeRegistration?.cep || prev.endereco_cep,
+      codigo_municipio: safeRegistration?.codigo_municipio ? String(safeRegistration.codigo_municipio) : prev.codigo_municipio,
     }));
   };
 
