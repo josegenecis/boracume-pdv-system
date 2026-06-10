@@ -45,6 +45,8 @@ jobs:
 
       - name: Set desktop release version
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $manualVersion = "${{ github.event.inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($manualVersion)) {
@@ -52,7 +54,16 @@ jobs:
             $parts = $baseVersion.Split('.')
             $basePatch = [int]$parts[2]
             $runPatch = [int]"${{ github.run_number }}"
-            $patch = [Math]::Max($basePatch + 1, $runPatch)
+            $latestPatch = 0
+            try {
+              $latestTag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+              if ($latestTag -match "^v?$($parts[0])\.$($parts[1])\.(\d+)$") {
+                $latestPatch = [int]$Matches[1]
+              }
+            } catch {
+              Write-Host "Nao foi possivel consultar a ultima release publicada. Usando package.json como base."
+            }
+            $patch = [Math]::Max([Math]::Max($basePatch + 1, $latestPatch + 1), $runPatch)
             $version = "$($parts[0]).$($parts[1]).$patch"
           } else {
             $version = $manualVersion.Trim()
