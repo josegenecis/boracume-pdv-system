@@ -281,8 +281,8 @@ const WaiterDashboard = () => {
   if (!waiterSession) return null;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-24 text-white">
-      <div className="mx-auto max-w-[440px] px-3 py-3 sm:max-w-3xl sm:px-6 lg:max-w-6xl lg:px-8">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top,#0B5138_0%,#083927_40%,#072C1F_100%)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-white">
+      <div className="mx-auto w-full min-w-0 max-w-[430px] px-4 py-3 sm:max-w-3xl sm:px-6 lg:max-w-6xl lg:px-8">
         <div className="flex justify-end">
           <Button
             variant="outline"
@@ -295,9 +295,9 @@ const WaiterDashboard = () => {
         </div>
 
         <div className="mt-1.5 flex flex-col items-center text-center">
-          <Logo size="md" theme="dark" className="justify-center" />
-          <div className="mt-2 inline-flex rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">
-            App web Garcom
+          <Logo size="md" theme="dark" className="max-w-full justify-center" />
+          <div className="mt-2 inline-flex max-w-full rounded-full bg-white/10 px-3 py-1 text-center text-[10px] font-medium uppercase tracking-[0.16em] text-white/80">
+            App web Garçom
           </div>
           <h1 className="mt-2.5 text-[1.55rem] font-semibold leading-tight text-white sm:text-[1.95rem]">Mesas</h1>
           <p className="mt-1 text-[11px] leading-4 text-white/68 sm:text-xs sm:leading-5">{waiterSession.profile.name}</p>
@@ -323,7 +323,7 @@ const WaiterDashboard = () => {
               }
             />
           ) : (
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6">
+            <div className="grid w-full min-w-0 grid-cols-3 gap-2.5 min-[390px]:grid-cols-4 sm:grid-cols-5 sm:gap-3 lg:grid-cols-6">
               {filteredTables.map((table) => {
                 return (
                   <div
@@ -353,16 +353,16 @@ const WaiterDashboard = () => {
                         setGuestCount('2');
                       }
                     }}
-                    className={`relative flex aspect-square cursor-pointer flex-col rounded-[18px] p-1.5 text-left shadow-[0_16px_34px_-24px_rgba(0,0,0,0.8)] transition active:scale-[0.98] sm:rounded-[24px] sm:p-3 ${tableTileTone[table.status]}`}
+                    className={`relative flex aspect-square min-w-0 cursor-pointer flex-col rounded-[18px] p-2 text-left shadow-[0_16px_34px_-24px_rgba(0,0,0,0.8)] transition active:scale-[0.98] sm:rounded-[24px] sm:p-3 ${tableTileTone[table.status]}`}
                   >
-                    <div className="flex items-start justify-start">
-                      <span className="rounded-full bg-black/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-current sm:px-2 sm:py-1 sm:text-[9px]">
+                    <div className="flex min-w-0 items-start justify-start">
+                      <span className="max-w-full truncate rounded-full bg-black/12 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-current sm:px-2 sm:py-1 sm:text-[9px]">
                         {tableOccupancyLabel(table.status)}
                       </span>
                     </div>
 
                     <div className="flex flex-1 items-center justify-center">
-                      <div className="text-[1.8rem] font-semibold leading-none tracking-tight sm:text-5xl">{table.number}</div>
+                      <div className="text-4xl font-semibold leading-none sm:text-5xl">{table.number}</div>
                     </div>
                   </div>
                 );
