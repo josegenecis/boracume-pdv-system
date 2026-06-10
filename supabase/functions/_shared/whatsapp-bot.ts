@@ -113,6 +113,26 @@ function buildMenuOrderCta(restaurantId: string) {
   return `Clique aqui e faça seu pedido: ${buildMenuShareUrl(restaurantId)}`;
 }
 
+function buildSmartMenuGreeting(restaurantName: string, restaurantId: string, customerName = '') {
+  const name = String(customerName || '').trim();
+  const greetingName = name && !/^cliente( whatsapp)?$/i.test(name) ? `, ${name}` : '';
+  return [
+    `Olá${greetingName}! 👋 Bem-vindo ao ${restaurantName}.`,
+    'Posso te ajudar a escolher, tirar dúvidas do cardápio ou acompanhar um pedido.',
+    '',
+    buildMenuOrderCta(restaurantId)
+  ].join('\n');
+}
+
+function buildCommercialFallbackReply(restaurantName: string, restaurantId: string) {
+  return [
+    `Posso te ajudar por aqui no ${restaurantName}.`,
+    'Para escolher com mais facilidade, acesse o cardápio completo:',
+    '',
+    buildMenuOrderCta(restaurantId)
+  ].join('\n');
+}
+
 function buildOrderStatusLabel(status: string) {
   const labels: Record<string, string> = {
     pending: 'recebido',
@@ -1810,7 +1830,7 @@ export async function processRestaurantBotMessage(params: {
     ? recentBotReplyMinutes > 2
     : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
-  const dailyMenuGreetingText = `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\n${buildMenuOrderCta(restaurantId)}`;
+  const dailyMenuGreetingText = buildSmartMenuGreeting(context.restaurantName, restaurantId, customerName);
   const shouldSendDailyMenuGreeting = !menuWasSentToday && (isFirstCustomerTouchToday || greetingIntent || isFirstConversationTouch);
 
   if (complementsInfoIntent && !wantsToOrder(text)) {
@@ -1900,7 +1920,18 @@ export async function processRestaurantBotMessage(params: {
     }
   }
 
-  if (lowSignalIntent && !explicitMenuIntent && !trackIntent && !openingHoursIntent && !promotionsIntent && !humanIntent && !problemIntent) {
+  if (
+    lowSignalIntent &&
+    !shouldSendDailyMenuGreeting &&
+    !greetingIntent &&
+    !isFirstConversationTouch &&
+    !explicitMenuIntent &&
+    !trackIntent &&
+    !openingHoursIntent &&
+    !promotionsIntent &&
+    !humanIntent &&
+    !problemIntent
+  ) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_low_signal_silent', 'Mensagem curta/agradecimento; resposta suprimida', {
       instanceName,
       customerPhone,
@@ -2012,18 +2043,18 @@ export async function processRestaurantBotMessage(params: {
     deterministicReplies.push(dailyMenuGreetingText);
     replyStrategy = 'daily_menu_greeting';
   } else if (greetingIntent && deterministicReplies.length === 0 && !explicitMenuIntent) {
-    deterministicReplies.push(`Olá! 👋\n\n${buildMenuOrderCta(restaurantId)}`);
+    deterministicReplies.push(buildSmartMenuGreeting(context.restaurantName, restaurantId, customerName));
     replyStrategy = 'greeting_help';
   }
 
   if (explicitMenuIntent && canRepeatMenuReply) {
-    const renderedMenuReply = `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\nClique aqui e faça seu pedido: ${menuLink}`;
+    const renderedMenuReply = buildSmartMenuGreeting(context.restaurantName, restaurantId, customerName);
 
     deterministicReplies.push(
       ensureMenuLink(
         renderedMenuReply || (explicitMenuIntent
           ? `Clique aqui e faça seu pedido: ${menuLink}`
-          : `Olá! 👋 Bem-vindo ao ${context.restaurantName}.\n\nClique aqui e faça seu pedido: ${menuLink}`),
+          : buildSmartMenuGreeting(context.restaurantName, restaurantId, customerName)),
         menuLink
       )
     );
@@ -2040,7 +2071,7 @@ export async function processRestaurantBotMessage(params: {
   if (deterministicReplies.length > 0) {
     replyText = Array.from(new Set(deterministicReplies.filter(Boolean))).join('\n\n');
   } else if (!explicitMenuIntent && greetingIntent && menuWasSentToday) {
-    replyText = `Olá! 👋\n\n${buildMenuOrderCta(restaurantId)}`;
+    replyText = buildSmartMenuGreeting(context.restaurantName, restaurantId, customerName);
     replyStrategy = 'greeting_after_menu_help';
   } else {
     replyStrategy = 'openai';
@@ -2070,7 +2101,9 @@ export async function processRestaurantBotMessage(params: {
   }
 
   if (!replyText) {
-    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_no_reply_silent', 'Nenhuma intenção acionável; resposta suprimida', {
+    replyText = buildCommercialFallbackReply(context.restaurantName, restaurantId);
+    replyStrategy = 'commercial_fallback_menu';
+    await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_fallback_menu', 'IA sem resposta; enviado fallback comercial com cardápio', {
       instanceName,
       customerPhone,
       conversationId,
@@ -2080,7 +2113,6 @@ export async function processRestaurantBotMessage(params: {
       openingHoursIntent,
       promotionsIntent
     });
-    return { ok: true, skipped: true, reason: 'no_actionable_intent', conversationId };
   }
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_reply_built', 'Resposta do bot montada', {
