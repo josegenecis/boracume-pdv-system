@@ -27,6 +27,33 @@ function formatBRL(value: unknown) {
   return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function normalizeAiSettings(row: any, autoResponses: any) {
+  const metadata = row?.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const botConfig = autoResponses?.bot_config && typeof autoResponses.bot_config === 'object' ? autoResponses.bot_config : {};
+  const forbidden = Array.isArray(row?.forbidden_responses)
+    ? row.forbidden_responses.filter(Boolean).join('\n')
+    : String(botConfig.forbidden_responses || '').trim();
+
+  return {
+    enabled: row?.enabled !== false,
+    assistantName: String(row?.assistant_name || botConfig.assistant_name || 'POP AI').trim(),
+    tone: String(row?.tone || botConfig.tone || 'vendedor, cordial e objetivo').trim(),
+    serviceStyle: String(metadata.service_style || botConfig.service_style || '').trim(),
+    orderFlow: String(metadata.order_flow || botConfig.order_flow || '').trim(),
+    welcomeMessage: String(row?.welcome_message || botConfig.welcome_message || '').trim(),
+    outOfHoursMessage: String(row?.out_of_hours_message || botConfig.out_of_hours_message || '').trim(),
+    humanTransferMessage: String(row?.human_transfer_message || botConfig.human_transfer_message || '').trim(),
+    deliveryRules: String(metadata.delivery_rules || botConfig.delivery_rules || '').trim(),
+    paymentRules: String(metadata.payment_rules || botConfig.payment_rules || '').trim(),
+    menuRecommendationRules: String(metadata.menu_recommendation_rules || botConfig.menu_recommendation_rules || '').trim(),
+    humanHandoffRules: String(metadata.human_handoff_rules || botConfig.human_handoff_rules || '').trim(),
+    forbiddenResponses: forbidden,
+    specificRules: String(row?.specific_rules || botConfig.specific_rules || '').trim(),
+    upsellEnabled: row?.upsell_enabled !== false && botConfig.upsell_enabled !== false,
+    maxHistoryMessages: Math.min(80, Math.max(10, Number(row?.max_history_messages || botConfig.max_history_messages || 30))),
+  };
+}
+
 function userMessage(message: string, status = 200) {
   return new Response(JSON.stringify({ message }), { status, headers: corsHeaders });
 }
@@ -159,6 +186,7 @@ function buildSystemPrompt(context: {
   whatsappEnabled: boolean;
   defaultMessage: string;
   autoResponses: any;
+  aiSettings: any;
 }) {
   const ordersText = context.latestOrders.length
     ? context.latestOrders
@@ -180,9 +208,10 @@ function buildSystemPrompt(context: {
     : '- Cardápio não carregado';
 
   const autoResponsesText = JSON.stringify(context.autoResponses || {});
+  const settings = context.aiSettings || {};
 
   return [
-    'Você é o assistente oficial do PopSystem para atendimento de restaurante no WhatsApp.',
+    `Você é ${settings.assistantName || 'o assistente oficial do PopSystem'} para atendimento de restaurante no WhatsApp.`,
     'Responda em português do Brasil, de forma humana, objetiva, cordial e natural.',
     'Atue como um atendente vendedor de alto nível: entenda a intenção, conduza a compra e reduza atrito para o cliente pedir.',
     'Priorize ajudar o cliente com cardápio, pedido, acompanhamento, dúvidas, promoções, recomendações reais e orientação de compra.',
@@ -199,6 +228,21 @@ function buildSystemPrompt(context: {
     'Não mencione OpenAI, modelo, prompt, JSON, contexto interno ou Supabase.',
     'Retorne somente o texto final que deve ser enviado ao WhatsApp.',
     '',
+    'Configuração personalizada do restaurante:',
+    `- Tom de voz: ${settings.tone || 'cordial e objetivo'}`,
+    settings.serviceStyle ? `- Estilo de atendimento: ${settings.serviceStyle}` : '',
+    settings.orderFlow ? `- Fluxo de pedido desejado: ${settings.orderFlow}` : '',
+    settings.welcomeMessage ? `- Saudação preferida: ${settings.welcomeMessage}` : '',
+    settings.outOfHoursMessage ? `- Mensagem fora de horário: ${settings.outOfHoursMessage}` : '',
+    settings.humanTransferMessage ? `- Mensagem ao chamar humano: ${settings.humanTransferMessage}` : '',
+    settings.deliveryRules ? `- Regras de entrega: ${settings.deliveryRules}` : '',
+    settings.paymentRules ? `- Regras de pagamento: ${settings.paymentRules}` : '',
+    settings.menuRecommendationRules ? `- Regras de recomendação/combos: ${settings.menuRecommendationRules}` : '',
+    settings.humanHandoffRules ? `- Quando transferir para humano: ${settings.humanHandoffRules}` : '',
+    settings.specificRules ? `- Regras específicas: ${settings.specificRules}` : '',
+    settings.forbiddenResponses ? `- Nunca responder/prometer:\n${settings.forbiddenResponses}` : '',
+    `- Upsell inteligente: ${settings.upsellEnabled ? 'ativo; sugerir complementos reais quando fizer sentido' : 'desativado; não sugerir venda adicional sem pedido do cliente'}`,
+    '',
     `Restaurante: ${context.restaurantName}`,
     `Cliente: ${context.customerName}`,
     `Telefone do cliente: ${context.customerPhone}`,
@@ -212,7 +256,7 @@ function buildSystemPrompt(context: {
     '',
     'Produtos em destaque do cardápio:',
     menuText
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function buildUserPrompt(message: string, restaurantName: string) {
@@ -332,9 +376,10 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const phoneCandidates = buildPhoneCandidates(customerPhone);
-    const [profileResult, settingsResult, customerResult, ordersResult, productsResult] = await Promise.all([
+    const [profileResult, settingsResult, aiSettingsResult, customerResult, ordersResult, productsResult] = await Promise.all([
       supabase.from('profiles').select('restaurant_name').eq('id', restaurantId).maybeSingle(),
       supabase.from('whatsapp_settings').select('enabled, default_message, auto_responses').eq('user_id', restaurantId).maybeSingle(),
+      supabase.from('ai_settings').select('*').eq('restaurant_id', restaurantId).maybeSingle(),
       supabase.from('customers').select('name').eq('user_id', restaurantId).in('phone', phoneCandidates).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('orders').select('order_number,status,created_at,customer_name').eq('user_id', restaurantId).in('customer_phone', phoneCandidates).order('created_at', { ascending: false }).limit(5),
       supabase.from('products').select('name,category,price,original_price,discount_percentage,is_highlight,description,available').eq('user_id', restaurantId).eq('available', true).order('updated_at', { ascending: false }).limit(160)
@@ -343,6 +388,11 @@ Deno.serve(async (req: Request) => {
     const restaurantName = String(profileResult?.data?.restaurant_name || 'restaurante').trim();
     const customerName = String(customerResult?.data?.name || 'cliente').trim();
     const media = safeBody?.media || null;
+    const autoResponses = settingsResult?.data?.auto_responses || {};
+    const aiSettings = normalizeAiSettings(aiSettingsResult?.data, autoResponses);
+    if (aiSettings.enabled === false || settingsResult?.data?.enabled === false) {
+      return json({ message: '' });
+    }
     let effectiveMessage = message;
     const transcription = await transcribeAudioIfPossible(openAiKey, media).catch(() => '');
     if (transcription) effectiveMessage = transcription;
@@ -357,7 +407,8 @@ Deno.serve(async (req: Request) => {
       menuHighlights: Array.isArray(productsResult?.data) ? productsResult.data : [],
       whatsappEnabled: settingsResult?.data?.enabled !== false,
       defaultMessage: String(settingsResult?.data?.default_message || ''),
-      autoResponses: settingsResult?.data?.auto_responses || {}
+      autoResponses,
+      aiSettings
     }) + '\n\nSe a mensagem indicar pedido complexo, ajude a coletar dados sem inventar itens. Seja curto, vendedor e profissional.';
 
     const reply = await openAiAssistantReply({
@@ -365,7 +416,7 @@ Deno.serve(async (req: Request) => {
       model: openAiModel,
       system,
       userPrompt: buildUserPrompt(effectiveMessage, restaurantName),
-      history: Array.isArray(safeBody?.conversationHistory) ? safeBody.conversationHistory : [],
+      history: Array.isArray(safeBody?.conversationHistory) ? safeBody.conversationHistory.slice(-aiSettings.maxHistoryMessages) : [],
       media
     });
 

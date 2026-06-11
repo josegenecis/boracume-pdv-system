@@ -35,9 +35,16 @@ interface AiSettings {
   enabled: boolean;
   assistant_name: string;
   tone: string;
+  service_style: string;
+  order_flow: string;
   welcome_message: string;
   out_of_hours_message: string;
   human_transfer_message: string;
+  delivery_rules: string;
+  payment_rules: string;
+  menu_recommendation_rules: string;
+  human_handoff_rules: string;
+  forbidden_responses: string;
   upsell_enabled: boolean;
   max_history_messages: number;
   specific_rules: string;
@@ -55,10 +62,17 @@ interface AiLog {
 const defaultAiSettings: AiSettings = {
   enabled: true,
   assistant_name: 'POP AI',
-  tone: 'simples',
+  tone: 'vendedor, cordial e objetivo',
+  service_style: 'Atendimento rápido, simpático, parecido com um atendente humano do restaurante.',
+  order_flow: 'Enviar o cardápio, ajudar o cliente a escolher e coletar apenas o próximo dado necessário.',
   welcome_message: '',
   out_of_hours_message: '',
   human_transfer_message: 'Vou chamar alguém da equipe para te ajudar.',
+  delivery_rules: '',
+  payment_rules: '',
+  menu_recommendation_rules: 'Recomendar produtos reais do cardápio, combos e itens em destaque quando fizer sentido.',
+  human_handoff_rules: 'Chamar atendente em reclamações, cancelamentos, cobrança, erro no pedido ou quando o cliente pedir uma pessoa.',
+  forbidden_responses: 'Não inventar preço, prazo, produto, taxa, promoção ou disponibilidade.',
   upsell_enabled: true,
   max_history_messages: 30,
   specific_rules: ''
@@ -331,28 +345,70 @@ const WhatsAppChatbot = () => {
   const fetchAiSettings = async () => {
     if (!user?.id) return;
     try {
-      const { data, error } = await (supabase as any)
-        .from('ai_settings')
-        .select('*')
-        .eq('restaurant_id', user.id)
-        .maybeSingle();
+      const [aiResult, whatsappResult] = await Promise.all([
+        (supabase as any)
+          .from('ai_settings')
+          .select('*')
+          .eq('restaurant_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('whatsapp_settings')
+          .select('enabled, default_message, auto_responses')
+          .eq('user_id', user.id)
+          .maybeSingle()
+      ]);
 
-      if (error && !String(error.message || '').includes('relation "public.ai_settings" does not exist')) {
-        throw error;
+      if (aiResult.error && !String(aiResult.error.message || '').includes('relation "public.ai_settings" does not exist')) {
+        throw aiResult.error;
       }
+
+      const data = aiResult.data;
+      const autoResponses = (whatsappResult.data?.auto_responses && typeof whatsappResult.data.auto_responses === 'object' && !Array.isArray(whatsappResult.data.auto_responses))
+        ? whatsappResult.data.auto_responses as Record<string, any>
+        : {};
+      const botConfig = (autoResponses.bot_config && typeof autoResponses.bot_config === 'object')
+        ? autoResponses.bot_config as Record<string, any>
+        : {};
+      const metadata = (data?.metadata && typeof data.metadata === 'object') ? data.metadata : {};
 
       if (data) {
         setAiSettings({
           enabled: data.enabled !== false,
           assistant_name: data.assistant_name || 'POP AI',
-          tone: data.tone || 'simples',
-          welcome_message: data.welcome_message || '',
+          tone: data.tone || botConfig.tone || defaultAiSettings.tone,
+          service_style: metadata.service_style || botConfig.service_style || defaultAiSettings.service_style,
+          order_flow: metadata.order_flow || botConfig.order_flow || defaultAiSettings.order_flow,
+          welcome_message: data.welcome_message || botConfig.welcome_message || '',
           out_of_hours_message: data.out_of_hours_message || '',
           human_transfer_message: data.human_transfer_message || defaultAiSettings.human_transfer_message,
+          delivery_rules: metadata.delivery_rules || botConfig.delivery_rules || '',
+          payment_rules: metadata.payment_rules || botConfig.payment_rules || '',
+          menu_recommendation_rules: metadata.menu_recommendation_rules || botConfig.menu_recommendation_rules || defaultAiSettings.menu_recommendation_rules,
+          human_handoff_rules: metadata.human_handoff_rules || botConfig.human_handoff_rules || defaultAiSettings.human_handoff_rules,
+          forbidden_responses: Array.isArray(data.forbidden_responses)
+            ? data.forbidden_responses.join('\n')
+            : botConfig.forbidden_responses || defaultAiSettings.forbidden_responses,
           upsell_enabled: data.upsell_enabled !== false,
           max_history_messages: Number(data.max_history_messages || 30),
           specific_rules: data.specific_rules || ''
         });
+      } else if (Object.keys(botConfig).length || whatsappResult.data) {
+        setAiSettings(prev => ({
+          ...prev,
+          enabled: whatsappResult.data?.enabled !== false,
+          assistant_name: botConfig.assistant_name || prev.assistant_name,
+          tone: botConfig.tone || prev.tone,
+          service_style: botConfig.service_style || prev.service_style,
+          order_flow: botConfig.order_flow || prev.order_flow,
+          welcome_message: botConfig.welcome_message || whatsappResult.data?.default_message || prev.welcome_message,
+          human_transfer_message: botConfig.human_transfer_message || prev.human_transfer_message,
+          delivery_rules: botConfig.delivery_rules || prev.delivery_rules,
+          payment_rules: botConfig.payment_rules || prev.payment_rules,
+          menu_recommendation_rules: botConfig.menu_recommendation_rules || prev.menu_recommendation_rules,
+          human_handoff_rules: botConfig.human_handoff_rules || prev.human_handoff_rules,
+          forbidden_responses: botConfig.forbidden_responses || prev.forbidden_responses,
+          specific_rules: botConfig.specific_rules || prev.specific_rules,
+        }));
       }
     } catch (error: any) {
       console.error('Erro ao carregar POP AI:', error);
@@ -367,13 +423,25 @@ const WhatsAppChatbot = () => {
         restaurant_id: user.id,
         enabled: aiSettings.enabled,
         assistant_name: aiSettings.assistant_name || 'POP AI',
-        tone: aiSettings.tone || 'simples',
+        tone: aiSettings.tone || defaultAiSettings.tone,
         welcome_message: aiSettings.welcome_message || null,
         out_of_hours_message: aiSettings.out_of_hours_message || null,
         human_transfer_message: aiSettings.human_transfer_message || defaultAiSettings.human_transfer_message,
         upsell_enabled: aiSettings.upsell_enabled,
         max_history_messages: Math.min(80, Math.max(10, Number(aiSettings.max_history_messages || 30))),
+        forbidden_responses: aiSettings.forbidden_responses
+          .split('\n')
+          .map((item) => item.trim())
+          .filter(Boolean),
         specific_rules: aiSettings.specific_rules || null,
+        metadata: {
+          service_style: aiSettings.service_style,
+          order_flow: aiSettings.order_flow,
+          delivery_rules: aiSettings.delivery_rules,
+          payment_rules: aiSettings.payment_rules,
+          menu_recommendation_rules: aiSettings.menu_recommendation_rules,
+          human_handoff_rules: aiSettings.human_handoff_rules,
+        },
         updated_at: new Date().toISOString()
       };
 
@@ -381,12 +449,52 @@ const WhatsAppChatbot = () => {
         .from('ai_settings')
         .upsert(payload, { onConflict: 'restaurant_id' });
 
-      if (error) throw error;
+      if (error && !String(error.message || '').includes('relation "public.ai_settings" does not exist')) throw error;
 
-      await supabase
+      const { data: existingWhatsapp } = await supabase
         .from('whatsapp_settings')
-        .update({ ai_enabled: aiSettings.enabled } as any)
-        .eq('user_id', user.id);
+        .select('auto_responses, phone_number, default_message')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const currentAutoResponses = (existingWhatsapp?.auto_responses && typeof existingWhatsapp.auto_responses === 'object' && !Array.isArray(existingWhatsapp.auto_responses))
+        ? existingWhatsapp.auto_responses as Record<string, any>
+        : {};
+      const botConfig = {
+        assistant_name: payload.assistant_name,
+        tone: payload.tone,
+        service_style: aiSettings.service_style,
+        order_flow: aiSettings.order_flow,
+        welcome_message: aiSettings.welcome_message,
+        out_of_hours_message: aiSettings.out_of_hours_message,
+        human_transfer_message: aiSettings.human_transfer_message,
+        delivery_rules: aiSettings.delivery_rules,
+        payment_rules: aiSettings.payment_rules,
+        menu_recommendation_rules: aiSettings.menu_recommendation_rules,
+        human_handoff_rules: aiSettings.human_handoff_rules,
+        forbidden_responses: aiSettings.forbidden_responses,
+        specific_rules: aiSettings.specific_rules,
+        upsell_enabled: aiSettings.upsell_enabled,
+        max_history_messages: payload.max_history_messages,
+      };
+
+      const { error: whatsappError } = await supabase
+        .from('whatsapp_settings')
+        .upsert({
+          user_id: user.id,
+          phone_number: existingWhatsapp?.phone_number || '',
+          default_message: aiSettings.welcome_message || existingWhatsapp?.default_message || 'Olá! Gostaria de fazer um pedido.',
+          enabled: true,
+          ai_enabled: aiSettings.enabled,
+          auto_responses: {
+            ...currentAutoResponses,
+            welcome: aiSettings.welcome_message || currentAutoResponses.welcome,
+            bot_config: botConfig,
+          },
+          updated_at: new Date().toISOString()
+        } as any, { onConflict: 'user_id' });
+
+      if (whatsappError) throw whatsappError;
 
       toast({
         title: 'POP AI atualizado',
@@ -914,12 +1022,66 @@ const WhatsAppChatbot = () => {
                   />
                 </label>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-semibold">Estilo de atendimento</span>
+                    <Textarea
+                      value={aiSettings.service_style}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, service_style: e.target.value }))}
+                      placeholder="Ex: atendimento rápido, simpático, informal, chamando o cliente pelo nome quando souber."
+                      rows={4}
+                    />
+                  </label>
+
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-semibold">Fluxo ideal de pedido</span>
+                    <Textarea
+                      value={aiSettings.order_flow}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, order_flow: e.target.value }))}
+                      placeholder="Ex: primeiro enviar cardápio, depois confirmar retirada/entrega, forma de pagamento e nome."
+                      rows={4}
+                    />
+                  </label>
+                </div>
+
                 <label className="space-y-2 block">
                   <span className="text-sm font-semibold">Mensagem fora de horário</span>
                   <Textarea
                     value={aiSettings.out_of_hours_message}
                     onChange={(e) => setAiSettings(prev => ({ ...prev, out_of_hours_message: e.target.value }))}
                     placeholder="Agora estamos fechados, mas posso deixar seu pedido encaminhado."
+                    rows={3}
+                  />
+                </label>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-semibold">Regras de entrega</span>
+                    <Textarea
+                      value={aiSettings.delivery_rules}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, delivery_rules: e.target.value }))}
+                      placeholder="Ex: atende até 5km, taxa depende do bairro, não prometer prazo exato sem confirmação."
+                      rows={4}
+                    />
+                  </label>
+
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-semibold">Regras de pagamento</span>
+                    <Textarea
+                      value={aiSettings.payment_rules}
+                      onChange={(e) => setAiSettings(prev => ({ ...prev, payment_rules: e.target.value }))}
+                      placeholder="Ex: aceitar Pix, dinheiro e cartão; perguntar troco quando for dinheiro."
+                      rows={4}
+                    />
+                  </label>
+                </div>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Como recomendar produtos e combos</span>
+                  <Textarea
+                    value={aiSettings.menu_recommendation_rules}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, menu_recommendation_rules: e.target.value }))}
+                    placeholder="Ex: sugerir combos para família, bebidas com pastel, adicionais no açaí, produtos em destaque primeiro."
                     rows={3}
                   />
                 </label>
@@ -934,12 +1096,32 @@ const WhatsAppChatbot = () => {
                 </label>
 
                 <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Quando chamar atendente humano</span>
+                  <Textarea
+                    value={aiSettings.human_handoff_rules}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, human_handoff_rules: e.target.value }))}
+                    placeholder="Ex: reclamações, pedido atrasado, cancelamento, cliente irritado, dúvidas fiscais, alteração de pedido já enviado."
+                    rows={3}
+                  />
+                </label>
+
+                <label className="space-y-2 block">
                   <span className="text-sm font-semibold">Regras específicas do restaurante</span>
                   <Textarea
                     value={aiSettings.specific_rules}
                     onChange={(e) => setAiSettings(prev => ({ ...prev, specific_rules: e.target.value }))}
                     placeholder="Ex: nunca oferecer entrega fora do bairro X; priorizar combo família; pedir ponto da carne..."
                     rows={5}
+                  />
+                </label>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold">Coisas que o bot nunca deve responder/prometer</span>
+                  <Textarea
+                    value={aiSettings.forbidden_responses}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, forbidden_responses: e.target.value }))}
+                    placeholder="Uma regra por linha. Ex: não prometer entrega em 20 minutos; não dar desconto sem autorização."
+                    rows={4}
                   />
                 </label>
 
