@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import AdjustableImageDialog from '@/components/media/AdjustableImageDialog';
 
 type Campaign = {
   id: string;
@@ -110,6 +111,7 @@ export default function WhatsAppCampaignManager() {
   const [selectedProductId, setSelectedProductId] = useState('none');
   const [promoImageUrl, setPromoImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [pendingPromoImageFile, setPendingPromoImageFile] = useState<File | null>(null);
   const [audienceType, setAudienceType] = useState<'active' | 'manual' | 'inactive_range'>('active');
   const [manualPhones, setManualPhones] = useState('');
   const [inactiveMinDays, setInactiveMinDays] = useState(15);
@@ -331,6 +333,19 @@ export default function WhatsAppCampaignManager() {
     }
   };
 
+  const handlePromotionImageSelected = (file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Selecione uma imagem para a promoção.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setPendingPromoImageFile(file);
+  };
+
   const processQueue = async (silent = false) => {
     if (processing) return;
     setProcessing(true);
@@ -408,6 +423,19 @@ export default function WhatsAppCampaignManager() {
 
   return (
     <div className="space-y-6 rounded-[28px] bg-[radial-gradient(circle_at_top_left,rgba(255,111,0,0.14),transparent_32%),linear-gradient(135deg,#fff7ed_0%,#f0fdf4_42%,#ffffff_100%)] p-4 sm:p-6">
+      <AdjustableImageDialog
+        open={Boolean(pendingPromoImageFile)}
+        file={pendingPromoImageFile}
+        title="Ajustar imagem da promoção"
+        aspectRatio={4 / 3}
+        outputWidth={1200}
+        outputHeight={900}
+        onCancel={() => setPendingPromoImageFile(null)}
+        onConfirm={(file) => {
+          setPendingPromoImageFile(null);
+          void uploadPromotionImage(file);
+        }}
+      />
       <div className="flex flex-col gap-3 rounded-2xl border border-orange-200/70 bg-white/80 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-orange-700">
@@ -582,7 +610,10 @@ export default function WhatsAppCampaignManager() {
                     id="wa-promo-image"
                     type="file"
                     accept="image/*"
-                    onChange={(event) => uploadPromotionImage(event.target.files?.[0])}
+                    onChange={(event) => {
+                      handlePromotionImageSelected(event.target.files?.[0]);
+                      event.currentTarget.value = '';
+                    }}
                     disabled={uploadingImage}
                   />
                   <Button

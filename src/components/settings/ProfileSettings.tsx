@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { formatBRL, parseBRL } from '@/lib/currency';
+import AdjustableImageDialog from '@/components/media/AdjustableImageDialog';
 
 const weekDays = [
   { key: 'monday', label: 'Segunda' },
@@ -94,6 +95,8 @@ const ProfileSettings = () => {
   const [profileThemeConfig, setProfileThemeConfig] = useState<Record<string, any>>({});
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
+  const [pendingBannerFile, setPendingBannerFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [weeklySchedule, setWeeklySchedule] = useState<Record<WeekDayKey, DailySchedule>>(createDefaultSchedule());
   const { toast } = useToast();
@@ -176,8 +179,54 @@ const ProfileSettings = () => {
     });
   };
 
+  const uploadProfileImage = async (file: File, kind: 'logo' | 'banner') => {
+    if (!user) return;
+
+    const setKindUploading = kind === 'logo' ? setUploading : setUploadingBanner;
+    setKindUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `${user.id}_${kind}_${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+
+      if (kind === 'logo') {
+        setProfileImage(publicUrl);
+      } else {
+        setBannerImage(publicUrl);
+        setBannerFit('cover');
+      }
+
+      toast({
+        title: kind === 'logo' ? 'Logo ajustada' : 'Banner ajustado',
+        description: kind === 'logo'
+          ? 'A logo foi carregada com o enquadramento escolhido. Clique em salvar para confirmar.'
+          : 'O banner foi carregado com o enquadramento escolhido. Clique em salvar para confirmar.',
+      });
+    } catch (error) {
+      console.error('Erro no upload:', error);
+      toast({
+        title: 'Erro no upload',
+        description: 'Não foi possível fazer upload da imagem. Tente novamente.',
+        variant: 'destructive'
+      });
+    } finally {
+      setKindUploading(false);
+    }
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file || !user) return;
 
     if (!file.type.startsWith('image/')) {
@@ -198,42 +247,12 @@ const ProfileSettings = () => {
       return;
     }
 
-    setUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}_logo_${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
-
-      setProfileImage(publicUrl);
-      
-      toast({
-        title: "Imagem carregada",
-        description: "A imagem foi carregada com sucesso. Clique em salvar para confirmar as alterações.",
-      });
-    } catch (error) {
-      console.error('Erro no upload:', error);
-      toast({
-        title: "Erro no upload",
-        description: "Não foi possível fazer upload da imagem. Tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setUploading(false);
-    }
+    setPendingLogoFile(file);
   };
 
   const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file || !user) return;
 
     if (!file.type.startsWith('image/')) {
@@ -254,38 +273,7 @@ const ProfileSettings = () => {
       return;
     }
 
-    setUploadingBanner(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}_banner_${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
-
-      setBannerImage(publicUrl);
-
-      toast({
-        title: "Banner carregado",
-        description: "O banner foi carregado com sucesso. Clique em salvar para confirmar as alterações.",
-      });
-    } catch (error) {
-      console.error('Erro no upload do banner:', error);
-      toast({
-        title: "Erro no upload",
-        description: "Não foi possível fazer upload do banner. Tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setUploadingBanner(false);
-    }
+    setPendingBannerFile(file);
   };
 
   const handleSave = async () => {
@@ -379,6 +367,32 @@ const ProfileSettings = () => {
 
   return (
     <div className="space-y-6">
+      <AdjustableImageDialog
+        open={Boolean(pendingLogoFile)}
+        file={pendingLogoFile}
+        title="Ajustar logo"
+        aspectRatio={1}
+        outputWidth={512}
+        outputHeight={512}
+        onCancel={() => setPendingLogoFile(null)}
+        onConfirm={(file) => {
+          setPendingLogoFile(null);
+          void uploadProfileImage(file, 'logo');
+        }}
+      />
+      <AdjustableImageDialog
+        open={Boolean(pendingBannerFile)}
+        file={pendingBannerFile}
+        title="Ajustar banner do restaurante"
+        aspectRatio={3}
+        outputWidth={1200}
+        outputHeight={400}
+        onCancel={() => setPendingBannerFile(null)}
+        onConfirm={(file) => {
+          setPendingBannerFile(null);
+          void uploadProfileImage(file, 'banner');
+        }}
+      />
       <Card className="border border-[#FF6400]/12 bg-gradient-to-br from-[#FFF8F2] via-white to-[#F5EBE1]/60 shadow-[0_20px_50px_-36px_rgba(0,50,35,0.18)]">
         <CardHeader className="border-b border-[#FF6400]/10 bg-white/70">
           <CardTitle>Informações Básicas</CardTitle>

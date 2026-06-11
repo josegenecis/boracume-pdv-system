@@ -9,12 +9,14 @@ import { Printer, Save, Upload, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import AdjustableImageDialog from '@/components/media/AdjustableImageDialog';
 
 export const PrinterConfig = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [settings, setSettings] = useState({
     paper_width: '58mm',
     font_size: 'normal',
@@ -64,28 +66,8 @@ export const PrinterConfig = () => {
     }
   };
 
-  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: 'Arquivo invÃ¡lido',
-        description: 'Selecione apenas imagens para a logomarca do cupom.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: 'Arquivo muito grande',
-        description: 'A logomarca deve ter no mÃ¡ximo 5MB.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+  const uploadReceiptLogo = async (file: File) => {
+    if (!user) return;
     setUploadingLogo(true);
     try {
       const fileExt = file.name.split('.').pop() || 'png';
@@ -103,24 +85,62 @@ export const PrinterConfig = () => {
 
       setSettings((prev) => ({ ...prev, receipt_logo_url: publicUrl }));
       toast({
-        title: 'Logomarca carregada',
-        description: 'Agora Ã© sÃ³ salvar para usar essa logo no cupom.',
+        title: 'Logomarca ajustada',
+        description: 'Agora é só salvar para usar essa logo no cupom.',
       });
     } catch (error) {
       console.error('Erro ao enviar logomarca do cupom:', error);
       toast({
         title: 'Erro no upload',
-        description: 'NÃ£o foi possÃ­vel carregar a logomarca do cupom.',
+        description: 'Não foi possível carregar a logomarca do cupom.',
         variant: 'destructive',
       });
     } finally {
       setUploadingLogo(false);
-      event.target.value = '';
     }
+  };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Selecione apenas imagens para a logomarca do cupom.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'A logomarca deve ter no máximo 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPendingLogoFile(file);
   };
 
   return (
     <Card>
+      <AdjustableImageDialog
+        open={Boolean(pendingLogoFile)}
+        file={pendingLogoFile}
+        title="Ajustar logo do cupom"
+        aspectRatio={2}
+        outputWidth={600}
+        outputHeight={300}
+        onCancel={() => setPendingLogoFile(null)}
+        onConfirm={(file) => {
+          setPendingLogoFile(null);
+          void uploadReceiptLogo(file);
+        }}
+      />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Printer className="h-5 w-5" /> Configuração de Impressão

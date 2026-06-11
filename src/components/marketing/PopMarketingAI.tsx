@@ -17,6 +17,7 @@ import { callPopMarketingAI } from '@/services/popMarketingAiService';
 import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 import { ensureStorageSetup } from '@/utils/storageSetup';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
+import AdjustableImageDialog from '@/components/media/AdjustableImageDialog';
 
 type Product = { id: string; name: string; price: number; image_url?: string | null; category?: string | null };
 type MetaConnection = {
@@ -116,6 +117,7 @@ export default function PopMarketingAI() {
   const [selectedCreativeId, setSelectedCreativeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadingCreativeKey, setUploadingCreativeKey] = useState<string | null>(null);
+  const [pendingCreativeImage, setPendingCreativeImage] = useState<{ creative: Creative; key: string; file: File } | null>(null);
   const [form, setForm] = useState({
     objective: 'vender_mais',
     destination: 'whatsapp',
@@ -332,6 +334,17 @@ export default function PopMarketingAI() {
     }
   };
 
+  const getCreativeOutputSize = (format?: string | null) => {
+    const normalized = String(format || '').toLowerCase();
+    if (normalized.includes('1920') || normalized.includes('story') || normalized.includes('reels')) {
+      return { width: 1080, height: 1920, aspect: 1080 / 1920 };
+    }
+    if (normalized.includes('1200') || normalized.includes('banner') || normalized.includes('horizontal') || normalized.includes('facebook')) {
+      return { width: 1200, height: 628, aspect: 1200 / 628 };
+    }
+    return { width: 1080, height: 1080, aspect: 1 };
+  };
+
   const openCampaign = async (campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setSelectedCopyIndex(0);
@@ -367,6 +380,22 @@ export default function PopMarketingAI() {
 
   return (
     <div className="space-y-6">
+      {pendingCreativeImage ? (
+        <AdjustableImageDialog
+          open
+          file={pendingCreativeImage.file}
+          title={`Ajustar imagem do criativo ${pendingCreativeImage.creative.format}`}
+          aspectRatio={getCreativeOutputSize(pendingCreativeImage.creative.format).aspect}
+          outputWidth={getCreativeOutputSize(pendingCreativeImage.creative.format).width}
+          outputHeight={getCreativeOutputSize(pendingCreativeImage.creative.format).height}
+          onCancel={() => setPendingCreativeImage(null)}
+          onConfirm={(file) => {
+            const current = pendingCreativeImage;
+            setPendingCreativeImage(null);
+            void replaceCreativeImage(current.creative, current.key, file);
+          }}
+        />
+      ) : null}
       <Card className="overflow-hidden border-0 bg-[#062f23] text-white shadow-xl">
         <CardContent className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
           <div>
@@ -699,7 +728,7 @@ export default function PopMarketingAI() {
                           onChange={(event) => {
                             const file = event.target.files?.[0] || null;
                             event.currentTarget.value = '';
-                            void replaceCreativeImage(creative, key, file);
+                            if (file) setPendingCreativeImage({ creative, key, file });
                           }}
                         />
                         <Button

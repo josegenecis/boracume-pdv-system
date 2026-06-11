@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { compressImageFileToMaxBytes } from '@/utils/imageCompression';
 import { prepareBannerVideoFile } from '@/utils/videoCompression';
+import AdjustableImageDialog from '@/components/media/AdjustableImageDialog';
 
 interface Banner {
   id: string;
@@ -59,6 +60,7 @@ const BannerManager = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [pendingAdjustFile, setPendingAdjustFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [assetKind, setAssetKind] = useState<'image' | 'video' | 'instagram'>('image');
   const [assetDurationSeconds, setAssetDurationSeconds] = useState<number | null>(null);
@@ -161,12 +163,7 @@ const BannerManager = () => {
 
             setAssetKind('image');
             setAssetDurationSeconds(null);
-            setImageFile(processedImage);
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              setImagePreview(event.target?.result as string);
-            };
-            reader.readAsDataURL(processedImage);
+            setPendingAdjustFile(processedImage);
             return;
           }
 
@@ -441,6 +438,7 @@ const BannerManager = () => {
     });
     setEditingBanner(null);
     setImageFile(null);
+    setPendingAdjustFile(null);
     setImagePreview('');
     setAssetKind('image');
     setAssetDurationSeconds(null);
@@ -448,6 +446,7 @@ const BannerManager = () => {
 
   const removeImage = () => {
     setImageFile(null);
+    setPendingAdjustFile(null);
     setImagePreview('');
     setAssetKind('image');
     setAssetDurationSeconds(null);
@@ -455,6 +454,22 @@ const BannerManager = () => {
 
   return (
     <Card>
+      <AdjustableImageDialog
+        open={Boolean(pendingAdjustFile)}
+        file={pendingAdjustFile}
+        title={formData.banner_type === 'tile' ? 'Ajustar banner vertical' : 'Ajustar banner horizontal'}
+        aspectRatio={formData.banner_type === 'tile' ? 2 / 3 : 800 / 260}
+        outputWidth={formData.banner_type === 'tile' ? 600 : 800}
+        outputHeight={formData.banner_type === 'tile' ? 900 : 260}
+        onCancel={() => setPendingAdjustFile(null)}
+        onConfirm={(file, previewUrl) => {
+          setPendingAdjustFile(null);
+          setImageFile(file);
+          setImagePreview(previewUrl);
+          setAssetKind('image');
+          setAssetDurationSeconds(null);
+        }}
+      />
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
