@@ -129,28 +129,20 @@ const MenuDigital = () => {
     if (!profile) return;
     
     const themeConfig = (profile as any)?.theme_config;
-    if (themeConfig) {
-      const root = document.documentElement;
-      if (themeConfig.primary) {
-        root.style.setProperty('--menu-primary', themeConfig.primary);
-      }
-      if (themeConfig.secondary) {
-        root.style.setProperty('--menu-secondary', themeConfig.secondary);
-      }
-      if (themeConfig.accent) {
-        root.style.setProperty('--menu-accent', themeConfig.accent);
-      }
-      if (themeConfig.background) {
-        root.style.setProperty('--menu-bg', themeConfig.background);
-      }
-    } else {
-      // Cores padrão (Pomar)
-      const root = document.documentElement;
-      root.style.setProperty('--menu-primary', '#85C441');
-      root.style.setProperty('--menu-secondary', '#063D2E');
-      root.style.setProperty('--menu-accent', '#EF6C20');
-      root.style.setProperty('--menu-bg', '#F7EEDF');
-    }
+    const root = document.documentElement;
+    const primary = themeConfig?.primary || '#85C441';
+    const secondary = themeConfig?.secondary || '#063D2E';
+    const accent = themeConfig?.accent || '#EF6C20';
+    const background = themeConfig?.background || '#F7EEDF';
+    const price = themeConfig?.price || accent;
+    const tag = themeConfig?.tag || primary;
+
+    root.style.setProperty('--menu-primary', primary);
+    root.style.setProperty('--menu-secondary', secondary);
+    root.style.setProperty('--menu-accent', accent);
+    root.style.setProperty('--menu-price', price);
+    root.style.setProperty('--menu-tag', tag);
+    root.style.setProperty('--menu-bg', background);
   }, [profile]);
 
   const bannerFit = ((profile as any)?.theme_config?.bannerFit === 'contain') ? 'contain' : 'cover';

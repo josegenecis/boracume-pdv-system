@@ -161,6 +161,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   const formatBRL = (value: number) =>
     `R$ ${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const menuPrimaryColor = 'var(--menu-primary, #85C441)';
+  const menuPriceColor = 'var(--menu-price, #EF6C20)';
   const menuSecondaryColor = 'var(--menu-secondary, #063D2E)';
   const menuBackgroundColor = 'var(--menu-bg, #F7EEDF)';
   const menuAccentBorder = 'rgba(133, 196, 65, 0.18)';
@@ -1128,7 +1129,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                           {item.notes && (
                             <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded-lg mt-2">Obs: {item.notes}</p>
                           )}
-                          <p className="text-sm font-bold mt-2" style={{ color: menuPrimaryColor }}>{formatBRL(item.totalPrice)}</p>
+                          <p className="text-sm font-bold mt-2" style={{ color: menuPriceColor }}>{formatBRL(item.totalPrice)}</p>
                         </div>
 
                         <div className="flex flex-none items-center justify-end gap-2">
@@ -1171,7 +1172,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                   </div>
                   <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
                     <span className="text-gray-900">Total</span>
-                    <span style={{ color: menuPrimaryColor }}>{formatBRL(total)}</span>
+                    <span style={{ color: menuPriceColor }}>{formatBRL(total)}</span>
                   </div>
                 </div>
               </div>
@@ -1367,14 +1368,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                 <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete da entrega</div>
                 {deliveryQuote?.ok ? (
                   <div className="text-sm mt-1">
-                    <span className="font-bold text-lg" style={{ color: menuSecondaryColor }}>{deliveryFee === 0 ? 'Grátis' : `R$ ${deliveryFee.toFixed(2)}`}</span>
+                    <span className="font-bold text-lg" style={{ color: menuPriceColor }}>{deliveryFee === 0 ? 'Grátis' : `R$ ${deliveryFee.toFixed(2)}`}</span>
                     {typeof deliveryQuote?.distanceKm === 'number' ? <span className="text-gray-500"> • {Number(deliveryQuote.distanceKm).toFixed(2)} km</span> : ''}
                     {deliveryQuote?.zone?.name ? <span className="text-gray-500"> • {deliveryQuote.zone.name}</span> : ''}
                   </div>
                 ) : storePricingMode === 'free' ? (
-                  <div className="text-lg font-bold mt-1" style={{ color: menuPrimaryColor }}>Grátis</div>
+                  <div className="text-lg font-bold mt-1" style={{ color: menuPriceColor }}>Grátis</div>
                 ) : storePricingMode === 'fixed' ? (
-                  <div className="text-lg font-bold mt-1" style={{ color: menuSecondaryColor }}>Fixo: R$ {deliveryFee.toFixed(2)}</div>
+                  <div className="text-lg font-bold mt-1" style={{ color: menuPriceColor }}>Fixo: R$ {deliveryFee.toFixed(2)}</div>
                 ) : (
                   <div className="text-sm mt-2 flex items-center gap-1 font-medium p-2 rounded-lg" style={{ color: menuPrimaryColor, backgroundColor: menuBackgroundColor }}>
                     {isDetectingZone ? 'Calculando valor...' : 'Preencha o endereço completo para calcular o frete'}
@@ -1389,7 +1390,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
             ) : quoteMode !== 'neighborhood' && deliveryQuote?.ok ? (
               <div className="p-4 rounded-2xl border" style={{ backgroundColor: menuBackgroundColor, borderColor: menuAccentBorder }}>
                 <div className="text-sm font-semibold mb-1" style={{ color: menuSecondaryColor }}>Frete calculado automaticamente</div>
-                <div className="text-lg font-bold" style={{ color: menuSecondaryColor }}>
+                <div className="text-lg font-bold" style={{ color: menuPriceColor }}>
                   R$ {Number(quoteZone?.delivery_fee || 0).toFixed(2)}
                   {typeof deliveryQuote?.distanceKm === 'number' ? <span className="text-gray-500 text-sm font-normal"> • {Number(deliveryQuote.distanceKm).toFixed(2)} km</span> : ''}
                 </div>
@@ -1587,7 +1588,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
               )}
               <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
                 <span className="text-gray-900">Total:</span>
-                <span style={{ color: menuPrimaryColor }}>{formatBRL(finalTotal)}</span>
+                <span style={{ color: menuPriceColor }}>{formatBRL(finalTotal)}</span>
               </div>
             </div>
           </div>
@@ -1659,7 +1660,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
                       ) : null}
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex flex-col">
-                          <div className="font-extrabold" style={{ color: menuPrimaryColor }}>R$ {discountedPrice.toFixed(2)}</div>
+                          <div className="font-extrabold" style={{ color: menuPriceColor }}>R$ {discountedPrice.toFixed(2)}</div>
                           {hasDiscount ? (
                             <div className="text-[11px] text-muted-foreground line-through">R$ {originalPrice.toFixed(2)}</div>
                           ) : null}

@@ -271,7 +271,7 @@ export const SimpleVariationModal: React.FC<SimpleVariationModalProps> = ({
               {product.description && (
                 <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
               )}
-              <div className="text-2xl font-extrabold" style={{ color: 'var(--menu-primary, #85C441)' }}>
+              <div className="text-2xl font-extrabold" style={{ color: 'var(--menu-price, #EF6C20)' }}>
                 {formatBRL(product.price)}
               </div>
             </div>

@@ -44,13 +44,13 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <div className="text-sm font-medium leading-snug text-gray-900 break-words whitespace-normal">{option.name}</div>
           {option.recommended && (
-            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--menu-tag, #85C441)', backgroundColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 18%, transparent)' }}>
               Recomendado
             </span>
           )}
         </div>
         {priceLabel && (
-          <div className="mt-1 text-xs font-medium leading-snug break-words whitespace-normal" style={{ color: 'var(--menu-primary, #85C441)' }}>
+          <div className="mt-1 text-xs font-medium leading-snug break-words whitespace-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>
             {priceLabel}
           </div>
         )}

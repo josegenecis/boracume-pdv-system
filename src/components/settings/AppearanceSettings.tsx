@@ -12,9 +12,9 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // Cores prontas sugeridas para o cardápio
 const PRESET_COLORS = [
-  { id: 'pomar', name: 'Pomar', primary: '#85C441', secondary: '#063D2E', accent: '#EF6C20', background: '#F7EEDF' },
-  { id: 'ifood', name: 'Clássico Red', primary: '#EA1D2C', secondary: '#333333', accent: '#EA1D2C', background: '#F7F7F7' },
-  { id: 'ocean', name: 'Ocean', primary: '#0ea5e9', secondary: '#0f172a', accent: '#38bdf8', background: '#f8fafc' },
+  { id: 'pomar', name: 'Pomar', primary: '#85C441', secondary: '#063D2E', accent: '#EF6C20', price: '#EF6C20', tag: '#85C441', background: '#F7EEDF' },
+  { id: 'ifood', name: 'Clássico Red', primary: '#EA1D2C', secondary: '#333333', accent: '#EA1D2C', price: '#EA1D2C', tag: '#EA1D2C', background: '#F7F7F7' },
+  { id: 'ocean', name: 'Ocean', primary: '#0ea5e9', secondary: '#0f172a', accent: '#38bdf8', price: '#0284c7', tag: '#0ea5e9', background: '#f8fafc' },
 ];
 
 const AppearanceSettings = () => {
@@ -24,9 +24,11 @@ const AppearanceSettings = () => {
   
   const [isSaving, setIsSaving] = useState(false);
   const [menuColors, setMenuColors] = useState({
-    primary: '#85C441', // Cor principal (botões, destaques)
+    primary: '#85C441', // Cor principal (botões)
     secondary: '#063D2E', // Cor secundária (textos, cabeçalho)
-    accent: '#EF6C20', // Cor de destaque (ícones, badges)
+    accent: '#EF6C20', // Cor de destaque (ícones)
+    price: '#EF6C20', // Cor dos preços
+    tag: '#85C441', // Cor das tags/badges
     background: '#F7EEDF' // Cor de fundo do cardápio
   });
 
@@ -47,6 +49,8 @@ const AppearanceSettings = () => {
             primary: theme.primary || '#85C441',
             secondary: theme.secondary || '#063D2E',
             accent: theme.accent || '#EF6C20',
+            price: theme.price || theme.accent || '#EF6C20',
+            tag: theme.tag || theme.primary || '#85C441',
             background: theme.background || '#F7EEDF',
           });
         }
@@ -67,6 +71,8 @@ const AppearanceSettings = () => {
       primary: preset.primary,
       secondary: preset.secondary,
       accent: preset.accent,
+      price: preset.price,
+      tag: preset.tag,
       background: preset.background
     });
   };
@@ -75,9 +81,18 @@ const AppearanceSettings = () => {
     if (!user) return;
     setIsSaving(true);
     try {
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('theme_config')
+        .eq('id', user.id)
+        .maybeSingle();
+      const currentTheme = (currentProfile?.theme_config && typeof currentProfile.theme_config === 'object')
+        ? currentProfile.theme_config as Record<string, any>
+        : {};
+
       const { error } = await supabase
         .from('profiles')
-        .update({ theme_config: menuColors })
+        .update({ theme_config: { ...currentTheme, ...menuColors } })
         .eq('id', user.id);
         
       if (error) throw error;
@@ -145,7 +160,7 @@ const AppearanceSettings = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               <div className="space-y-3">
-                <Label htmlFor="primary-color" className="text-sm">Cor Principal (Botões e Tags)</Label>
+                <Label htmlFor="primary-color" className="text-sm">Cor Principal (Botões)</Label>
                 <div className="flex gap-3">
                   <Input 
                     type="color" 
@@ -183,7 +198,7 @@ const AppearanceSettings = () => {
               </div>
 
               <div className="space-y-3">
-                <Label htmlFor="accent-color" className="text-sm">Cor de Destaque (Preços e Ícones)</Label>
+                <Label htmlFor="accent-color" className="text-sm">Cor de Destaque (Ícones)</Label>
                 <div className="flex gap-3">
                   <Input 
                     type="color" 
@@ -196,6 +211,44 @@ const AppearanceSettings = () => {
                     type="text" 
                     value={menuColors.accent} 
                     onChange={(e) => handleColorChange('accent', e.target.value)}
+                    className="flex-1 font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="price-color" className="text-sm">Cor dos Preços</Label>
+                <div className="flex gap-3">
+                  <Input 
+                    type="color" 
+                    id="price-color" 
+                    value={menuColors.price} 
+                    onChange={(e) => handleColorChange('price', e.target.value)}
+                    className="w-14 h-12 p-1 cursor-pointer"
+                  />
+                  <Input 
+                    type="text" 
+                    value={menuColors.price} 
+                    onChange={(e) => handleColorChange('price', e.target.value)}
+                    className="flex-1 font-mono uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="tag-color" className="text-sm">Cor das Tags e Selos</Label>
+                <div className="flex gap-3">
+                  <Input 
+                    type="color" 
+                    id="tag-color" 
+                    value={menuColors.tag} 
+                    onChange={(e) => handleColorChange('tag', e.target.value)}
+                    className="w-14 h-12 p-1 cursor-pointer"
+                  />
+                  <Input 
+                    type="text" 
+                    value={menuColors.tag} 
+                    onChange={(e) => handleColorChange('tag', e.target.value)}
                     className="flex-1 font-mono uppercase"
                   />
                 </div>
@@ -234,7 +287,10 @@ const AppearanceSettings = () => {
                   </h3>
                   <p className="text-xs text-gray-500 mt-1">Pão brioche, blend 160g, queijo prato e maionese da casa.</p>
                   <div className="mt-3">
-                    <span className="font-bold text-lg" style={{ color: menuColors.accent }}>R$ 32,90</span>
+                    <span className="font-bold text-lg" style={{ color: menuColors.price }}>R$ 32,90</span>
+                    <span className="ml-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold" style={{ color: menuColors.tag, borderColor: menuColors.tag, backgroundColor: `${menuColors.tag}1A` }}>
+                      -10%
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
