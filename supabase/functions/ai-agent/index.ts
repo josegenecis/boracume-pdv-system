@@ -595,8 +595,8 @@ Deno.serve(async (req) => {
                 parameters: {
                     type: "object",
                     properties: {
-                        limit: { type: "integer", description: "Máximo por execução (padrão 25, máx 100)." },
-                        process_all: { type: "boolean", description: "Se true, tenta processar em lotes até o limite máximo." },
+                        limit: { type: "integer", description: "Máximo de produtos para processar agora (padrão 100, máx 150)." },
+                        process_all: { type: "boolean", description: "Se true ou omitido, tenta processar todos os produtos sem imagem dentro do limite." },
                         job_id: { type: "string", description: "ID do job para continuar uma execução anterior (opcional)." }
                     }
                 }
@@ -610,8 +610,8 @@ Deno.serve(async (req) => {
                 parameters: {
                     type: "object",
                     properties: {
-                        limit: { type: "integer", description: "Quantidade máxima de produtos a processar (padrão 25, máx 100 por execução)" },
-                        process_all: { type: "boolean", description: "Se true, tenta processar todos (em lotes) até o limite máximo por execução." },
+                        limit: { type: "integer", description: "Quantidade máxima de produtos a processar agora (padrão 100, máx 150)." },
+                        process_all: { type: "boolean", description: "Se true ou omitido, tenta processar todos os produtos sem imagem dentro do limite." },
                         job_id: { type: "string", description: "ID do job para continuar uma execução anterior (opcional)." }
                     }
                 }
@@ -769,7 +769,7 @@ Regras:
 - Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
 - Se o usuário pedir para criar imagem de produto, ou para gerar imagens faltantes, use generate_product_image / generate_missing_product_images.
-- Se o usuário pedir imagens para produtos sem imagem, execute generate_missing_product_images imediatamente, em lote seguro, e avise quantas foram geradas e quantas ficaram pendentes.
+- Se o usuário pedir imagens para produtos sem imagem, execute generate_missing_product_images com process_all=true e limit=100. Não peça para o usuário mandar "continue" quando ainda houver produtos pendentes; a ferramenta deve tentar o lote completo na mesma solicitação.
 - Se o usuário pedir informações, use a função de listar para buscar dados reais antes de responder.
 - Se faltar algum dado indispensável, faça 1 pergunta objetiva para destravar a execução.
 - Seja direto e confirme a ação realizada.
@@ -1496,16 +1496,17 @@ Regras:
                                 };
                             }
                         } else {
-                            const requested = Number(args.limit || 10) || 10;
-                            const maxPerExecution = 10;
+                            const requested = Number(args.limit || 100) || 100;
+                            const maxPerExecution = 150;
                             const limit = Math.min(Math.max(requested, 1), maxPerExecution);
-                            const processAll = Boolean(args.process_all);
+                            const processAll = args.process_all !== false;
                             const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
                             const startedAt = Date.now();
-                            const timeBudgetMs = 95_000;
+                            const timeBudgetMs = 240_000;
                             const restaurantName = await getRestaurantName();
                             const failures: any[] = [];
                             const updatedIds: string[] = [];
+                            const attemptedIds = new Set<string>();
                             let processed = 0;
                             let updated = 0;
 
@@ -1527,21 +1528,22 @@ Regras:
                                 }
                             } catch {}
 
-                            while (updated < limit) {
+                            while (processed < limit) {
                                 const { data: products, error } = await supabase
                                     .from('products')
                                     .select('id, name, description, image_url')
                                     .eq('user_id', userId)
                                     .or('image_url.is.null,image_url.eq.')
                                     .order('created_at', { ascending: true })
-                                    .limit(Math.min(5, limit - updated));
+                                    .limit(Math.min(200, limit + attemptedIds.size));
                                 if (error) throw error;
-                                const list = products || [];
+                                const list = (products || []).filter((product: any) => !attemptedIds.has(String(product.id)));
                                 if (list.length === 0) break;
 
                                 for (const product of list) {
-                                    if (updated >= limit) break;
+                                    if (processed >= limit) break;
                                     if (Date.now() - startedAt > timeBudgetMs) break;
+                                    attemptedIds.add(String(product.id));
                                     processed++;
                                     try {
                                         const generated = await generateProductImageWithOpenAI({
@@ -1600,7 +1602,10 @@ Regras:
                                 failures,
                                 remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
                                 updated_ids: updatedIds,
-                                note: `Gerei até ${maxPerExecution} imagens por execução para proteger custo e timeout. Se ainda faltar, peça "continue o job ${jobId}".`
+                                exhausted_time_budget: Date.now() - startedAt > timeBudgetMs,
+                                note: typeof remainingCount === 'number' && remainingCount > 0
+                                    ? `Tentei processar o lote completo desta solicitação. Ainda restam ${remainingCount} produto(s) sem imagem, normalmente por falha da API, timeout ou limite de segurança.`
+                                    : 'Todas as imagens pendentes foram processadas.'
                             };
                         }
                     }
@@ -1686,16 +1691,17 @@ Regras:
                                 };
                             }
                         } else {
-                            const requested = Number(args.limit || 25) || 25;
-                            const maxPerExecution = 25;
+                            const requested = Number(args.limit || 100) || 100;
+                            const maxPerExecution = 150;
                             const limit = Math.min(Math.max(requested, 1), maxPerExecution);
-                            const processAll = Boolean(args.process_all);
+                            const processAll = args.process_all !== false;
                             const jobId = String(args.job_id || '').trim() || crypto.randomUUID();
                             const startedAt = Date.now();
-                            const timeBudgetMs = 90_000;
+                            const timeBudgetMs = 220_000;
 
                             const failures: any[] = [];
                             const updatedIds: string[] = [];
+                            const attemptedIds = new Set<string>();
                             let processed = 0;
                             let updated = 0;
 
@@ -1717,21 +1723,22 @@ Regras:
                                 }
                             } catch {}
 
-                            while (updated < limit) {
+                            while (processed < limit) {
                                 const { data: products, error } = await supabase
                                     .from('products')
                                     .select('id, name, description, image_url')
                                     .eq('user_id', userId)
                                     .or('image_url.is.null,image_url.eq.')
                                     .order('created_at', { ascending: true })
-                                    .limit(10);
+                                    .limit(Math.min(200, limit + attemptedIds.size));
                                 if (error) throw error;
-                                const list = products || [];
+                                const list = (products || []).filter((product: any) => !attemptedIds.has(String(product.id)));
                                 if (list.length === 0) break;
 
                                 for (const p of list) {
-                                    if (updated >= limit) break;
+                                    if (processed >= limit) break;
                                     if (Date.now() - startedAt > timeBudgetMs) break;
+                                    attemptedIds.add(String(p.id));
                                     processed++;
                                     try {
                                         const q = pickQuery(String(p.name), String(p.description || ''), '');
@@ -1786,7 +1793,10 @@ Regras:
                                 failures,
                                 remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
                                 updated_ids: updatedIds,
-                                note: `Processo em lotes (até ${maxPerExecution} por execução). Se faltar, peça para continuar informando o job_id.`
+                                exhausted_time_budget: Date.now() - startedAt > timeBudgetMs,
+                                note: typeof remainingCount === 'number' && remainingCount > 0
+                                    ? `Tentei processar o lote completo desta solicitação. Ainda restam ${remainingCount} produto(s) sem imagem, normalmente por falha da busca, timeout ou limite de segurança.`
+                                    : 'Todas as imagens pendentes foram processadas.'
                             };
                         }
                     }
