@@ -654,11 +654,14 @@ Deno.serve(async (req) => {
             type: "function",
             function: {
                 name: "list_products",
-                description: "Lista produtos do cardápio para consulta. Use quando o usuário perguntar 'quais produtos temos' ou 'preço do X'.",
+                description: "Lista produtos reais do cardápio para consulta. Use category quando o usuário pedir produtos de uma categoria, como 'Extras', 'Bebidas' ou 'Pizzas'. Use search somente para buscar por nome/texto de produto.",
                 parameters: {
                     type: "object",
                     properties: {
-                        search: { type: "string", description: "Termo de busca opcional" }
+                        search: { type: "string", description: "Termo de busca por nome/texto do produto. Não use para categoria." },
+                        category: { type: "string", description: "Nome da categoria que deve ser listada exatamente ou de forma aproximada." },
+                        include_unavailable: { type: "boolean", description: "Se true, inclui produtos indisponíveis/inativos." },
+                        limit: { type: "number", description: "Quantidade máxima de produtos para retornar. Padrão 100." }
                     }
                 }
             }
@@ -743,6 +746,7 @@ Regras:
 - Se faltar um dado indispensável (ex.: qual produto, qual período, qual categoria), faça 1 pergunta objetiva.
 - Se o pedido envolver cadastro completo de produto com tamanhos/variações e/ou complementos, use create_product_full.
 - Se o pedido envolver mudança em produto já existente (preço, nome, categoria, descrição, disponibilidade, PDV/delivery ou destaque), use update_product. Nunca crie um novo produto quando o usuário pediu para alterar um produto existente.
+- Se o usuário pedir "vá nos produtos/categoria X e liste todos", use list_products com category: "X". Não transforme categoria em busca por nome.
 - Para alterações de cardápio, preserve todos os campos que o usuário não pediu para mudar. Se houver mais de um produto possível, pare e peça uma confirmação objetiva com as opções encontradas.
 - Se o usuário pedir para listar ou alterar preços de grupos de complementos já existentes, use list_variation_group e adjust_variation_group_prices.
 - Se o pedido envolver imagem do produto, use generate_product_image ou generate_missing_product_images.
@@ -760,6 +764,7 @@ Regras:
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
 - Se o usuário pedir para alterar produto existente (ex.: mudar preço, nome, categoria, descrição, disponibilidade, destacar, aparecer ou ocultar do delivery/PDV), use update_product e não crie duplicado.
+- Se o usuário pedir para listar produtos de uma categoria, use list_products com category. Ex.: "vai nos produtos Extras e lista todos" significa category="Extras", não search="Extras".
 - Ao editar cardápio, seja conservador: localize o produto correto, preserve os campos não mencionados e peça confirmação se o nome estiver ambíguo.
 - Se o usuário pedir para listar ou reajustar preços de um grupo de complementos/adicionais já existente, use list_variation_group e adjust_variation_group_prices.
 - Se o usuário enviar uma imagem de comprovante/recibo, extraia as informações e lance a despesa usando create_expense. Categorize automaticamente da melhor forma.
@@ -1826,19 +1831,63 @@ Regras:
 
                 // --- LIST PRODUCTS ---
                 else if (fnName === "list_products") {
+                    const rawCategory = String(args.category || '').trim();
+                    const rawSearch = String(args.search || '').trim();
+                    const includeUnavailable = args.include_unavailable === true;
+                    const limit = Math.min(250, Math.max(1, Number(args.limit || 100)));
+                    const requestedCategory = rawCategory || rawSearch;
+                    let matchedCategory: any = null;
+
+                    if (requestedCategory) {
+                        const { data: categories, error: categoryError } = await supabase
+                            .from('product_categories')
+                            .select('id, name')
+                            .eq('user_id', userId)
+                            .limit(300);
+                        if (categoryError) throw categoryError;
+
+                        const normalizedRequestedCategory = normalizeText(requestedCategory);
+                        matchedCategory = (categories || []).find((category: any) =>
+                            normalizeText(category?.name) === normalizedRequestedCategory
+                        ) || null;
+
+                        if (!matchedCategory && rawCategory) {
+                            matchedCategory = (categories || []).find((category: any) =>
+                                normalizeText(category?.name).includes(normalizedRequestedCategory) ||
+                                normalizedRequestedCategory.includes(normalizeText(category?.name))
+                            ) || null;
+                        }
+                    }
+
                     let query = supabase
                         .from('products')
-                        .select('name, price, category, available')
+                        .select('id, name, price, category, category_id, available, show_in_pdv, show_in_delivery')
                         .eq('user_id', userId)
-                        .limit(20);
+                        .order('name', { ascending: true })
+                        .limit(limit);
+
+                    if (!includeUnavailable) {
+                        query = query.eq('available', true);
+                    }
                     
-                    if (args.search) {
-                        query = query.ilike('name', `%${args.search}%`);
+                    if (matchedCategory?.id) {
+                        query = query.or(`category_id.eq.${matchedCategory.id},category.ilike.%${matchedCategory.name}%`);
+                    } else if (rawCategory) {
+                        query = query.ilike('category', `%${rawCategory}%`);
+                    } else if (rawSearch) {
+                        query = query.or(`name.ilike.%${rawSearch}%,category.ilike.%${rawSearch}%`);
                     }
                     
                     const { data: products, error } = await query;
                     if (error) throw error;
-                    result = { success: true, products: products };
+                    result = {
+                        success: true,
+                        mode: matchedCategory ? 'category' : rawCategory ? 'category_fuzzy' : rawSearch ? 'search' : 'all',
+                        requested_category: rawCategory || null,
+                        matched_category: matchedCategory?.name || null,
+                        count: products?.length || 0,
+                        products: products
+                    };
                 }
 
                 else if (fnName === "create_expense") {
