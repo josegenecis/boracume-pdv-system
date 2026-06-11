@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ConsoleMessage {
   id: string;
@@ -38,16 +39,72 @@ const thinkingMessages = [
   'Conferindo o resultado...'
 ];
 
+const formatJobProgressMessage = (metadata: any) => {
+  const status = String(metadata?.status || 'running');
+  const updated = Number(metadata?.updated || 0);
+  const processed = Number(metadata?.processed || 0);
+  const failures = Number(metadata?.failures || 0);
+  const remaining = metadata?.remaining_without_image;
+  const remainingText = typeof remaining === 'number' ? `- Ainda sem imagem: ${remaining}` : '';
+
+  if (status === 'done') {
+    return [
+      'Concluí a geração das imagens em segundo plano.',
+      '',
+      `- Atualizadas: ${updated}`,
+      `- Processadas: ${processed}`,
+      failures ? `- Falhas: ${failures}` : '',
+      remainingText ? `- Ainda sem imagem: ${remaining}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  if (status === 'failed') {
+    return [
+      'O job de geração de imagens encontrou um problema.',
+      '',
+      `- Atualizadas antes da falha: ${updated}`,
+      `- Processadas: ${processed}`,
+      failures ? `- Falhas: ${failures}` : '',
+      metadata?.error ? `- Erro: ${metadata.error}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  if (status === 'partial' || status === 'paused_timeout') {
+    return [
+      'O job de imagens terminou parcialmente.',
+      '',
+      `- Atualizadas: ${updated}`,
+      `- Processadas: ${processed}`,
+      failures ? `- Falhas: ${failures}` : '',
+      remainingText,
+      'Alguns itens podem ter falhado por limite da API, timeout ou produto muito difícil de representar.'
+    ].filter(Boolean).join('\n');
+  }
+
+  return [
+    'Estou gerando as imagens em segundo plano.',
+    '',
+    `- Atualizadas até agora: ${updated}`,
+    `- Processadas: ${processed}`,
+    failures ? `- Falhas: ${failures}` : '',
+    remainingText,
+    'Pode sair desta página; quando voltar eu continuo mostrando o andamento.'
+  ].filter(Boolean).join('\n');
+};
+
 export function AgentConsole({ className }: AgentConsoleProps) {
   const [messages, setMessages] = useState<ConsoleMessage[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [storageHydrated, setStorageHydrated] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recoveredJobsForUserRef = useRef<string>('');
   const { user } = useAuth();
   const { toast } = useToast();
+  const storageKey = user?.id ? `pop-ai-agent-console:${user.id}` : '';
 
   useEffect(() => {
     const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
@@ -57,6 +114,134 @@ export function AgentConsole({ className }: AgentConsoleProps) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!storageKey) {
+      setStorageHydrated(true);
+      return;
+    }
+    setStorageHydrated(false);
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        setMessages([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setMessages([]);
+        return;
+      }
+      setMessages(parsed.map((message: any) => ({
+        ...message,
+        timestamp: message?.timestamp ? new Date(message.timestamp) : new Date()
+      })));
+    } catch {
+      setMessages([]);
+    } finally {
+      setStorageHydrated(true);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || !storageHydrated) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(messages.slice(-80)));
+    } catch {}
+  }, [messages, storageKey, storageHydrated]);
+
+  useEffect(() => {
+    if (!user?.id || !storageHydrated || messages.length > 0 || recoveredJobsForUserRef.current === user.id) return;
+    recoveredJobsForUserRef.current = user.id;
+
+    const recoverRunningJobs = async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('agent_activity_logs')
+        .select('id, description, metadata, created_at')
+        .eq('user_id', user.id)
+        .eq('action_type', 'ai_image_job')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error || !data?.length) return;
+
+      const activeRows = data.filter((row: any) => {
+        const status = String(row?.metadata?.status || 'queued');
+        return ['queued', 'running'].includes(status);
+      });
+
+      if (!activeRows.length) return;
+
+      setMessages((prev) => {
+        if (prev.length > 0) return prev;
+        return activeRows.reverse().map((row: any) => ({
+          id: `job-${row.id}`,
+          type: 'agent',
+          content: formatJobProgressMessage(row.metadata || {}),
+          timestamp: row.created_at ? new Date(row.created_at) : new Date(),
+          status: 'processing',
+          metadata: {
+            background_job: {
+              id: row.id,
+              type: 'missing_product_images',
+              status: row?.metadata?.status || 'queued',
+              log: row
+            }
+          }
+        }));
+      });
+    };
+
+    void recoverRunningJobs();
+  }, [messages.length, storageHydrated, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const pollJobs = async () => {
+      const activeJobs = messages
+        .filter((message) => message.type === 'agent' && message.metadata?.background_job?.id && message.status === 'processing')
+        .map((message) => ({ messageId: message.id, jobId: String(message.metadata.background_job.id) }));
+
+      if (activeJobs.length === 0) return;
+
+      const { data, error } = await supabase
+        .from('agent_activity_logs')
+        .select('id, description, metadata, created_at')
+        .eq('user_id', user.id)
+        .in('id', activeJobs.map((job) => job.jobId));
+      if (error) return;
+
+      const rowsById = new Map((data || []).map((row: any) => [String(row.id), row]));
+      setMessages((prev) => prev.map((message) => {
+        const job = activeJobs.find((item) => item.messageId === message.id);
+        if (!job) return message;
+        const row: any = rowsById.get(job.jobId);
+        if (!row) return message;
+        const jobMetadata = row.metadata || {};
+        const status = String(jobMetadata.status || 'running');
+        const finished = ['done', 'failed', 'partial', 'paused_timeout'].includes(status);
+        return {
+          ...message,
+          content: formatJobProgressMessage(jobMetadata),
+          status: finished ? (status === 'failed' ? 'error' : 'success') : 'processing',
+          metadata: {
+            ...message.metadata,
+            background_job: {
+              ...message.metadata?.background_job,
+              status,
+              log: row
+            }
+          }
+        };
+      }));
+    };
+
+    void pollJobs();
+    const interval = window.setInterval(pollJobs, 5000);
+    return () => window.clearInterval(interval);
+  }, [messages, user?.id]);
 
   const addMessage = (message: Omit<ConsoleMessage, 'id' | 'timestamp'>) => {
     const newMessage: ConsoleMessage = {
@@ -150,7 +335,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
             ? {
                 ...message,
                 content: result.message,
-                status: result.success ? 'success' : 'error',
+                status: result.metadata?.background_job ? 'processing' : result.success ? 'success' : 'error',
                 metadata: result.metadata
               }
             : message
@@ -159,7 +344,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
 
       toast({
         title: result.success ? 'POP AI executou' : 'POP AI encontrou um problema',
-        description: result.message,
+        description: result.metadata?.background_job ? 'O job continuará no servidor mesmo se você sair da página.' : result.message,
         variant: result.success ? 'default' : 'destructive'
       });
     } catch (error) {
@@ -274,6 +459,12 @@ export function AgentConsole({ className }: AgentConsoleProps) {
                           <img src={message.imageUrl} alt="Imagem enviada" className="mb-3 max-h-56 rounded-2xl border object-contain" />
                         )}
                         <div className="whitespace-pre-wrap">{message.content}</div>
+                        {message.status === 'processing' && !isUser && message.metadata?.background_job && (
+                          <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            trabalhando em segundo plano
+                          </div>
+                        )}
                         {message.status === 'success' && !isUser && (
                           <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
                             <CheckCircle2 className="h-3.5 w-3.5" />

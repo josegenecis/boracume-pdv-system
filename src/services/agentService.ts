@@ -85,7 +85,10 @@ export async function processAgentCommand(
             return {
                 success: true,
                 message: data.message,
-                metadata: { tool_results: data.tool_results }
+                metadata: {
+                  ...(data.metadata || {}),
+                  tool_results: data.tool_results
+                }
             };
         }
 

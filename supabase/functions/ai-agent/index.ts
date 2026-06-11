@@ -221,6 +221,201 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+    const shouldRunMissingProductImagesInBackground = (() => {
+        if (supportMode || imageBase64) return false;
+        const text = String(command || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+        return (
+            /produtos?.{0,40}sem imagem/.test(text) &&
+            /(gerar|gere|criar|crie|fazer|preencher|colocar|adicionar).{0,50}imagens?/.test(text)
+        ) || (
+            /imagens?.{0,50}produtos?.{0,50}sem imagem/.test(text)
+        );
+    })();
+
+    const runMissingProductImagesJob = async (jobId: string) => {
+        const updateJob = async (metadata: Record<string, any>, description?: string) => {
+            try {
+                await supabase
+                    .from('agent_activity_logs')
+                    .update({
+                        description: description || 'Geração IA de imagens para produtos sem imagem',
+                        metadata: {
+                            ...metadata,
+                            last_update_at: new Date().toISOString()
+                        }
+                    } as any)
+                    .eq('user_id', userId)
+                    .eq('id', jobId);
+            } catch (error) {
+                console.error('agent_job_update_failed', error);
+            }
+        };
+
+        const getRestaurantName = async () => {
+            try {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('restaurant_name')
+                    .eq('id', userId)
+                    .maybeSingle();
+                return String(data?.restaurant_name || 'restaurante brasileiro');
+            } catch {
+                return 'restaurante brasileiro';
+            }
+        };
+
+        const startedAt = Date.now();
+        const maxProducts = Math.min(Math.max(Number(body?.limit || 150) || 150, 1), 150);
+        const timeBudgetMs = 270_000;
+        const restaurantName = await getRestaurantName();
+        const failures: any[] = [];
+        const updatedIds: string[] = [];
+        const attemptedIds = new Set<string>();
+        let processed = 0;
+        let updated = 0;
+
+        await updateJob({
+            status: 'running',
+            provider: 'openai',
+            processed,
+            updated,
+            failures: 0,
+            remaining_without_image: null,
+            started_at: new Date(startedAt).toISOString()
+        }, 'Gerando imagens em segundo plano');
+
+        try {
+            while (processed < maxProducts && Date.now() - startedAt <= timeBudgetMs) {
+                const { data: products, error } = await supabase
+                    .from('products')
+                    .select('id, name, description, image_url')
+                    .eq('user_id', userId)
+                    .or('image_url.is.null,image_url.eq.')
+                    .order('created_at', { ascending: true })
+                    .limit(Math.min(200, maxProducts + attemptedIds.size));
+                if (error) throw error;
+
+                const list = (products || []).filter((product: any) => !attemptedIds.has(String(product.id)));
+                if (list.length === 0) break;
+
+                for (const product of list) {
+                    if (processed >= maxProducts || Date.now() - startedAt > timeBudgetMs) break;
+                    attemptedIds.add(String(product.id));
+                    processed++;
+                    try {
+                        const generated = await generateProductImageWithOpenAI({
+                            apiKey: OPENAI_API_KEY!,
+                            supabase,
+                            product,
+                            restaurantName
+                        });
+                        const { error: updErr } = await supabase
+                            .from('products')
+                            .update({ image_url: generated.imageUrl, updated_at: new Date().toISOString() } as any)
+                            .eq('user_id', userId)
+                            .eq('id', product.id);
+                        if (updErr) throw updErr;
+                        updated++;
+                        updatedIds.push(String(product.id));
+                    } catch (error: any) {
+                        failures.push({ id: product.id, name: product.name, error: String(error?.message || error) });
+                    }
+
+                    if (processed === 1 || processed % 3 === 0) {
+                        await updateJob({
+                            status: 'running',
+                            provider: 'openai',
+                            processed,
+                            updated,
+                            failures: failures.length,
+                            updated_ids: updatedIds,
+                            last_error: failures.at(-1)?.error || null
+                        }, `Gerando imagens em segundo plano: ${updated} atualizada(s)`);
+                    }
+                }
+            }
+
+            const { count: remainingCount } = await supabase
+                .from('products')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', userId)
+                .or('image_url.is.null,image_url.eq.');
+
+            const exhaustedTime = Date.now() - startedAt > timeBudgetMs;
+            const done = typeof remainingCount === 'number' && remainingCount === 0;
+            await updateJob({
+                status: done ? 'done' : exhaustedTime ? 'paused_timeout' : 'partial',
+                provider: 'openai',
+                processed,
+                updated,
+                failures: failures.length,
+                failure_samples: failures.slice(0, 10),
+                remaining_without_image: typeof remainingCount === 'number' ? remainingCount : null,
+                updated_ids: updatedIds,
+                exhausted_time_budget: exhaustedTime,
+                finished_at: new Date().toISOString()
+            }, done
+                ? `Imagens concluídas: ${updated} produto(s) atualizado(s)`
+                : `Imagens parcialmente concluídas: ${updated} atualizada(s), ${remainingCount ?? '?'} pendente(s)`);
+        } catch (error: any) {
+            await updateJob({
+                status: 'failed',
+                provider: 'openai',
+                processed,
+                updated,
+                failures: failures.length,
+                failure_samples: failures.slice(0, 10),
+                error: String(error?.message || error),
+                updated_ids: updatedIds,
+                finished_at: new Date().toISOString()
+            }, `Falha ao gerar imagens: ${String(error?.message || error)}`);
+        }
+    };
+
+    if (shouldRunMissingProductImagesInBackground) {
+        if (!OPENAI_API_KEY) {
+            throw new Error('Secret OPENAI_API_KEY não configurado. A geração de imagens por IA precisa da chave OpenAI no Supabase.');
+        }
+        const jobId = crypto.randomUUID();
+        await supabase.from('agent_activity_logs').insert({
+            id: jobId,
+            user_id: userId,
+            action_type: 'ai_image_job',
+            description: 'Geração IA de imagens para produtos sem imagem iniciada',
+            metadata: {
+                status: 'queued',
+                provider: 'openai',
+                processed: 0,
+                updated: 0,
+                failures: 0,
+                remaining_without_image: null,
+                command,
+                started_at: new Date().toISOString()
+            }
+        } as any);
+
+        const runtime = (globalThis as any).EdgeRuntime;
+        if (runtime?.waitUntil) {
+            runtime.waitUntil(runMissingProductImagesJob(jobId));
+        } else {
+            runMissingProductImagesJob(jobId).catch((error) => console.error('agent_background_job_failed', error));
+        }
+
+        return new Response(JSON.stringify({
+            success: true,
+            message: `Iniciei a geração das imagens em segundo plano.\n\nJob: ${jobId}\n\nPode sair desta página ou minimizar o navegador. Vou continuar pelo servidor e esta tela acompanha o progresso quando você voltar.`,
+            metadata: {
+                background_job: {
+                    id: jobId,
+                    type: 'missing_product_images'
+                }
+            }
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
     const parseMoney = (v: any): number => {
         if (typeof v === 'number') return v;
         if (typeof v === 'string') {
