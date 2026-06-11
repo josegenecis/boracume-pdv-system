@@ -7,11 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Edit, Search, Package } from 'lucide-react';
+import { Plus, Edit, Search, Package, ShoppingBag } from 'lucide-react';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { useNavigate } from 'react-router-dom';
 
 interface Ingredient {
   id: string;
@@ -26,6 +28,19 @@ interface Ingredient {
   updated_at: string;
 }
 
+interface ProductStock {
+  id: string;
+  name: string;
+  category?: string | null;
+  price: number;
+  track_stock: boolean;
+  stock_quantity: number;
+  low_stock_threshold: number;
+  available?: boolean | null;
+  show_in_delivery?: boolean | null;
+  updated_at?: string | null;
+}
+
 const UNITS = [
   { value: 'kg', label: 'Quilograma (kg)' },
   { value: 'g', label: 'Grama (g)' },
@@ -37,8 +52,11 @@ const UNITS = [
 export default function Ingredientes() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [filteredIngredients, setFilteredIngredients] = useState<Ingredient[]>([]);
+  const [products, setProducts] = useState<ProductStock[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<ProductStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStockStatus, setFilterStockStatus] = useState('all'); // all, low_stock
@@ -62,23 +80,36 @@ export default function Ingredientes() {
 
   const filterIngredients = () => {
     let filtered = ingredients;
+    let filteredProductRows = products;
 
     if (searchTerm) {
       filtered = filtered.filter(ing => 
         ing.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
+      filteredProductRows = filteredProductRows.filter(product =>
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(product.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
 
     if (filterStockStatus === 'low_stock') {
       filtered = filtered.filter(ing => (ing.current_stock || 0) <= (ing.min_stock || 0));
+      filteredProductRows = filteredProductRows.filter(product =>
+        product.track_stock && (product.stock_quantity || 0) <= (product.low_stock_threshold || 0)
+      );
+    } else if (filterStockStatus === 'controlled') {
+      filteredProductRows = filteredProductRows.filter(product => product.track_stock);
+    } else if (filterStockStatus === 'out') {
+      filteredProductRows = filteredProductRows.filter(product => product.track_stock && (product.stock_quantity || 0) <= 0);
     }
 
     setFilteredIngredients(filtered);
+    setFilteredProducts(filteredProductRows);
   };
 
   useEffect(() => {
     filterIngredients();
-  }, [searchTerm, filterStockStatus, ingredients]);
+  }, [searchTerm, filterStockStatus, ingredients, products]);
 
   const normalizeIngredient = (ingredient: any): Ingredient => ({
     ...ingredient,
@@ -86,6 +117,14 @@ export default function Ingredientes() {
     cost_price: Number(ingredient?.cost_price ?? ingredient?.price ?? 0),
     current_stock: Number(ingredient?.current_stock ?? 0),
     min_stock: Number(ingredient?.min_stock ?? 0),
+  });
+
+  const normalizeProductStock = (product: any): ProductStock => ({
+    ...product,
+    price: Number(product?.price ?? 0),
+    track_stock: Boolean(product?.track_stock),
+    stock_quantity: Number(product?.stock_quantity ?? 0),
+    low_stock_threshold: Number(product?.low_stock_threshold ?? 0),
   });
 
   const buildIngredientPayloadVariants = () => {
@@ -159,21 +198,32 @@ export default function Ingredientes() {
   const loadIngredients = async () => {
     try {
       if (!user) return;
-      const { data, error } = await supabase
-        .from('ingredients')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
+      const [{ data, error }, productsResult] = await Promise.all([
+        supabase
+          .from('ingredients')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('name'),
+        (supabase as any)
+          .from('products')
+          .select('id,name,category,price,track_stock,stock_quantity,low_stock_threshold,available,show_in_delivery,updated_at')
+          .eq('user_id', user.id)
+          .order('name')
+      ]);
         
       if (error) throw error;
+      if (productsResult.error) throw productsResult.error;
       const normalizedIngredients = (data || []).map(normalizeIngredient);
+      const normalizedProducts = (productsResult.data || []).map(normalizeProductStock);
       setIngredients(normalizedIngredients);
       setFilteredIngredients(normalizedIngredients);
+      setProducts(normalizedProducts);
+      setFilteredProducts(normalizedProducts);
     } catch (error) {
       console.error('Error loading ingredients:', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível carregar os insumos.',
+        description: 'Não foi possível carregar o estoque.',
         variant: 'destructive'
       });
     } finally {
@@ -258,9 +308,9 @@ export default function Ingredientes() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Controle de Ingredientes</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Controle de Estoque</h1>
           <p className="text-muted-foreground">
-            Gerencie os ingredientes utilizados em seus produtos
+            Veja produtos do PDV e insumos usados na ficha técnica
           </p>
         </div>
         <Button onClick={handleNewIngredient}>
@@ -297,8 +347,10 @@ export default function Ingredientes() {
                   <SelectValue placeholder="Todos os insumos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os insumos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="controlled">Produtos com controle</SelectItem>
                   <SelectItem value="low_stock">Estoque Baixo</SelectItem>
+                  <SelectItem value="out">Sem estoque</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -306,77 +358,166 @@ export default function Ingredientes() {
         </CardContent>
       </Card>
 
-      {/* Ingredients Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Ingredientes ({filteredIngredients.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredIngredients.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>Nenhum ingrediente encontrado</p>
-              <p className="text-sm mt-1">Tente ajustar os filtros ou cadastrar um novo ingrediente</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Unidade</TableHead>
-                    <TableHead>Estoque Atual</TableHead>
-                    <TableHead>Estoque Mínimo</TableHead>
-                    <TableHead>Preço de Custo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredIngredients.map((ingredient) => {
-                    const isLowStock = (ingredient.current_stock || 0) <= (ingredient.min_stock || 0);
-                    return (
-                      <TableRow key={ingredient.id}>
-                        <TableCell className="font-medium">{ingredient.name}</TableCell>
-                        <TableCell>{UNITS.find(u => u.value === ingredient.unit)?.label || ingredient.unit}</TableCell>
-                        <TableCell>
-                          <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
-                            {ingredient.current_stock || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{ingredient.min_stock || 0}</TableCell>
-                        <TableCell>{formatCurrency(ingredient.price)}</TableCell>
-                        <TableCell>
-                          {isLowStock ? (
-                            <span className="text-red-500 font-semibold text-xs flex items-center gap-1">
-                              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
-                              Baixo
-                            </span>
-                          ) : (
-                            <span className="text-boracume-green font-semibold text-xs">Normal</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(ingredient)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+      <Tabs defaultValue="products" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="products">Produtos ({filteredProducts.length})</TabsTrigger>
+          <TabsTrigger value="ingredients">Insumos ({filteredIngredients.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5" />
+                Estoque de produtos
+              </CardTitle>
+              <CardDescription>
+                Produtos com controle ativo baixam automaticamente quando a venda é finalizada.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ShoppingBag className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum produto encontrado</p>
+                  <p className="text-sm mt-1">Cadastre produtos ou ative o controle de estoque no cadastro do produto.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Estoque Atual</TableHead>
+                        <TableHead>Estoque Mínimo</TableHead>
+                        <TableHead>Preço</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredProducts.map((product) => {
+                        const isControlled = product.track_stock;
+                        const isLowStock = isControlled && product.stock_quantity <= product.low_stock_threshold;
+                        const isOut = isControlled && product.stock_quantity <= 0;
+                        return (
+                          <TableRow key={product.id}>
+                            <TableCell className="font-medium">{product.name}</TableCell>
+                            <TableCell>{product.category || 'Sem categoria'}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={isLowStock ? 'destructive' : 'secondary'}
+                                className={!isControlled ? 'bg-slate-100 text-slate-600' : isLowStock ? 'bg-red-500' : 'bg-boracume-green text-white'}
+                              >
+                                {isControlled ? product.stock_quantity : 'Não controla'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{isControlled ? product.low_stock_threshold : '-'}</TableCell>
+                            <TableCell>{formatCurrency(product.price)}</TableCell>
+                            <TableCell>
+                              {isOut ? (
+                                <span className="text-red-600 font-semibold text-xs">Sem estoque</span>
+                              ) : isLowStock ? (
+                                <span className="text-red-500 font-semibold text-xs flex items-center gap-1">
+                                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                                  Baixo
+                                </span>
+                              ) : isControlled ? (
+                                <span className="text-boracume-green font-semibold text-xs">Normal</span>
+                              ) : (
+                                <span className="text-slate-500 font-semibold text-xs">Sem controle</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="sm" onClick={() => navigate('/produtos')}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ingredients">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Ingredientes ({filteredIngredients.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredIngredients.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum ingrediente encontrado</p>
+                  <p className="text-sm mt-1">Tente ajustar os filtros ou cadastrar um novo ingrediente</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Unidade</TableHead>
+                        <TableHead>Estoque Atual</TableHead>
+                        <TableHead>Estoque Mínimo</TableHead>
+                        <TableHead>Preço de Custo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredIngredients.map((ingredient) => {
+                        const isLowStock = (ingredient.current_stock || 0) <= (ingredient.min_stock || 0);
+                        return (
+                          <TableRow key={ingredient.id}>
+                            <TableCell className="font-medium">{ingredient.name}</TableCell>
+                            <TableCell>{UNITS.find(u => u.value === ingredient.unit)?.label || ingredient.unit}</TableCell>
+                            <TableCell>
+                              <Badge variant={isLowStock ? "destructive" : "secondary"} className={isLowStock ? "bg-red-500" : "bg-boracume-green text-white"}>
+                                {ingredient.current_stock || 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{ingredient.min_stock || 0}</TableCell>
+                            <TableCell>{formatCurrency(ingredient.price)}</TableCell>
+                            <TableCell>
+                              {isLowStock ? (
+                                <span className="text-red-500 font-semibold text-xs flex items-center gap-1">
+                                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                                  Baixo
+                                </span>
+                              ) : (
+                                <span className="text-boracume-green font-semibold text-xs">Normal</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEdit(ingredient)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Form Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>

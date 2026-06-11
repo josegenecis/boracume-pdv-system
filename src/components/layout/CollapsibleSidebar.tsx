@@ -132,7 +132,7 @@ const CollapsibleSidebar = () => {
       icon: Package,
       label: 'Estoque & Insumos',
       items: [
-        { to: '/estoque', label: 'Gestão de Insumos', feature: 'stock', area: 'stock' },
+        { to: '/estoque', label: 'Produtos e Insumos', feature: 'stock', area: 'stock' },
       ]
     },
     {

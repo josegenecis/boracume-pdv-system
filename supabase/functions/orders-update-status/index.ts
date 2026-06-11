@@ -58,11 +58,26 @@ const applyStockForOrder = async (supabase: any, order: any) => {
 
   let updatedCount = 0
   let disabledCount = 0
+  const grouped = new Map<string, number>()
 
   for (const item of items) {
-    const productId = String(item?.product_id || '')
+    const productId = String(item?.product_id || item?.id || '')
     const qty = Math.max(0, parseInt(String(item?.quantity || '0'), 10) || 0)
     if (!productId || qty <= 0) continue
+    grouped.set(productId, (grouped.get(productId) || 0) + qty)
+  }
+
+  for (const [productId, qty] of grouped.entries()) {
+    const { data: existingMovement } = await supabase
+      .from('inventory_movements')
+      .select('id')
+      .eq('user_id', order.user_id)
+      .eq('order_id', order.id)
+      .eq('product_id', productId)
+      .eq('type', 'sale')
+      .maybeSingle()
+
+    if (existingMovement?.id) continue
 
     const { data: product, error: pErr } = await supabase
       .from('products')
@@ -73,6 +88,18 @@ const applyStockForOrder = async (supabase: any, order: any) => {
 
     if (pErr || !product) continue
     if (!product.track_stock) continue
+
+    const { error: movementErr } = await supabase
+      .from('inventory_movements')
+      .insert({
+        user_id: order.user_id,
+        product_id: productId,
+        order_id: order.id,
+        type: 'sale',
+        quantity: -qty
+      })
+
+    if (movementErr) continue
 
     const currentQty = Math.max(0, parseInt(String(product.stock_quantity || 0), 10) || 0)
     const nextQty = Math.max(0, currentQty - qty)
@@ -334,7 +361,7 @@ Deno.serve(async (req: Request) => {
     if (updateErr) return ok({ ok: false, error: 'db_error', details: errInfo(updateErr) })
 
     let stockResult: any = null
-    if (newStatus === 'preparing') {
+    if (['preparing', 'ready', 'in_delivery', 'delivered', 'completed'].includes(newStatus)) {
       try {
         stockResult = await applyStockForOrder(supabase, updated)
       } catch {}

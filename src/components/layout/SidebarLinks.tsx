@@ -18,7 +18,8 @@ import {
   QrCode,
   Bot,
   Bug,
-  Megaphone
+  Megaphone,
+  Package
 } from 'lucide-react';
 
 const SidebarLinks = () => {
@@ -31,6 +32,7 @@ const SidebarLinks = () => {
     { to: '/cardapio', icon: QrCode, label: 'Cardápio Digital' },
     { to: '/pedidos', icon: FileText, label: 'Pedidos' },
     { to: '/pdv', icon: CreditCard, label: 'PDV (Ponto de Venda)' },
+    { to: '/estoque', icon: Package, label: 'Estoque' },
     { to: '/mesas', icon: Utensils, label: 'Mesas' },
     { to: '/cozinha', icon: ChefHat, label: 'Cozinha (KDS)' },
     { to: '/agente', icon: Bot, label: 'Assistente de Comandos' },

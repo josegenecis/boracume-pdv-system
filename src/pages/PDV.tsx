@@ -35,6 +35,7 @@ import { parseBRL } from '@/lib/currency';
 import { prefetchSimpleVariations, type Variation } from '@/hooks/useSimpleVariations';
 import type { PizzaCategoryConfig } from '@/lib/pizza-pricing';
 import { enrichCategoryWithMetadata } from '@/lib/category-metadata';
+import { applyProductStockForOrder } from '@/services/inventoryStock';
 
 interface Product {
   id: string;
@@ -1983,6 +1984,16 @@ const PDV = () => {
       console.log('Pedido criado com sucesso:', data);
 
       const created = Array.isArray(data) ? data[0] : data;
+
+      try {
+        await applyProductStockForOrder({
+          userId: user?.id,
+          orderId: created?.id,
+          items: orderItems,
+        });
+      } catch (stockError) {
+        console.warn('Falha ao aplicar baixa de estoque da venda:', stockError);
+      }
 
       if (!isCounterPdvSale) {
         try {
