@@ -212,8 +212,9 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const [paymentMethods, setPaymentMethods] = useState<CheckoutPaymentMethod[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<CheckoutPaymentMethod | null>(null);
+  const [pixOnlineCheckoutAvailable, setPixOnlineCheckoutAvailable] = useState(false);
   const isPixSelected = selectedPaymentMethod?.code === 'pix';
-  const requiresMercadoPago = isPixSelected;
+  const requiresMercadoPago = isPixSelected && pixOnlineCheckoutAvailable;
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -360,6 +361,35 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       }
     };
     if (isOpen) fetchPaymentMethods();
+  }, [isOpen, userId]);
+
+  useEffect(() => {
+    const fetchPixOnlineAvailability = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('pix_settings')
+          .select('enabled, bank, client_id, mp_access_token')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (error || !data) {
+          setPixOnlineCheckoutAvailable(false);
+          return;
+        }
+
+        const provider = String(data.bank || 'mercadopago').toLowerCase();
+        const hasMercadoPagoCredentials = Boolean(data.mp_access_token || data.client_id);
+        setPixOnlineCheckoutAvailable(Boolean(data.enabled) && provider === 'mercadopago' && hasMercadoPagoCredentials);
+      } catch {
+        setPixOnlineCheckoutAvailable(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchPixOnlineAvailability();
+    } else {
+      setPixOnlineCheckoutAvailable(false);
+    }
   }, [isOpen, userId]);
 
   useEffect(() => {
@@ -766,7 +796,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   };
 
   const finalizeOrder = async (orderData: any) => {
-    if (String(orderData?.payment_method || '') === 'pix' || requiresMercadoPago) {
+    if (requiresMercadoPago && String(orderData?.payment_method || '') === 'pix') {
       await startPixCheckout(orderData);
       onClose();
       return;
@@ -1477,10 +1507,21 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               {isPixSelected && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
-                  <div className="text-sm font-medium text-gray-900">PIX ou Cartão/Wallets</div>
-                  <div className="text-sm text-gray-700">
-                    Você será redirecionado para o ambiente seguro do Mercado Pago, onde poderá pagar com PIX, Cartão de Crédito, Débito, Apple Pay ou Google Pay.
-                  </div>
+                  {pixOnlineCheckoutAvailable ? (
+                    <>
+                      <div className="text-sm font-medium text-gray-900">PIX online</div>
+                      <div className="text-sm text-gray-700">
+                        Você será direcionado para pagar com PIX no ambiente seguro do Mercado Pago.
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-medium text-gray-900">PIX na entrega</div>
+                      <div className="text-sm text-gray-700">
+                        O pedido será enviado ao restaurante e o pagamento via PIX será combinado na entrega ou retirada.
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
