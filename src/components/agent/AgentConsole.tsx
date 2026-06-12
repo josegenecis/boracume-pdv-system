@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Bot, CheckCircle2, ImageIcon, Loader2, Paperclip, Send, Sparkles, User, Wand2, X } from 'lucide-react';
+import { Bot, CheckCircle2, ImageIcon, Loader2, Paperclip, Send, Sparkles, StopCircle, User, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
+import { cancelAgentBackgroundJob, processAgentCommand, type SupportChatHistoryMessage } from '@/services/agentService';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ConsoleMessage {
@@ -39,6 +39,20 @@ const thinkingMessages = [
   'Conferindo o resultado...'
 ];
 
+const activeJobStatuses = ['queued', 'running', 'cancel_requested'];
+const finishedJobStatuses = ['done', 'failed', 'partial', 'paused_timeout', 'cancelled'];
+
+const isMissingProductImagesCommand = (command: string) => {
+  const text = String(command || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return (
+    /produtos?.{0,40}sem imagem/.test(text) &&
+    /(gerar|gere|criar|crie|fazer|preencher|colocar|adicionar).{0,50}imagens?/.test(text)
+  ) || /imagens?.{0,50}produtos?.{0,50}sem imagem/.test(text);
+};
+
 const formatJobProgressMessage = (metadata: any) => {
   const status = String(metadata?.status || 'running');
   const updated = Number(metadata?.updated || 0);
@@ -66,6 +80,28 @@ const formatJobProgressMessage = (metadata: any) => {
       `- Processadas: ${processed}`,
       failures ? `- Falhas: ${failures}` : '',
       metadata?.error ? `- Erro: ${metadata.error}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  if (status === 'cancel_requested') {
+    return [
+      'Estou parando a geração com segurança.',
+      '',
+      `- Atualizadas até agora: ${updated}`,
+      `- Processadas: ${processed}`,
+      failures ? `- Falhas: ${failures}` : '',
+      'Vou finalizar o item atual e encerrar o job.'
+    ].filter(Boolean).join('\n');
+  }
+
+  if (status === 'cancelled') {
+    return [
+      'Geração de imagens cancelada.',
+      '',
+      `- Atualizadas antes de parar: ${updated}`,
+      `- Processadas: ${processed}`,
+      failures ? `- Falhas: ${failures}` : '',
+      remainingText
     ].filter(Boolean).join('\n');
   }
 
@@ -169,7 +205,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
 
       const activeRows = data.filter((row: any) => {
         const status = String(row?.metadata?.status || 'queued');
-        return ['queued', 'running'].includes(status);
+        return activeJobStatuses.includes(status);
       });
 
       if (!activeRows.length) return;
@@ -221,7 +257,7 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         if (!row) return message;
         const jobMetadata = row.metadata || {};
         const status = String(jobMetadata.status || 'running');
-        const finished = ['done', 'failed', 'partial', 'paused_timeout'].includes(status);
+        const finished = finishedJobStatuses.includes(status);
         return {
           ...message,
           content: formatJobProgressMessage(jobMetadata),
@@ -262,6 +298,47 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         content: message.content
       }));
 
+  const getActiveBackgroundJobMessage = () =>
+    messages.find((message) => {
+      const status = String(message.metadata?.background_job?.status || '');
+      return message.type === 'agent'
+        && message.metadata?.background_job?.id
+        && message.status === 'processing'
+        && (!status || activeJobStatuses.includes(status));
+    });
+
+  const handleStopJob = async (message: ConsoleMessage) => {
+    const jobId = String(message.metadata?.background_job?.id || '');
+    if (!user?.id || !jobId) return;
+
+    setMessages((prev) => prev.map((item) => (
+      item.id === message.id
+        ? {
+            ...item,
+            content: formatJobProgressMessage({
+              ...(item.metadata?.background_job?.log?.metadata || {}),
+              status: 'cancel_requested'
+            }),
+            status: 'processing',
+            metadata: {
+              ...item.metadata,
+              background_job: {
+                ...item.metadata?.background_job,
+                status: 'cancel_requested'
+              }
+            }
+          }
+        : item
+    )));
+
+    const result = await cancelAgentBackgroundJob(user.id, jobId);
+    toast({
+      title: result.success ? 'Parando job' : 'Não consegui parar',
+      description: result.message,
+      variant: result.success ? 'default' : 'destructive'
+    });
+  };
+
   const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -290,6 +367,21 @@ export function AgentConsole({ className }: AgentConsoleProps) {
         title: 'Faça login',
         description: 'Entre no sistema para usar o POP AI.',
         variant: 'destructive'
+      });
+      return;
+    }
+
+    const activeBackgroundJob = getActiveBackgroundJobMessage();
+    if (activeBackgroundJob && isMissingProductImagesCommand(text)) {
+      addMessage({
+        type: 'agent',
+        content: 'Já existe uma geração de imagens em andamento. Vou acompanhar o job atual em vez de executar tudo de novo.',
+        status: 'success',
+        metadata: activeBackgroundJob.metadata
+      });
+      toast({
+        title: 'Job já em andamento',
+        description: 'Use o botão Parar se quiser interromper antes de iniciar outro.'
       });
       return;
     }
@@ -460,9 +552,22 @@ export function AgentConsole({ className }: AgentConsoleProps) {
                         )}
                         <div className="whitespace-pre-wrap">{message.content}</div>
                         {message.status === 'processing' && !isUser && message.metadata?.background_job && (
-                          <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            trabalhando em segundo plano
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <div className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              trabalhando em segundo plano
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-full border-red-200 bg-white px-3 text-xs font-bold text-red-700 hover:bg-red-50"
+                              onClick={() => handleStopJob(message)}
+                              disabled={String(message.metadata?.background_job?.status || '') === 'cancel_requested'}
+                            >
+                              <StopCircle className="mr-1 h-3.5 w-3.5" />
+                              {String(message.metadata?.background_job?.status || '') === 'cancel_requested' ? 'Parando' : 'Parar'}
+                            </Button>
                           </div>
                         )}
                         {message.status === 'success' && !isUser && (

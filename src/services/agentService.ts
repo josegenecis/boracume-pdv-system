@@ -9,6 +9,38 @@ export interface AgentCommandResult {
 
 export type SupportChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
+export async function cancelAgentBackgroundJob(userId: string, jobId: string): Promise<AgentCommandResult> {
+  try {
+    if (!String(userId || '').trim() || !String(jobId || '').trim()) {
+      return { success: false, message: 'Job inválido para cancelamento.' };
+    }
+
+    const { data, status } = await invokeEdgeFunction('ai-agent', {
+      userId,
+      command: 'cancelar job em segundo plano',
+      cancelJobId: jobId
+    });
+
+    if (status === 200 && data?.success) {
+      return {
+        success: true,
+        message: data.message || 'Cancelamento solicitado.',
+        metadata: data.metadata || {}
+      };
+    }
+
+    return {
+      success: false,
+      message: String(data?.error || data?.message || 'Não consegui cancelar este job agora.')
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: String(error?.message || 'Não consegui cancelar este job agora.')
+    };
+  }
+}
+
 export interface Ingredient {
   id: string;
   name: string;
@@ -46,6 +78,17 @@ const EXPENSE_CATEGORIES = [
   'marketing',
   'equipamentos'
 ];
+
+const isMissingProductImagesCommand = (command: string) => {
+  const text = String(command || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return (
+    /produtos?.{0,40}sem imagem/.test(text) &&
+    /(gerar|gere|criar|crie|fazer|preencher|colocar|adicionar).{0,50}imagens?/.test(text)
+  ) || /imagens?.{0,50}produtos?.{0,50}sem imagem/.test(text);
+};
 
 /**
  * Process natural language commands and execute deterministic tasks
@@ -103,6 +146,15 @@ export async function processAgentCommand(
     // 2. Fallback: Processamento Local (Regex Legacy)
     console.log('[AgentService] Usando fallback local...');
     const normalizedCommand = command.toLowerCase().trim();
+
+    if (isMissingProductImagesCommand(command)) {
+      return {
+        success: false,
+        message: edgeFailureMsg
+          ? `Não consegui iniciar a geração de imagens agora: ${edgeFailureMsg}`
+          : 'Não consegui iniciar a geração de imagens agora.'
+      };
+    }
 
     if (isIngredientDisableCommand(normalizedCommand)) {
       return await handleIngredientDisable(normalizedCommand, userId);

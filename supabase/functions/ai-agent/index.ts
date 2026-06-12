@@ -185,9 +185,9 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { command, userId, conversationHistory = [], supportMode = false, imageBase64 } = body;
+    const { command, userId, conversationHistory = [], supportMode = false, imageBase64, cancelJobId } = body;
 
-    if (!command && !imageBase64) {
+    if (!command && !imageBase64 && !cancelJobId) {
         throw new Error('Comando ou imagem são obrigatórios.');
     }
     if (!userId) {
@@ -221,6 +221,66 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+    if (cancelJobId) {
+        const { data: existingJob, error: readError } = await supabase
+            .from('agent_activity_logs')
+            .select('id, metadata')
+            .eq('user_id', userId)
+            .eq('id', cancelJobId)
+            .eq('action_type', 'ai_image_job')
+            .maybeSingle();
+        if (readError) throw readError;
+        if (!existingJob) {
+            return new Response(JSON.stringify({
+                success: false,
+                message: 'Não encontrei este job para cancelar.'
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
+        }
+
+        const metadata = existingJob.metadata || {};
+        const currentStatus = String(metadata.status || '');
+        const terminalStatuses = ['done', 'failed', 'partial', 'paused_timeout', 'cancelled'];
+        if (terminalStatuses.includes(currentStatus)) {
+            return new Response(JSON.stringify({
+                success: true,
+                message: 'Esse job já estava finalizado.',
+                metadata: {
+                    background_job: {
+                        id: existingJob.id,
+                        type: 'missing_product_images',
+                        status: currentStatus
+                    }
+                }
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        }
+
+        await supabase
+            .from('agent_activity_logs')
+            .update({
+                description: 'Cancelamento solicitado pelo usuário',
+                metadata: {
+                    ...metadata,
+                    status: 'cancel_requested',
+                    cancel_requested_at: new Date().toISOString(),
+                    last_update_at: new Date().toISOString()
+                }
+            } as any)
+            .eq('user_id', userId)
+            .eq('id', existingJob.id);
+
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'Solicitei a parada do job. Ele será interrompido com segurança no próximo item.',
+            metadata: {
+                background_job: {
+                    id: existingJob.id,
+                    type: 'missing_product_images',
+                    status: 'cancel_requested'
+                }
+            }
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
     const shouldRunMissingProductImagesInBackground = (() => {
         if (supportMode || imageBase64) return false;
         const text = String(command || '')
@@ -236,6 +296,21 @@ Deno.serve(async (req) => {
     })();
 
     const runMissingProductImagesJob = async (jobId: string) => {
+        const readJobMetadata = async () => {
+            const { data } = await supabase
+                .from('agent_activity_logs')
+                .select('metadata')
+                .eq('user_id', userId)
+                .eq('id', jobId)
+                .maybeSingle();
+            return data?.metadata || {};
+        };
+
+        const isCancelRequested = async () => {
+            const metadata = await readJobMetadata();
+            return String(metadata?.status || '') === 'cancel_requested';
+        };
+
         const updateJob = async (metadata: Record<string, any>, description?: string) => {
             try {
                 await supabase
@@ -277,6 +352,18 @@ Deno.serve(async (req) => {
         let processed = 0;
         let updated = 0;
 
+        if (await isCancelRequested()) {
+            await updateJob({
+                status: 'cancelled',
+                provider: 'openai',
+                processed,
+                updated,
+                failures: 0,
+                cancelled_at: new Date().toISOString()
+            }, 'Geração cancelada antes de iniciar');
+            return;
+        }
+
         await updateJob({
             status: 'running',
             provider: 'openai',
@@ -289,6 +376,19 @@ Deno.serve(async (req) => {
 
         try {
             while (processed < maxProducts && Date.now() - startedAt <= timeBudgetMs) {
+                if (await isCancelRequested()) {
+                    await updateJob({
+                        status: 'cancelled',
+                        provider: 'openai',
+                        processed,
+                        updated,
+                        failures: failures.length,
+                        updated_ids: updatedIds,
+                        cancelled_at: new Date().toISOString()
+                    }, `Geração cancelada: ${updated} produto(s) atualizado(s)`);
+                    return;
+                }
+
                 const { data: products, error } = await supabase
                     .from('products')
                     .select('id, name, description, image_url')
@@ -303,6 +403,19 @@ Deno.serve(async (req) => {
 
                 for (const product of list) {
                     if (processed >= maxProducts || Date.now() - startedAt > timeBudgetMs) break;
+                    if (await isCancelRequested()) {
+                        await updateJob({
+                            status: 'cancelled',
+                            provider: 'openai',
+                            processed,
+                            updated,
+                            failures: failures.length,
+                            updated_ids: updatedIds,
+                            cancelled_at: new Date().toISOString()
+                        }, `Geração cancelada: ${updated} produto(s) atualizado(s)`);
+                        return;
+                    }
+
                     attemptedIds.add(String(product.id));
                     processed++;
                     try {
@@ -379,6 +492,32 @@ Deno.serve(async (req) => {
         if (!OPENAI_API_KEY) {
             throw new Error('Secret OPENAI_API_KEY não configurado. A geração de imagens por IA precisa da chave OpenAI no Supabase.');
         }
+
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: recentJobs } = await supabase
+            .from('agent_activity_logs')
+            .select('id, metadata, created_at')
+            .eq('user_id', userId)
+            .eq('action_type', 'ai_image_job')
+            .gte('created_at', oneDayAgo)
+            .order('created_at', { ascending: false })
+            .limit(10);
+        const activeJob = (recentJobs || []).find((job: any) => ['queued', 'running', 'cancel_requested'].includes(String(job?.metadata?.status || '')));
+        if (activeJob) {
+            return new Response(JSON.stringify({
+                success: true,
+                message: `Já existe uma geração de imagens em andamento.\n\nJob: ${activeJob.id}\n\nVou acompanhar esse mesmo job em vez de executar tudo de novo.`,
+                metadata: {
+                    background_job: {
+                        id: activeJob.id,
+                        type: 'missing_product_images',
+                        status: activeJob?.metadata?.status || 'running',
+                        reused: true
+                    }
+                }
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        }
+
         const jobId = crypto.randomUUID();
         await supabase.from('agent_activity_logs').insert({
             id: jobId,
@@ -936,9 +1075,11 @@ Seu objetivo é resolver completamente as solicitações do cliente dentro do si
 
 Regras:
 - Fale de forma natural e acolhedora, sem mencionar ferramentas internas, logs, ou nomes de tabelas.
+- Aja como um operador especialista do PopSystem: entenda a intenção, consulte dados reais, execute a ação certa e responda com o que foi feito.
 - Antes de responder, sempre que preciso, busque dados reais ou execute ações no sistema usando as ferramentas disponíveis.
 - Não peça confirmação para passos triviais; execute e confirme o resultado.
 - Se faltar um dado indispensável (ex.: qual produto, qual período, qual categoria), faça 1 pergunta objetiva.
+- Não reexecute uma ação que já aparece no histórico como concluída. Se o usuário repetir o mesmo pedido, explique o estado atual e ofereça o próximo passo.
 - Se o pedido envolver cadastro completo de produto com tamanhos/variações e/ou complementos, use create_product_full.
 - Se o pedido envolver mudança em produto já existente (preço, nome, categoria, descrição, disponibilidade, PDV/delivery ou destaque), use update_product. Nunca crie um novo produto quando o usuário pediu para alterar um produto existente.
 - Se o usuário pedir "vá nos produtos/categoria X e liste todos", use list_products com category: "X". Não transforme categoria em busca por nome.
@@ -950,11 +1091,14 @@ Regras:
 - Mantenha respostas curtas e diretas.
 - O ID do usuário (restaurante) é: ${userId}`
       : `Você é um assistente administrativo inteligente para um sistema de PDV de restaurante.
-Seu objetivo é executar ações no banco de dados conforme o pedido do usuário.
+Seu objetivo é ser tão útil quanto um bom copiloto operacional: entender pedidos em linguagem natural, consultar dados reais do PopSystem, executar ações com segurança e explicar o resultado de forma curta.
 
 Regras:
+- Antes de responder sobre produtos, categorias, estoque, financeiro, pedidos ou marketing, consulte/execute pelas ferramentas disponíveis sempre que isso for necessário para usar dados reais.
 - Se o usuário pedir para criar algo, chame a função apropriada.
 - Tenha autonomia: planeje e execute múltiplas ações necessárias usando as tools disponíveis, sem pedir confirmação.
+- Não reexecute uma ação que já aparece no histórico como concluída. Se o usuário repetir o mesmo pedido, diga que já foi feito ou que existe um processo em andamento e mostre o próximo passo.
+- Se existir uma tarefa longa em andamento, não abra outra igual. Informe o status e oriente o usuário a aguardar ou cancelar.
 - Se o usuário disser "pode fazer", "sim", "isso", "continue", "pode aplicar" ou algo parecido, entenda como autorização para executar a última solicitação acionável do histórico. Não pergunte "o que você quer que eu faça?" se existir uma ação pendente no histórico.
 - Se o usuário pedir para criar 3 ou mais produtos, use create_products com uma lista completa (crie exatamente a quantidade solicitada, até 50).
 - Se o usuário pedir para criar produto com tamanhos/variações de preço e/ou complementos/adicionais, use create_product_full.
