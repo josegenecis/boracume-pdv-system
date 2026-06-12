@@ -627,52 +627,55 @@ const MenuDigital = () => {
         }
       }
 
-      // Notificar cliente via WhatsApp (pedido recebido)
-      try {
-        if (data?.id) {
-          await notifyOrderCreatedById(data.id);
-        }
-      } catch (waErr) {
-        console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
-      }
-
-      try {
-        if (data?.id && loyaltyRewardId) {
-          const { data: redeemResult, error: redeemError } = await supabase.functions.invoke('loyalty-redeem-reward', {
-            body: {
-              rewardId: loyaltyRewardId,
-              orderId: data.id,
-              userId: orderData.user_id,
-            }
-          });
-
-          if (redeemError) throw redeemError;
-          if (!redeemResult?.ok) {
-            console.warn('⚠️ Recompensa fidelidade não foi marcada como usada:', redeemResult);
+      if (data?.id) {
+        void (async () => {
+          try {
+            await notifyOrderCreatedById(data.id);
+          } catch (waErr) {
+            console.warn('⚠️ Falha ao notificar via WhatsApp (não crítico):', waErr);
           }
-        }
-      } catch (loyaltyErr) {
-        console.warn('⚠️ Falha ao marcar recompensa fidelidade como usada:', loyaltyErr);
-      }
+        })();
 
-      // Push para o restaurante
-      try {
-        const { data: subs } = await supabase
-          .from('push_subscriptions')
-          .select('endpoint, keys')
-          .eq('user_id', orderData.user_id)
-        if (Array.isArray(subs) && subs.length > 0) {
-          await supabase.functions.invoke('send-push', {
-            body: {
-              subscriptions: subs.map(s => ({ endpoint: s.endpoint, keys: s.keys })),
-              title: 'Novo Pedido!',
-              body: `Pedido ${orderData.order_number} recebido`,
-              url: '/pedidos'
+        void (async () => {
+          try {
+            if (!loyaltyRewardId) return;
+            const { data: redeemResult, error: redeemError } = await supabase.functions.invoke('loyalty-redeem-reward', {
+              body: {
+                rewardId: loyaltyRewardId,
+                orderId: data.id,
+                userId: orderData.user_id,
+              }
+            });
+
+            if (redeemError) throw redeemError;
+            if (!redeemResult?.ok) {
+              console.warn('⚠️ Recompensa fidelidade não foi marcada como usada:', redeemResult);
             }
-          })
-        }
-      } catch (pushErr) {
-        console.warn('Falha ao enviar push (não crítico):', pushErr)
+          } catch (loyaltyErr) {
+            console.warn('⚠️ Falha ao marcar recompensa fidelidade como usada:', loyaltyErr);
+          }
+        })();
+
+        void (async () => {
+          try {
+            const { data: subs } = await supabase
+              .from('push_subscriptions')
+              .select('endpoint, keys')
+              .eq('user_id', orderData.user_id);
+            if (Array.isArray(subs) && subs.length > 0) {
+              await supabase.functions.invoke('send-push', {
+                body: {
+                  subscriptions: subs.map(s => ({ endpoint: s.endpoint, keys: s.keys })),
+                  title: 'Novo Pedido!',
+                  body: `Pedido ${orderData.order_number} recebido`,
+                  url: '/pedidos'
+                }
+              });
+            }
+          } catch (pushErr) {
+            console.warn('Falha ao enviar push (não crítico):', pushErr);
+          }
+        })();
       }
       toast({
         title: "Pedido realizado!",
