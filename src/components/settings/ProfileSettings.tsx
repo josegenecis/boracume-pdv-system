@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Save, Copy, Clock3 } from 'lucide-react';
+import { Upload, Save, Copy, Clock3, Smartphone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,6 +101,15 @@ const ProfileSettings = () => {
   const [weeklySchedule, setWeeklySchedule] = useState<Record<WeekDayKey, DailySchedule>>(createDefaultSchedule());
   const { toast } = useToast();
   const { user } = useAuth();
+
+  const previewTheme = {
+    primary: profileThemeConfig.primary || '#85C441',
+    secondary: profileThemeConfig.secondary || '#063D2E',
+    accent: profileThemeConfig.accent || '#EF6C20',
+    price: profileThemeConfig.price || profileThemeConfig.accent || '#EF6C20',
+    tag: profileThemeConfig.tag || profileThemeConfig.primary || '#85C441',
+    background: profileThemeConfig.background || '#F7EEDF',
+  };
 
   useEffect(() => {
     if (user) {
@@ -433,51 +442,146 @@ const ProfileSettings = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Banner do Restaurante</Label>
-            <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2] md:h-32">
-              {bannerImage ? (
-                <img src={bannerImage} alt="Banner" className={`w-full h-full ${bannerFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-              ) : (
-                <div className="text-xs text-muted-foreground">Nenhum banner cadastrado</div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <Label htmlFor="banner-upload" className="cursor-pointer">
-                <Button variant="outline" className="cursor-pointer border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" disabled={uploadingBanner} asChild>
-                  <span>
-                    <Upload size={16} className="mr-2" />
-                    {uploadingBanner ? 'Enviando...' : 'Alterar Banner'}
-                  </span>
-                </Button>
-              </Label>
-              <input
-                id="banner-upload"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleBannerUpload}
-              />
-              <div className="w-full space-y-1 sm:w-[220px]">
-                <Label className="text-xs font-semibold text-[#003223]/70">Ajuste da imagem</Label>
-                <Select value={bannerFit} onValueChange={(value) => setBannerFit(value === 'contain' ? 'contain' : 'cover')}>
-                  <SelectTrigger className="h-10 rounded-xl border-[#FF6400]/15 bg-white/85">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cover">Preencher capa</SelectItem>
-                    <SelectItem value="contain">Mostrar inteira</SelectItem>
-                  </SelectContent>
-                </Select>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="space-y-2">
+              <Label>Banner do Restaurante</Label>
+              <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-[#FF6400]/10 bg-[#FFF8F2] md:h-32">
+                {bannerImage ? (
+                  <img src={bannerImage} alt="Banner" className={`w-full h-full ${bannerFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
+                ) : (
+                  <div className="text-xs text-muted-foreground">Nenhum banner cadastrado</div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <Label htmlFor="banner-upload" className="cursor-pointer">
+                  <Button variant="outline" className="cursor-pointer border-[#FF6400]/15 bg-white/85 text-[#003223] hover:bg-[#F5EBE1]" disabled={uploadingBanner} asChild>
+                    <span>
+                      <Upload size={16} className="mr-2" />
+                      {uploadingBanner ? 'Enviando...' : 'Alterar Banner'}
+                    </span>
+                  </Button>
+                </Label>
+                <input
+                  id="banner-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleBannerUpload}
+                />
+                <div className="w-full space-y-1 sm:w-[220px]">
+                  <Label className="text-xs font-semibold text-[#003223]/70">Ajuste da imagem</Label>
+                  <Select value={bannerFit} onValueChange={(value) => setBannerFit(value === 'contain' ? 'contain' : 'cover')}>
+                    <SelectTrigger className="h-10 rounded-xl border-[#FF6400]/15 bg-white/85">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cover">Preencher capa</SelectItem>
+                      <SelectItem value="contain">Mostrar inteira</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Formatos aceitos: JPG, PNG, WebP, GIF (máx. 10MB)
+                </p>
+                <p className="text-xs text-blue-600 font-medium">
+                  Tamanho recomendado: 1200x400px (formato horizontal)
+                </p>
               </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
-                Formatos aceitos: JPG, PNG, WebP, GIF (máx. 10MB)
-              </p>
-              <p className="text-xs text-blue-600 font-medium">
-                Tamanho recomendado: 1200x400px (formato horizontal)
-              </p>
+
+            <div className="rounded-2xl border border-[#003223]/10 bg-white/85 p-3 shadow-sm">
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#003223]/60">
+                <Smartphone className="h-4 w-4 text-[#FF6400]" />
+                Preview mobile
+              </div>
+              <div className="mx-auto w-full max-w-[310px] overflow-hidden rounded-[28px] border-[8px] border-[#101820] bg-[#101820] shadow-xl">
+                <div className="h-[560px] overflow-hidden rounded-[20px]" style={{ backgroundColor: previewTheme.background }}>
+                  <div className="relative h-36 overflow-hidden" style={{ backgroundColor: previewTheme.secondary }}>
+                    {bannerImage ? (
+                      <img
+                        src={bannerImage}
+                        alt="Prévia da capa no cardápio mobile"
+                        className={`absolute inset-0 h-full w-full ${bannerFit === 'contain' ? 'object-contain' : 'object-cover'}`}
+                      />
+                    ) : profileImage ? (
+                      <img
+                        src={profileImage}
+                        alt="Prévia da logo no fundo do cardápio"
+                        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-20 blur-xl"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/15" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-transparent" />
+                  </div>
+
+                  <div className="-mt-11 px-3">
+                    <div className="rounded-xl border border-black/5 bg-white p-3 shadow-sm">
+                      <div className="flex items-start gap-2">
+                        <div className="-mt-7 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 shadow-sm">
+                          {profileImage ? (
+                            <img src={profileImage} alt="Logo na prévia mobile" className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-xs font-black" style={{ color: previewTheme.secondary }}>
+                              {(formData.restaurantName || 'PS').slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-base font-black leading-tight" style={{ color: previewTheme.secondary }}>
+                            {formData.restaurantName || 'Nome do restaurante'}
+                          </h3>
+                          <div className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: `${previewTheme.tag}22`, color: previewTheme.tag }}>
+                            Aberto agora
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: previewTheme.secondary, opacity: 0.72 }}>
+                            {formData.description || 'Descrição curta do restaurante aparecendo no cardápio digital.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl bg-white p-2 shadow-sm">
+                      <div className="h-9 rounded-xl bg-slate-100 px-3 py-2 text-[11px] text-slate-400">Buscar no cardápio</div>
+                    </div>
+
+                    <div className="mt-3 flex gap-2 overflow-hidden">
+                      {['Destaques', 'Combos', 'Bebidas'].map((item, index) => (
+                        <div
+                          key={item}
+                          className="shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold"
+                          style={{
+                            backgroundColor: index === 0 ? previewTheme.primary : '#fff',
+                            color: index === 0 ? '#fff' : previewTheme.secondary,
+                            border: index === 0 ? 'none' : '1px solid rgba(0,0,0,0.08)'
+                          }}
+                        >
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {[
+                        ['Produto destaque', 'R$ 32,90'],
+                        ['Combo especial', 'R$ 48,00']
+                      ].map(([name, price]) => (
+                        <div key={name} className="flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm">
+                          <div className="h-14 w-14 rounded-xl" style={{ backgroundColor: `${previewTheme.primary}22` }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-xs font-black" style={{ color: previewTheme.secondary }}>{name}</div>
+                            <div className="mt-1 text-[11px] text-slate-500">Descrição do item no app mobile.</div>
+                            <div className="mt-1 text-sm font-black" style={{ color: previewTheme.price }}>{price}</div>
+                          </div>
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-black text-white" style={{ backgroundColor: previewTheme.primary }}>+</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
