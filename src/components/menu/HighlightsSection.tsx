@@ -80,7 +80,7 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
                 {product.original_price && product.discount_percentage ? (
                   <div className="space-y-1">
                     <div className="flex items-end gap-2">
-                      <span className="font-semibold text-gray-900">R$ {product.price.toFixed(2)}</span>
+                      <span className="text-base font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>R$ {product.price.toFixed(2)}</span>
                       <span className="text-[11px] text-gray-500 line-through">R$ {Number(product.original_price).toFixed(2)}</span>
                     </div>
                     <div className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-semibold">
@@ -88,7 +88,7 @@ const HighlightsSection: React.FC<HighlightsSectionProps> = ({ products, onProdu
                     </div>
                   </div>
                 ) : (
-                  <div className="font-semibold text-gray-900">R$ {product.price.toFixed(2)}</div>
+                  <div className="text-base font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>R$ {product.price.toFixed(2)}</div>
                 )}
               </div>
             </div>

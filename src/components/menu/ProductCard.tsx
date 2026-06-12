@@ -111,7 +111,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
             ) : product.original_price && product.discount_percentage ? (
               <div className="space-y-1">
                 <div className="flex items-end gap-2">
-                  <span className="font-bold" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
+                  <span className="text-base font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
                   <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>{formatBRL(product.original_price)}</span>
                 </div>
                 <div className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border" style={{ color: 'var(--menu-tag, #85C441)', backgroundColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 20%, transparent)' }}>
@@ -119,7 +119,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
                 </div>
               </div>
             ) : (
-              <span className="font-bold" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
+              <span className="text-base font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
             )}
           </div>
         </div>
@@ -154,7 +154,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
           ) : product.original_price && product.discount_percentage ? (
             <div className="space-y-1">
               <div className="flex items-end gap-2">
-                <span className="font-semibold text-base" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
+                <span className="text-lg font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>{formatBRL(product.price)}</span>
                 <span className="text-xs line-through" style={{ color: 'var(--menu-secondary, #063D2E)', opacity: 0.5 }}>{formatBRL(product.original_price)}</span>
               </div>
               <div className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border" style={{ color: 'var(--menu-tag, #85C441)', backgroundColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--menu-tag, #85C441) 20%, transparent)' }}>
@@ -162,7 +162,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onProductClick, isAd
               </div>
             </div>
           ) : (
-            <span className="font-semibold text-base" style={{ color: 'var(--menu-price, #EF6C20)' }}>
+            <span className="text-lg font-black tracking-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>
               {formatBRL(product.price)}
             </span>
           )}

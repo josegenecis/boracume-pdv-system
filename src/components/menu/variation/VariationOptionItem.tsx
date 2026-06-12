@@ -50,7 +50,7 @@ export const VariationOptionItem: React.FC<VariationOptionItemProps> = ({
           )}
         </div>
         {priceLabel && (
-          <div className="mt-1 text-xs font-medium leading-snug break-words whitespace-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>
+          <div className="mt-1 text-xs font-extrabold leading-snug break-words whitespace-normal" style={{ color: 'var(--menu-price, #EF6C20)' }}>
             {priceLabel}
           </div>
         )}
