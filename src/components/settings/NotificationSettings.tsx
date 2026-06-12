@@ -4,20 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Volume2, Bell, Mail, MessageSquare, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import SoundUploadManager from './SoundUploadManager';
-import { soundNotifications } from '@/utils/soundUtils';
-
-const normalizeOrderSound = (value: string | null | undefined) => {
-  if (value === 'chime' || value === 'ding' || value === 'notification') {
-    return 'chime';
-  }
-  return 'bell';
-};
+import { POPSYSTEM_ORDER_SOUND_TYPE, soundNotifications } from '@/utils/soundUtils';
 
 const NotificationSettings = () => {
   const [notifications, setNotifications] = useState({
@@ -29,21 +20,19 @@ const NotificationSettings = () => {
     smsNotifications: false,
     pushNotifications: true,
     soundEnabled: true,
-    orderSound: 'bell',
+    orderSound: POPSYSTEM_ORDER_SOUND_TYPE,
     volume: '80'
-  });
-
-  const [customSoundUrls, setCustomSoundUrls] = useState({
-    custom_bell_url: null as string | null,
-    custom_chime_url: null as string | null,
-    custom_ding_url: null as string | null,
-    custom_notification_url: null as string | null,
   });
 
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
+
+  const isMissingSoundColumnError = (error: any) => {
+    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+    return /order_sound|custom_(bell|chime|ding|notification)_url|column/i.test(message);
+  };
 
   useEffect(() => {
     if (user) {
@@ -74,23 +63,8 @@ const NotificationSettings = () => {
           smsNotifications: data.sms_notifications,
           pushNotifications: data.push_notifications,
           soundEnabled: data.sound_enabled,
-          orderSound: normalizeOrderSound(data.order_sound),
+          orderSound: POPSYSTEM_ORDER_SOUND_TYPE,
           volume: data.volume
-        });
-
-        setCustomSoundUrls({
-          custom_bell_url: data.custom_bell_url,
-          custom_chime_url: data.custom_chime_url,
-          custom_ding_url: data.custom_ding_url,
-          custom_notification_url: data.custom_notification_url,
-        });
-
-        // Configurar sons personalizados no sistema de som
-        soundNotifications.setCustomSoundUrls({
-          custom_bell_url: data.custom_bell_url,
-          custom_chime_url: data.custom_chime_url,
-          custom_ding_url: data.custom_ding_url,
-          custom_notification_url: data.custom_notification_url,
         });
       }
     } catch (error) {
@@ -128,10 +102,10 @@ const NotificationSettings = () => {
       // Evitar sobreposição: parar sons antes de testar
       soundNotifications.stopAllSounds();
       await soundNotifications.enableSound();
-      await soundNotifications.playSound(notifications.orderSound);
+      await soundNotifications.playSound(POPSYSTEM_ORDER_SOUND_TYPE);
       toast({
         title: "Som reproduzido",
-        description: `Som "${notifications.orderSound}" com volume ${notifications.volume}%.`,
+        description: `Toque PopSystem com volume ${notifications.volume}%.`,
       });
     } catch (error) {
       console.error('Erro ao reproduzir som:', error);
@@ -164,33 +138,45 @@ const NotificationSettings = () => {
         sms_notifications: notifications.smsNotifications,
         push_notifications: notifications.pushNotifications,
         sound_enabled: notifications.soundEnabled,
-        order_sound: notifications.orderSound,
+        order_sound: POPSYSTEM_ORDER_SOUND_TYPE,
         volume: String(typeof notifications.volume === 'string' ? parseInt(notifications.volume, 10) : notifications.volume),
-        custom_bell_url: customSoundUrls.custom_bell_url,
-        custom_chime_url: customSoundUrls.custom_chime_url,
-        custom_ding_url: customSoundUrls.custom_ding_url,
-        custom_notification_url: customSoundUrls.custom_notification_url,
+        custom_bell_url: null,
+        custom_chime_url: null,
+        custom_ding_url: null,
+        custom_notification_url: null,
         updated_at: new Date().toISOString()
       };
 
-      if (existingData) {
-        const { error } = await supabase
-          .from('notification_settings')
-          .update(settingsData)
-          .eq('user_id', user.id);
+      const savePayload = async (payload: Record<string, any>) => {
+        if (existingData) {
+          const { error } = await (supabase as any)
+            .from('notification_settings')
+            .update(payload)
+            .eq('user_id', user.id);
+          return error;
+        }
 
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('notification_settings')
-          .insert(settingsData);
+          .insert(payload);
+        return error;
+      };
 
-        if (error) throw error;
+      let saveError = await savePayload(settingsData);
+      if (saveError && isMissingSoundColumnError(saveError)) {
+        const compatibleSettingsData = { ...settingsData };
+        delete (compatibleSettingsData as any).order_sound;
+        delete (compatibleSettingsData as any).custom_bell_url;
+        delete (compatibleSettingsData as any).custom_chime_url;
+        delete (compatibleSettingsData as any).custom_ding_url;
+        delete (compatibleSettingsData as any).custom_notification_url;
+        saveError = await savePayload(compatibleSettingsData);
       }
+
+      if (saveError) throw saveError;
       
       // Forçar atualização do sistema de som após salvar
       console.log('💾 NotificationSettings - Forçando atualização do sistema de som após salvar');
-      soundNotifications.setCustomSoundUrls(customSoundUrls);
       soundNotifications.setEnabled(notifications.soundEnabled);
       soundNotifications.setVolume(parseFloat(notifications.volume) / 100);
 
@@ -224,24 +210,6 @@ const NotificationSettings = () => {
       handleSave().catch(console.error);
     }, 600);
     setSaveTimeout(id);
-  };
-
-  const handleSoundUploaded = (soundType: string, url: string | null) => {
-    console.log(`🎵 NotificationSettings - Som ${soundType} uploaded:`, url);
-    
-    const urlKey = `custom_${soundType}_url` as keyof typeof customSoundUrls;
-    const newCustomUrls = {
-      ...customSoundUrls,
-      [urlKey]: url
-    };
-    
-    setCustomSoundUrls(newCustomUrls);
-
-    // Atualizar sistema de som imediatamente
-    console.log('🔄 NotificationSettings - Atualizando sistema de som com nova URL');
-    soundNotifications.setCustomSoundUrls(newCustomUrls);
-    
-    console.log('✅ NotificationSettings - Sistema de som atualizado com sucesso');
   };
 
   return (
@@ -399,23 +367,13 @@ const NotificationSettings = () => {
             <>
               <div className="space-y-2">
                 <Label htmlFor="order-sound">Som para Novos Pedidos</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={notifications.orderSound}
-                    onValueChange={(value) => handleSelectChange('orderSound', value)}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="bell">
-                        Alerta Original {customSoundUrls.custom_bell_url ? '(personalizado)' : ''}
-                      </SelectItem>
-                      <SelectItem value="chime">
-                        Bell Instant {customSoundUrls.custom_chime_url ? '(personalizado)' : ''}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="flex-1 rounded-xl border bg-muted/40 px-3 py-2">
+                    <div className="text-sm font-semibold">Toque PopSystem</div>
+                    <div className="text-xs text-muted-foreground">
+                      Toque oficial padrão. Repete após terminar até o pedido ser aceito.
+                    </div>
+                  </div>
                   <Button variant="outline" onClick={playTestSound}>
                     Testar
                   </Button>
@@ -438,11 +396,6 @@ const NotificationSettings = () => {
           )}
         </CardContent>
       </Card>
-
-      <SoundUploadManager 
-        customUrls={customSoundUrls}
-        onSoundUploaded={handleSoundUploaded}
-      />
 
       <div className="flex justify-end">
         <Button onClick={handleSave} className="w-full md:w-auto" disabled={loading}>

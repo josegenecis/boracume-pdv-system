@@ -1,49 +1,33 @@
 // Utility functions for sound notifications using HTML5 Audio
+export const POPSYSTEM_ORDER_SOUND_PATH = '/sounds/Toque%20PopSystem.mp3';
+export const POPSYSTEM_ORDER_SOUND_TYPE = 'bell';
+
 export class SoundNotifications {
   private isEnabled: boolean = true;
   private volume: number = 0.8;
   private audioFiles: Map<string, HTMLAudioElement> = new Map();
-  private customSoundUrls: Map<string, string> = new Map();
   private currentlyPlaying: Set<HTMLAudioElement> = new Set();
   private audioContext: AudioContext | null = null;
   private unlocked: boolean = false;
-  private persistentAlertTimer: number | null = null;
-  private persistentAlertSoundType: string = 'bell';
-  private persistentAlertIntervalMs: number = 4000;
+  private persistentAlertActive: boolean = false;
+  private persistentAlertRestartTimer: number | null = null;
+  private persistentAlertAudio: HTMLAudioElement | null = null;
 
   constructor() {
     this.preloadSounds();
   }
 
-  private normalizeSoundType(soundType: string) {
-    if (soundType === 'chime' || soundType === 'ding' || soundType === 'notification') {
-      return 'chime';
-    }
-    return 'bell';
+  private normalizeSoundType(_soundType: string) {
+    return POPSYSTEM_ORDER_SOUND_TYPE;
   }
 
-  private getDefaultSoundPath(soundType: string) {
-    const normalized = this.normalizeSoundType(soundType);
-    return normalized === 'chime' ? '/sounds/Bell Instant.mp3' : '/sounds/Alerta Original.mp3';
+  private getDefaultSoundPath(_soundType: string) {
+    return POPSYSTEM_ORDER_SOUND_PATH;
   }
 
-  setCustomSoundUrls(customUrls: { [key: string]: string | null }) {
-    console.log('🔧 SOUND UTILS - Configurando URLs personalizadas:', customUrls);
-    this.customSoundUrls.clear();
-    
-    Object.entries(customUrls).forEach(([key, url]) => {
-      if (url) {
-        // Converter custom_bell_url para bell, etc.
-        const soundType = key.replace('custom_', '').replace('_url', '');
-        this.customSoundUrls.set(soundType, url);
-        console.log(`✅ SOUND UTILS - URL personalizada configurada: ${soundType} -> ${url}`);
-      }
-    });
-    
-    console.log('🔧 SOUND UTILS - URLs personalizadas ativas:', 
-      Array.from(this.customSoundUrls.entries()));
-    
-    // Recarregar sons com as novas URLs
+  setCustomSoundUrls(_customUrls: { [key: string]: string | null }) {
+    // Mantido por compatibilidade com versões antigas. O sistema agora usa
+    // somente o toque oficial PopSystem para todos os restaurantes.
     this.preloadSounds();
   }
 
@@ -60,10 +44,6 @@ export class SoundNotifications {
 
     sounds.forEach(sound => {
       try {
-        // Usar som personalizado se disponível
-        const customUrl = this.customSoundUrls.get(sound.name);
-        const audioPath = customUrl || sound.path;
-        
         const audio = new Audio();
         audio.volume = this.volume;
         // Preload minimal metadata so play() can start quickly when needed
@@ -122,7 +102,7 @@ export class SoundNotifications {
       if (audio) {
         const prevVolume = audio.volume
         audio.volume = 0
-        if (!audio.src) audio.src = this.customSoundUrls.get('bell') || this.getDefaultSoundPath('bell')
+        if (!audio.src) audio.src = this.getDefaultSoundPath('bell')
         try {
           await audio.play()
           audio.pause()
@@ -155,15 +135,7 @@ export class SoundNotifications {
       
       if (audio) {
         const normalizedSoundType = this.normalizeSoundType(soundType);
-        const customUrl = this.customSoundUrls.get(normalizedSoundType);
-        const audioPath = customUrl || this.getDefaultSoundPath(normalizedSoundType);
-
-        if (customUrl && !this.isValidUrl(customUrl)) {
-          console.warn(`⚠️ URL personalizada inválida para ${soundType}: ${customUrl}`);
-          audio.src = this.getDefaultSoundPath(normalizedSoundType);
-        } else if (!audio.src) {
-          audio.src = audioPath;
-        }
+        const audioPath = this.getDefaultSoundPath(normalizedSoundType);
         
         // Ensure src is set and try to play; if blocked, fallback to WebAudio persistent alert
         if (!audio.src) audio.src = audioPath;
@@ -183,12 +155,7 @@ export class SoundNotifications {
           await audio.play();
         } catch (err) {
           console.warn('⚠️ play() blocked, using WebAudio fallback for persistent alerts', err);
-          // If play is blocked (autoplay policies), use fallback and start persistent alert
           this.createFallbackSound();
-          // Start persistent alert if not already running
-          if (this.persistentAlertTimer === null) {
-            this.startPersistentAlert(normalizedSoundType, this.persistentAlertIntervalMs);
-          }
         }
       } else {
         this.createFallbackSound();
@@ -202,21 +169,71 @@ export class SoundNotifications {
     }
   }
 
-  startPersistentAlert(soundType: string = 'bell', intervalMs: number = 4000) {
-    this.persistentAlertSoundType = soundType;
-    this.persistentAlertIntervalMs = Math.max(1500, intervalMs);
-    if (this.persistentAlertTimer !== null) return;
-
-    void this.playSound(this.persistentAlertSoundType);
-    this.persistentAlertTimer = window.setInterval(() => {
-      void this.playSound(this.persistentAlertSoundType);
-    }, this.persistentAlertIntervalMs);
+  startPersistentAlert(_soundType: string = 'bell', _intervalMs: number = 4000) {
+    if (!this.isEnabled) return;
+    if (this.persistentAlertActive) return;
+    this.persistentAlertActive = true;
+    void this.playPersistentAlertOnce();
   }
 
   stopPersistentAlert() {
-    if (this.persistentAlertTimer !== null) {
-      window.clearInterval(this.persistentAlertTimer);
-      this.persistentAlertTimer = null;
+    this.persistentAlertActive = false;
+    if (this.persistentAlertRestartTimer !== null) {
+      window.clearTimeout(this.persistentAlertRestartTimer);
+      this.persistentAlertRestartTimer = null;
+    }
+    if (this.persistentAlertAudio) {
+      this.persistentAlertAudio.pause();
+      this.persistentAlertAudio.currentTime = 0;
+      this.currentlyPlaying.delete(this.persistentAlertAudio);
+    }
+  }
+
+  private async playPersistentAlertOnce() {
+    if (!this.persistentAlertActive || !this.isEnabled) return;
+    try {
+      if (!this.unlocked) {
+        try {
+          await this.enableSound();
+        } catch {}
+      }
+
+      const audio = this.persistentAlertAudio || new Audio();
+      this.persistentAlertAudio = audio;
+      audio.loop = false;
+      audio.preload = 'auto';
+      audio.src = POPSYSTEM_ORDER_SOUND_PATH;
+      audio.volume = this.volume;
+      audio.currentTime = 0;
+      this.currentlyPlaying.add(audio);
+
+      audio.onended = () => {
+        this.currentlyPlaying.delete(audio);
+        if (!this.persistentAlertActive || !this.isEnabled) return;
+        this.persistentAlertRestartTimer = window.setTimeout(() => {
+          this.persistentAlertRestartTimer = null;
+          void this.playPersistentAlertOnce();
+        }, 250);
+      };
+      audio.onerror = () => {
+        this.currentlyPlaying.delete(audio);
+        this.createFallbackSound();
+        if (!this.persistentAlertActive || !this.isEnabled) return;
+        this.persistentAlertRestartTimer = window.setTimeout(() => {
+          this.persistentAlertRestartTimer = null;
+          void this.playPersistentAlertOnce();
+        }, 1500);
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.warn('⚠️ Falha ao reproduzir alerta persistente oficial:', error);
+      this.createFallbackSound();
+      if (!this.persistentAlertActive || !this.isEnabled) return;
+      this.persistentAlertRestartTimer = window.setTimeout(() => {
+        this.persistentAlertRestartTimer = null;
+        void this.playPersistentAlertOnce();
+      }, 1500);
     }
   }
 

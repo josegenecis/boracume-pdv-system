@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { soundNotifications } from '@/utils/soundUtils';
+import { POPSYSTEM_ORDER_SOUND_TYPE, soundNotifications } from '@/utils/soundUtils';
 import { updateOrderStatus as updateOrderStatusRemote } from '@/utils/updateOrderStatus';
 import { PrinterService } from '@/utils/printerService';
 
@@ -41,7 +41,6 @@ const GlobalNotificationSystem: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [soundType, setSoundType] = useState('bell');
   const [volume, setVolume] = useState(0.8);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => {
@@ -63,11 +62,8 @@ const GlobalNotificationSystem: React.FC = () => {
 
   const isOnOrdersPageRef = useRef(isOnOrdersPage);
   const soundEnabledRef = useRef(soundEnabled);
-  const soundTypeRef = useRef(soundType);
-  const volumeRef = useRef(volume);
   const pendingOrdersRef = useRef<PendingOrder[]>([]);
   const pollingRef = useRef<number | null>(null);
-  const warnedUnlockRef = useRef(false);
   const visibleOrders = pendingOrders.filter((order) => !dismissedOrders.has(order.id));
 
   useEffect(() => {
@@ -80,43 +76,19 @@ const GlobalNotificationSystem: React.FC = () => {
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
-    soundTypeRef.current = soundType;
-    volumeRef.current = volume;
     soundNotifications.setEnabled(soundEnabled);
     soundNotifications.setVolume(volume);
-  }, [soundEnabled, soundType, volume]);
+  }, [soundEnabled, volume]);
 
   useEffect(() => {
     const shouldLoopAlert = soundEnabled && pendingOrders.length > 0;
     if (shouldLoopAlert) {
-      soundNotifications.startPersistentAlert(soundType, 4000);
+      soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
       return;
     }
     soundNotifications.stopPersistentAlert();
     soundNotifications.stopAllSounds();
-  }, [pendingOrders.length, soundEnabled, soundType]);
-
-  const playOrderSound = async () => {
-    if (!soundEnabledRef.current) return;
-    try {
-      await soundNotifications.playSound(soundTypeRef.current);
-      return;
-    } catch {}
-    try {
-      await soundNotifications.playSound('bell');
-    } catch {}
-    try {
-      if (warnedUnlockRef.current) return;
-      const unlocked = localStorage.getItem('sound_unlocked') === 'true';
-      if (unlocked) return;
-      warnedUnlockRef.current = true;
-      toast({
-        title: 'Som bloqueado',
-        description: 'Clique/toque na tela uma vez para liberar a notificacao sonora.',
-        duration: 8000,
-      });
-    } catch {}
-  };
+  }, [pendingOrders.length, soundEnabled]);
 
   const showBackgroundOrderNotification = async (order: PendingOrder) => {
     const title = 'Novo pedido recebido';
@@ -137,7 +109,9 @@ const GlobalNotificationSystem: React.FC = () => {
   };
 
   const handleIncomingOrderAlert = async (order: PendingOrder) => {
-    await playOrderSound();
+    if (soundEnabledRef.current) {
+      soundNotifications.startPersistentAlert(POPSYSTEM_ORDER_SOUND_TYPE);
+    }
     await showBackgroundOrderNotification(order);
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
@@ -191,24 +165,15 @@ const GlobalNotificationSystem: React.FC = () => {
       try {
         const { data, error } = await (supabase as any)
           .from('notification_settings')
-          .select('sound_enabled, volume, order_sound, custom_bell_url, custom_chime_url, custom_ding_url, custom_notification_url')
+          .select('sound_enabled, volume')
           .eq('user_id', user.id)
           .maybeSingle();
         if (error || !data) return;
 
         const enabled = !!data.sound_enabled;
         const vol = Math.max(0, Math.min(1, parseFloat(String(data.volume || '80')) / 100));
-        const type = String(data.order_sound || 'bell');
-
         setSoundEnabled(enabled);
         setVolume(vol);
-        setSoundType(type);
-        soundNotifications.setCustomSoundUrls({
-          custom_bell_url: data.custom_bell_url || null,
-          custom_chime_url: data.custom_chime_url || null,
-          custom_ding_url: data.custom_ding_url || null,
-          custom_notification_url: data.custom_notification_url || null,
-        });
       } catch {}
     };
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { soundNotifications } from '@/utils/soundUtils';
+import { POPSYSTEM_ORDER_SOUND_TYPE, soundNotifications } from '@/utils/soundUtils';
 
 const isPdvCounterOrder = (order: any) => {
   const source = String(order?.variations?.source || order?.source || '').toUpperCase();
@@ -14,7 +14,7 @@ export const useOrderNotifications = () => {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(true);
   const [volume, setVolume] = useState(0.8);
-  const [soundType, setSoundType] = useState('bell');
+  const [soundType, setSoundType] = useState(POPSYSTEM_ORDER_SOUND_TYPE);
 
   useEffect(() => {
     if (!user) return;
@@ -34,20 +34,7 @@ export const useOrderNotifications = () => {
         
         setEnabled(data.sound_enabled);
         setVolume(parseFloat(data.volume) / 100);
-        setSoundType(data.order_sound);
-
-
-        // Configurar URLs personalizadas no sistema de som (apenas URLs válidas)
-        const customUrls = {
-          custom_bell_url: data.custom_bell_url && data.custom_bell_url.trim() !== '' ? data.custom_bell_url : null,
-          custom_chime_url: data.custom_chime_url && data.custom_chime_url.trim() !== '' ? data.custom_chime_url : null,
-          custom_ding_url: data.custom_ding_url && data.custom_ding_url.trim() !== '' ? data.custom_ding_url : null,
-          custom_notification_url: data.custom_notification_url && data.custom_notification_url.trim() !== '' ? data.custom_notification_url : null,
-
-        };
-        
-        console.log('🎵 useOrderNotifications - Configurando sons personalizados:', customUrls);
-        soundNotifications.setCustomSoundUrls(customUrls);
+        setSoundType(POPSYSTEM_ORDER_SOUND_TYPE);
         
         // Configurar volume e status
         soundNotifications.setEnabled(data.sound_enabled);
@@ -78,7 +65,7 @@ export const useOrderNotifications = () => {
           if (enabled) {
             // Reproduzir som de notificação
             try {
-              console.log(`🎵 Tentando reproduzir som: ${soundType}`);
+              console.log('🎵 Tentando reproduzir Toque PopSystem');
               // Use a slight delay to ensure browser interaction policies are met if possible, 
               // or just fire away.
               await soundNotifications.playSound(soundType);
@@ -103,14 +90,14 @@ export const useOrderNotifications = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, enabled, volume, soundType, toast]);
+  }, [user, enabled, volume, toast]);
 
   // Atualizar configurações quando mudarem
   useEffect(() => {
-    console.log('🔄 useOrderNotifications - Atualizando configurações:', { enabled, volume, soundType });
+    console.log('🔄 useOrderNotifications - Atualizando configurações:', { enabled, volume, soundType: POPSYSTEM_ORDER_SOUND_TYPE });
     soundNotifications.setEnabled(enabled);
     soundNotifications.setVolume(volume);
-  }, [enabled, volume, soundType]);
+  }, [enabled, volume]);
 
   const playTestSound = async () => {
     try {
