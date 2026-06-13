@@ -29,12 +29,33 @@ export default async function handler(req: Request): Promise<Response> {
   try {
     const { data, error } = await supabase
       .from('pix_settings')
-      .select('enabled, bank, pix_key, merchant_name, merchant_city')
+      .select('enabled, bank, pix_key, merchant_name, merchant_city, client_id, mp_access_token, mp_refresh_token')
       .eq('user_id', userId)
       .maybeSingle()
 
     if (error) return new Response(JSON.stringify({ ok: false, error: 'query_failed' }), { status: 500, headers })
-    return new Response(JSON.stringify({ ok: true, settings: data || null }), { headers })
+    if (!data) return new Response(JSON.stringify({ ok: true, settings: null, onlineCheckoutAvailable: false }), { headers })
+
+    const providerKey = String(data.bank || 'mercadopago')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago')
+    const hasOnlineCredentials = Boolean(data.mp_access_token || data.client_id || data.mp_refresh_token)
+    const publicSettings = {
+      enabled: Boolean(data.enabled),
+      bank: data.bank || 'mercadopago',
+      pix_key: data.pix_key || null,
+      merchant_name: data.merchant_name || null,
+      merchant_city: data.merchant_city || null,
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      settings: publicSettings,
+      onlineCheckoutAvailable: Boolean(data.enabled) && isMercadoPago && hasOnlineCredentials,
+    }), { headers })
   } catch {
     return new Response(JSON.stringify({ ok: false, error: 'internal_error' }), { status: 500, headers })
   }

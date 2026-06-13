@@ -367,22 +367,14 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   useEffect(() => {
     const fetchPixOnlineAvailability = async () => {
       try {
-        const { data, error } = await (supabase as any)
-          .from('pix_settings')
-          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token')
-          .eq('user_id', userId)
-          .maybeSingle();
+        const { data } = await invokeEdgeFunction('pix-settings-public', { userId }, { timeoutMs: 20000 });
 
-        if (error || !data) {
-          setPixOnlineCheckoutAvailable(error ? null : false);
+        if (!data?.ok) {
+          setPixOnlineCheckoutAvailable(null);
           return;
         }
 
-        const provider = normalizePaymentMethodText(data.bank || 'mercadopago');
-        const providerKey = provider.replace(/[^a-z0-9]/g, '');
-        const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago');
-        const hasMercadoPagoCredentials = Boolean(data.mp_access_token || data.client_id || data.mp_refresh_token);
-        setPixOnlineCheckoutAvailable(Boolean(data.enabled) && isMercadoPago && hasMercadoPagoCredentials);
+        setPixOnlineCheckoutAvailable(Boolean(data.onlineCheckoutAvailable));
       } catch {
         setPixOnlineCheckoutAvailable(null);
       }
