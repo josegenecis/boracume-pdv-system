@@ -1913,7 +1913,7 @@ const PDV = () => {
       if (paymentMethod === 'pix' && !hasSplitPayment) {
         const { data: pixCfg, error: pixCfgErr } = await supabase
           .from('pix_settings')
-          .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
+          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_pdv_enabled')
           .eq('user_id', user?.id)
           .maybeSingle()
 
@@ -1921,16 +1921,24 @@ const PDV = () => {
           toast({ title: 'PIX', description: pixCfgErr.message || 'Falha ao carregar configuração do PIX.', variant: 'destructive' });
         }
 
+        const providerKey = String((pixCfg as any)?.bank || 'mercadopago')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '');
+        const isMercadoPagoProvider = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago');
+        const hasMercadoPagoCredentials = Boolean((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token || (pixCfg as any)?.mp_refresh_token);
+
         const useMpPixPdv =
           Boolean((pixCfg as any)?.enabled) &&
-          String((pixCfg as any)?.bank || '').toLowerCase() === 'mercadopago' &&
+          isMercadoPagoProvider &&
           Boolean((pixCfg as any)?.mp_pdv_enabled) &&
-          Boolean((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token)
+          hasMercadoPagoCredentials
 
-        if (!useMpPixPdv && (pixCfg as any)?.enabled && String((pixCfg as any)?.bank || '').toLowerCase() === 'mercadopago') {
+        if (!useMpPixPdv && (pixCfg as any)?.enabled && isMercadoPagoProvider) {
           if (!(pixCfg as any)?.mp_pdv_enabled) {
             toast({ title: 'PIX', description: 'Mercado Pago no PDV está desativado em Configurações → PIX.', variant: 'destructive' });
-          } else if (!((pixCfg as any)?.client_id || (pixCfg as any)?.mp_access_token)) {
+          } else if (!hasMercadoPagoCredentials) {
             toast({ title: 'PIX', description: 'Mercado Pago não está conectado. Conecte em Configurações → PIX.', variant: 'destructive' });
           }
         }
@@ -2098,10 +2106,10 @@ const PDV = () => {
   ];
 
   const renderPaymentControls = (compact = false) => {
-    const inputClassName = compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs';
+    const inputClassName = compact ? 'h-7.5 text-[10px]' : 'h-7 text-[11px]';
     const labelClassName = compact
       ? 'text-[9px] font-semibold uppercase tracking-[0.12em]'
-      : 'text-[10px] font-semibold uppercase tracking-[0.12em]';
+      : 'text-[9px] font-semibold uppercase tracking-[0.12em]';
     const selectedAmount = paymentAmounts[paymentMethod];
     const displayedPaymentAmount = selectedAmount || formatCurrency(getFinalTotal());
     const splitActive = hasManualPaymentSplit();
@@ -2111,15 +2119,15 @@ const PDV = () => {
     const cashChange = getCashChangeValue();
 
     return (
-      <div className="space-y-2">
-        <div className="grid grid-cols-3 gap-2">
+      <div className={compact ? 'space-y-2' : 'space-y-1.5'}>
+        <div className="grid grid-cols-3 gap-1.5">
           {PDV_PAYMENT_METHODS.map((method) => (
             <Button
               key={method.value}
               type="button"
               size={compact ? undefined : 'sm'}
               variant={paymentMethod === method.value ? 'default' : 'outline'}
-              className={compact ? 'h-7.5 text-[10px]' : 'h-8 text-xs'}
+              className={compact ? 'h-7.5 text-[10px]' : 'h-7 rounded-lg text-[11px]'}
               onClick={() => {
                 setSelectedPaymentMethod(method.value);
                 if (method.value !== 'cartao') setTefData(null);
@@ -2134,7 +2142,7 @@ const PDV = () => {
           ))}
         </div>
 
-        <div className="rounded-xl border border-[#003223]/10 bg-[#F8FBF6] p-2">
+        <div className={compact ? 'rounded-xl border border-[#003223]/10 bg-[#F8FBF6] p-2' : 'rounded-lg border border-[#003223]/10 bg-[#F8FBF6] p-1.5'}>
           <div className={`${labelClassName} text-[#003223]/70`}>Valor neste método</div>
           <CurrencyTextInput
             placeholder="R$ 0,00"
@@ -2142,13 +2150,15 @@ const PDV = () => {
             onValueChange={(value) => updatePaymentAmount(paymentMethod, value)}
             className={`${inputClassName} mt-1 bg-white`}
           />
-          <div className="mt-1 text-[10px] leading-4 text-slate-500">
-            Deixe em branco para receber o total em {getPaymentMethodLabel(paymentMethod)}. Digite um valor para dividir em mais métodos.
-          </div>
+          {compact && (
+            <div className="mt-1 text-[10px] leading-4 text-slate-500">
+              Deixe em branco para receber o total em {getPaymentMethodLabel(paymentMethod)}. Digite um valor para dividir em mais métodos.
+            </div>
+          )}
         </div>
 
         {paymentMethod === 'dinheiro' && (
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-2">
+          <div className={compact ? 'grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50/70 p-2' : 'grid grid-cols-2 gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50/70 p-1.5'}>
             <div className="space-y-1">
               <div className={`${labelClassName} text-emerald-800`}>Valor recebido</div>
               <CurrencyTextInput
@@ -2160,7 +2170,7 @@ const PDV = () => {
             </div>
             <div className="space-y-1">
               <div className={`${labelClassName} text-emerald-800`}>Troco</div>
-              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-3 font-bold text-emerald-700`}>
+              <div className={`${inputClassName} flex items-center rounded-md border bg-white px-2 font-bold text-emerald-700`}>
                 {formatCurrency(cashChange)}
               </div>
             </div>
@@ -2197,12 +2207,12 @@ const PDV = () => {
               )}
             </div>
           ) : (
-            <div className={compact ? 'text-[10px] text-muted-foreground' : 'text-xs text-muted-foreground'}>Cartão via maquininha</div>
+            <div className={compact ? 'text-[10px] text-muted-foreground' : 'text-[10px] text-muted-foreground'}>Cartão via maquininha</div>
           )
         )}
 
         {splitActive && (
-          <div className="rounded-xl border border-[#FF6400]/15 bg-white p-2 text-[11px]">
+          <div className={compact ? 'rounded-xl border border-[#FF6400]/15 bg-white p-2 text-[11px]' : 'rounded-lg border border-[#FF6400]/15 bg-white p-1.5 text-[10px]'}>
             <div className="flex items-center justify-between">
               <span className="font-semibold text-slate-500">Pago</span>
               <span className="font-bold text-[#003223]">{formatCurrency(paidTotal)}</span>
@@ -2211,7 +2221,7 @@ const PDV = () => {
               <span className="font-semibold text-slate-500">Restante</span>
               <span className={`font-bold ${remaining > 0.009 ? 'text-red-600' : 'text-emerald-700'}`}>{formatCurrency(remaining)}</span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap gap-1">
               {getPaymentLines().map((line) => (
                 <Badge key={line.method} variant="outline" className="rounded-full bg-[#F8FBF6] text-[10px]">
                   {line.label}: {formatCurrency(line.amount)}
@@ -2224,7 +2234,7 @@ const PDV = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1.5">
           <div className="space-y-1">
             <div className={`${labelClassName} text-red-600`}>Desconto</div>
             <CurrencyTextInput
@@ -2491,9 +2501,9 @@ const PDV = () => {
           </div>
 
           {/* Right Column: Cart (Desktop) */}
-          <div className="hidden lg:flex lg:w-[380px] xl:w-[420px] bg-white flex-col h-full z-20 border-l border-[#FF6400]/10">
-            <div className="border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/70 p-3 backdrop-blur-sm shrink-0">
-              <div className="flex items-center gap-2 mb-3">
+          <div className="hidden lg:flex lg:w-[360px] xl:w-[400px] bg-white flex-col h-full z-20 border-l border-[#FF6400]/10">
+            <div className="border-b border-[#FF6400]/10 bg-gradient-to-r from-[#FFF8F2] via-white to-[#F5EBE1]/70 p-2 backdrop-blur-sm shrink-0">
+              <div className="flex items-center gap-2 mb-2">
                 <Calculator className="text-primary w-5 h-5" />
                 <h2 className="font-bold text-base">Pedido</h2>
                 <span className="ml-auto text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
@@ -2502,10 +2512,10 @@ const PDV = () => {
               </div>
               
               <Tabs value={orderType} onValueChange={(value) => setOrderType(value as any)} className="w-full">
-                <TabsList className="grid h-10 w-full grid-cols-3 items-center rounded-xl border border-[#FF6400]/12 bg-[#F5EBE1]/85 p-1">
-                  <TabsTrigger value="counter" className="flex h-8 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Balcão</TabsTrigger>
-                  <TabsTrigger value="delivery" className="flex h-8 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Entrega</TabsTrigger>
-                  <TabsTrigger value="pickup" className="flex h-8 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Retirada</TabsTrigger>
+                <TabsList className="grid h-9 w-full grid-cols-3 items-center rounded-xl border border-[#FF6400]/12 bg-[#F5EBE1]/85 p-1">
+                  <TabsTrigger value="counter" className="flex h-7 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Balcão</TabsTrigger>
+                  <TabsTrigger value="delivery" className="flex h-7 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Entrega</TabsTrigger>
+                  <TabsTrigger value="pickup" className="flex h-7 items-center justify-center rounded-lg text-xs font-semibold text-[#003223]/70 data-[state=active]:bg-[#FF6400] data-[state=active]:text-white">Retirada</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -2527,7 +2537,7 @@ const PDV = () => {
                     const formattedVariations = formatSelectedVariations(item.selectedVariations);
                     const seq = String(index + 1).padStart(2, '0');
                     return (
-                      <div key={item.cartItemId} className="flex items-start justify-between p-3 hover:bg-gray-50 transition-colors group">
+                      <div key={item.cartItemId} className="flex items-start justify-between p-2 hover:bg-gray-50 transition-colors group">
                         <div className="flex-1 min-w-0 pr-3">
                           <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-sm text-gray-900 leading-tight line-clamp-2">
@@ -2594,9 +2604,9 @@ const PDV = () => {
 
             {/* Checkout Form & Totals - Fixed at Bottom */}
             <div className="bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-30">
-              <div className="p-3 space-y-3">
+              <div className="p-2 space-y-2">
                 {/* Compact Form */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                    <div className="flex gap-2">
                       <Input
                         placeholder={orderType === 'dine_in' ? "Nome (Opcional)" : (orderType === 'counter' ? "CPF na Nota (Opcional)" : "Nome *")}
@@ -2675,7 +2685,7 @@ const PDV = () => {
                 </div>
 
                 {/* Totals Summary */}
-                <div className="bg-gray-50 rounded-lg p-2 text-xs space-y-1 border">
+                <div className="bg-gray-50 rounded-lg p-1.5 text-[11px] space-y-0.5 border">
                   <div className="flex justify-between text-gray-500">
                     <span>Subtotal</span>
                     <span>{formatCurrency(getTotalValue())}</span>
@@ -2698,7 +2708,7 @@ const PDV = () => {
                       <span>{formatCurrency(getSurchargeValue())}</span>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-sm text-gray-900 pt-1 border-t border-gray-200 mt-1">
+                  <div className="flex justify-between font-bold text-[13px] text-gray-900 pt-1 border-t border-gray-200 mt-1">
                     <span>Total</span>
                     <span>{formatCurrency(getFinalTotal())}</span>
                   </div>
@@ -2708,7 +2718,7 @@ const PDV = () => {
                 <div className="grid grid-cols-2 gap-2">                  <Button
                     onClick={handleFinalizeSale}
                     disabled={processing || cart.length === 0}
-                    className="w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-bold shadow-sm"
+                    className="w-full bg-green-600 hover:bg-green-700 h-9 text-sm font-bold shadow-sm"
                   >
                     {processing && orderType !== 'dine_in' ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -2726,7 +2736,7 @@ const PDV = () => {
                     variant="outline"
                     onClick={openTableLaunch}
                     disabled={processing || cart.length === 0}
-                    className="h-10 w-full border-[#003223]/20 text-sm font-bold text-[#003223] hover:bg-[#F5EBE1]"
+                    className="h-9 w-full border-[#003223]/20 text-sm font-bold text-[#003223] hover:bg-[#F5EBE1]"
                   >
                     Lançar mesa
                   </Button>

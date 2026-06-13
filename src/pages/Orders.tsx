@@ -22,6 +22,7 @@ import AdminPinDialog from '@/components/security/AdminPinDialog';
 import { canCancelOrder, getLocalOperatorSession } from '@/services/operatorAuth';
 import { verifyAdminPin } from '@/services/adminPin';
 import { DragDropContext, Draggable, Droppable, DropResult } from '@hello-pangea/dnd';
+import { formatPaymentMethodLabel } from '@/lib/orderDetails';
 
 interface Order {
   id: string;
@@ -981,7 +982,7 @@ const Orders = () => {
               </div>
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Pagamento</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-slate-900">{order.payment_method.toUpperCase()}</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-900">{formatPaymentMethodLabel(order.payment_method)}</div>
               </div>
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tipo</div>
@@ -1589,7 +1590,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -1740,7 +1741,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -1862,7 +1863,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {order.payment_method.toUpperCase()}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
                         </div>
 
                         <div className="flex flex-wrap gap-2 mt-3">

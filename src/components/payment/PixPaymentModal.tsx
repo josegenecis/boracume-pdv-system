@@ -48,7 +48,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
 
             const { data: pixDb, error: pixDbErr } = await supabase
                 .from('pix_settings')
-                .select('enabled, bank, client_id, mp_access_token, mp_pdv_enabled')
+                .select('enabled, bank, client_id, mp_access_token, mp_refresh_token, mp_pdv_enabled')
                 .eq('user_id', order.user_id)
                 .maybeSingle();
 
@@ -56,11 +56,17 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                 throw new Error(pixDbErr.message || 'Falha ao carregar configuração do PIX.');
             }
 
+            const providerKey = String((pixDb as any)?.bank || 'mercadopago')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '');
+            const isMercadoPagoProvider = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago');
             const canUseMercadoPago =
                 Boolean((pixDb as any)?.enabled) &&
-                String((pixDb as any)?.bank || '').toLowerCase() === 'mercadopago' &&
+                isMercadoPagoProvider &&
                 Boolean((pixDb as any)?.mp_pdv_enabled) &&
-                Boolean((pixDb as any)?.client_id || (pixDb as any)?.mp_access_token);
+                Boolean((pixDb as any)?.client_id || (pixDb as any)?.mp_access_token || (pixDb as any)?.mp_refresh_token);
             if (canUseMercadoPago) {
                 const payload: any = {
                     order_id: order.id,

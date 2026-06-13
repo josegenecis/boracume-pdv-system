@@ -106,6 +106,15 @@ const OrderTracking: React.FC = () => {
   const sanitizedPhone = order.customer_phone ? order.customer_phone.replace(/\D/g, '') : '';
   const waNumber = sanitizedPhone ? (sanitizedPhone.startsWith('55') ? sanitizedPhone : `55${sanitizedPhone}`) : '';
   const waMessage = `Olá! Aqui está o link para acompanhar seu pedido ${order.order_number || ''}: ${window.location.href}`;
+  const paymentLabel = (() => {
+    const method = String(order.payment_method || '').toLowerCase();
+    if (method === 'pix_online') return 'PIX online';
+    if (method === 'pix_entrega') return 'PIX na entrega';
+    if (method === 'pix') {
+      return order.acceptance_status === 'awaiting_pix_payment' ? 'PIX online' : 'PIX na entrega';
+    }
+    return method ? method.toUpperCase() : 'NÃO INFORMADO';
+  })();
   const acceptanceLabel = order.acceptance_status === 'awaiting_pix_payment'
     ? 'Aguardando pagamento PIX'
     : order.acceptance_status === 'pending_acceptance'
@@ -134,7 +143,7 @@ const OrderTracking: React.FC = () => {
           <CardContent className="space-y-6">
             <div className="flex items-center gap-2">
               <Badge>{order.order_type === 'delivery' ? 'Entrega' : order.order_type === 'pickup' ? 'Retirada' : 'No Local'}</Badge>
-              <Badge variant="secondary">{order.payment_method.toUpperCase()}</Badge>
+              <Badge variant="secondary">{paymentLabel}</Badge>
               {acceptanceLabel && <Badge variant="outline">{acceptanceLabel}</Badge>}
             </div>
 
@@ -176,7 +185,7 @@ const OrderTracking: React.FC = () => {
                   Enviar WhatsApp
                 </Button>
               )}
-              {order.payment_method === 'pix' && order.acceptance_status === 'awaiting_pix_payment' && (
+              {(order.payment_method === 'pix' || order.payment_method === 'pix_online') && order.acceptance_status === 'awaiting_pix_payment' && (
                 <Button className="bg-green-600 hover:bg-green-700" onClick={() => setPixOpen(true)}>
                   <QrCode className="w-4 h-4 mr-2" />
                   Pagar PIX

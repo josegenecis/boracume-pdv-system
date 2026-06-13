@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Eye, Phone, MapPin, Clock, User, Package } from 'lucide-react';
 import OrderStatusBadge from './OrderStatusBadge';
 import type { OrderStatusType } from './OrderStatusBadge';
+import { formatPaymentMethodLabel } from '@/lib/orderDetails';
 
 interface OrderItem {
   product_name: string;
@@ -165,7 +166,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted-foreground">Pagamento:</span>
             <Badge variant="outline" className="text-xs">
-              {order.payment_method.toUpperCase()}
+              {formatPaymentMethodLabel(order.payment_method)}
             </Badge>
           </div>
         </div>

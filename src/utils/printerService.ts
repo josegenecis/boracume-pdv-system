@@ -102,6 +102,8 @@ function getPaymentSplitLines(order: any) {
 function formatPaymentMethodLabel(method: any) {
   const value = String(method || '').trim().toLowerCase();
   if (value === 'pix') return 'PIX';
+  if (value === 'pix_online') return 'PIX ONLINE';
+  if (value === 'pix_entrega') return 'PIX NA ENTREGA';
   if (value === 'cartao' || value === 'cartão') return 'CARTAO';
   if (value === 'dinheiro') return 'DINHEIRO';
   if (value === 'cartao_credito') return 'CREDITO';
@@ -1097,7 +1099,7 @@ async function printElectron(order: any, config: any) {
     subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
     discount: Number(order.discount || 0),
     delivery_fee: Number(order.delivery_fee || 0),
-    payment_method: String(order.payment_method || '').toUpperCase()
+    payment_method: formatPaymentMethodLabel(order.payment_method)
   };
 
   const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: config.paper_width === '58mm' ? 32 : 48 });

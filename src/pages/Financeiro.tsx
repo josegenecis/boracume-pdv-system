@@ -981,9 +981,11 @@ const Financeiro = () => {
 
   const margemOperacional = dre.receitaLiquida > 0 ? (dre.lucroOperacional / dre.receitaLiquida) * 100 : 0;
   
-  const getPaymentMethodLabel = (method?: PaymentMethod) => {
+  const getPaymentMethodLabel = (method?: PaymentMethod | string) => {
     switch (method) {
       case 'pix': return 'PIX';
+      case 'pix_online': return 'PIX online';
+      case 'pix_entrega': return 'PIX na entrega';
       case 'dinheiro': return 'DINHEIRO';
       case 'cartao': return 'CARTÃO';
       default: return method || '-';

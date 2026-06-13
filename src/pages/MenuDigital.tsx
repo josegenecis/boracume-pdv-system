@@ -679,7 +679,7 @@ const MenuDigital = () => {
       }
       toast({
         title: "Pedido realizado!",
-        description: orderData.payment_method === 'pix'
+        description: String(orderData.payment_method || '').includes('pix_entrega')
           ? `Pagamento via PIX será realizado na entrega do pedido ${orderData.order_number}.`
           : `Acompanhe o andamento do pedido ${orderData.order_number}.`,
       });

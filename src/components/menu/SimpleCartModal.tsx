@@ -212,9 +212,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   const [paymentMethods, setPaymentMethods] = useState<CheckoutPaymentMethod[]>([]);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<CheckoutPaymentMethod | null>(null);
-  const [pixOnlineCheckoutAvailable, setPixOnlineCheckoutAvailable] = useState(false);
+  const [pixOnlineCheckoutAvailable, setPixOnlineCheckoutAvailable] = useState<boolean | null>(null);
   const isPixSelected = selectedPaymentMethod?.code === 'pix';
-  const requiresMercadoPago = isPixSelected && pixOnlineCheckoutAvailable;
   const [step, setStep] = useState<'bag' | 'checkout'>('bag');
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -368,27 +367,30 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
       try {
         const { data, error } = await (supabase as any)
           .from('pix_settings')
-          .select('enabled, bank, client_id, mp_access_token')
+          .select('enabled, bank, client_id, mp_access_token, mp_refresh_token')
           .eq('user_id', userId)
           .maybeSingle();
 
         if (error || !data) {
-          setPixOnlineCheckoutAvailable(false);
+          setPixOnlineCheckoutAvailable(error ? null : false);
           return;
         }
 
-        const provider = String(data.bank || 'mercadopago').toLowerCase();
-        const hasMercadoPagoCredentials = Boolean(data.mp_access_token || data.client_id);
-        setPixOnlineCheckoutAvailable(Boolean(data.enabled) && provider === 'mercadopago' && hasMercadoPagoCredentials);
+        const provider = normalizePaymentMethodText(data.bank || 'mercadopago');
+        const providerKey = provider.replace(/[^a-z0-9]/g, '');
+        const isMercadoPago = !providerKey || providerKey === 'mp' || providerKey.includes('mercadopago');
+        const hasMercadoPagoCredentials = Boolean(data.mp_access_token || data.client_id || data.mp_refresh_token);
+        setPixOnlineCheckoutAvailable(Boolean(data.enabled) && isMercadoPago && hasMercadoPagoCredentials);
       } catch {
-        setPixOnlineCheckoutAvailable(false);
+        setPixOnlineCheckoutAvailable(null);
       }
     };
 
     if (isOpen) {
+      setPixOnlineCheckoutAvailable(null);
       fetchPixOnlineAvailability();
     } else {
-      setPixOnlineCheckoutAvailable(false);
+      setPixOnlineCheckoutAvailable(null);
     }
   }, [isOpen, userId]);
 
@@ -795,13 +797,34 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     });
   };
 
+  const isPixCheckoutConfigurationError = (error: unknown) => {
+    const raw = String(error instanceof Error ? error.message : error || '').toLowerCase();
+    return (
+      raw.includes('checkout via pix nao esta configurado') ||
+      raw.includes('pix_not_configured') ||
+      raw.includes('pix_disabled') ||
+      raw.includes('missing_provider_credentials')
+    );
+  };
+
   const finalizeOrder = async (orderData: any) => {
-    if (requiresMercadoPago && String(orderData?.payment_method || '') === 'pix') {
-      await startPixCheckout(orderData);
-      onClose();
+    const isPixOrder = selectedPaymentMethod?.code === 'pix' || String(orderData?.payment_method || '').startsWith('pix');
+    if (!isPixOrder) {
+      await placeOrderNow(orderData);
       return;
     }
-    await placeOrderNow(orderData);
+
+    if (pixOnlineCheckoutAvailable !== false) {
+      try {
+        await startPixCheckout({ ...orderData, payment_method: 'pix_online' });
+        onClose();
+        return;
+      } catch (error) {
+        if (!isPixCheckoutConfigurationError(error)) throw error;
+      }
+    }
+
+    await placeOrderNow({ ...orderData, payment_method: 'pix_entrega' });
   };
 
   const hasProductVariations = async (productId: string) => {
@@ -958,7 +981,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
         customer_address: isDeliveryMode ? customerAddress : null,
         customer_neighborhood: neighborhood,
         delivery_zone_id: isDeliveryMode ? (deliveryZoneId || null) : null,
-        payment_method: paymentMethod,
+        payment_method: paymentMethod === 'pix' ? (pixOnlineCheckoutAvailable === false ? 'pix_entrega' : 'pix_online') : paymentMethod,
         change_amount: paymentMethod === 'dinheiro' ? parseFloat(changeAmount) || null : null,
         delivery_instructions: notes,
         customer_latitude: isDeliveryMode ? location.latitude : null,
@@ -1507,7 +1530,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
               {isPixSelected && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2 space-y-2">
-                  {pixOnlineCheckoutAvailable ? (
+                  {pixOnlineCheckoutAvailable !== false ? (
                     <>
                       <div className="text-sm font-medium text-gray-900">PIX online</div>
                       <div className="text-sm text-gray-700">

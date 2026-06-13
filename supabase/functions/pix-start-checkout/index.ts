@@ -231,7 +231,12 @@ Deno.serve(async (req: Request) => {
     // Fallback seguro para origin se header não existir
     const origin = getRequestOrigin(req) || 'http://localhost:5173'
 
-    const provider = String(pix.bank || 'mercadopago').toLowerCase()
+    const providerKey = String(pix.bank || 'mercadopago')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    const provider = (!providerKey || providerKey === 'mp' || providerKey.includes('mercadopago')) ? 'mercadopago' : providerKey
     let webhookSecret = getEnv('PIX_WEBHOOK_SECRET') || String(pix.webhook_secret || '')
     if (!webhookSecret) {
       webhookSecret = randomSecret()

@@ -71,6 +71,8 @@ export const formatPaymentMethodLabel = (value: unknown) => {
   const raw = normalizeSpaces(value).toLowerCase();
   const labels: Record<string, string> = {
     pix: 'PIX',
+    pix_online: 'PIX online',
+    pix_entrega: 'PIX na entrega',
     dinheiro: 'Dinheiro',
     cartao: 'Cartão',
     cartao_credito: 'Cartão de Crédito',

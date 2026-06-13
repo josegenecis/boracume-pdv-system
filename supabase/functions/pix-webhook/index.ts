@@ -221,7 +221,7 @@ serve(async (req) => {
           .eq('user_id', checkout.restaurant_user_id)
           .maybeSingle()
         
-        if (!mp || !(mp.mp_access_token || mp.client_id)) {
+        if (!mp || !(mp.mp_access_token || mp.client_id || (mp as any).mp_refresh_token)) {
             console.error(`[PixWebhook] MP settings not found for user ${checkout.restaurant_user_id}`);
             return new Response(JSON.stringify({ error: 'config_missing' }), { status: 200 });
         }
