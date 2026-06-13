@@ -141,6 +141,7 @@ interface SimpleCartModalProps {
   userId: string;
   isStoreOpen?: boolean;
   storeClosedMessage?: string;
+  onPixPaid?: (orderId: string) => void;
 }
 
 export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
@@ -155,7 +156,8 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
   deliverySettings = null,
   userId,
   isStoreOpen = true,
-  storeClosedMessage = 'A loja está fechada no momento.'
+  storeClosedMessage = 'A loja está fechada no momento.',
+  onPixPaid
 }) => {
   const { toast } = useToast();
   const formatBRL = (value: number) =>
@@ -817,7 +819,6 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
     if (pixOnlineCheckoutAvailable !== false) {
       try {
         await startPixCheckout({ ...orderData, payment_method: 'pix_online' });
-        onClose();
         return;
       } catch (error) {
         if (!isPixCheckoutConfigurationError(error)) throw error;
@@ -1094,7 +1095,7 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
 
   if (cart.length === 0) {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen && !pixCheckout} onOpenChange={onClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Carrinho</DialogTitle>
@@ -1121,9 +1122,13 @@ export const SimpleCartModal: React.FC<SimpleCartModalProps> = ({
           qrCodeImage={pixCheckout.qrCodeImage}
           paymentLinkUrl={pixCheckout.paymentLinkUrl}
           paymentId={pixCheckout.paymentId}
+          onPaid={(orderId) => {
+            setPixCheckout(null);
+            onPixPaid?.(orderId);
+          }}
         />
       ) : null}
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen && !pixCheckout} onOpenChange={onClose}>
       <DialogContent className="h-[100dvh] max-h-[100dvh] w-[calc(100dvw-1rem)] max-w-[calc(100dvw-1rem)] overflow-hidden overflow-x-hidden rounded-none border border-gray-100 bg-white p-0 shadow-2xl sm:h-[90dvh] sm:max-h-[90dvh] sm:max-w-lg sm:rounded-xl">
         <div className="flex flex-col h-full min-h-0">
           <DialogHeader className="border-b border-gray-100 px-4 py-4">

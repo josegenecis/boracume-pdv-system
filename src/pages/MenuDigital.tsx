@@ -967,6 +967,13 @@ const MenuDigital = () => {
         userId={finalUserId}
         isStoreOpen={storeOpenInfo.isOpen}
         storeClosedMessage={storeOpenInfo.detail}
+        onPixPaid={(orderId) => {
+          clearCart();
+          setShowCartModal(false);
+          if (orderId) {
+            navigate(`/track/${orderId}`);
+          }
+        }}
       />
 
       {/* Clube de Vantagens removido conforme solicitação */}
