@@ -1341,6 +1341,11 @@ function isActionableCustomerIntent(text: string) {
     isGreeting(text);
 }
 
+function getManualPauseMinutes() {
+  const raw = Number(getEnv('WHATSAPP_MANUAL_PAUSE_MINUTES', '20'));
+  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+}
+
 export async function pauseRestaurantBotForConversation(params: {
   supabase: any;
   restaurantId: string;
@@ -1529,52 +1534,117 @@ export async function sendEvolutionText(restaurantId: string, instanceName: stri
   const instance = String(instanceName || '').trim();
   const number = normalizePhone(phone);
   const message = String(text || '').trim();
-  let primaryFailure: any = null;
+  const attempts: any[] = [];
 
   if (!number || !message) {
     return { ok: false, skipped: true };
   }
 
-  if (EVOLUTION_BASE_URL && EVOLUTION_API_KEY && instance) {
-    await sendEvolutionTypingPresence(instance, number, Math.min(5, Math.max(1, Math.ceil(message.length / 80)))).catch(() => null);
-    const response = await fetch(`${EVOLUTION_BASE_URL.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance)}`, {
+  const base = EVOLUTION_BASE_URL.replace(/\/$/, '');
+  const instanceToken = fallbackRestaurantId ? `token_${fallbackRestaurantId.replace(/-/g, '')}` : '';
+  const delay = 1200;
+  const request = async (label: string, url: string, apiKey: string, body: Record<string, unknown>) => {
+    if (!url || !apiKey) return { ok: false, skipped: true, transport: label, status: null };
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: EVOLUTION_API_KEY
+        apikey: apiKey
       },
-      body: JSON.stringify({
-        number,
-        text: message,
-        delay: 1200,
-        linkPreview: true,
-        options: {
-          delay: 1200,
-          presence: 'composing'
-        }
-      })
-    });
+      body: JSON.stringify(body)
+    }).catch((error) => ({ ok: false, status: 0, json: async () => ({ error: String(error?.message || error || 'network_error') }) }) as any);
 
     const data = await response.json().catch(() => ({}));
-    if (response.ok) {
-      return { ok: true, status: response.status, data, transport: 'evolution-sendText' };
+    const result = { ok: Boolean(response.ok), status: response.status || null, data, transport: label };
+    attempts.push(result);
+    return result;
+  };
+
+  if (EVOLUTION_BASE_URL && EVOLUTION_API_KEY && instance) {
+    await sendEvolutionTypingPresence(instance, number, Math.min(5, Math.max(1, Math.ceil(message.length / 80)))).catch(() => null);
+
+    const encodedInstance = encodeURIComponent(instance);
+    const globalAttempts = [
+      {
+        label: 'evolution-message-sendText-text',
+        url: `${base}/message/sendText/${encodedInstance}`,
+        apiKey: EVOLUTION_API_KEY,
+        body: { number, text: message, delay, linkPreview: true, options: { delay, presence: 'composing' } }
+      },
+      {
+        label: 'evolution-message-sendText-message',
+        url: `${base}/message/sendText/${encodedInstance}`,
+        apiKey: EVOLUTION_API_KEY,
+        body: { number, message, delay, linkPreview: true, options: { delay, presence: 'composing' } }
+      },
+      {
+        label: 'evolution-send-text-instance',
+        url: `${base}/send/text/${encodedInstance}`,
+        apiKey: EVOLUTION_API_KEY,
+        body: { number, text: message, delay, linkPreview: true }
+      },
+      {
+        label: 'evolution-chat-sendMessage',
+        url: `${base}/chat/sendMessage/${encodedInstance}`,
+        apiKey: EVOLUTION_API_KEY,
+        body: { number, text: message, delay, linkPreview: true }
+      },
+      {
+        label: 'evolution-send-text-global',
+        url: `${base}/send/text`,
+        apiKey: EVOLUTION_API_KEY,
+        body: { instanceName: instance, instance, number, text: message, delay, linkPreview: true }
+      }
+    ];
+
+    for (const attempt of globalAttempts) {
+      const result = await request(attempt.label, attempt.url, attempt.apiKey, attempt.body);
+      if (result.ok) return result;
     }
-    primaryFailure = { ok: false, status: response.status, data, transport: 'evolution-sendText' };
   }
 
-  if (!fallbackRestaurantId) {
-    return primaryFailure || { ok: false, error: 'missing_restaurant_id' };
+  if (EVOLUTION_BASE_URL && instanceToken) {
+    const tokenAttempts = [
+      {
+        label: 'legacy-send-text-token',
+        url: `${base}/send/text`,
+        apiKey: instanceToken,
+        body: { number, text: message }
+      },
+      {
+        label: 'legacy-message-sendText-token',
+        url: instance ? `${base}/message/sendText/${encodeURIComponent(instance)}` : '',
+        apiKey: instanceToken,
+        body: { number, text: message, delay, linkPreview: true }
+      }
+    ];
+
+    for (const attempt of tokenAttempts) {
+      const result = await request(attempt.label, attempt.url, attempt.apiKey, attempt.body);
+      if (result.ok) return result;
+    }
   }
 
-  const legacy = await sendRestaurantWhatsApp(fallbackRestaurantId, number, message);
-  if (legacy?.ok) {
-    return { ...legacy, transport: 'legacy-send-text', fallbackFrom: primaryFailure?.transport || null };
+  if (fallbackRestaurantId) {
+    const legacy = await sendRestaurantWhatsApp(fallbackRestaurantId, number, message);
+    attempts.push({ ...legacy, transport: 'restaurant-whatsapp-legacy' });
+    if (legacy?.ok) {
+      return { ...legacy, transport: 'restaurant-whatsapp-legacy', fallbackFrom: attempts[0]?.transport || null };
+    }
   }
 
   return {
-    ...legacy,
-    transport: 'legacy-send-text',
-    primaryFailure
+    ok: false,
+    error: 'all_send_attempts_failed',
+    transport: attempts[0]?.transport || 'none',
+    status: attempts[0]?.status || null,
+    data: attempts[0]?.data || null,
+    attempts: attempts.map((attempt) => ({
+      transport: attempt.transport,
+      ok: Boolean(attempt.ok),
+      status: attempt.status || null,
+      data: attempt.data || attempt.error || null
+    }))
   };
 }
 
@@ -1758,13 +1828,18 @@ export async function processRestaurantBotMessage(params: {
 
   const pauseState = getConversationPauseState(existingConversation);
   const shouldResumeExpiredPause = pauseState.expired;
+  const shouldResumeManualPauseForCustomer =
+    pauseState.paused &&
+    pauseState.reason === 'manual' &&
+    minutesSince(existingConversation?.bot_paused_at) >= getManualPauseMinutes() &&
+    isActionableCustomerIntent(text);
   const shouldResumeTemporaryPauseForCustomer =
     pauseState.paused &&
     pauseState.reason === 'temporary' &&
     minutesSince(existingConversation?.bot_paused_at) >= 10 &&
     isActionableCustomerIntent(text);
 
-  if (shouldResumeExpiredPause || shouldResumeTemporaryPauseForCustomer) {
+  if (shouldResumeExpiredPause || shouldResumeTemporaryPauseForCustomer || shouldResumeManualPauseForCustomer) {
     const resumePayload = {
       status: 'active',
       bot_paused: false,
@@ -1785,18 +1860,19 @@ export async function processRestaurantBotMessage(params: {
         .eq('id', conversationId);
     }
 
-    if (shouldResumeTemporaryPauseForCustomer) {
+    if (shouldResumeTemporaryPauseForCustomer || shouldResumeManualPauseForCustomer) {
       await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_auto_resumed', 'Bot reativado automaticamente por nova intenção do cliente', {
         instanceName,
         customerPhone,
         conversationId,
         pauseState,
+        manualPauseMinutes: getManualPauseMinutes(),
         textPreview: text.slice(0, 120)
       });
     }
   }
 
-  if (pauseState.paused && !shouldResumeTemporaryPauseForCustomer) {
+  if (pauseState.paused && !shouldResumeTemporaryPauseForCustomer && !shouldResumeManualPauseForCustomer) {
     await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused', 'Bot pausado por atendimento humano', {
       instanceName,
       customerPhone,

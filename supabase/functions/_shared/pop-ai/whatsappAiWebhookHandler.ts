@@ -14,6 +14,36 @@ import { getRestaurantKnowledge } from './restaurantKnowledgeService.ts';
 import { sendEvolutionTyping } from './evolutionService.ts';
 import type { PopAiEngineResult, PopAiIncomingMessage } from './types.ts';
 
+function normalizeIntentText(text: string) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function minutesSince(dateString?: string | null) {
+  if (!dateString) return Number.POSITIVE_INFINITY;
+  const time = new Date(dateString).getTime();
+  if (Number.isNaN(time)) return Number.POSITIVE_INFINITY;
+  return (Date.now() - time) / 60000;
+}
+
+function manualPauseMinutes() {
+  const raw = Number(Deno.env.get('WHATSAPP_MANUAL_PAUSE_MINUTES') || '20');
+  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+}
+
+function isActionableCustomerIntent(text: string) {
+  const value = normalizeIntentText(text);
+  return /^(oi+|ola+|opa+|bom dia|boa tarde|boa noite)\b/.test(value) ||
+    /(link|cardapio|catalogo|menu|me envia|me manda|manda o link|envia o link|me passa o link)/i.test(value) ||
+    /(acompanhar|rastrear|status do pedido|meu pedido|onde.*pedido|pedido.*andamento|pedido.*status)/i.test(value) ||
+    /(promo|promocao|desconto|oferta|combo)/i.test(value) ||
+    /(quero|queria|gostaria|vou querer|fazer pedido|pedir|pedido|finalizar pedido)/i.test(value);
+}
+
 export async function processPopAiMessage(params: PopAiIncomingMessage): Promise<PopAiEngineResult> {
   const startedAt = Date.now();
   const supabase = params.supabase;
@@ -40,17 +70,32 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
     ]);
 
     if (aiConversation.status === 'human_active' || aiConversation.status === 'human_required') {
-      await savePopAiMessage(supabase, aiConversation, 'user', text, {
-        skipped: true,
-        reason: 'human_conversation_active'
-      });
-      await logPopAiAction(supabase, restaurantId, aiConversation.id, 'incoming_ignored_human_active', {
-        instanceName: params.instanceName,
-        phone,
-        textPreview: text.slice(0, 180),
-        status: aiConversation.status
-      });
-      return { ok: true, skipped: true, reason: 'bot_paused', aiConversationId: aiConversation.id, status: 'human_active' };
+      const pausedAt = String(aiConversation?.metadata?.pausedAt || aiConversation?.last_message_at || '');
+      const shouldResume =
+        minutesSince(pausedAt) >= manualPauseMinutes() &&
+        isActionableCustomerIntent(text);
+
+      if (shouldResume) {
+        await updatePopAiConversationStatus(supabase, aiConversation.id, 'ai_active', {
+          reason: 'auto_resume_after_human_pause',
+          previousStatus: aiConversation.status,
+          manualPauseMinutes: manualPauseMinutes(),
+          resumedAt: new Date().toISOString()
+        });
+        aiConversation = { ...aiConversation, status: 'ai_active' };
+      } else {
+        await savePopAiMessage(supabase, aiConversation, 'user', text, {
+          skipped: true,
+          reason: 'human_conversation_active'
+        });
+        await logPopAiAction(supabase, restaurantId, aiConversation.id, 'incoming_ignored_human_active', {
+          instanceName: params.instanceName,
+          phone,
+          textPreview: text.slice(0, 180),
+          status: aiConversation.status
+        });
+        return { ok: true, skipped: true, reason: 'bot_paused', aiConversationId: aiConversation.id, status: 'human_active' };
+      }
     }
 
     const systemPrompt = buildPopAiSystemPrompt(settings, knowledge);

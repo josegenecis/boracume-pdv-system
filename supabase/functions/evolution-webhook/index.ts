@@ -297,7 +297,7 @@ Deno.serve(async (req: Request) => {
       error: result.error || null,
       details: result.details || null
     });
-    return json({ success: false, error: result.error || 'bot_failed', details: result.details || null }, 502);
+    return json({ success: true, handled: true, botOk: false, error: result.error || 'bot_failed', details: result.details || null });
   }
 
   await logWhatsAppBotStep(supabase, userId, 'whatsapp_webhook_processed', 'Webhook evolution processado com sucesso', {
