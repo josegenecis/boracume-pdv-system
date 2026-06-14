@@ -1295,11 +1295,14 @@ function getConversationPauseState(conversation: any) {
 }
 
 async function loadExistingWhatsAppConversation(supabase: any, restaurantId: string, customerPhone: string) {
+  const phoneCandidates = buildPhoneCandidates(customerPhone);
   const fullResult = await supabase
     .from('whatsapp_conversations')
     .select('id, status, bot_paused, bot_paused_at, bot_paused_by')
     .eq('user_id', restaurantId)
-    .eq('customer_phone', customerPhone)
+    .in('customer_phone', phoneCandidates)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!fullResult.error) return fullResult.data || null;
@@ -1312,7 +1315,9 @@ async function loadExistingWhatsAppConversation(supabase: any, restaurantId: str
     .from('whatsapp_conversations')
     .select('id, status')
     .eq('user_id', restaurantId)
-    .eq('customer_phone', customerPhone)
+    .in('customer_phone', phoneCandidates)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (fallbackResult.error) return null;
@@ -1346,6 +1351,7 @@ export async function pauseRestaurantBotForConversation(params: {
   const supabase = params.supabase;
   const restaurantId = String(params.restaurantId || '').trim();
   const customerPhone = normalizePhone(params.customerPhone);
+  const phoneCandidates = buildPhoneCandidates(customerPhone);
   const customerName = String(params.customerName || 'Cliente WhatsApp').trim() || 'Cliente WhatsApp';
 
   if (!restaurantId || !customerPhone) {
@@ -1356,7 +1362,9 @@ export async function pauseRestaurantBotForConversation(params: {
     .from('whatsapp_conversations')
     .select('id')
     .eq('user_id', restaurantId)
-    .eq('customer_phone', customerPhone)
+    .in('customer_phone', phoneCandidates)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (findError) return { ok: false, error: findError.message };
@@ -1404,6 +1412,20 @@ export async function pauseRestaurantBotForConversation(params: {
   }
 
   if (updateError) return { ok: false, error: updateError.message };
+
+  await supabase
+    .from('ai_conversations')
+    .update({
+      status: 'human_active',
+      metadata: {
+        reason: params.reason || 'outgoing_message',
+        legacyConversationId: conversationId,
+        pausedAt: new Date().toISOString()
+      },
+      last_message_at: new Date().toISOString()
+    })
+    .eq('restaurant_id', restaurantId)
+    .in('phone', phoneCandidates);
 
   await logWhatsAppBotStep(supabase, restaurantId, 'whatsapp_bot_paused_by_outgoing', 'Bot pausado por mensagem enviada pelo restaurante', {
     customerPhone,
@@ -1852,7 +1874,7 @@ export async function processRestaurantBotMessage(params: {
   const menuWasSentToday = Boolean(lastMenuMessage?.id && isSameLocalDay(lastMenuMessage?.sent_at));
   const isFirstCustomerTouchToday = customerMessagesToday <= 1;
   const canRepeatMenuReply = explicitMenuIntent
-    ? recentBotReplyMinutes > 2
+    ? recentBotReplyMinutes > 30
     : (!menuWasSentToday && (isFirstConversationTouch || greetingIntent || recentBotReplyMinutes > 20));
   const menuLink = buildMenuShareUrl(restaurantId);
   const dailyMenuGreetingText = buildConfiguredSmartMenuGreeting(context, restaurantId, customerName);
@@ -1984,6 +2006,20 @@ export async function processRestaurantBotMessage(params: {
         .update({ status: 'bot_paused', updated_at: new Date().toISOString() })
         .eq('id', conversationId);
     }
+
+    await supabase
+      .from('ai_conversations')
+      .update({
+        status: 'human_required',
+        metadata: {
+          reason: problemIntent ? 'problem_or_complaint' : 'human_requested',
+          legacyConversationId: conversationId,
+          pausedAt: new Date().toISOString()
+        },
+        last_message_at: new Date().toISOString()
+      })
+      .eq('restaurant_id', restaurantId)
+      .in('phone', phoneCandidates);
 
     const handoffText = problemIntent
       ? (renderConfiguredText(getBotConfig(context).human_transfer_message, context.restaurantName, restaurantId, customerName) ||

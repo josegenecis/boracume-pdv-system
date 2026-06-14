@@ -86,6 +86,43 @@ const configureEvolutionWebhook = async (baseUrl: string, globalApiKey: string, 
   return { ok: false, webhookUrl, results };
 };
 
+const configureEvolutionWebhooks = async (baseUrl: string, globalApiKey: string, instanceNames: string[], instanceToken: string) => {
+  const names = Array.from(new Set(instanceNames.map((item) => String(item || '').trim()).filter(Boolean)));
+  const results = [];
+  for (const name of names) {
+    const result = await configureEvolutionWebhook(baseUrl, globalApiKey, name, instanceToken);
+    results.push({ instanceName: name, ...result });
+    if (result.ok) return { ok: true, webhookUrl: result.webhookUrl, results };
+  }
+  return { ok: false, webhookUrl: buildWebhookUrl(), results };
+};
+
+const ensureWhatsAppSettingsEnabled = async (supabaseAdmin: any, restaurantId: string, baseUrl: string, globalApiKey: string) => {
+  const payload = {
+    enabled: true,
+    ai_enabled: true,
+    evolution_url: baseUrl,
+    evolution_api_key: globalApiKey,
+    updated_at: new Date().toISOString()
+  };
+  const existing = await supabaseAdmin
+    .from('whatsapp_settings')
+    .select('id')
+    .eq('user_id', restaurantId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.data?.id) {
+    await supabaseAdmin.from('whatsapp_settings').update(payload).eq('id', existing.data.id);
+    return;
+  }
+
+  await supabaseAdmin.from('whatsapp_settings').insert({
+    user_id: restaurantId,
+    ...payload
+  });
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -174,10 +211,6 @@ serve(async (req) => {
       newStatus = 'connecting';
     }
 
-    const webhookResult = newStatus === 'connected'
-      ? await configureEvolutionWebhook(baseUrl, globalApiKey, instanceName, instanceToken)
-      : null;
-
     const jid = currentInstance?.jid || currentInstance?.ownerJid || currentInstance?.owner || currentInstance?.number || currentInstance?.phone;
     if (jid) {
       phone = String(jid).split('@')[0] || null;
@@ -194,6 +227,10 @@ serve(async (req) => {
       currentInstance?.instance
     ].filter(Boolean).map((item) => String(item).trim()).filter(Boolean)));
 
+    const webhookResult = newStatus === 'connected'
+      ? await configureEvolutionWebhooks(baseUrl, globalApiKey, providerNames, instanceToken)
+      : null;
+
     for (const name of providerNames) {
       await supabaseAdmin
         .from('whatsapp_instances')
@@ -202,6 +239,10 @@ serve(async (req) => {
           instance_name: name,
           ...updateData
         }, { onConflict: 'instance_name' });
+    }
+
+    if (newStatus === 'connected') {
+      await ensureWhatsAppSettingsEnabled(supabaseAdmin, restaurant_id, baseUrl, globalApiKey);
     }
 
     return new Response(JSON.stringify({ status: newStatus, phone, webhook: webhookResult, instanceNames: providerNames }), {

@@ -196,14 +196,22 @@ export async function syncLegacyConversationAiState(
   status: PopAiConversationStatus
 ) {
   if (!legacyConversationId) return;
+  const isHuman = status === 'human_required' || status === 'human_active';
+  const payload: Record<string, unknown> = {
+    ai_conversation_id: aiConversationId,
+    ai_status: status,
+    human_required: isHuman,
+    updated_at: new Date().toISOString()
+  };
+  if (isHuman) {
+    payload.status = 'bot_paused';
+    payload.bot_paused = true;
+    payload.bot_paused_at = new Date().toISOString();
+  }
+
   await supabase
     .from('whatsapp_conversations')
-    .update({
-      ai_conversation_id: aiConversationId,
-      ai_status: status,
-      human_required: status === 'human_required' || status === 'human_active',
-      updated_at: new Date().toISOString()
-    })
+    .update(payload)
     .eq('id', legacyConversationId);
 }
 

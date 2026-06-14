@@ -39,6 +39,20 @@ export async function processPopAiMessage(params: PopAiIncomingMessage): Promise
       getConversationHistory(supabase, aiConversation.id, Number(settings.max_history_messages || 30))
     ]);
 
+    if (aiConversation.status === 'human_active' || aiConversation.status === 'human_required') {
+      await savePopAiMessage(supabase, aiConversation, 'user', text, {
+        skipped: true,
+        reason: 'human_conversation_active'
+      });
+      await logPopAiAction(supabase, restaurantId, aiConversation.id, 'incoming_ignored_human_active', {
+        instanceName: params.instanceName,
+        phone,
+        textPreview: text.slice(0, 180),
+        status: aiConversation.status
+      });
+      return { ok: true, skipped: true, reason: 'bot_paused', aiConversationId: aiConversation.id, status: 'human_active' };
+    }
+
     const systemPrompt = buildPopAiSystemPrompt(settings, knowledge);
     await savePopAiMessage(supabase, aiConversation, 'system', systemPrompt, {
       kind: 'current_restaurant_knowledge',
