@@ -8,10 +8,16 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
+const SUPABASE_PROJECT_REF = 'gcfyrcpugmducptktjic';
 
 const evolutionBaseUrl = () => String(Deno.env.get('EVOLUTION_BASE_URL') || Deno.env.get('EVOGO_BASE_URL') || 'https://api.boracume.com').replace(/\/+$/, '');
 const evolutionApiKey = () => String(Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOGO_API_KEY') || '').trim();
-const buildWebhookUrl = () => `${String(Deno.env.get('SUPABASE_URL') || '').replace(/\/+$/, '')}/functions/v1/evogo-webhook`;
+const functionsBaseUrl = () => {
+  const explicit = String(Deno.env.get('SUPABASE_FUNCTIONS_URL') || Deno.env.get('PUBLIC_FUNCTIONS_URL') || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+  return `https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1`;
+};
+const buildWebhookUrl = () => `${functionsBaseUrl()}/evogo-webhook`;
 
 const getInstancesFromPayload = (payload: any) => {
   if (Array.isArray(payload?.data)) return payload.data;
@@ -146,14 +152,31 @@ const ensureWhatsAppSettingsEnabled = async (supabaseAdmin: any, restaurantId: s
     .maybeSingle();
 
   if (existing?.data?.id) {
-    await supabaseAdmin.from('whatsapp_settings').update(payload).eq('id', existing.data.id);
+    const updated = await supabaseAdmin.from('whatsapp_settings').update(payload).eq('id', existing.data.id);
+    if (updated.error && String(updated.error.message || '').includes('ai_enabled')) {
+      await supabaseAdmin.from('whatsapp_settings').update({
+        enabled: true,
+        evolution_url: baseUrl,
+        evolution_api_key: globalApiKey,
+        updated_at: new Date().toISOString()
+      }).eq('id', existing.data.id);
+    }
     return;
   }
 
-  await supabaseAdmin.from('whatsapp_settings').insert({
+  const inserted = await supabaseAdmin.from('whatsapp_settings').insert({
     user_id: restaurantId,
     ...payload
   });
+  if (inserted.error && String(inserted.error.message || '').includes('ai_enabled')) {
+    await supabaseAdmin.from('whatsapp_settings').insert({
+      user_id: restaurantId,
+      enabled: true,
+      evolution_url: baseUrl,
+      evolution_api_key: globalApiKey,
+      updated_at: new Date().toISOString()
+    });
+  }
 };
 
 serve(async (req) => {
