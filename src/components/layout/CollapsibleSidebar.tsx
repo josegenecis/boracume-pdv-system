@@ -123,24 +123,24 @@ const CollapsibleSidebar = () => {
       icon: DollarSign,
       label: 'Financeiro',
       items: [
-        { to: '/financeiro', label: 'Resumo', feature: 'finance', area: 'finance' },
-        { to: '/despesas', label: 'Despesas', feature: 'finance', area: 'finance' },
+        { to: '/financeiro', label: 'Visão Geral', feature: 'finance', area: 'finance' },
+        { to: '/despesas', label: 'Contas a Pagar', feature: 'finance', area: 'finance' },
       ]
     },
     {
       id: 'estoque',
       icon: Package,
-      label: 'Estoque & Insumos',
+      label: 'Estoque',
       items: [
-        { to: '/estoque', label: 'Produtos e Insumos', feature: 'stock', area: 'stock' },
+        { to: '/estoque', label: 'Produtos e Estoque', feature: 'stock', area: 'stock' },
       ]
     },
     {
       id: 'inteligencia',
       icon: BarChart3,
-      label: 'Inteligência',
+      label: 'Análise do Negócio',
       items: [
-        { to: '/inteligencia/cmv', label: 'Dashboard CMV & ABC', feature: 'cmv', area: 'stock' },
+        { to: '/inteligencia/cmv', label: 'Produtos mais lucrativos', feature: 'cmv', area: 'stock' },
       ]
     },
     {
@@ -159,9 +159,9 @@ const CollapsibleSidebar = () => {
       items: [
         { to: '/produtos', label: 'Produtos', feature: 'products', area: 'products' },
         { to: '/produtos?tab=categories', label: 'Categorias', feature: 'products', area: 'products' },
-        { to: '/produtos?tab=global-variations', label: 'Variações', feature: 'products', area: 'products' },
+        { to: '/produtos?tab=global-variations', label: 'Adicionais', feature: 'products', area: 'products' },
         { to: '/cardapio', label: 'Acessar cardápio', feature: 'menu', area: 'products' },
-        { to: '/configuracoes?tab=menu', label: 'QR Code & Links', feature: 'menu', area: 'products' },
+        { to: '/configuracoes?tab=menu', label: 'Cardápio Online', feature: 'menu', area: 'products' },
       ]
     },
     {
@@ -175,16 +175,16 @@ const CollapsibleSidebar = () => {
     {
       id: 'marketing',
       icon: Megaphone,
-      label: 'Marketing',
+      label: 'Propaganda',
       items: [
-        { to: '/marketing?tab=banners', label: 'Banners', feature: 'marketing', area: 'marketing' },
-        { to: '/marketing?tab=coupons', label: 'Cupons', feature: 'marketing', area: 'marketing' },
-        { to: '/marketing?tab=highlights', label: 'Destaques', feature: 'marketing', area: 'marketing' },
-        { to: '/marketing?tab=upsells', label: 'Upsells', feature: 'marketing', area: 'marketing' },
-        { to: '/marketing?tab=loyalty', label: 'Fidelidade', feature: 'marketing', area: 'marketing' },
-        { to: '/marketing?tab=pixels', label: 'Pixels', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=banners', label: 'Artes e Banners', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=coupons', label: 'Cupons de Desconto', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=highlights', label: 'Produtos em Destaque', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=upsells', label: 'Venda Mais', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=loyalty', label: 'Clientes Fiéis', feature: 'marketing', area: 'marketing' },
+        { to: '/marketing?tab=pixels', label: 'Facebook e Instagram', feature: 'marketing', area: 'marketing' },
         { to: '/configuracoes?tab=whatsapp', label: 'WhatsApp', feature: 'whatsapp', area: 'marketing' },
-        { to: '/whatsapp-bot', label: 'WhatsApp Bot', feature: 'whatsapp', area: 'marketing' },
+        { to: '/whatsapp-bot', label: 'Robô do WhatsApp', feature: 'whatsapp', area: 'marketing' },
       ]
     },
     {
@@ -228,7 +228,7 @@ const CollapsibleSidebar = () => {
   }, [subscription]);
 
   const standaloneLinks: SidebarLink[] = [
-    { to: '/agente', icon: Bot, label: 'Assistente', feature: 'agent', area: 'agent' },
+    { to: '/agente', icon: Bot, label: 'Ajuda Inteligente', feature: 'agent', area: 'agent' },
     { to: '/downloads', icon: Download, label: 'App Desktop', feature: 'desktop', area: 'desktop' },
     { to: '/subscription', icon: Crown, label: 'Planos', detail: currentPlanLabel, accent: true },
   ];

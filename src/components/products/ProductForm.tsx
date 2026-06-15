@@ -1729,7 +1729,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
           console.log('✅ Vínculos inseridos com sucesso!');
           if (!options?.silent) {
             toast({
-              title: "Variações globais vinculadas",
+              title: "Adicionais vinculados",
               description: `${variations.length} variações globais salvas com sucesso!`,
               variant: "default"
             });
@@ -2245,7 +2245,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSave, onCancel }) 
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#FF6400]/20 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#FF6400]">
                 <Sparkles className="h-3.5 w-3.5" />
-                Complementos do produto
+                Adicionais do produto
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-sm font-semibold text-[#003223]">Adicionar variações</div>

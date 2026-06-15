@@ -274,9 +274,9 @@ const ProductVariationManager: React.FC<ProductVariationManagerProps> = ({
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white/80 px-3 py-1 text-xs font-semibold text-boracume-orange">
             <Sparkles className="h-3.5 w-3.5" />
-            Complementos do produto
+            Adicionais do produto
           </div>
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">Variações do Produto</h3>
+          <h3 className="mt-2 text-lg font-semibold text-slate-900">Opções do Produto</h3>
         </div>
         <div className="flex gap-2">
           <Button

@@ -280,7 +280,7 @@ const GlobalVariationManager: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">Variações Globais</h3>
+          <h3 className="mt-2 text-lg font-semibold text-slate-900">Adicionais</h3>
         </div>
         <Button onClick={() => setShowForm(true)} size="sm" className="h-9 rounded-xl bg-[#8CC850] px-4 text-white hover:bg-[#79b541] shadow-[0_18px_35px_-20px_rgba(140,200,80,0.45)]">
           <Plus size={16} className="mr-1" /> Nova Variação Global

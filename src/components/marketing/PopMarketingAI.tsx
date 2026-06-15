@@ -248,7 +248,7 @@ export default function PopMarketingAI() {
     try {
       const result = await callPopMarketingAI<{ connection: MetaConnection }>({ action: 'sync_assets' });
       setConnection(result.connection);
-      toast({ title: 'Ativos atualizados', description: 'Contas, páginas, Instagram e WhatsApp foram sincronizados.' });
+      toast({ title: 'Contas conectadas atualizadas', description: 'Facebook, Instagram e WhatsApp foram sincronizados.' });
     } catch (error: any) {
       toast({ title: 'Erro ao sincronizar', description: error?.message || 'Tente reconectar a Meta.', variant: 'destructive' });
     } finally {
@@ -400,19 +400,19 @@ export default function PopMarketingAI() {
         <CardContent className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.28em] text-[#d9ff99]">
-              <Sparkles className="h-4 w-4" /> PopMarketing AI
+              <Sparkles className="h-4 w-4" /> Anúncios Automáticos
             </div>
-            <h2 className="text-3xl font-black">Tráfego pago com IA para restaurantes</h2>
+            <h2 className="text-3xl font-black">Crie anúncios para Facebook e Instagram em poucos cliques</h2>
             <p className="mt-2 max-w-3xl text-white/78">
-              Conecte Meta Ads, gere estratégia e copys com IA, monte criativos profissionais com foto real e publique campanhas pausadas com segurança.
+              Conecte suas contas, escolha o que deseja divulgar e o PopSystem ajuda a criar sua propaganda de forma simples.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={connectMeta} disabled={loading} className="bg-[#ff5a00] text-white hover:bg-[#e75000]">
-              <Facebook className="mr-2 h-4 w-4" /> Conectar Meta Ads
+              <Facebook className="mr-2 h-4 w-4" /> Conectar Facebook e Instagram
             </Button>
             <Button onClick={syncAssets} disabled={loading || !connection} variant="secondary">
-              <RefreshCw className="mr-2 h-4 w-4" /> Atualizar ativos
+              <RefreshCw className="mr-2 h-4 w-4" /> Atualizar contas conectadas
             </Button>
           </div>
         </CardContent>
@@ -421,23 +421,24 @@ export default function PopMarketingAI() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Wand2 className="h-5 w-5 text-[#ff5a00]" /> Criar campanha com IA</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Wand2 className="h-5 w-5 text-[#ff5a00]" /> Criar propaganda com IA</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Objetivo</Label>
+              <Label>O que você deseja?</Label>
               <Select value={form.objective} onValueChange={(v) => setForm((p) => ({ ...p, objective: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="vender_mais">Vender mais</SelectItem>
                   <SelectItem value="divulgar_promocao">Divulgar promoção</SelectItem>
-                  <SelectItem value="aumentar_pedidos">Aumentar pedidos</SelectItem>
-                  <SelectItem value="recuperar_clientes">Recuperar clientes</SelectItem>
+                  <SelectItem value="aumentar_pedidos">Receber pedidos no WhatsApp</SelectItem>
+                  <SelectItem value="recuperar_clientes">Atrair novos clientes</SelectItem>
+                  <SelectItem value="produto_especifico">Divulgar produto específico</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Destino do botão</Label>
+              <Label>Para onde o cliente vai?</Label>
               <Select value={form.destination} onValueChange={(v) => setForm((p) => ({ ...p, destination: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -448,11 +449,11 @@ export default function PopMarketingAI() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Produto em foco</Label>
+              <Label>O que deseja anunciar?</Label>
               <Select value={form.productId} onValueChange={(v) => setForm((p) => ({ ...p, productId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Selecionar produto" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">IA escolhe / categoria</SelectItem>
+                  <SelectItem value="none">PopSystem escolhe / categoria</SelectItem>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>{product.name} - {money(product.price)}</SelectItem>
                   ))}
@@ -460,17 +461,17 @@ export default function PopMarketingAI() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Produto/categoria livre</Label>
-              <Input value={form.productFocus} onChange={(e) => setForm((p) => ({ ...p, productFocus: e.target.value }))} placeholder="Ex.: açaí 500ml, pizzas, combos" />
+              <Label>Digite o produto ou categoria</Label>
+              <Input value={form.productFocus} onChange={(e) => setForm((p) => ({ ...p, productFocus: e.target.value }))} placeholder="Ex.: hambúrguer, pizza, açaí, combo família" />
             </div>
             <div className="space-y-2">
-              <Label>Verba diária</Label>
+              <Label>Quanto deseja investir por dia?</Label>
               <Input type="number" min={5} value={form.dailyBudget} onChange={(e) => setForm((p) => ({ ...p, dailyBudget: Number(e.target.value || 0) }))} />
             </div>
             <div className="space-y-2">
-              <Label>Raio do anúncio em km</Label>
+              <Label>Até quantos km do restaurante mostrar?</Label>
               <Input type="number" min={1} value={form.targetRadiusKm} onChange={(e) => setForm((p) => ({ ...p, targetRadiusKm: Number(e.target.value || 0) }))} />
-              <p className="text-xs text-muted-foreground">A Meta usa esse raio a partir do endereço do restaurante. Se não houver coordenada, o sistema usa a cidade/BR como fallback.</p>
+              <p className="text-xs text-muted-foreground">Seu anúncio será mostrado para pessoas próximas ao restaurante.</p>
             </div>
             <div className="space-y-2">
               <Label>Cidade alvo</Label>
@@ -484,7 +485,7 @@ export default function PopMarketingAI() {
               <div>
                 <Label>Direção de arte dos criativos</Label>
                 <p className="text-xs text-muted-foreground">
-                  O PopMarketing usa templates profissionais com foto real do produto. Não há geração de imagem por IA no fluxo principal.
+                  O PopSystem usa modelos profissionais com foto real do produto. Não há geração de imagem por IA no fluxo principal.
                 </p>
               </div>
               <div className="grid gap-3 rounded-2xl border bg-[#fbfaf6] p-4 sm:grid-cols-2">
@@ -495,9 +496,9 @@ export default function PopMarketingAI() {
                   </div>
                 </div>
                 <div className="rounded-xl border bg-white p-3">
-                  <div className="font-bold text-[#003223]">Templates automáticos</div>
+                  <div className="font-bold text-[#003223]">Modelos automáticos</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Feed, Stories, Reels e Horizontal são renderizados em PNG com logo, foto, headline, preço e CTA.
+                    Feed, Stories, Reels e Horizontal são montados com logo, foto, chamada, preço e botão.
                   </div>
                 </div>
               </div>
@@ -565,12 +566,12 @@ export default function PopMarketingAI() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-600" /> Conexão Meta</CardTitle>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-600" /> Facebook e Instagram</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span>Status</span>
-              <Badge className={connection?.status === 'connected' ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-700'}>{connection?.status || 'desconectado'}</Badge>
+              <Badge className={connection?.status === 'connected' ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-700'}>{connection?.status === 'connected' ? 'conectado' : 'não conectado'}</Badge>
             </div>
             <div>Conta: <strong>{connection?.ad_account_id || 'não vinculada'}</strong></div>
             <div>Página: <strong>{connection?.page_id || 'não vinculada'}</strong></div>
@@ -635,13 +636,13 @@ export default function PopMarketingAI() {
               <Tabs defaultValue="overview">
                 <TabsList className="mb-4">
                   <TabsTrigger value="overview">Resumo</TabsTrigger>
-                  <TabsTrigger value="copy">Copys</TabsTrigger>
-                  <TabsTrigger value="creative">Criativos</TabsTrigger>
+                  <TabsTrigger value="copy">Textos</TabsTrigger>
+                  <TabsTrigger value="creative">Artes</TabsTrigger>
                 </TabsList>
                 <TabsContent value="overview" className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-4">
                     <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Status</div><div className="font-black">{statusLabel[selectedCampaign.status] || selectedCampaign.status}</div></div>
-                    <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Verba diária</div><div className="font-black">{money(selectedCampaign.daily_budget)}</div></div>
+                    <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Investimento por dia</div><div className="font-black">{money(selectedCampaign.daily_budget)}</div></div>
                     <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Destino</div><div className="font-black">{selectedCampaign.destination}</div></div>
                     <div className="rounded-xl bg-muted p-4"><div className="text-xs text-muted-foreground">Criada</div><div className="font-black">{dateLabel(selectedCampaign.created_at)}</div></div>
                   </div>
@@ -652,10 +653,15 @@ export default function PopMarketingAI() {
                     <p className="mt-1">
                       {selectedCampaign.ai_strategy?.audience?.origin?.formatted_address
                         ? `Anúncio configurado para ${selectedCampaign.ai_strategy?.audience?.radius_km || selectedCampaign.target_radius_km || 5} km a partir de ${selectedCampaign.ai_strategy.audience.origin.formatted_address}.`
-                        : `Sem coordenada automática no momento. Ao publicar, o fallback usa segmentação ampla no Brasil até o endereço do restaurante ser geocodificado.`}
+                        : `Ainda não encontramos a localização exata. Confira o endereço do restaurante antes de publicar.`}
                     </p>
                   </div>
-                  <pre className="max-h-80 overflow-auto rounded-xl bg-[#062f23] p-4 text-xs text-white">{JSON.stringify(selectedCampaign.ai_strategy || {}, null, 2)}</pre>
+                  <div className="rounded-xl bg-[#062f23] p-4 text-sm text-white">
+                    <div className="font-bold">Estratégia da campanha</div>
+                    <p className="mt-2 text-white/80">
+                      O PopSystem preparou textos, público recomendado, raio de entrega da propaganda e canais indicados para revisão.
+                    </p>
+                  </div>
                 </TabsContent>
                 <TabsContent value="copy" className="grid gap-3 md:grid-cols-2">
                   {(selectedCampaign.ai_strategy?.copies || []).map((copy: any, index: number) => (
@@ -768,9 +774,9 @@ export default function PopMarketingAI() {
 
       <Alert>
         <CheckCircle2 className="h-4 w-4" />
-        <AlertTitle>MVP entregue com trava de segurança</AlertTitle>
+        <AlertTitle>Campanha pronta para sua revisão</AlertTitle>
         <AlertDescription>
-          Campanhas são planejadas por IA e os criativos são montados por templates com foto real, sem custo de API de imagem. Tudo é enviado à Meta em modo pausado para revisão.
+          As campanhas são planejadas com IA e as artes usam modelos prontos com foto real do produto. Tudo é enviado pausado para você revisar antes de ativar.
         </AlertDescription>
       </Alert>
     </div>

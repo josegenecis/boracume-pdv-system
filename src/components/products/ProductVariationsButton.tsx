@@ -18,12 +18,12 @@ const ProductVariationsButton: React.FC<ProductVariationsButtonProps> = ({ produ
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className={compact ? 'h-8 px-2' : undefined}>
           <Settings size={16} className={compact ? '' : 'mr-1'} />
-          <span className={compact ? 'hidden sm:inline ml-1' : ''}>Variações</span>
+          <span className={compact ? 'hidden sm:inline ml-1' : ''}>Opções</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Gerenciar Variações</DialogTitle>
+          <DialogTitle>Gerenciar Opções</DialogTitle>
         </DialogHeader>
         <ProductVariationManager 
           productId={productId} 

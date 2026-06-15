@@ -170,7 +170,7 @@ export default function UpsellManager() {
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle>Upsells</CardTitle>
+          <CardTitle>Venda Mais</CardTitle>
           <Button onClick={openCreate} disabled={loading}>
             <Plus className="h-4 w-4 mr-2" />
             Nova regra

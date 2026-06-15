@@ -150,7 +150,7 @@ const Configuracoes: React.FC = () => {
               <option value="ifood">iFood (em breve)</option>
               <option value="users">Usuários e Equipe</option>
               <option value="notifications">Notificações</option>
-              <option value="marketing">Marketing</option>
+              <option value="marketing">Propaganda</option>
               <option value="support">Suporte</option>
             </select>
           </div>
@@ -174,7 +174,7 @@ const Configuracoes: React.FC = () => {
           <TabsTrigger value="users">{tabLabel('Usuários e Equipe', 'team')}</TabsTrigger>
           <TabsTrigger value="notifications">{tabLabel('Notificações', 'settings')}</TabsTrigger>
 
-          <TabsTrigger value="marketing">{tabLabel('Marketing', 'marketing')}</TabsTrigger>
+          <TabsTrigger value="marketing">{tabLabel('Propaganda', 'marketing')}</TabsTrigger>
           <TabsTrigger value="support">{tabLabel('Suporte', 'settings')}</TabsTrigger>
         </TabsList>
         

@@ -98,7 +98,7 @@ const defaultSettings: TimeClockSettings = {
   face_min_score: 0.75,
   face_store_evidence: false,
   face_policy_version: '2026-05-lgpd-v1',
-  policy_notice: 'O ponto registra horário, localização, aparelho e verificação facial/liveness somente para controle de jornada.',
+  policy_notice: 'O ponto registra horário, localização, aparelho e reconhecimento facial somente para controle de jornada.',
 };
 
 const defaultAutomationSettings: AutomationSettings = {
@@ -494,7 +494,7 @@ export default function ControlePonto() {
               </div>
               <h1 className="mt-3 text-3xl font-bold tracking-tight">Controle de ponto da equipe</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/72">
-                Estrutura preparada para GPS, aparelho autorizado, auditoria e API facial/liveness. A biometria deve ser processada por provedor seguro; o PopSystem guarda resultado, score e evidências mínimas.
+                Controle a entrada e saída dos funcionários com localização, aparelho autorizado e validação facial.
               </p>
             </div>
             <Button className="rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={() => void loadData()} disabled={loading}>
@@ -520,19 +520,19 @@ export default function ControlePonto() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="rounded-[22px] border-[#E6E0D5]">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><Users className="h-4 w-4" /> Presentes agora</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><Users className="h-4 w-4" /> Funcionários trabalhando</CardTitle>
             </CardHeader>
             <CardContent className="text-3xl font-bold text-[#063B2A]">{presentCount}</CardContent>
           </Card>
           <Card className="rounded-[22px] border-[#E6E0D5]">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="h-4 w-4" /> Revisão pendente</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="h-4 w-4" /> Pontos para revisar</CardTitle>
             </CardHeader>
             <CardContent className="text-3xl font-bold text-amber-600">{events.filter((event) => event.status === 'pending_review').length}</CardContent>
           </Card>
           <Card className="rounded-[22px] border-[#E6E0D5]">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4" /> Raio permitido</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4" /> Distância permitida</CardTitle>
             </CardHeader>
             <CardContent className="text-3xl font-bold text-[#063B2A]">{settings.allowed_radius_meters}m</CardContent>
           </Card>
@@ -546,8 +546,8 @@ export default function ControlePonto() {
             <CardContent className="space-y-5">
               {[
                 ['enabled', 'Ativar controle de ponto'],
-                ['require_location', 'Exigir localização no ponto'],
-                ['require_face_liveness', 'Exigir biometria facial/liveness'],
+                ['require_location', 'Exigir localização ao bater ponto'],
+                ['require_face_liveness', 'Exigir reconhecimento facial'],
                 ['require_device_binding', 'Vincular aparelho do funcionário'],
                 ['allow_outside_radius', 'Permitir ponto fora do raio com revisão'],
               ].map(([key, label]) => (
@@ -592,7 +592,7 @@ export default function ControlePonto() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Modo da prova de vida</Label>
+                  <Label>Como validar o rosto</Label>
                   <Select
                     value={settings.face_liveness_mode}
                     onValueChange={(value) => setSettings((current) => ({
@@ -605,9 +605,9 @@ export default function ControlePonto() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manual_review">Revisão manual auditável</SelectItem>
-                      <SelectItem value="faceio">FACEIO liveness</SelectItem>
-                      <SelectItem value="provider_webhook">API facial por webhook</SelectItem>
+                      <SelectItem value="manual_review">Revisão manual</SelectItem>
+                      <SelectItem value="faceio">Reconhecimento facial automático</SelectItem>
+                      <SelectItem value="provider_webhook">Validação facial externa</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -616,7 +616,7 @@ export default function ControlePonto() {
               <div className="rounded-2xl border border-[#E6E0D5] bg-white p-4">
                 <div className="mb-3 flex items-center gap-2 font-semibold text-[#063B2A]">
                   <ShieldCheck className="h-4 w-4 text-[#FF6400]" />
-                  Biometria facial e LGPD
+                  Reconhecimento facial e LGPD
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -752,7 +752,7 @@ export default function ControlePonto() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-[#FF6400]" />
-                Automação RH e contabilidade
+                Envio automático para RH e contador
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -768,7 +768,7 @@ export default function ControlePonto() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email da contabilidade</Label>
+                  <Label>Email do contador</Label>
                   <Input
                     type="email"
                     value={automationSettings.accounting_email}

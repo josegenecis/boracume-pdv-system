@@ -1019,7 +1019,7 @@ const Financeiro = () => {
   const financePulse = [
     { label: 'Margem', value: Math.max(10, Math.min(96, Math.round(margemOperacional))) },
     { label: 'Liquidez', value: Math.max(14, Math.min(95, totalIncome > 0 ? Math.round((balance / totalIncome) * 100) + 62 : 22)) },
-    { label: 'Despesas', value: Math.max(12, Math.min(96, totalIncome > 0 ? 100 - Math.round((totalExpenses / totalIncome) * 100) : 18)) },
+    { label: 'Contas pagas', value: Math.max(12, Math.min(96, totalIncome > 0 ? 100 - Math.round((totalExpenses / totalIncome) * 100) : 18)) },
     { label: 'Caixa', value: Math.max(16, Math.min(94, currentSession ? 74 : 48)) },
   ];
   const topExpenseCards = expenseByCategory.slice(0, 4);
@@ -1100,8 +1100,8 @@ const Financeiro = () => {
 
   const mobileTypeFilters: Array<{ value: TxTypeFilter; label: string }> = [
     { value: 'all', label: 'Todos' },
-    { value: 'entrada', label: 'Receitas' },
-    { value: 'saida', label: 'Despesas' },
+    { value: 'entrada', label: 'Contas a Receber' },
+    { value: 'saida', label: 'Contas a Pagar' },
   ];
 
   const mobilePaymentFilters: Array<{ value: PaymentMethodFilter; label: string }> = [
@@ -1864,7 +1864,7 @@ const Financeiro = () => {
           <CardContent>
             <div className="text-xl font-bold">{formatCurrency(cashTotal)}</div>
             <div className="text-sm text-muted-foreground">
-              {totalIncome ? Math.round((cashTotal / totalIncome) * 100) : 0}% das receitas
+              {totalIncome ? Math.round((cashTotal / totalIncome) * 100) : 0}% do dinheiro recebido
             </div>
           </CardContent>
         </Card>

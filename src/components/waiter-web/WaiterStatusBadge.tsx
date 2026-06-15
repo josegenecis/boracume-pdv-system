@@ -23,7 +23,7 @@ type WaiterStatusBadgeProps = {
 const labelByStatus: Record<WaiterStatus, string> = {
   free: 'Livre',
   occupied: 'Ocupada',
-  preparing: 'Em preparo',
+  preparing: 'Preparando',
   ready: 'Pronto',
   check_requested: 'Conta solicitada',
   partially_paid: 'Pagamento parcial',

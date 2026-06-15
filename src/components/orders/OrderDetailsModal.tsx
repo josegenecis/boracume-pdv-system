@@ -454,7 +454,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
                         {false && item?.options && Array.isArray(item.options) && item.options.length > 0 && (
                           <div className="text-xs">
-                            <span className="font-medium text-gray-700">Variações:</span>
+                            <span className="font-medium text-gray-700">Opções:</span>
                             <div className="mt-1 space-y-1">
                               {item.options.map((option, oIndex) => {
                                 // Se for string simples

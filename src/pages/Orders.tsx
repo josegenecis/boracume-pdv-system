@@ -881,10 +881,10 @@ const Orders = () => {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       pending: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-      accepted: { label: 'Em preparo', className: 'bg-blue-100 text-blue-800 border-blue-200' },
+      accepted: { label: 'Preparando', className: 'bg-blue-100 text-blue-800 border-blue-200' },
       preparing: { label: 'Preparando', className: 'bg-blue-100 text-blue-800 border-blue-200' },
       ready: { label: 'Pronto', className: 'bg-green-100 text-green-800 border-green-200' },
-      in_delivery: { label: 'Em entrega', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+      in_delivery: { label: 'Saiu para entrega', className: 'bg-purple-100 text-purple-800 border-purple-200' },
       delivered: { label: 'Finalizado', className: 'bg-gray-100 text-gray-800 border-gray-200' },
       completed: { label: 'Finalizado', className: 'bg-gray-100 text-gray-800 border-gray-200' },
       cancelled: { label: 'Cancelado', className: 'bg-red-100 text-red-800 border-red-200' }
@@ -1196,7 +1196,7 @@ const Orders = () => {
             </DialogHeader>
             <Tabs value={deliveryDialogTab} onValueChange={(v) => setDeliveryDialogTab(v as any)}>
               <TabsList>
-                <TabsTrigger value="in_delivery">Em entrega ({inDeliveryOrders.length})</TabsTrigger>
+                <TabsTrigger value="in_delivery">Saiu para entrega ({inDeliveryOrders.length})</TabsTrigger>
                 <TabsTrigger value="delivered">Despachados ({deliveredOrders.length})</TabsTrigger>
               </TabsList>
 
@@ -1287,7 +1287,7 @@ const Orders = () => {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="all">Todos os pedidos</SelectItem>
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="preparing">Preparando</SelectItem>
                   <SelectItem value="ready">Pronto</SelectItem>
@@ -1302,7 +1302,7 @@ const Orders = () => {
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os Tipos</SelectItem>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
                   <SelectItem value="delivery">Entrega</SelectItem>
                   <SelectItem value="pickup">Retirada</SelectItem>
                   <SelectItem value="dine_in">No Local</SelectItem>
@@ -1312,7 +1312,7 @@ const Orders = () => {
               <div className="relative min-w-[260px] flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Buscar por número, cliente ou telefone..."
+                  placeholder="Buscar pedido, cliente ou telefone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -1341,7 +1341,7 @@ const Orders = () => {
                   });
                 }}
               >
-                {autoAcceptEnabled ? 'Autoaceite ligado' : 'Autoaceite'}
+                {autoAcceptEnabled ? 'Aceitar pedidos automático' : 'Aceitar pedidos automático'}
               </Button>
               <Button onClick={() => fetchOrders({ background: true })} variant="outline">
                 {refreshing ? 'Atualizando...' : 'Atualizar'}
@@ -1352,7 +1352,7 @@ const Orders = () => {
               <div className="hidden flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Buscar por número, cliente ou telefone..."
+                  placeholder="Buscar pedido, cliente ou telefone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -1410,7 +1410,7 @@ const Orders = () => {
                 });
               }}
             >
-              {autoAcceptEnabled ? 'Autoaceite ligado' : 'Ligar autoaceite'}
+              {autoAcceptEnabled ? 'Aceitar pedidos automático' : 'Ligar aceite automático'}
             </Button>
 
             <TabsContent value="novos" className="mt-4 space-y-3">
@@ -1433,9 +1433,9 @@ const Orders = () => {
           <DragDropContext onDragEnd={(r) => { void onKanbanDragEnd(r); }}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
-                { id: 'pending', title: 'Pendentes', items: pendingOrders, headerClass: 'bg-yellow-50 border-yellow-500 text-yellow-800' },
-                { id: 'preparing', title: 'Em preparo', items: activeOrders, headerClass: 'bg-blue-50 border-blue-500 text-blue-800' },
-                { id: 'in_delivery', title: 'Em entrega', items: completedOrders, headerClass: 'bg-purple-50 border-purple-500 text-purple-800' },
+                { id: 'pending', title: 'Aguardando', items: pendingOrders, headerClass: 'bg-yellow-50 border-yellow-500 text-yellow-800' },
+                { id: 'preparing', title: 'Preparando', items: activeOrders, headerClass: 'bg-blue-50 border-blue-500 text-blue-800' },
+                { id: 'in_delivery', title: 'Saiu para entrega', items: completedOrders, headerClass: 'bg-purple-50 border-purple-500 text-purple-800' },
               ].map((col) => (
                 <div key={col.id} className="space-y-3">
                   <div className={`p-3 rounded-lg border-l-4 ${col.headerClass}`}>
@@ -1501,12 +1501,12 @@ const Orders = () => {
         <>
         {/* Orders Columns */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Pendentes */}
+          {/* Aguardando */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                <h2 className="text-lg font-semibold text-yellow-800">Pendentes ({pendingOrders.length})</h2>
+                <h2 className="text-lg font-semibold text-yellow-800">Aguardando ({pendingOrders.length})</h2>
               </div>
               <div className="w-full sm:w-auto">
                 <OrdersBulkActionButton
@@ -1652,12 +1652,12 @@ const Orders = () => {
             )}
           </div>
 
-          {/* Em preparo */}
+          {/* Preparando */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <h2 className="text-lg font-semibold text-blue-800">Em preparo ({activeOrders.length})</h2>
+                <h2 className="text-lg font-semibold text-blue-800">Preparando ({activeOrders.length})</h2>
               </div>
               <div className="w-full sm:w-auto">
                 <OrdersBulkActionButton
@@ -1813,12 +1813,12 @@ const Orders = () => {
             )}
           </div>
 
-          {/* Em entrega */}
+          {/* Saiu para entrega */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                <h2 className="text-lg font-semibold text-purple-800">Em entrega ({completedOrders.length})</h2>
+                <h2 className="text-lg font-semibold text-purple-800">Saiu para entrega ({completedOrders.length})</h2>
               </div>
               <div className="w-full sm:w-auto">
                 <OrdersBulkActionButton

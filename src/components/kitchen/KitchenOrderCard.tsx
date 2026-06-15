@@ -238,7 +238,7 @@ const KitchenOrderCard: React.FC<KitchenOrderCardProps> = ({ order, onStatusChan
                    </div>
                 </div>
 
-                {/* Variações e Opcionais */}
+                {/* Opções e adicionais */}
                 {optionLines.map((line, i) => {
                   const raw = String(line || '').trim();
                   if (!raw) return null;

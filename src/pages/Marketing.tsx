@@ -11,14 +11,14 @@ import WhatsAppCampaignManager from '@/components/marketing/WhatsAppCampaignMana
 import PopMarketingAI from '@/components/marketing/PopMarketingAI';
 
 const TABS = [
-  { value: 'banners', label: 'Banners' },
-  { value: 'coupons', label: 'Cupons' },
-  { value: 'highlights', label: 'Destaques' },
-  { value: 'upsells', label: 'Upsells' },
-  { value: 'pop-ai', label: 'PopMarketing AI' },
+  { value: 'banners', label: 'Artes e Banners' },
+  { value: 'coupons', label: 'Cupons de Desconto' },
+  { value: 'highlights', label: 'Produtos em Destaque' },
+  { value: 'upsells', label: 'Venda Mais' },
+  { value: 'pop-ai', label: 'Anúncios Automáticos' },
   { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'loyalty', label: 'Fidelidade' },
-  { value: 'pixels', label: 'Pixels' }
+  { value: 'loyalty', label: 'Clientes Fiéis' },
+  { value: 'pixels', label: 'Facebook e Instagram' }
 ];
 
 export default function Marketing() {
@@ -41,9 +41,9 @@ export default function Marketing() {
     <div className="h-full w-full py-6">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <div className="text-2xl font-bold tracking-tight">Marketing</div>
+          <div className="text-2xl font-bold tracking-tight">Propaganda</div>
           <div className="text-sm text-muted-foreground mt-1">
-            Banners, cupons, destaques, upsells, WhatsApp, fidelidade e pixels (Meta/Google).
+            Artes, cupons, produtos em destaque, WhatsApp e anúncios para vender mais.
           </div>
         </div>
       </div>

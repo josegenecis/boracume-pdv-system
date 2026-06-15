@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -308,7 +308,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         return;
     }
     if (activeTab === 'json' && !textInput.trim()) {
-        toast({ title: 'Atenção', description: 'Cole o JSON do cardápio.', variant: 'destructive' });
+        toast({ title: 'Atenção', description: 'Cole os dados do cardápio.', variant: 'destructive' });
         return;
     }
     if (activeTab === 'link' && !urlInput.trim()) {
@@ -346,14 +346,14 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
       } 
       else if (activeTab === 'json') {
-        setLoadingMessage('Validando JSON...');
+        setLoadingMessage('Validando dados...');
         try {
           const parsed = repairMojibake(JSON.parse(textInput));
           // Aceitar tanto o formato do Apify antigo quanto o formato direto
           let rawCategories = Array.isArray(parsed) ? parsed : (parsed.categories || []);
           
           if (!Array.isArray(rawCategories)) {
-            throw new Error('O JSON deve ser uma lista (array) de categorias.');
+            throw new Error('Os dados devem estar organizados em uma lista de categorias.');
           }
 
           // Converter o formato sugerido pelo seu amigo {"products": []} para o formato interno do sistema {"items": []}
@@ -363,7 +363,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           }));
 
         } catch (e) {
-          throw new Error('Formato JSON inválido. Verifique se copiou corretamente.');
+          throw new Error('Formato inválido. Verifique se copiou corretamente.');
         }
       }
       else if (activeTab === 'link') {
@@ -651,11 +651,11 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         }
       }
 
-      const addonsSummary = `${totalAddonGroupsLinked} complementos vinculados` + (totalAddonGroupsCreated > 0 ? ` (${totalAddonGroupsCreated} novos)` : '');
-      const addonsErrorsSummary = totalAddonErrors > 0 ? ` • ${totalAddonErrors} falhas em complementos` : '';
+      const addonsSummary = `${totalAddonGroupsLinked} adicionais encontrados` + (totalAddonGroupsCreated > 0 ? ` (${totalAddonGroupsCreated} novos)` : '');
+      const addonsErrorsSummary = totalAddonErrors > 0 ? ` • ${totalAddonErrors} falhas em adicionais` : '';
       toast({
-        title: 'Importação Concluída!',
-        description: `${totalProducts} produtos importados. ${totalImages} imagens. ${addonsSummary}${addonsErrorsSummary}.`,
+        title: 'Encontramos seu cardápio',
+        description: `${totalProducts} produtos encontrados. ${totalImages} imagens. ${addonsSummary}${addonsErrorsSummary}.`,
       });
       
       onImportComplete();
@@ -684,19 +684,18 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-600" />
-            Importar Cardápio com IA
+            Migrar Cardápio com IA
           </DialogTitle>
           <DialogDescription>
-            Use Inteligência Artificial para ler cardápios por Link ou Foto.
+            Cole o link do seu cardápio ou envie uma foto. O PopSystem organiza tudo automaticamente.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="text"><Type className="w-4 h-4 mr-2" /> Texto</TabsTrigger>
-            <TabsTrigger value="link"><LinkIcon className="w-4 h-4 mr-2" /> Link</TabsTrigger>
-            <TabsTrigger value="image"><Upload className="w-4 h-4 mr-2" /> Foto</TabsTrigger>
-            <TabsTrigger value="json"><FileJson className="w-4 h-4 mr-2" /> JSON</TabsTrigger>
+            <TabsTrigger value="link"><LinkIcon className="w-4 h-4 mr-2" /> Link do Cardápio</TabsTrigger>
+            <TabsTrigger value="image"><Upload className="w-4 h-4 mr-2" /> Foto ou PDF</TabsTrigger>
           </TabsList>
 
           <TabsContent value="text" className="space-y-4 py-4">
@@ -713,7 +712,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
           <TabsContent value="link" className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Link do Cardápio Digital (iFood, Goomer, Site próprio)</Label>
+              <Label>Link do Cardápio</Label>
               <Input 
                 placeholder="https://..." 
                 value={urlInput}
@@ -721,7 +720,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               />
               <div className="flex items-center gap-2 p-3 bg-purple-50 text-purple-800 rounded-md text-xs border border-purple-100">
                 <Wand2 className="w-4 h-4" />
-                <span>A IA visitará o site e extrairá os produtos automaticamente.</span>
+                <span>O PopSystem vai ler o cardápio e organizar os produtos automaticamente.</span>
               </div>
             </div>
           </TabsContent>
@@ -754,21 +753,6 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
               )}
             </div>
           </TabsContent>
-
-          <TabsContent value="json" className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Cole o JSON Estruturado (Bulk Import)</Label>
-              <Textarea 
-                placeholder='Ex: [{"category": "Pizzas", "items": [{"name": "Calabresa", "price": 40}]}]'
-                className="h-40 font-mono text-sm"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                O sistema criará as categorias automaticamente, importará as imagens e evitará produtos duplicados.
-              </p>
-            </div>
-          </TabsContent>
         </Tabs>
 
         <DialogFooter>
@@ -785,7 +769,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           </Button>
           <Button onClick={handleImport} disabled={loading} className={activeTab !== 'text' ? "bg-purple-600 hover:bg-purple-700" : ""}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-            {loading ? loadingMessage : (activeTab === 'text' ? 'Importar' : 'Processar com IA')}
+            {loading ? loadingMessage : 'Analisar Cardápio'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -156,7 +156,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          Variações e Adicionais
+          Opções e Adicionais
           {onClose && (
             <Button variant="outline" onClick={onClose}>
               Voltar
@@ -224,7 +224,7 @@ const ProductVariationsForm: React.FC<ProductVariationsFormProps> = ({ productId
 
         {/* Lista de variações */}
         <div className="space-y-3">
-          <h4 className="font-medium">Variações Cadastradas</h4>
+          <h4 className="font-medium">Opções Cadastradas</h4>
           {variations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nenhuma variação cadastrada ainda.

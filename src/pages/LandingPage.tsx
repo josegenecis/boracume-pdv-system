@@ -27,10 +27,10 @@ const WHATSAPP_URL = 'https://wa.me/5585999999999?text=Ol%C3%A1%2C%20quero%20con
 
 const platformCards = [
   { icon: Monitor, title: 'PDV Inteligente', description: 'Venda no balcão, mesa, delivery e retirada com controle completo.' },
-  { icon: TabletSmartphone, title: 'Cardápio Digital', description: 'Receba pedidos online com produtos, variações, complementos, imagens e promoções.' },
+  { icon: TabletSmartphone, title: 'Cardápio Online', description: 'Receba pedidos online com produtos, opções, adicionais, imagens e promoções.' },
   { icon: Store, title: 'Totem de Autoatendimento', description: 'Reduza filas, agilize pedidos e ofereça uma experiência moderna ao cliente.' },
   { icon: Bot, title: 'WhatsApp com IA', description: 'Atendimento inteligente para responder clientes, sugerir produtos e ajudar nas vendas.' },
-  { icon: Megaphone, title: 'PopMarketing AI', description: 'Crie campanhas, copys, anúncios e estratégias de marketing com apoio da inteligência artificial.' },
+  { icon: Megaphone, title: 'Anúncios Automáticos', description: 'Crie propagandas, textos e anúncios para vender mais com apoio da inteligência artificial.' },
   { icon: Users, title: 'Controle de Funcionários', description: 'Ponto, escalas, horários, produtividade e gestão da equipe em um só lugar.' },
   { icon: DollarSign, title: 'Financeiro e Caixa', description: 'Controle vendas, formas de pagamento, fechamento de caixa e relatórios gerenciais.' },
   { icon: Package, title: 'Estoque e Produção', description: 'Acompanhe ingredientes, baixa automática e previsão de reposição.' },
@@ -42,7 +42,7 @@ const differentials = [
   'PIX automático',
   'Totem integrado',
   'Controle de ponto facial',
-  'Marketing integrado',
+  'Propaganda integrada',
   'Atendimento via WhatsApp com IA',
   'Cardápio digital moderno',
   'Relatórios inteligentes',
@@ -100,8 +100,8 @@ const plans = [
   },
   {
     name: 'Premium',
-    description: 'Para operações que precisam de automação, IA, marketing e visão multiempresa.',
-    items: ['PopMarketing AI', 'WhatsApp AI', 'Totem integrado', 'Multiempresa e BI'],
+    description: 'Para operações que precisam de automação, IA, propaganda e visão multiempresa.',
+    items: ['Anúncios Automáticos', 'WhatsApp com IA', 'Totem integrado', 'Multiempresa e relatórios'],
   },
 ];
 
@@ -151,7 +151,7 @@ const FeatureMockup = () => (
             </div>
             <div className="rounded-lg bg-[#EF6C20] p-3 text-white">
               <Sparkles className="mb-3 h-5 w-5" />
-              <div className="text-xs font-semibold uppercase opacity-80">PopMarketing AI</div>
+              <div className="text-xs font-semibold uppercase opacity-80">Anúncios Automáticos</div>
               <div className="mt-2 text-lg font-black leading-tight">Campanha pronta para revisão</div>
               <div className="mt-3 rounded-md bg-white/15 p-2 text-[11px]">Açaí 1000ml em oferta</div>
             </div>
@@ -354,21 +354,21 @@ const LandingPage = () => {
         <section id="marketing" className="bg-[#F8FAF7] py-20">
           <div className="container grid gap-8 lg:grid-cols-2 lg:items-center">
             <div>
-              <div className="mb-3 text-xs font-black uppercase tracking-[0.24em] text-[#EF6C20]">Marketing para restaurante</div>
-              <h2 className="text-3xl font-black text-[#063D2E] md:text-4xl">Marketing integrado ao sistema</h2>
+              <div className="mb-3 text-xs font-black uppercase tracking-[0.24em] text-[#EF6C20]">Propaganda para restaurante</div>
+              <h2 className="text-3xl font-black text-[#063D2E] md:text-4xl">Propaganda integrada ao sistema</h2>
               <p className="mt-4 text-lg leading-8 text-slate-600">
-                Com o PopMarketing AI, o restaurante pode criar campanhas com mais facilidade, usando fotos reais dos produtos,
-                copys geradas por IA e integração com redes sociais.
+                Com os Anúncios Automáticos, o restaurante pode criar campanhas com mais facilidade, usando fotos reais dos produtos,
+                textos gerados por IA e integração com redes sociais.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                {['Copys automáticas', 'Criativos com templates profissionais', 'Campanhas para WhatsApp', 'Campanhas para cardápio digital', 'Segmentação por raio', 'Análise de resultados'].map((item) => (
+                {['Textos automáticos', 'Artes com modelos profissionais', 'Campanhas para WhatsApp', 'Campanhas para cardápio online', 'Pessoas próximas ao restaurante', 'Resultados'].map((item) => (
                   <div key={item} className="rounded-lg bg-white p-4 text-sm font-bold text-[#063D2E] shadow-sm">{item}</div>
                 ))}
               </div>
             </div>
             <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between">
-                <strong className="text-[#063D2E]">PopMarketing AI</strong>
+                <strong className="text-[#063D2E]">Anúncios Automáticos</strong>
                 <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-[#EF6C20]">Revisão</span>
               </div>
               <div className="aspect-square rounded-lg bg-[#063D2E] p-6 text-white">

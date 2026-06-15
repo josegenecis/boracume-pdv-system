@@ -129,10 +129,10 @@ export default function InteligenciaCMV() {
         <div>
           <h1 className="text-2xl font-bold text-boracume-dark-green flex items-center gap-2">
             <BarChart3 className="text-boracume-orange" />
-            Inteligência e Custos (CMV)
+            Produtos mais lucrativos
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Analise a saúde financeira do seu cardápio com base na Ficha Técnica.
+            Veja quais produtos vendem melhor, dão mais lucro e merecem mais atenção no cardápio.
           </p>
         </div>
       </div>

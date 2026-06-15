@@ -888,7 +888,7 @@ const Products = () => {
         </div>
 
         <div className="mt-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#003223]/60">Complementos</div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#003223]/60">Adicionais</div>
           {availableVariationGroups.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#FF6400]/15 bg-[#FFF8F2] px-3 py-4 text-sm text-slate-500">
               Nenhum grupo de complementos ativo cadastrado.
@@ -1149,14 +1149,14 @@ const Products = () => {
             <TabsList className="grid h-10 w-full max-w-[420px] grid-cols-3 rounded-xl border border-[#FF6400]/10 bg-[#F5EBE1]/70 p-1">
             <TabsTrigger value="products" className="h-8 rounded-lg px-4 text-sm font-semibold">Produtos</TabsTrigger>
             <TabsTrigger value="categories" className="h-8 rounded-lg px-4 text-sm font-semibold">Categorias</TabsTrigger>
-            <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Complementos</TabsTrigger>
+            <TabsTrigger value="global-variations" className="h-8 rounded-lg px-4 text-sm font-semibold">Adicionais</TabsTrigger>
             </TabsList>
           </div>
 
           <div className="hidden items-center justify-end gap-2 lg:flex">
             <Button variant="outline" onClick={() => setShowImportModal(true)} className="h-9 rounded-xl border-[#FF6400]/15 bg-white px-4 text-sm font-semibold text-[#003223] hover:bg-[#F5EBE1]">
               <Import className="mr-2 h-4 w-4" />
-              Importar produto
+              Importar cardápio
             </Button>
             <Button className="h-9 rounded-xl bg-[#8CC850] px-4 text-sm font-semibold text-white hover:bg-[#79b541]" onClick={() => {
               setEditingProduct(null);
@@ -1246,7 +1246,7 @@ const Products = () => {
               </Button>
               <Button variant="outline" className="h-11 flex-1 rounded-2xl border-[#FF6400]/15 bg-white px-4 text-[#003223] hover:bg-[#F5EBE1]" onClick={() => setShowImportModal(true)}>
                 <Import className="mr-2 h-4 w-4" />
-                Importar produto
+                Importar cardápio
               </Button>
             </div>
             <div className="flex gap-2">
