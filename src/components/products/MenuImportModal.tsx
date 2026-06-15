@@ -36,6 +36,7 @@ interface ImportedProduct {
   price: number;
   description?: string;
   image_url?: string;
+  available?: boolean;
   variants?: ImportedVariant[];
   price_variants?: ImportedVariant[];
   variations?: ImportedVariationGroup[];
@@ -45,6 +46,18 @@ interface ImportedCategory {
   name: string;
   items: ImportedProduct[];
 }
+
+type MenuImportStats = {
+  categoriesFound: number;
+  productsFound: number;
+  complementsFound: number;
+  groupedProducts: number;
+};
+
+type NormalizedMenuResult = {
+  categories: ImportedCategory[];
+  stats: MenuImportStats;
+};
 
 const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete }) => {
   const [activeTab, setActiveTab] = useState('text');
@@ -165,6 +178,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       price: Number(raw?.price ?? raw?.preco ?? raw?.valor ?? raw?.amount ?? 0) || 0,
       description: String(raw?.description || raw?.descricao || raw?.details || raw?.detalhes || '').trim(),
       image_url: raw?.image_url || raw?.imagem || raw?.image || raw?.foto || raw?.url_imagem || '',
+      available: raw?.available ?? raw?.ativo,
       variants: Array.isArray(variants) ? variants.map((variant: any) => ({
         name: String(variant?.name || variant?.nome || variant?.title || '').trim(),
         price: Number(variant?.price ?? variant?.preco ?? variant?.valor ?? 0) || 0,
@@ -181,6 +195,151 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
           : [],
       })) : [],
     };
+  };
+
+  const centsToMoney = (value: any) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return numeric / 100;
+  };
+
+  const normalizeImportedMenu = (rawJson: any): NormalizedMenuResult => {
+    const json = repairMojibake(rawJson || {});
+    const complements = Array.isArray(json?.complementos) ? json.complementos : [];
+    const complementsById = new Map<string, any>();
+    for (const complement of complements) {
+      const id = String(complement?.id ?? complement?.codigo ?? complement?.uuid ?? '').trim();
+      if (id) complementsById.set(id, complement);
+    }
+
+    const normalizeStats = (categories: ImportedCategory[], stats?: Partial<MenuImportStats>): NormalizedMenuResult => ({
+      categories,
+      stats: {
+        categoriesFound: stats?.categoriesFound ?? categories.length,
+        productsFound: stats?.productsFound ?? categories.reduce((sum, category) => sum + (category.items?.length || 0), 0),
+        complementsFound: stats?.complementsFound ?? complements.length,
+        groupedProducts: stats?.groupedProducts ?? categories.reduce((sum, category) => sum + (category.items?.length || 0), 0),
+      },
+    });
+
+    if (Array.isArray(json?.categories)) {
+      return normalizeStats(json.categories.map((cat: any) => ({
+        name: cat.category || cat.categoria || cat.nome || cat.name || cat.title || 'Geral',
+        items: (Array.isArray(cat.products)
+          ? cat.products
+          : Array.isArray(cat.produtos)
+            ? cat.produtos
+            : Array.isArray(cat.itens)
+              ? cat.itens
+              : Array.isArray(cat.items)
+                ? cat.items
+                : []).map(normalizeImportedProduct).filter((product: ImportedProduct) => product.name),
+      })));
+    }
+
+    if (!Array.isArray(json) && Array.isArray(json?.products || json?.produtos || json?.items || json?.itens)) {
+      const products = json.products || json.produtos || json.items || json.itens;
+      return normalizeStats([{
+        name: json?.category || json?.categoria || json?.name || json?.nome || 'Geral',
+        items: products.map(normalizeImportedProduct).filter((product: ImportedProduct) => product.name),
+      }], {
+        categoriesFound: 1,
+        productsFound: products.length,
+        complementsFound: complements.length,
+        groupedProducts: products.length,
+      });
+    }
+
+    const rawCategories = Array.isArray(json)
+      ? json
+      : (json?.categorias || json?.menu || json?.sections || []);
+
+    if (Array.isArray(json?.categorias) && Array.isArray(json?.produtos)) {
+      const categories = json.categorias;
+      const products = json.produtos;
+      const categoryById = new Map<string, ImportedCategory>();
+
+      for (const category of categories) {
+        const id = String(category?.id ?? category?.categoria_id ?? category?.codigo ?? category?.uuid ?? '').trim();
+        const name = String(category?.nome || category?.name || category?.titulo || 'Geral').trim() || 'Geral';
+        const normalizedCategory = { name, items: [] as ImportedProduct[] };
+        categoryById.set(id || normalizeKey(name), normalizedCategory);
+      }
+
+      const fallbackCategory: ImportedCategory = { name: 'Geral', items: [] };
+      let groupedProducts = 0;
+
+      for (const product of products) {
+        const categoryId = String(product?.categoria_id ?? product?.category_id ?? product?.categoriaId ?? '').trim();
+        const targetCategory = categoryById.get(categoryId) || fallbackCategory;
+        const complementIds = Array.isArray(product?.complementos_ids)
+          ? product.complementos_ids
+          : Array.isArray(product?.complemento_ids)
+            ? product.complemento_ids
+            : Array.isArray(product?.complements_ids)
+              ? product.complements_ids
+              : [];
+
+        const variations = complementIds
+          .map((id: any) => complementsById.get(String(id).trim()))
+          .filter(Boolean)
+          .map((complement: any): ImportedVariationGroup => {
+            const options = Array.isArray(complement?.opcoes || complement?.options)
+              ? (complement.opcoes || complement.options)
+              : [];
+            return {
+              name: String(complement?.nome || complement?.name || 'Adicionais').trim() || 'Adicionais',
+              required: Boolean(complement?.obrigatorio ?? complement?.required ?? false),
+              max_selections: Number(complement?.max_escolhas ?? complement?.max_selections ?? complement?.max ?? 10) || 10,
+              options: options.map((option: any) => ({
+                name: String(option?.titulo || option?.nome || option?.name || '').trim(),
+                price: centsToMoney(option?.preco_extra ?? option?.price ?? option?.preco ?? 0),
+              })).filter((option: ImportedVariant) => option.name),
+            };
+          })
+          .filter((variation: ImportedVariationGroup) => variation.options.length > 0);
+
+        const normalizedProduct: ImportedProduct = {
+          name: String(product?.nome || product?.name || product?.titulo || '').trim(),
+          description: String(product?.descricao || product?.description || '').trim(),
+          price: centsToMoney(product?.preco ?? product?.price ?? product?.valor ?? 0),
+          image_url: product?.imagem || product?.image_url || product?.image || product?.foto || '',
+          available: product?.ativo ?? product?.available,
+          variations,
+        };
+
+        if (!normalizedProduct.name) continue;
+        targetCategory.items.push(normalizedProduct);
+        groupedProducts += 1;
+      }
+
+      const normalizedCategories = Array.from(categoryById.values()).filter(category => category.items.length > 0);
+      if (fallbackCategory.items.length > 0) normalizedCategories.push(fallbackCategory);
+
+      return normalizeStats(normalizedCategories, {
+        categoriesFound: categories.length,
+        productsFound: products.length,
+        complementsFound: complements.length,
+        groupedProducts,
+      });
+    }
+
+    if (Array.isArray(rawCategories)) {
+      return normalizeStats(rawCategories.map((cat: any) => ({
+        name: cat.category || cat.categoria || cat.nome || cat.name || cat.title || 'Geral',
+        items: (Array.isArray(cat.products)
+          ? cat.products
+          : Array.isArray(cat.produtos)
+            ? cat.produtos
+            : Array.isArray(cat.itens)
+              ? cat.itens
+              : Array.isArray(cat.items)
+                ? cat.items
+                : []).map(normalizeImportedProduct).filter((product: ImportedProduct) => product.name),
+      })));
+    }
+
+    return normalizeStats([]);
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -376,39 +535,25 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         setLoadingMessage('Validando dados...');
         try {
           const parsed = repairMojibake(JSON.parse(jsonInput));
-          // Aceitar tanto o formato do Apify antigo quanto o formato direto
-          let rawCategories = Array.isArray(parsed)
-            ? parsed
-            : (parsed.categories || parsed.categorias || parsed.menu || parsed.sections || []);
+          const normalized = normalizeImportedMenu(parsed);
+          console.log('[Import JSON] categorias encontradas:', normalized.stats.categoriesFound);
+          console.log('[Import JSON] produtos encontrados:', normalized.stats.productsFound);
+          console.log('[Import JSON] complementos encontrados:', normalized.stats.complementsFound);
+          console.log('[Import JSON] produtos agrupados:', normalized.stats.groupedProducts);
 
-          if (!Array.isArray(rawCategories) && Array.isArray(parsed?.products || parsed?.produtos || parsed?.items || parsed?.itens)) {
-            rawCategories = [{
-              name: parsed?.category || parsed?.categoria || parsed?.name || parsed?.nome || 'Geral',
-              items: parsed.products || parsed.produtos || parsed.items || parsed.itens,
-            }];
-          }
-          
-          if (!Array.isArray(rawCategories)) {
-            throw new Error('Os dados devem estar organizados em uma lista de categorias.');
+          if (normalized.stats.categoriesFound <= 0 || normalized.categories.length <= 0) {
+            throw new Error('Não encontrei categorias nesse JSON. Verifique se o arquivo tem categories ou categorias.');
           }
 
-          // Converter o formato sugerido pelo seu amigo {"products": []} para o formato interno do sistema {"items": []}
-          categoriesToImport = rawCategories.map(cat => ({
-             name: cat.category || cat.categoria || cat.nome || cat.name || cat.title || 'Geral',
-             items: Array.isArray(cat.products)
-              ? cat.products
-              : (Array.isArray(cat.produtos)
-                  ? cat.produtos
-                  : (Array.isArray(cat.itens)
-                      ? cat.itens
-                      : (Array.isArray(cat.items) ? cat.items : [])))
-            })).map(category => ({
-              ...category,
-              items: (category.items || []).map(normalizeImportedProduct).filter(product => product.name)
-          }));
+          if (normalized.stats.productsFound <= 0 || normalized.stats.groupedProducts <= 0) {
+            throw new Error('Não encontrei produtos nesse JSON. Verifique se o arquivo tem produtos/items dentro das categorias.');
+          }
+
+          categoriesToImport = normalized.categories;
 
         } catch (e) {
-          throw new Error('Formato inválido. Verifique se copiou corretamente.');
+          const message = e instanceof Error ? e.message : 'Formato inválido. Verifique se copiou corretamente.';
+          throw new Error(message);
         }
       }
       else if (activeTab === 'link') {
@@ -602,6 +747,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     ? Math.min(...normalizedPriceVariants.map(v => v.price))
                     : 0);
             const normalizedImageUrl = normalizeImageUrl(product.image_url);
+            const productAvailable = product.available !== false;
 
             const { data: newProduct, error: prodError } = await supabase
                 .from('products')
@@ -613,9 +759,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                     image_url: normalizedImageUrl,
                     category: category.name || 'Geral',
                     category_id: categoryId,
-                    available: true,
-                    show_in_pdv: true,
-                    show_in_delivery: true
+                    available: productAvailable,
+                    is_available: productAvailable,
+                    show_in_pdv: productAvailable,
+                    show_in_delivery: productAvailable
                 })
                 .select('id')
                 .single();
@@ -694,6 +841,10 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 }
             }
         }
+      }
+
+      if (totalProducts === 0) {
+        throw new Error('Nenhum produto novo foi criado. Verifique se o JSON tem produtos válidos ou se esses produtos já existem no sistema.');
       }
 
       const addonsSummary = `${totalAddonGroupsLinked} adicionais encontrados` + (totalAddonGroupsCreated > 0 ? ` (${totalAddonGroupsCreated} novos)` : '');
