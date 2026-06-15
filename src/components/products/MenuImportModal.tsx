@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2 } from 'lucide-react';
+import { Upload, Link as LinkIcon, Type, Loader2, CheckCircle2, Wand2, FileJson } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,6 +49,7 @@ interface ImportedCategory {
 const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onImportComplete }) => {
   const [activeTab, setActiveTab] = useState('text');
   const [textInput, setTextInput] = useState('');
+  const [jsonInput, setJsonInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Processando...');
@@ -154,6 +155,32 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
     }
     
     return [{ name: "Geral", items: products }];
+  };
+
+  const normalizeImportedProduct = (raw: any): ImportedProduct => {
+    const variants = raw?.variants || raw?.variantes || raw?.price_variants || raw?.precos || [];
+    const variations = raw?.variations || raw?.variacoes || raw?.complementos || raw?.addons || [];
+    return {
+      name: String(raw?.name || raw?.nome || raw?.title || raw?.titulo || '').trim(),
+      price: Number(raw?.price ?? raw?.preco ?? raw?.valor ?? raw?.amount ?? 0) || 0,
+      description: String(raw?.description || raw?.descricao || raw?.details || raw?.detalhes || '').trim(),
+      image_url: raw?.image_url || raw?.imagem || raw?.image || raw?.foto || raw?.url_imagem || '',
+      variants: Array.isArray(variants) ? variants.map((variant: any) => ({
+        name: String(variant?.name || variant?.nome || variant?.title || '').trim(),
+        price: Number(variant?.price ?? variant?.preco ?? variant?.valor ?? 0) || 0,
+      })) : [],
+      variations: Array.isArray(variations) ? variations.map((group: any) => ({
+        name: String(group?.name || group?.nome || group?.title || 'Adicionais').trim(),
+        required: Boolean(group?.required ?? group?.obrigatorio ?? false),
+        max_selections: Number(group?.max_selections ?? group?.maximo ?? group?.max ?? 1) || 1,
+        options: Array.isArray(group?.options || group?.opcoes || group?.items || group?.itens)
+          ? (group?.options || group?.opcoes || group?.items || group?.itens).map((option: any) => ({
+              name: String(option?.name || option?.nome || option?.title || '').trim(),
+              price: Number(option?.price ?? option?.preco ?? option?.valor ?? 0) || 0,
+            }))
+          : [],
+      })) : [],
+    };
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -307,7 +334,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
         toast({ title: 'Atenção', description: 'Cole o texto do cardápio.', variant: 'destructive' });
         return;
     }
-    if (activeTab === 'json' && !textInput.trim()) {
+    if (activeTab === 'json' && !jsonInput.trim()) {
         toast({ title: 'Atenção', description: 'Cole os dados do cardápio.', variant: 'destructive' });
         return;
     }
@@ -348,9 +375,18 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       else if (activeTab === 'json') {
         setLoadingMessage('Validando dados...');
         try {
-          const parsed = repairMojibake(JSON.parse(textInput));
+          const parsed = repairMojibake(JSON.parse(jsonInput));
           // Aceitar tanto o formato do Apify antigo quanto o formato direto
-          let rawCategories = Array.isArray(parsed) ? parsed : (parsed.categories || []);
+          let rawCategories = Array.isArray(parsed)
+            ? parsed
+            : (parsed.categories || parsed.categorias || parsed.menu || parsed.sections || []);
+
+          if (!Array.isArray(rawCategories) && Array.isArray(parsed?.products || parsed?.produtos || parsed?.items || parsed?.itens)) {
+            rawCategories = [{
+              name: parsed?.category || parsed?.categoria || parsed?.name || parsed?.nome || 'Geral',
+              items: parsed.products || parsed.produtos || parsed.items || parsed.itens,
+            }];
+          }
           
           if (!Array.isArray(rawCategories)) {
             throw new Error('Os dados devem estar organizados em uma lista de categorias.');
@@ -358,8 +394,17 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
 
           // Converter o formato sugerido pelo seu amigo {"products": []} para o formato interno do sistema {"items": []}
           categoriesToImport = rawCategories.map(cat => ({
-             name: cat.category || cat.name || 'Geral',
-             items: Array.isArray(cat.products) ? cat.products : (Array.isArray(cat.items) ? cat.items : [])
+             name: cat.category || cat.categoria || cat.nome || cat.name || cat.title || 'Geral',
+             items: Array.isArray(cat.products)
+              ? cat.products
+              : (Array.isArray(cat.produtos)
+                  ? cat.produtos
+                  : (Array.isArray(cat.itens)
+                      ? cat.itens
+                      : (Array.isArray(cat.items) ? cat.items : [])))
+            })).map(category => ({
+              ...category,
+              items: (category.items || []).map(normalizeImportedProduct).filter(product => product.name)
           }));
 
         } catch (e) {
@@ -661,6 +706,7 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
       onImportComplete();
       onClose();
       setTextInput('');
+      setJsonInput('');
       setSelectedImage(null);
       setImagePreview(null);
       setUrlInput('');
@@ -687,15 +733,16 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
             Migrar Cardápio com IA
           </DialogTitle>
           <DialogDescription>
-            Cole o link do seu cardápio ou envie uma foto. O PopSystem organiza tudo automaticamente.
+            Cole o link, envie uma foto ou importe um JSON do cardápio. O PopSystem organiza tudo automaticamente.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="text"><Type className="w-4 h-4 mr-2" /> Texto</TabsTrigger>
-            <TabsTrigger value="link"><LinkIcon className="w-4 h-4 mr-2" /> Link do Cardápio</TabsTrigger>
-            <TabsTrigger value="image"><Upload className="w-4 h-4 mr-2" /> Foto ou PDF</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4">
+            <TabsTrigger value="text" className="text-xs"><Type className="w-4 h-4 mr-1" /> Texto</TabsTrigger>
+            <TabsTrigger value="json" className="text-xs"><FileJson className="w-4 h-4 mr-1" /> JSON</TabsTrigger>
+            <TabsTrigger value="link" className="text-xs"><LinkIcon className="w-4 h-4 mr-1" /> Link</TabsTrigger>
+            <TabsTrigger value="image" className="text-xs"><Upload className="w-4 h-4 mr-1" /> Foto</TabsTrigger>
           </TabsList>
 
           <TabsContent value="text" className="space-y-4 py-4">
@@ -707,6 +754,22 @@ const MenuImportModal: React.FC<MenuImportModalProps> = ({ isOpen, onClose, onIm
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
               />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="json" className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Cole o JSON do cardápio</Label>
+              <Textarea
+                placeholder={`{\n  "categories": [\n    {\n      "name": "Lanches",\n      "items": [\n        { "name": "X-Bacon", "price": 25.00, "description": "..." }\n      ]\n    }\n  ]\n}`}
+                className="h-40 font-mono text-xs"
+                value={jsonInput}
+                onChange={(e) => setJsonInput(e.target.value)}
+              />
+              <div className="flex items-center gap-2 rounded-md border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
+                <FileJson className="h-4 w-4" />
+                <span>Aceita categorias com <strong>items</strong>, <strong>products</strong>, <strong>itens</strong> ou <strong>produtos</strong>.</span>
+              </div>
             </div>
           </TabsContent>
 
