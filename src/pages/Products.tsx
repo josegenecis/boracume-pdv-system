@@ -106,6 +106,21 @@ const Products = () => {
   }, [searchParams, tab]);
 
   useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+
+    setTab('products');
+    setEditingProduct(null);
+    setShowForm(true);
+    setIsSheetOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'products');
+      next.delete('new');
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     try {
       const mq = window.matchMedia('(max-width: 639px)');
       const handler = (e: MediaQueryListEvent | MediaQueryList) => {

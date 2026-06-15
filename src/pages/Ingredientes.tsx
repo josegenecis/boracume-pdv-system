@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Edit, Search, Package, ShoppingBag } from 'lucide-react';
+import { Plus, Edit, Search, Package, ShoppingBag, ArrowDownToLine } from 'lucide-react';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { useNavigate } from 'react-router-dom';
 
@@ -64,6 +64,10 @@ export default function Ingredientes() {
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  const [stockEntryOpen, setStockEntryOpen] = useState(false);
+  const [stockEntryTarget, setStockEntryTarget] = useState<{ type: 'product' | 'ingredient'; id: string; name: string } | null>(null);
+  const [stockEntryQuantity, setStockEntryQuantity] = useState('');
+  const [stockEntryCost, setStockEntryCost] = useState(0);
   const [formData, setFormData] = useState({
     name: '',
     unit: 'un',
@@ -274,6 +278,95 @@ export default function Ingredientes() {
     setIsFormOpen(true);
   };
 
+  const openStockEntry = (target: { type: 'product' | 'ingredient'; id: string; name: string }) => {
+    setStockEntryTarget(target);
+    setStockEntryQuantity('');
+    setStockEntryCost(0);
+    setStockEntryOpen(true);
+  };
+
+  const handleStockEntry = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user || !stockEntryTarget) return;
+
+    const quantity = Number(String(stockEntryQuantity || '').replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast({
+        title: 'Quantidade inválida',
+        description: 'Informe uma quantidade maior que zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      if (stockEntryTarget.type === 'product') {
+        const current = products.find((product) => product.id === stockEntryTarget.id);
+        const nextQuantity = Math.max(0, Number(current?.stock_quantity || 0)) + Math.trunc(quantity);
+
+        const { error: productError } = await (supabase as any)
+          .from('products')
+          .update({
+            track_stock: true,
+            stock_quantity: nextQuantity,
+            available: true,
+            is_available: true,
+            show_in_delivery: current?.show_in_delivery ?? true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', stockEntryTarget.id)
+          .eq('user_id', user.id);
+
+        if (productError) throw productError;
+
+        await (supabase as any).from('inventory_movements').insert({
+          user_id: user.id,
+          product_id: stockEntryTarget.id,
+          type: 'purchase',
+          quantity: Math.trunc(quantity),
+        });
+      } else {
+        const current = ingredients.find((ingredient) => ingredient.id === stockEntryTarget.id);
+        const nextQuantity = Number(current?.current_stock || 0) + quantity;
+
+        const { error: ingredientError } = await (supabase as any)
+          .from('ingredients')
+          .update({
+            current_stock: nextQuantity,
+            cost_price: stockEntryCost > 0 ? Number(stockEntryCost) : current?.cost_price ?? current?.price ?? 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', stockEntryTarget.id)
+          .eq('user_id', user.id);
+
+        if (ingredientError) throw ingredientError;
+
+        await (supabase as any).from('stock_movements').insert({
+          user_id: user.id,
+          ingredient_id: stockEntryTarget.id,
+          movement_type: 'in',
+          quantity,
+          unit_cost: stockEntryCost > 0 ? Number(stockEntryCost) : current?.cost_price ?? current?.price ?? 0,
+          reason: 'Entrada manual pelo estoque',
+        });
+      }
+
+      toast({
+        title: 'Estoque atualizado',
+        description: `${stockEntryTarget.name} recebeu entrada de estoque.`,
+      });
+      setStockEntryOpen(false);
+      setStockEntryTarget(null);
+      await loadIngredients();
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao lançar estoque',
+        description: error?.message || 'Não foi possível somar essa entrada no estoque.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -313,10 +406,16 @@ export default function Ingredientes() {
             Veja produtos do PDV e insumos usados na ficha técnica
           </p>
         </div>
-        <Button onClick={handleNewIngredient}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Ingrediente
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => navigate('/produtos?new=1')}>
+            <ShoppingBag className="h-4 w-4 mr-2" />
+            Novo produto
+          </Button>
+          <Button onClick={handleNewIngredient}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo insumo
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -430,9 +529,14 @@ export default function Ingredientes() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="sm" onClick={() => navigate('/produtos')}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openStockEntry({ type: 'product', id: product.id, name: product.name })}>
+                                  <ArrowDownToLine className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => navigate('/produtos')}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -499,13 +603,22 @@ export default function Ingredientes() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEdit(ingredient)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openStockEntry({ type: 'ingredient', id: ingredient.id, name: ingredient.name })}
+                                >
+                                  <ArrowDownToLine className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEdit(ingredient)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -616,6 +729,59 @@ export default function Ingredientes() {
               </Button>
               <Button type="submit" className="bg-boracume-green hover:bg-boracume-green/90">
                 {editingIngredient ? 'Salvar Alterações' : 'Cadastrar Insumo'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stockEntryOpen} onOpenChange={setStockEntryOpen}>
+        <DialogContent className="sm:max-w-[460px]">
+          <form onSubmit={handleStockEntry}>
+            <DialogHeader>
+              <DialogTitle>Entrada de estoque</DialogTitle>
+              <DialogDescription>
+                Some uma compra ou reposição ao estoque de {stockEntryTarget?.name}.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="stock_entry_quantity">Quantidade que entrou *</Label>
+                <Input
+                  id="stock_entry_quantity"
+                  type="number"
+                  step={stockEntryTarget?.type === 'product' ? '1' : '0.001'}
+                  min="0"
+                  value={stockEntryQuantity}
+                  onChange={(event) => setStockEntryQuantity(event.target.value)}
+                  placeholder={stockEntryTarget?.type === 'product' ? 'Ex: 12' : 'Ex: 2.5'}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Produto acabado usa unidade inteira. Insumo usa a unidade cadastrada nele.
+                </p>
+              </div>
+
+              {stockEntryTarget?.type === 'ingredient' ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="stock_entry_cost">Custo por unidade</Label>
+                  <CurrencyInput
+                    id="stock_entry_cost"
+                    value={stockEntryCost}
+                    onValueChange={setStockEntryCost}
+                    placeholder="0,00"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setStockEntryOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-boracume-green hover:bg-boracume-green/90">
+                Somar no estoque
               </Button>
             </DialogFooter>
           </form>
