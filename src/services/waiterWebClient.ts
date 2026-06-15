@@ -1037,7 +1037,7 @@ export async function startWaiterPixCheckout(input: {
     preferredMethod: 'pix',
     orderPayload: {
       source: 'WAITER_WEB_PIX',
-      payment_method: 'pix',
+      payment_method: 'pix_online',
       total: amount,
       delivery_fee: 0,
       order_type: 'dine_in',

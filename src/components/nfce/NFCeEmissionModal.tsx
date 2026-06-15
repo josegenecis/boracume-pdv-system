@@ -10,6 +10,7 @@ import { Receipt, User, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPaymentMethodLabel } from '@/lib/orderDetails';
 
 interface Order {
   id: string;
@@ -184,7 +185,7 @@ const NFCeEmissionModal: React.FC<NFCeEmissionModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span>Forma de Pagamento:</span>
-                  <span>{order.payment_method}</span>
+                  <span>{formatPaymentMethodLabel(order.payment_method)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Itens:</span>

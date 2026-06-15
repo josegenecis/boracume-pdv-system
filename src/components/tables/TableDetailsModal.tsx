@@ -153,7 +153,7 @@ const TableDetailsModal: React.FC<TableDetailsModalProps> = ({
           total: Number(accountData.total || 0),
           status: accountData.status || 'open',
           created_at: accountData.created_at,
-          payment_method: 'pix',
+          payment_method: 'pix_online',
           name: (accountData as any).name || null,
           source: 'table_accounts'
         });

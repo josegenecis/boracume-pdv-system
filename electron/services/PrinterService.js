@@ -56,6 +56,20 @@ class PrinterService extends EventEmitter {
     });
   }
 
+  formatPaymentMethodLabel(method, data = {}) {
+    const value = String(method || '').trim().toLowerCase();
+    const acceptanceStatus = String(data.acceptance_status || '').trim().toLowerCase();
+    if (value === 'pix' && acceptanceStatus === 'awaiting_pix_payment') return 'PIX ONLINE';
+    if (value === 'pix') return 'PIX';
+    if (value === 'pix_online') return 'PIX ONLINE';
+    if (value === 'pix_entrega') return 'PIX NA ENTREGA';
+    if (value === 'cartao' || value === 'cartão') return 'CARTAO';
+    if (value === 'dinheiro') return 'DINHEIRO';
+    if (value === 'cartao_credito') return 'CREDITO';
+    if (value === 'cartao_debito') return 'DEBITO';
+    return String(method || 'N/A').toUpperCase().replace(/_/g, ' ');
+  }
+
   async connectPrinter(deviceId, options = {}) {
     try {
       // Verificar se já está conectado
@@ -532,7 +546,7 @@ class PrinterService extends EventEmitter {
     printer.bold(true);
     
     if (data.payment_method) {
-      printer.println(`Pagamento: ${data.payment_method}`);
+      printer.println(`Pagamento: ${this.formatPaymentMethodLabel(data.payment_method, data)}`);
     }
     
     printer.newLine();

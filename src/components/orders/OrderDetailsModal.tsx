@@ -547,7 +547,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   </div>
                   <div className="flex justify-between text-xs text-gray-600">
                     <span>Método de pagamento:</span>
-                    <span className="font-medium">{formatPaymentMethodLabel(order?.payment_method)}</span>
+                    <span className="font-medium">{formatPaymentMethodLabel(order?.payment_method, order?.acceptance_status)}</span>
                   </div>
                   {paymentBrand && (
                     <div className="flex justify-between text-xs text-gray-600">

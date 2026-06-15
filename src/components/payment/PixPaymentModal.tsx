@@ -73,7 +73,7 @@ const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                     order_number: order.order_number,
                     total: amount,
                     delivery_fee: Number(order.delivery_fee || 0) || 0,
-                    payment_method: 'pix',
+                    payment_method: 'pix_online',
                     customer_name: order.customer_name || 'Cliente',
                     customer_phone: order.customer_phone || '',
                     order_type: order.order_type || 'counter',

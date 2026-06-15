@@ -62,7 +62,7 @@ import {
 import { CurrencyTextInput } from '@/components/ui/currency-text-input';
 import { parseBRL } from '@/lib/currency';
 
-type PaymentMethod = 'pix' | 'dinheiro' | 'cartao';
+type PaymentMethod = 'pix' | 'pix_online' | 'pix_entrega' | 'dinheiro' | 'cartao';
 type PaymentMethodFilter = '' | 'all' | PaymentMethod;
 type TxTypeFilter = '' | 'all' | 'entrada' | 'saida';
 type SupabaseQuery = {

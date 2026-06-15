@@ -94,10 +94,12 @@ function formatCurrency(value: unknown) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(toNumber(value));
 }
 
-function formatPaymentMethodLabel(value: unknown) {
+function formatPaymentMethodLabel(value: unknown, order?: any) {
   const raw = normalizeText(value).toLowerCase();
   const labels: Record<string, string> = {
     pix: "PIX",
+    pix_online: "PIX online",
+    pix_entrega: "PIX na entrega",
     dinheiro: "Dinheiro",
     cartao: "Cartao",
     cartao_credito: "Cartao de Credito",
@@ -105,6 +107,10 @@ function formatPaymentMethodLabel(value: unknown) {
     credito: "Cartao de Credito",
     debito: "Cartao de Debito",
   };
+
+  if (raw === "pix" && normalizeText(order?.acceptance_status).toLowerCase() === "awaiting_pix_payment") {
+    return "PIX online";
+  }
 
   if (labels[raw]) return labels[raw];
   if (!raw) return "Nao informado";
@@ -395,7 +401,7 @@ function buildDetailedOrderMessage(order: any, trackingUrl?: string) {
   const deliveryFee = Math.max(0, toNumber(order?.delivery_fee));
   const discount = Math.max(0, toNumber(order?.discount));
   const total = toNumber(order?.total) || Math.max(0, subtotal + deliveryFee - discount);
-  const paymentMethod = formatPaymentMethodLabel(order?.payment_method);
+  const paymentMethod = formatPaymentMethodLabel(order?.payment_method, order);
 
   lines.push(`Pedido #${orderNumber || "sem numero"}`);
   if (trackingUrl) lines.push(`Acompanhe: ${trackingUrl}`);

@@ -67,7 +67,7 @@ export const toOrderNumber = (value: unknown) => {
 export const formatCurrencyBRL = (value: unknown) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(toOrderNumber(value));
 
-export const formatPaymentMethodLabel = (value: unknown) => {
+export const formatPaymentMethodLabel = (value: unknown, acceptanceStatus?: unknown) => {
   const raw = normalizeSpaces(value).toLowerCase();
   const labels: Record<string, string> = {
     pix: 'PIX',
@@ -80,6 +80,10 @@ export const formatPaymentMethodLabel = (value: unknown) => {
     credito: 'Cartão de Crédito',
     debito: 'Cartão de Débito',
   };
+
+  if (raw === 'pix' && normalizeSpaces(acceptanceStatus).toLowerCase() === 'awaiting_pix_payment') {
+    return 'PIX online';
+  }
 
   if (labels[raw]) return labels[raw];
   if (!raw) return 'Não informado';
@@ -355,7 +359,7 @@ export const buildDetailedOrderWhatsappMessage = (
   const deliveryFee = Math.max(0, toOrderNumber(order?.delivery_fee));
   const discount = Math.max(0, toOrderNumber(order?.discount));
   const total = toOrderNumber(order?.total) || Math.max(0, subtotal + deliveryFee - discount);
-  const paymentMethod = formatPaymentMethodLabel(order?.payment_method);
+  const paymentMethod = formatPaymentMethodLabel(order?.payment_method, order?.acceptance_status);
 
   lines.push(`*Pedido #${orderNumber || 'sem número'}*`);
   if (trackingUrl) lines.push(`Acompanhe: ${trackingUrl}`);

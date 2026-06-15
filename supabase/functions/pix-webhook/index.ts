@@ -346,7 +346,7 @@ serve(async (req) => {
           const targetOrderId = String(checkout.order_id)
           const { error: updErr } = await supabase
             .from('orders')
-            .update({ status: 'paid', acceptance_status: 'pending_acceptance', payment_method: 'pix' } as any)
+            .update({ status: 'paid', acceptance_status: 'pending_acceptance', payment_method: 'pix_online' } as any)
             .eq('id', targetOrderId)
           if (updErr) {
             await supabase
@@ -402,7 +402,7 @@ serve(async (req) => {
           items: payload?.items || [],
           total: payload?.total || 0,
           delivery_fee: payload?.delivery_fee || 0,
-          payment_method: 'pix', // Force PIX
+          payment_method: 'pix_online',
           status: payload?.status || (isPdv ? 'preparing' : 'pending'),
           acceptance_status: payload?.acceptance_status || (isPdv ? 'accepted' : 'pending_acceptance'),
           change_amount: payload?.change_amount ?? null,
@@ -502,7 +502,7 @@ serve(async (req) => {
         items: payload?.items || [],
         total: payload?.total || 0,
         delivery_fee: payload?.delivery_fee || null,
-        payment_method: payload?.payment_method || 'pix',
+        payment_method: payload?.payment_method || 'pix_online',
         discount: payload?.discount ?? 0,
         coupon_code: payload?.coupon_code ?? null,
         status: 'pending',

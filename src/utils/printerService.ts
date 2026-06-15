@@ -93,14 +93,16 @@ function getPaymentSplitLines(order: any) {
   if (!Array.isArray(lines)) return [];
   return lines
     .map((line: any) => ({
-      label: normalizeSingleLine(line?.label || line?.method),
+      label: normalizeSingleLine(line?.method ? formatPaymentMethodLabel(line.method, order) : line?.label),
       amount: Number(line?.amount || 0),
     }))
     .filter((line) => line.label && Number.isFinite(line.amount) && line.amount > 0);
 }
 
-function formatPaymentMethodLabel(method: any) {
+function formatPaymentMethodLabel(method: any, order?: any) {
   const value = String(method || '').trim().toLowerCase();
+  const acceptanceStatus = String(order?.acceptance_status || '').trim().toLowerCase();
+  if (value === 'pix' && acceptanceStatus === 'awaiting_pix_payment') return 'PIX ONLINE';
   if (value === 'pix') return 'PIX';
   if (value === 'pix_online') return 'PIX ONLINE';
   if (value === 'pix_entrega') return 'PIX NA ENTREGA';
@@ -734,7 +736,7 @@ function buildOrderHtml(order: any, config: any, store?: any) {
           ${(() => {
             const splitLines = getPaymentSplitLines(order);
             if (splitLines.length === 0) {
-              return `<div style="margin-top: 5px;">Pagamento: ${formatPaymentMethodLabel(order.payment_method)}</div>`;
+              return `<div style="margin-top: 5px;">Pagamento: ${formatPaymentMethodLabel(order.payment_method, order)}</div>`;
             }
             return `
               <div style="margin-top: 5px;">Pagamento: MISTO</div>
@@ -1099,7 +1101,7 @@ async function printElectron(order: any, config: any) {
     subtotal: Number(order.total || 0) - Number(order.delivery_fee || 0),
     discount: Number(order.discount || 0),
     delivery_fee: Number(order.delivery_fee || 0),
-    payment_method: formatPaymentMethodLabel(order.payment_method)
+    payment_method: formatPaymentMethodLabel(order.payment_method, order)
   };
 
   const conn = await api.connectPrinter(deviceId, protocol, { protocol, width: config.paper_width === '58mm' ? 32 : 48 });
@@ -1561,7 +1563,7 @@ export const PrinterService = {
         });
       });
     } else {
-      commands += text(`Pagamento: ${formatPaymentMethodLabel(order.payment_method)}`);
+      commands += text(`Pagamento: ${formatPaymentMethodLabel(order.payment_method, order)}`);
     }
     if (order.change_amount) {
       formatColumns('Troco', formatCurrencyValue(Number(order.change_amount || 0)), lineWidth).forEach((value) => {

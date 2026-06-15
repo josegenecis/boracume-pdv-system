@@ -149,7 +149,7 @@ export default function TotemCheckoutModal(props: TotemCheckoutModalProps) {
         items: cartItems,
         total: total,
         delivery_fee: 0,
-        payment_method: 'pix',
+        payment_method: 'pix_online',
         change_amount: null,
         status: 'pending',
         acceptance_status: 'awaiting_pix_payment',

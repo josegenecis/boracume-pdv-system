@@ -27,6 +27,7 @@ interface Order {
   items: OrderItem[];
   total: number;
   status: OrderStatusType;
+  acceptance_status?: string;
   payment_method: string;
   order_type: string;
   created_at: string;
@@ -166,7 +167,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onStatusChange, onViewDeta
           <div className="flex justify-between items-center text-sm">
             <span className="text-muted-foreground">Pagamento:</span>
             <Badge variant="outline" className="text-xs">
-              {formatPaymentMethodLabel(order.payment_method)}
+              {formatPaymentMethodLabel(order.payment_method, order.acceptance_status)}
             </Badge>
           </div>
         </div>

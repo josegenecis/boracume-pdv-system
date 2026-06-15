@@ -982,7 +982,7 @@ const Orders = () => {
               </div>
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Pagamento</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-slate-900">{formatPaymentMethodLabel(order.payment_method)}</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-slate-900">{formatPaymentMethodLabel(order.payment_method, order.acceptance_status)}</div>
               </div>
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tipo</div>
@@ -1590,7 +1590,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method, order.acceptance_status)}</span>
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -1741,7 +1741,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method, order.acceptance_status)}</span>
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -1863,7 +1863,7 @@ const Orders = () => {
 
                         <div className="text-sm text-gray-600">
                           {order.items.length} item(s) • {formatCurrency(order.total)} •
-                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method)}</span>
+                          <span className="font-medium"> {formatPaymentMethodLabel(order.payment_method, order.acceptance_status)}</span>
                         </div>
 
                         <div className="flex flex-wrap gap-2 mt-3">

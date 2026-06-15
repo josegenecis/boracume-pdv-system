@@ -107,6 +107,8 @@ const emptyPdvPaymentAmounts = (): PdvPaymentAmounts => ({
 });
 
 const getPaymentMethodLabel = (method: PdvPaymentMethod | string) => {
+  if (method === 'pix_online') return 'PIX online';
+  if (method === 'pix_entrega') return 'PIX na entrega';
   return PDV_PAYMENT_METHODS.find((option) => option.value === method)?.label || String(method || '-');
 };
 
@@ -1946,7 +1948,7 @@ const PDV = () => {
         if (useMpPixPdv) {
           const mpPayload = {
             ...orderData,
-            payment_method: 'pix',
+            payment_method: 'pix_online',
             status: 'preparing',
             acceptance_status: 'accepted',
           }
@@ -3132,7 +3134,7 @@ const PDV = () => {
                     items: cart,
                     total: pixAmount,
                     delivery_fee: getDeliveryFee(),
-                    payment_method: 'pix',
+                    payment_method: 'pix_online',
                     customer_name: customerName,
                   } as any);
 
