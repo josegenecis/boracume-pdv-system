@@ -42,15 +42,6 @@ const randomSecret = () => {
   }
 }
 
-const isMercadoPagoQrRenderError = (value: unknown) => {
-  const raw = JSON.stringify(value || {}).toLowerCase()
-  return (
-    raw.includes('without key enabled for qr render') ||
-    raw.includes('qr render') ||
-    raw.includes('collector user without key enabled')
-  )
-}
-
 const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 const weekdayToDayKey: Record<string, string> = {
   sun: 'sunday',
@@ -380,93 +371,6 @@ Deno.serve(async (req: Request) => {
               updated_at: new Date().toISOString()
             })
             .eq('correlation_id', correlationID)
-
-          if (isMercadoPagoQrRenderError(mpJson)) {
-            console.log("MP direct QR unavailable; falling back to Checkout Pro preference...")
-            const preferenceBody = {
-              items: [
-                {
-                  title: `Pedido ${orderPayload?.order_number || correlationID}`,
-                  quantity: 1,
-                  currency_id: 'BRL',
-                  unit_price: Number((value / 100).toFixed(2)),
-                },
-              ],
-              external_reference: correlationID,
-              notification_url: notificationUrl,
-              payer: {
-                email: payerEmail,
-                name: customerName,
-                phone: customerPhone ? { area_code: "11", number: customerPhone.replace(/\D/g, '') } : undefined,
-              },
-              back_urls: {
-                success: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
-                pending: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
-                failure: `${origin.replace(/\/+$/, '')}/mp/return?cid=${encodeURIComponent(correlationID)}`,
-              },
-              auto_return: 'approved',
-              metadata: {
-                correlationID,
-                restaurantUserId,
-                payment_method: preferredMethod || null,
-                fallback_reason: 'direct_qr_unavailable',
-              },
-            }
-
-            let fallbackResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
-              },
-              body: JSON.stringify(preferenceBody),
-            })
-
-            if (fallbackResp.status === 401) {
-              const refreshed = await refreshAccessToken()
-              if (refreshed) {
-                accessToken = refreshed
-                fallbackResp = await fetch('https://api.mercadopago.com/checkout/preferences', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`
-                  },
-                  body: JSON.stringify(preferenceBody),
-                })
-              }
-            }
-
-            const fallbackJson: any = await fallbackResp.json().catch(() => ({}))
-            if (fallbackResp.ok && fallbackJson?.init_point) {
-              await supabase
-                .from('pix_checkouts')
-                .update({
-                  status: 'PENDING',
-                  transaction_id: String(fallbackJson?.id || ''),
-                  metadata: {
-                    provider: 'mercadopago',
-                    preference_id: fallbackJson?.id ?? null,
-                    init_point: fallbackJson?.init_point ?? null,
-                    fallback_reason: 'direct_qr_unavailable',
-                    direct_qr_error: mpJson,
-                  },
-                  updated_at: new Date().toISOString()
-                })
-                .eq('correlation_id', correlationID)
-
-              return ok({ ok: true, correlationID, initPoint: fallbackJson.init_point, provider: 'mercadopago', fallback: 'checkout_pro' })
-            }
-
-            await supabase
-              .from('pix_checkouts')
-              .update({
-                metadata: { provider: 'mercadopago', error: mpJson, fallback_error: fallbackJson },
-                updated_at: new Date().toISOString()
-              })
-              .eq('correlation_id', correlationID)
-          }
-
           return ok({ ok: false, error: 'provider_error', details: mpJson, correlationID })
         }
 
