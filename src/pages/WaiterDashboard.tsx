@@ -21,12 +21,17 @@ import {
 } from '@/services/waiterWebClient';
 import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
+import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationPanel';
 import {
   Armchair,
+  ChefHat,
+  CircleDollarSign,
+  ClipboardList,
   LayoutGrid,
   LogOut,
   PlusCircle,
   RefreshCw,
+  Settings,
 } from 'lucide-react';
 
 const tableTileTone: Record<TableStatus, string> = {
@@ -50,6 +55,7 @@ const WaiterDashboard = () => {
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [transferTable, setTransferTable] = useState<RestaurantTable | null>(null);
   const [releaseTable, setReleaseTable] = useState<RestaurantTable | null>(null);
+  const [stoneSettingsOpen, setStoneSettingsOpen] = useState(false);
   const [createTableOpen, setCreateTableOpen] = useState(false);
   const [guestCount, setGuestCount] = useState('2');
   const [customerName, setCustomerName] = useState('');
@@ -105,6 +111,10 @@ const WaiterDashboard = () => {
     if (!transferTable?.sessionId) return [];
     return tables.filter((table) => table.id !== transferTable.id && (!table.sessionId || table.status === 'free'));
   }, [tables, transferTable]);
+
+  const firstReceivableTable = useMemo(() => {
+    return filteredTables.find((table) => table.sessionId && table.dueAmount > 0) || null;
+  }, [filteredTables]);
 
   const loadTables = async ({
     initialLoad,
@@ -309,6 +319,58 @@ const WaiterDashboard = () => {
           </div>
         ) : null}
 
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-5 sm:gap-3">
+          {[
+            {
+              label: 'Mesas',
+              icon: <LayoutGrid className="h-5 w-5" />,
+              onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+            },
+            {
+              label: 'Comandas',
+              icon: <ClipboardList className="h-5 w-5" />,
+              onClick: () => {
+                const table = filteredTables.find((current) => current.sessionId);
+                if (table?.sessionId) navigate(`/waiter-session/${table.sessionId}`);
+              },
+            },
+            {
+              label: 'Pedidos',
+              icon: <ChefHat className="h-5 w-5" />,
+              onClick: () => {
+                const table = filteredTables.find((current) => current.sentItemsCount > 0 && current.sessionId);
+                if (table?.sessionId) navigate(`/waiter-session/${table.sessionId}`);
+              },
+            },
+            {
+              label: 'Receber',
+              icon: <CircleDollarSign className="h-5 w-5" />,
+              onClick: () => {
+                if (firstReceivableTable?.sessionId) {
+                  navigate(`/waiter-session/${firstReceivableTable.sessionId}?tab=payments`);
+                  return;
+                }
+                toast({ title: 'Nenhuma conta em aberto', description: 'Nao encontrei mesa com saldo para receber agora.' });
+              },
+            },
+            {
+              label: 'Config.',
+              icon: <Settings className="h-5 w-5" />,
+              onClick: () => setStoneSettingsOpen(true),
+            },
+          ].map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.onClick}
+              className="flex min-h-[74px] flex-col items-center justify-center gap-2 rounded-[22px] border border-white/15 bg-white/12 px-3 py-3 text-sm font-semibold text-white shadow-[0_16px_40px_-28px_rgba(0,0,0,0.9)] transition active:scale-[0.98]"
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="mt-5">
           {filteredTables.length === 0 ? (
             <WaiterEmptyState
@@ -451,6 +513,14 @@ const WaiterDashboard = () => {
               </Button>
             </DialogFooter>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stoneSettingsOpen} onOpenChange={setStoneSettingsOpen}>
+        <DialogContent className="rounded-[28px] border-0 p-4 sm:max-w-xl">
+          <DialogTitle className="text-2xl font-semibold text-[#082F23]">Configuracoes Stone</DialogTitle>
+          <DialogDescription>Confira se o POS Android esta pronto para receber PIX, debito e credito.</DialogDescription>
+          <StoneIntegrationPanel />
         </DialogContent>
       </Dialog>
 

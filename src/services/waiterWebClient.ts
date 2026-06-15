@@ -5,7 +5,7 @@ export type SessionStatus = 'open' | 'serving' | 'payment_pending' | 'closed';
 export type AccountStatus = 'open' | 'preparing' | 'ready' | 'check_requested' | 'partially_paid' | 'paid';
 export type KitchenStatus = 'idle' | 'sent' | 'preparing' | 'ready' | 'delivered';
 export type OrderItemStatus = 'draft' | 'sent' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-export type PaymentMethod = 'cash' | 'pix' | 'card';
+export type PaymentMethod = 'cash' | 'pix' | 'debit' | 'credit' | 'card';
 
 export type WaiterWebProfile = {
   id: string;
@@ -113,6 +113,17 @@ export type PaymentEntry = {
   method: PaymentMethod;
   amount: number;
   createdAt: string;
+  provider?: string | null;
+  transactionId?: string | null;
+  atk?: string | null;
+  nsu?: string | null;
+  authorizationCode?: string | null;
+  installments?: number | null;
+  status?: string | null;
+  deviceId?: string | null;
+  terminal?: string | null;
+  stoneCode?: string | null;
+  receiptText?: string | null;
 };
 
 export type WaiterServiceChargeSettings = {
@@ -248,6 +259,19 @@ export type WaiterPaymentInput = {
   accountId: string;
   method: PaymentMethod;
   amount: number;
+  provider?: 'stone' | 'manual' | 'mercadopago';
+  transactionId?: string;
+  atk?: string;
+  nsu?: string;
+  authorizationCode?: string;
+  installments?: number;
+  status?: string;
+  date?: string;
+  deviceId?: string;
+  terminal?: string;
+  stoneCode?: string;
+  receiptText?: string;
+  raw?: unknown;
 };
 
 export type WaiterServiceChargeInput = {

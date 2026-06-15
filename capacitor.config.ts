@@ -3,7 +3,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'app.lovable.411cc844ef394277a88e574f3069317f',
-  appName: 'bora-cume-hub',
+  appName: 'PopSystem Garcom',
   webDir: 'dist',
   server: {
     url: 'https://411cc844-ef39-4277-a88e-574f3069317f.lovableproject.com?forceHideBadge=true',
@@ -23,6 +23,11 @@ const config: CapacitorConfig = {
         availableDevices: "Dispositivos disponíveis",
         noDeviceFound: "Nenhum dispositivo encontrado"
       }
+    },
+    StonePos: {
+      enabled: true,
+      provider: 'stone',
+      appMode: 'waiter-pos'
     }
   }
 };

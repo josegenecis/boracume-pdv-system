@@ -751,6 +751,17 @@ function buildSessionMetrics(snapshot: Awaited<ReturnType<typeof getSessionSnaps
         method: payment.method,
         amount: normalizeAmount(payment.amount),
         createdAt: payment.created_at,
+        provider: payment.provider ?? payment.metadata?.provider ?? null,
+        transactionId: payment.transaction_id ?? payment.metadata?.transaction_id ?? payment.metadata?.transactionId ?? null,
+        atk: payment.atk ?? payment.metadata?.atk ?? null,
+        nsu: payment.nsu ?? payment.metadata?.nsu ?? null,
+        authorizationCode: payment.authorization_code ?? payment.metadata?.authorization_code ?? payment.metadata?.authorizationCode ?? null,
+        installments: payment.installments ?? payment.metadata?.installments ?? null,
+        status: payment.status ?? payment.metadata?.status ?? null,
+        deviceId: payment.device_id ?? payment.metadata?.device_id ?? payment.metadata?.deviceId ?? null,
+        terminal: payment.terminal ?? payment.metadata?.terminal ?? null,
+        stoneCode: payment.stone_code ?? payment.metadata?.stone_code ?? payment.metadata?.stoneCode ?? null,
+        receiptText: payment.receipt_text ?? payment.metadata?.receiptText ?? null,
       })),
       tickets,
       items: accountItems,
@@ -2302,8 +2313,21 @@ Deno.serve(async (req: Request) => {
           accountId: String(payment?.accountId || ''),
           method: String(payment?.method || ''),
           amount: normalizeAmount(payment?.amount),
+          provider: String(payment?.provider || 'manual'),
+          transactionId: String(payment?.transactionId || payment?.transaction_id || ''),
+          atk: String(payment?.atk || ''),
+          nsu: String(payment?.nsu || ''),
+          authorizationCode: String(payment?.authorizationCode || payment?.authorization_code || ''),
+          installments: payment?.installments ? Number(payment.installments) : null,
+          status: String(payment?.status || 'approved'),
+          date: String(payment?.date || ''),
+          deviceId: String(payment?.deviceId || payment?.device_id || ''),
+          terminal: String(payment?.terminal || ''),
+          stoneCode: String(payment?.stoneCode || payment?.stone_code || ''),
+          receiptText: String(payment?.receiptText || ''),
+          raw: payment?.raw ?? null,
         }))
-        .filter((payment: any) => payment.accountId && ['cash', 'pix', 'card'].includes(payment.method) && payment.amount > 0)
+        .filter((payment: any) => payment.accountId && ['cash', 'pix', 'debit', 'credit', 'card'].includes(payment.method) && payment.amount > 0)
 
       if (!sanitizedPayments.length) return fail('Nenhum pagamento valido foi informado.', 400)
 
@@ -2357,6 +2381,32 @@ Deno.serve(async (req: Request) => {
           waiter_id: waiterSession.profile.id,
           method: payment.method,
           amount: totalAmount,
+          provider: payment.provider,
+          transaction_id: payment.transactionId || null,
+          atk: payment.atk || null,
+          nsu: payment.nsu || null,
+          authorization_code: payment.authorizationCode || null,
+          installments: payment.installments,
+          status: payment.status || 'approved',
+          payment_date: payment.date || new Date().toISOString(),
+          device_id: payment.deviceId || null,
+          terminal: payment.terminal || null,
+          stone_code: payment.stoneCode || null,
+          receipt_text: payment.receiptText || null,
+          metadata: {
+            provider: payment.provider,
+            transaction_id: payment.transactionId || null,
+            atk: payment.atk || null,
+            nsu: payment.nsu || null,
+            authorization_code: payment.authorizationCode || null,
+            installments: payment.installments,
+            status: payment.status || 'approved',
+            payment_date: payment.date || null,
+            device_id: payment.deviceId || null,
+            terminal: payment.terminal || null,
+            stone_code: payment.stoneCode || null,
+            raw: payment.raw,
+          },
         }
       })
 
@@ -2380,11 +2430,42 @@ Deno.serve(async (req: Request) => {
         if (serviceInsertError) throw serviceInsertError
       }
 
-      const { error: insertError } = await supabase
+      const { data: insertedPayments, error: insertError } = await supabase
         .from('payments')
         .insert(paymentRows)
+        .select('id, account_id, method, amount, transaction_id, nsu, atk, status, device_id')
 
       if (insertError) throw insertError
+
+      const { data: sessionRowForLogs, error: sessionLogError } = await supabase
+        .from('table_sessions')
+        .select('table_id')
+        .eq('id', sessionId)
+        .maybeSingle()
+
+      if (sessionLogError) throw sessionLogError
+
+      const paymentLogs = (insertedPayments ?? []).map((payment: any) => ({
+        restaurant_id: waiterSession.profile.restaurantId,
+        table_id: sessionRowForLogs?.table_id ?? null,
+        account_id: payment.account_id,
+        operator_id: waiterSession.profile.id,
+        device_id: payment.device_id ?? null,
+        transaction_id: payment.transaction_id ?? null,
+        nsu: payment.nsu ?? null,
+        atk: payment.atk ?? null,
+        amount: normalizeAmount(payment.amount),
+        payment_method: payment.method,
+        status: payment.status || 'approved',
+      }))
+
+      if (paymentLogs.length) {
+        const { error: logError } = await supabase
+          .from('payment_logs')
+          .insert(paymentLogs)
+
+        if (logError) console.warn('payment_logs insert failed:', logError?.message || logError)
+      }
 
       await refreshSessionStatus(supabase, sessionId)
       const session = await buildSessionResponse(supabase, waiterSession.profile.restaurantId, sessionId)

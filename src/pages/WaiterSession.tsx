@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/components/ui/dialog';
@@ -50,6 +50,9 @@ import { normalizeImageUrlForDisplay } from '@/utils/normalizeImageUrl';
 import { WaiterBottomNav } from '@/components/waiter-web/WaiterBottomNav';
 import { WaiterEmptyState } from '@/components/waiter-web/WaiterEmptyState';
 import { WaiterStatusBadge } from '@/components/waiter-web/WaiterStatusBadge';
+import { StoneIntegrationPanel } from '@/components/waiter-web/StoneIntegrationPanel';
+import { stoneProvider } from '@/services/payments/stoneProvider';
+import { enqueueOfflinePayment, syncOfflinePayments } from '@/services/payments/offlinePaymentQueue';
 import {
   ArrowLeft,
   Check,
@@ -65,6 +68,8 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
+  Split,
   Users,
 } from 'lucide-react';
 
@@ -104,9 +109,20 @@ const parsePaymentAmount = (value: string) => {
 
 const buildOptionLabel = (groupName: string, optionName: string) => `${groupName}: ${optionName}`;
 
+const paymentMethodLabel: Record<PaymentMethod, string> = {
+  cash: 'Dinheiro',
+  pix: 'PIX Stone',
+  debit: 'Debito Stone',
+  credit: 'Credito Stone',
+  card: 'Cartao',
+};
+
+const stonePaymentMethods: PaymentMethod[] = ['pix', 'debit', 'credit'];
+
 const WaiterSessionPage = () => {
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [session, setSession] = useState<TableSession | null>(() => loadWaiterSessionCache(sessionId));
   const [catalog, setCatalog] = useState<ProductCategory[]>(() => loadWaiterCatalogCache()?.categories || []);
@@ -129,8 +145,10 @@ const WaiterSessionPage = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
+  const [splitPeople, setSplitPeople] = useState('2');
   const [serviceChargeAccepted, setServiceChargeAccepted] = useState(false);
   const [pixCheckout, setPixCheckout] = useState<WaiterPixCheckoutState | null>(null);
+  const [stoneSettingsOpen, setStoneSettingsOpen] = useState(false);
   const [moveItemId, setMoveItemId] = useState('');
   const [moveTargetAccountId, setMoveTargetAccountId] = useState('');
   const [moveQuantity, setMoveQuantity] = useState('1');
@@ -299,6 +317,25 @@ const WaiterSessionPage = () => {
     void loadSession(false);
     void loadCatalog();
   }, [sessionId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'payments') {
+      setActiveTab('payments');
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    syncOfflinePayments().then(({ synced }) => {
+      if (synced > 0) {
+        toast({
+          title: 'Pagamentos sincronizados',
+          description: `${synced} recebimento(s) pendente(s) foram enviados ao PopSystem.`,
+        });
+        void loadSession(true);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -636,10 +673,27 @@ const WaiterSessionPage = () => {
     );
   };
 
+  const splitSelectedAccount = () => {
+    if (!session || !paymentLines.length) return;
+
+    const people = Math.max(2, Number(splitPeople || 2));
+    const firstLine = paymentLines[0];
+    const account = session.accounts.find((current) => current.id === firstLine.accountId) || session.accounts.find((current) => current.dueAmount > 0);
+    if (!account || account.dueAmount <= 0) return;
+
+    const baseAmount = Math.floor((account.dueAmount / people) * 100) / 100;
+    const lines = Array.from({ length: people }).map((_, index) => {
+      const amount = index === people - 1 ? Number((account.dueAmount - baseAmount * (people - 1)).toFixed(2)) : baseAmount;
+      return createPaymentLine(account.id, amount, firstLine.method || 'pix');
+    });
+
+    setPaymentLines(lines);
+  };
+
   const handleSavePayments = async () => {
     if (!session) return;
 
-    const payload: WaiterPaymentInput[] = paymentLines
+    const initialPayload: WaiterPaymentInput[] = paymentLines
       .map((line) => ({
         accountId: line.accountId,
         method: line.method,
@@ -647,7 +701,7 @@ const WaiterSessionPage = () => {
       }))
       .filter((line) => line.accountId && line.amount > 0);
 
-    if (!payload.length) {
+    if (!initialPayload.length) {
       toast({
         title: 'Pagamento vazio',
         description: 'Informe pelo menos uma linha de pagamento valida.',
@@ -660,85 +714,84 @@ const WaiterSessionPage = () => {
     const serviceEnabled = Boolean(serviceSettings?.enabled && serviceChargeAccepted);
     const servicePercent = Math.max(0, Number(serviceSettings?.percentage || 10));
 
-    const pixPayments = payload.filter((line) => line.method === 'pix');
-    if (pixPayments.length > 0) {
-      if (serviceEnabled) {
-        toast({
-          title: 'Taxa com PIX indisponivel',
-          description: 'Para adicionar a taxa do garçom, use Dinheiro ou Cartao neste recebimento.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      if (payload.length !== 1 || pixPayments.length !== 1) {
-        toast({
-          title: 'PIX por comanda',
-          description: 'Para pagar com PIX, selecione uma unica comanda por vez e gere um QR Code para ela.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const pixPayment = pixPayments[0];
-      const targetAccount = session.accounts.find((account) => account.id === pixPayment.accountId);
-      if (!targetAccount) {
-        toast({
-          title: 'Comanda invalida',
-          description: 'Selecione a comanda correta antes de gerar o PIX.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setSubmitting(true);
-      try {
-        const checkout = await startWaiterPixCheckout({
-          sessionId: session.id,
-          accountId: pixPayment.accountId,
-          amount: pixPayment.amount,
-          accountName: targetAccount.name,
-          tableLabel: session.tableLabel,
-        });
-
-        setPaymentDialogOpen(false);
-        setPixCheckout({
-          ...checkout,
-          accountId: pixPayment.accountId,
-          amount: pixPayment.amount,
-        });
-        toast({
-          title: 'PIX gerado',
-          description: `QR Code pronto para receber ${targetAccount.name}.`,
-        });
-      } catch (error: any) {
-        toast({
-          title: 'Erro ao gerar PIX',
-          description: error?.message || 'Nao foi possivel iniciar o pagamento PIX desta comanda.',
-          variant: 'destructive',
-        });
-      } finally {
-        setSubmitting(false);
-      }
-      return;
-    }
-
     setSubmitting(true);
+    const payload: WaiterPaymentInput[] = [];
+
     try {
+      for (const payment of initialPayload) {
+        const targetAccount = session.accounts.find((account) => account.id === payment.accountId);
+        if (!targetAccount) throw new Error('Selecione uma comanda valida para receber.');
+
+        if (stonePaymentMethods.includes(payment.method)) {
+          const stoneResult = await stoneProvider.startPayment({
+            amount: payment.amount,
+            paymentType: payment.method === 'pix' ? 'pix' : payment.method === 'debit' ? 'debit' : 'credit',
+            installments: payment.method === 'credit' ? 1 : undefined,
+            accountId: payment.accountId,
+            sessionId: session.id,
+            tableId: session.tableId,
+            tableLabel: session.tableLabel,
+            accountName: targetAccount.name,
+            reference: `${session.tableLabel}-${targetAccount.name}-${Date.now()}`,
+          });
+
+          payload.push({
+            ...payment,
+            amount: stoneResult.amount || payment.amount,
+            provider: 'stone',
+            transactionId: stoneResult.transaction_id,
+            atk: stoneResult.atk,
+            nsu: stoneResult.nsu,
+            authorizationCode: stoneResult.authorization_code,
+            installments: stoneResult.installments,
+            status: stoneResult.status,
+            date: stoneResult.date,
+            deviceId: stoneResult.device_id,
+            terminal: stoneResult.terminal,
+            stoneCode: stoneResult.stone_code,
+            receiptText: stoneResult.receiptText,
+            raw: stoneResult.raw,
+          });
+          continue;
+        }
+
+        payload.push({ ...payment, provider: 'manual', status: 'approved', date: new Date().toISOString() });
+      }
+
       const response = await recordWaiterPayments(session.id, payload, {
         enabled: serviceEnabled,
         percentage: servicePercent,
       });
       applySession(response.session);
-      setPaymentDialogOpen(false);
+      const hasRemainingBalance = response.session.accounts.some((account) => account.dueAmount > 0);
+      if (hasRemainingBalance) {
+        openPaymentDialog(undefined, response.session);
+      } else {
+        setPaymentDialogOpen(false);
+      }
       toast({
         title: 'Pagamento registrado',
-        description: 'As comandas foram atualizadas com sucesso.',
+        description: hasRemainingBalance
+          ? `Recebimento salvo. Saldo restante: ${formatMoney(response.session.dueAmount)}.`
+          : 'Conta quitada. Mesa fechada pelo PopSystem.',
       });
     } catch (error: any) {
+      const approvedStonePayments = payload.filter((payment) => payment.provider === 'stone' && payment.status === 'approved');
+      if (approvedStonePayments.length > 0) {
+        enqueueOfflinePayment({
+          sessionId: session.id,
+          payments: approvedStonePayments,
+          serviceCharge: { enabled: serviceEnabled, percentage: servicePercent },
+        });
+      }
+
       toast({
-        title: 'Erro ao registrar pagamento',
-        description: error?.message || 'Nao foi possivel salvar os pagamentos.',
+        title: approvedStonePayments.length ? 'Stone aprovou, PopSystem vai sincronizar' : 'Erro ao receber pagamento',
+        description:
+          error?.message ||
+          (approvedStonePayments.length
+            ? 'O recebimento ficou salvo neste aparelho para sincronizar quando a conexao voltar.'
+            : 'Nao foi possivel concluir este recebimento.'),
         variant: 'destructive',
       });
     } finally {
@@ -1360,7 +1413,9 @@ const WaiterSessionPage = () => {
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <div className="font-semibold text-[#082F23]">{payment.accountName}</div>
-                                  <div className="mt-1 text-sm uppercase tracking-[0.14em] text-slate-400">{payment.method}</div>
+                                  <div className="mt-1 text-sm uppercase tracking-[0.14em] text-slate-400">
+                                    {paymentMethodLabel[payment.method] || payment.method}
+                                  </div>
                                   <div className="mt-1 text-sm text-slate-500">
                                     {new Date(payment.createdAt).toLocaleString('pt-BR', {
                                       day: '2-digit',
@@ -1369,8 +1424,38 @@ const WaiterSessionPage = () => {
                                       minute: '2-digit',
                                     })}
                                   </div>
+                                  {payment.nsu || payment.atk || payment.authorizationCode ? (
+                                    <div className="mt-2 grid gap-1 text-xs text-slate-500">
+                                      {payment.nsu ? <span>NSU: {payment.nsu}</span> : null}
+                                      {payment.atk ? <span>ATK: {payment.atk}</span> : null}
+                                      {payment.authorizationCode ? <span>Autorizacao: {payment.authorizationCode}</span> : null}
+                                    </div>
+                                  ) : null}
                                 </div>
-                                <div className="font-semibold text-[#082F23]">{formatMoney(payment.amount)}</div>
+                                <div className="text-right">
+                                  <div className="font-semibold text-[#082F23]">{formatMoney(payment.amount)}</div>
+                                  {payment.transactionId ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="mt-2 h-8 rounded-xl text-xs"
+                                      onClick={async () => {
+                                        try {
+                                          await stoneProvider.reprintReceipt?.(payment.transactionId || '');
+                                          toast({ title: 'Reimpressao enviada', description: 'Comprovante solicitado na Stone.' });
+                                        } catch (error: any) {
+                                          toast({
+                                            title: 'Reimpressao indisponivel',
+                                            description: error?.message || 'Use essa opcao no POS Android com Stone.',
+                                            variant: 'destructive',
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      Reimprimir
+                                    </Button>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1689,9 +1774,9 @@ const WaiterSessionPage = () => {
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-[100dvw] max-w-[100dvw] grid-rows-none flex-col overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[92dvh] sm:w-[calc(100dvw-2rem)] sm:max-w-2xl sm:rounded-[28px]">
           <div className="border-b border-[#E7E1D8] bg-white px-4 pb-3 pt-5 sm:px-6">
-            <DialogTitle className="pr-8 text-xl font-semibold leading-tight text-[#082F23] sm:text-2xl">Recebimento da mesa</DialogTitle>
+            <DialogTitle className="pr-8 text-xl font-semibold leading-tight text-[#082F23] sm:text-2xl">Receber Pagamento</DialogTitle>
             <DialogDescription className="mt-1 text-sm leading-5">
-              Divida pagamentos por comanda e por forma de pagamento.
+              Receba pela Stone, em dinheiro ou divida a conta sem sair do app.
             </DialogDescription>
           </div>
 
@@ -1699,11 +1784,11 @@ const WaiterSessionPage = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Total</div>
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Conta</div>
                   <div className="mt-2 text-sm font-semibold leading-tight text-[#082F23] sm:text-xl">{formatMoney(session.total)}</div>
                 </div>
                 <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Recebido</div>
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400 sm:text-xs">Pago</div>
                   <div className="mt-2 text-sm font-semibold leading-tight text-[#082F23] sm:text-xl">{formatMoney(session.paidTotal)}</div>
                 </div>
                 <div className="rounded-2xl bg-[#F4F8F2] p-3 sm:p-4">
@@ -1742,8 +1827,9 @@ const WaiterSessionPage = () => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="pix">PIX</SelectItem>
+                            <SelectItem value="debit">Debito</SelectItem>
+                            <SelectItem value="credit">Credito</SelectItem>
                             <SelectItem value="cash">Dinheiro</SelectItem>
-                            <SelectItem value="card">Cartao</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1841,17 +1927,36 @@ const WaiterSessionPage = () => {
               </div>
 
               <div className="flex justify-start pb-2">
-                <Button
-                  variant="outline"
-                  className="h-11 w-full rounded-2xl sm:w-auto"
-                  onClick={() => {
-                    const nextAccount = session.accounts.find((account) => account.dueAmount > 0);
-                    setPaymentLines((current) => [...current, createPaymentLine(nextAccount?.id || '', 0, 'pix')]);
-                  }}
-                >
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Adicionar linha
-                </Button>
+                <div className="grid w-full gap-2 sm:grid-cols-[1fr,1fr,auto]">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl"
+                    onClick={() => {
+                      const nextAccount = session.accounts.find((account) => account.dueAmount > 0);
+                      setPaymentLines((current) => [...current, createPaymentLine(nextAccount?.id || '', 0, 'pix')]);
+                    }}
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Multipla forma
+                  </Button>
+                  <div className="flex gap-2">
+                    <Input
+                      value={splitPeople}
+                      inputMode="numeric"
+                      onChange={(event) => setSplitPeople(event.target.value.replace(/\D/g, '').slice(0, 2))}
+                      className="h-11 rounded-2xl"
+                      aria-label="Quantidade de pessoas"
+                    />
+                    <Button variant="outline" className="h-11 rounded-2xl" onClick={splitSelectedAccount}>
+                      <Split className="mr-2 h-4 w-4" />
+                      Dividir
+                    </Button>
+                  </div>
+                  <Button variant="outline" className="h-11 rounded-2xl" onClick={() => setStoneSettingsOpen(true)}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Stone
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1861,9 +1966,17 @@ const WaiterSessionPage = () => {
               Cancelar
             </Button>
             <Button className="h-11 rounded-2xl bg-[#FF6400] hover:bg-[#E25A00]" onClick={handleSavePayments} disabled={submitting}>
-              Confirmar
+              {submitting ? 'Recebendo...' : 'Confirmar'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={stoneSettingsOpen} onOpenChange={setStoneSettingsOpen}>
+        <DialogContent className="rounded-[28px] border-0 p-4 sm:max-w-xl">
+          <DialogTitle className="text-2xl font-semibold text-[#082F23]">Configurações Stone</DialogTitle>
+          <DialogDescription>Confira o POS antes de receber PIX, débito ou crédito.</DialogDescription>
+          <StoneIntegrationPanel />
         </DialogContent>
       </Dialog>
 
